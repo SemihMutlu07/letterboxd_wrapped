@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Upload, Film, Star, Clock, Globe } from 'lucide-react';
+import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface ProgressData {
   stage: string;
@@ -15,6 +16,7 @@ export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const router = useRouter();
 
   // Poll progress endpoint during upload
@@ -24,7 +26,7 @@ export default function LetterboxdLanding() {
     if (isUploading) {
       intervalId = setInterval(async () => {
         try {
-          const response = await fetch('http://localhost:8000/api/progress');
+          const response = await fetch('https://fastapi-production-2b21.up.railway.app/api/progress');
           if (response.ok) {
             const progressData = await response.json();
             setProgress(progressData);
@@ -60,7 +62,7 @@ export default function LetterboxdLanding() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/api/analyze', {
+      const response = await fetch('https://fastapi-production-2b21.up.railway.app/api/analyze', {
         method: 'POST',
         body: formData,
       });
@@ -243,6 +245,47 @@ export default function LetterboxdLanding() {
             <p className="text-red-300">{error}</p>
           </div>
         )}
+
+        {/* How to Export Section */}
+        <div className="mt-8 w-full max-w-xl mx-auto text-left">
+          <button
+            onClick={() => setIsInstructionsOpen(!isInstructionsOpen)}
+            className="w-full flex justify-between items-center p-4 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition-colors"
+          >
+            <div className="flex items-center">
+              <HelpCircle className="w-5 h-5 mr-3 text-gray-400" />
+              <span className="font-semibold text-gray-200">How to Export Your Letterboxd Data</span>
+            </div>
+            <motion.div
+              animate={{ rotate: isInstructionsOpen ? 180 : 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ChevronDown className="w-5 h-5 text-gray-400" />
+            </motion.div>
+          </button>
+          <AnimatePresence>
+            {isInstructionsOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2 p-6 bg-gray-800/50 border border-gray-700 rounded-lg text-gray-300 space-y-3">
+                  <p>Follow these steps on the Letterboxd website to get your data:</p>
+                  <ol className="list-decimal list-inside space-y-2">
+                    <li>Go to your <strong className="text-orange-400">Profile</strong> and click on <strong className="text-orange-400">Settings</strong>.</li>
+                    <li>Select the <strong className="text-orange-400">Data</strong> tab from the settings menu (it's on the far right).</li>
+                    <li>Click the <strong className="text-orange-400">Export Your Data</strong> button.</li>
+                    <li>Your data will be prepared and a <strong className="text-orange-400">.zip file</strong> will download.</li>
+                    <li>Once downloaded, just drag and drop the file here!</li>
+                  </ol>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Features Preview */}
         <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
