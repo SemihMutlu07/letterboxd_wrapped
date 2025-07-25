@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle, Loader, AlertTriangle } from 'lucide-react';
 
@@ -20,7 +20,7 @@ const movieFacts = [
   "Disneyland has a secret basketball court inside the Matterhorn."
 ];
 
-export default function LoadingPage() {
+function LoadingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
@@ -120,4 +120,24 @@ export default function LoadingPage() {
       </motion.div>
     </div>
   );
-} 
+}
+
+export default function LoadingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-lg bg-white/10 backdrop-blur-lg rounded-2xl p-8 text-center"
+        >
+          <Loader className="w-16 h-16 text-orange-400 mx-auto mb-4 animate-spin" />
+          <h2 className="text-2xl font-bold text-white mb-2">Loading...</h2>
+          <p className="text-gray-300">Preparing your analysis...</p>
+        </motion.div>
+      </div>
+    }>
+      <LoadingContent />
+    </Suspense>
+  );
+}
