@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useRef } from 'react';
 import { motion, Variants } from 'framer-motion';
 import { Film, Star, Clock, TrendingUp, Download } from 'lucide-react';
