@@ -207,7 +207,7 @@ export default function LetterboxdLanding() {
 
           {/* Fun Facts */}
           <div className="mt-8 text-sm text-gray-400">
-            <p>💡 Did you know? We're fetching data from The Movie Database (TMDb) to enrich your film collection with comprehensive metadata!</p>
+            <p>💡 Did you know? We&apos;re fetching data from The Movie Database (TMDb) to enrich your film collection with comprehensive metadata!</p>
           </div>
         </div>
       </div>

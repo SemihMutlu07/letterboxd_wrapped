@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion, useInView, Variants } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import {
-  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Users, Languages, Sparkles, Download, Instagram, Twitter
+  Film, Star, Clock, TrendingUp, Calendar, Award, Users, Languages, Sparkles, Download, Instagram, Twitter
 } from 'lucide-react';
-import { useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import React from 'react';
+import Link from 'next/link';
 
 // --- Interfaces for Stats Data ---
 interface CountItem { name: string; count: number; }
@@ -142,9 +142,9 @@ const ComprehensiveResultsPage = () => {
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">No data found</h2>
           <p className="text-gray-400">Please upload your Letterboxd data first.</p>
-          <a href="/" className="mt-6 inline-block px-6 py-2 bg-orange-500 rounded-lg font-bold">
+          <Link href="/" className="mt-6 inline-block px-6 py-2 bg-orange-500 rounded-lg font-bold">
             Go Back
-          </a>
+          </Link>
         </div>
       </div>
     );
