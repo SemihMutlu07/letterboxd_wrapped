@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
+  // appDir is no longer needed in Next.js 15+ as App Router is stable
 }
 
 module.exports = nextConfig

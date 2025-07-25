@@ -1,287 +1,269 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { Upload, Download, Settings, FileText, Smartphone, Monitor, ArrowRight } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Upload, Film, Star, Clock, Globe } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-const LetterboxdLanding = () => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isDragging, setIsDragging] = useState(false);
+interface ProgressData {
+  stage: string;
+  message: string;
+  progress: number;
+  total: number;
+}
+
+export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ProgressData | null>(null);
   const router = useRouter();
 
-  const steps = [
-    {
-      id: 1,
-      title: "Go to Letterboxd Settings",
-      description: "Navigate to letterboxd.com → Settings → Import & Export",
-      icon: <Settings className="w-6 h-6" />,
-      image: "/letterboxd-settings.png" // We'll add this image later
-    },
-    {
-      id: 2,
-      title: "Export Your Data",
-      description: "Click 'Export Your Data' and wait for the download",
-      icon: <Download className="w-6 h-6" />,
-      image: "/letterboxd-export.png" // We'll add this image later
-    },
-    {
-      id: 3,
-      title: "Upload & Get Your Wrapped",
-      description: "Upload your ZIP file here and see your movie year!",
-      icon: <Upload className="w-6 h-6" />,
-      image: "/letterboxd-upload.png" // We'll add this image later
-    }
-  ];
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  // Poll progress endpoint during upload
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
     
-    const files = Array.from(e.dataTransfer.files);
-    await handleFiles(files);
-  }, []);
-
-  const handleFileInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      await handleFiles(files);
+    if (isUploading) {
+      intervalId = setInterval(async () => {
+        try {
+          const response = await fetch('http://localhost:8000/api/progress');
+          if (response.ok) {
+            const progressData = await response.json();
+            setProgress(progressData);
+            
+            // If analysis is complete, stop polling and redirect
+            if (progressData.stage === 'complete') {
+              clearInterval(intervalId);
+              // Small delay to show completion message
+              setTimeout(() => {
+                router.push('/results');
+              }, 1500);
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching progress:', err);
+        }
+      }, 500); // Poll every 500ms
     }
-  }, []);
 
-  const handleFiles = async (files: File[]) => {
-    if (files.length === 0) return;
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isUploading, router]);
+
+  const handleFile = useCallback(async (file: File) => {
+    if (!file) return;
 
     setIsUploading(true);
+    setError(null);
+    setProgress({ stage: 'starting', message: 'Preparing analysis...', progress: 0, total: 1 });
     
-    try {
-      const formData = new FormData();
-      files.forEach((file, index) => {
-        formData.append(`file${index}`, file);
-      });
+    const formData = new FormData();
+    formData.append('file', file);
 
-      const response = await fetch('/api/upload', {
+    try {
+      const response = await fetch('http://localhost:8000/api/analyze', {
         method: 'POST',
         body: formData,
       });
 
       if (response.ok) {
         const result = await response.json();
-        // Navigate to results page with the session ID
-        router.push(`/results?session=${result.sessionId}`);
+        // Save stats to localStorage to pass to the results page
+        localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+        // The redirect will happen via the progress polling
       } else {
-        throw new Error('Upload failed');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Analysis failed');
       }
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Upload failed. Please try again.');
-    } finally {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       setIsUploading(false);
+      setProgress(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  }, [handleFile]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  }, [handleFile]);
+
+  const getStageIcon = (stage: string) => {
+    switch (stage) {
+      case 'extracting': return '📦';
+      case 'loading': return '📁';
+      case 'processing': return '🎬';
+      case 'tmdb_matching': return '🔍';
+      case 'tmdb_metadata': return '📊';
+      case 'analyzing': return '🎯';
+      case 'complete': return '✅';
+      case 'error': return '❌';
+      default: return '⏳';
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-      {/* Header */}
-      <header className="container mx-auto px-4 py-6">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-            <FileText className="w-5 h-5 text-white" />
-          </div>
-          <span className="text-xl font-bold text-white">Letterboxd Wrapped</span>
-        </div>
-      </header>
+  const getProgressPercentage = () => {
+    if (!progress || progress.total === 0) return 0;
+    return Math.min((progress.progress / progress.total) * 100, 100);
+  };
 
-      {/* Hero Section */}
-      <section className="container mx-auto px-4 py-16 text-center">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
-            Your Movie Year,
-            <span className="bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent">
-              {" "}Wrapped
-            </span>
-          </h1>
-          <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Transform your Letterboxd data into beautiful, shareable visuals. 
-            See your movie statistics like never before.
-          </p>
+  if (isUploading && progress) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-2xl text-center">
+          {/* Header */}
+          <h1 className="text-4xl font-bold mb-4">Analyzing Your Films</h1>
+          <p className="text-xl text-gray-400 mb-8">Creating your comprehensive movie wrapped...</p>
           
-          {/* Preview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12 max-w-3xl mx-auto">
-            <div className="bg-gradient-to-br from-pink-500 to-orange-500 p-6 rounded-2xl text-white transform hover:scale-105 transition-transform">
-              <h3 className="text-2xl font-bold mb-2">247</h3>
-              <p className="text-sm opacity-90">Films Watched</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-6 rounded-2xl text-white transform hover:scale-105 transition-transform">
-              <h3 className="text-2xl font-bold mb-2">4.2★</h3>
-              <p className="text-sm opacity-90">Average Rating</p>
-            </div>
-            <div className="bg-gradient-to-br from-green-500 to-teal-500 p-6 rounded-2xl text-white transform hover:scale-105 transition-transform">
-              <h3 className="text-2xl font-bold mb-2">Drama</h3>
-              <p className="text-sm opacity-90">Top Genre</p>
+          {/* Progress Circle */}
+          <div className="relative w-32 h-32 mx-auto mb-8">
+            <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
+              {/* Background circle */}
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                stroke="rgb(55, 65, 81)"
+                strokeWidth="8"
+                fill="none"
+              />
+              {/* Progress circle */}
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                stroke="rgb(249, 115, 22)"
+                strokeWidth="8"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 40}`}
+                strokeDashoffset={`${2 * Math.PI * 40 * (1 - getProgressPercentage() / 100)}`}
+                className="transition-all duration-500 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-3xl">{getStageIcon(progress.stage)}</span>
             </div>
           </div>
 
-          {/* Device Support */}
-          <div className="flex items-center justify-center space-x-8 mb-12">
-            <div className="flex items-center space-x-2 text-gray-300">
-              <Monitor className="w-5 h-5" />
-              <span>Desktop</span>
+          {/* Progress Details */}
+          <div className="bg-gray-800 rounded-xl p-6 mb-6">
+            <h3 className="text-xl font-semibold mb-2 text-orange-400">
+              {progress.stage.charAt(0).toUpperCase() + progress.stage.slice(1).replace('_', ' ')}
+            </h3>
+            <p className="text-gray-300 mb-4">{progress.message}</p>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-700 rounded-full h-3 mb-2">
+              <div 
+                className="bg-gradient-to-r from-orange-400 to-pink-500 h-3 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${getProgressPercentage()}%` }}
+              />
             </div>
-            <div className="flex items-center space-x-2 text-gray-300">
-              <Smartphone className="w-5 h-5" />
-              <span>Mobile</span>
-            </div>
+            <p className="text-sm text-gray-400">
+              {progress.progress} / {progress.total} 
+              {progress.total > 1 && ` (${Math.round(getProgressPercentage())}%)`}
+            </p>
           </div>
-        </div>
-      </section>
 
-      {/* How It Works */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-12">
-            How It Works
-          </h2>
-          
-          {/* Step Navigation */}
-          <div className="flex justify-center mb-8">
-            <div className="flex space-x-4 bg-white/10 rounded-full p-2">
-              {steps.map((step) => (
-                <button
-                  key={step.id}
-                  onClick={() => setCurrentStep(step.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    currentStep === step.id
-                      ? 'bg-orange-500 text-white'
-                      : 'text-gray-300 hover:text-white'
+          {/* Stage Indicators */}
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+            {[
+              { key: 'extracting', label: 'Extract', icon: '📦' },
+              { key: 'loading', label: 'Load', icon: '📁' },
+              { key: 'processing', label: 'Process', icon: '🎬' },
+              { key: 'tmdb_matching', label: 'Match', icon: '🔍' },
+              { key: 'tmdb_metadata', label: 'Enrich', icon: '📊' },
+              { key: 'analyzing', label: 'Analyze', icon: '🎯' }
+            ].map((stage, index) => {
+              const isActive = progress.stage === stage.key;
+              const isComplete = ['extracting', 'loading', 'processing', 'tmdb_matching', 'tmdb_metadata', 'analyzing'].indexOf(progress.stage) > index;
+              
+              return (
+                <div 
+                  key={stage.key}
+                  className={`p-2 rounded-lg border transition-all ${
+                    isActive 
+                      ? 'bg-orange-500 border-orange-400 text-white' 
+                      : isComplete
+                      ? 'bg-green-600 border-green-500 text-white'
+                      : 'bg-gray-700 border-gray-600 text-gray-400'
                   }`}
                 >
-                  Step {step.id}
-                </button>
-              ))}
-            </div>
+                  <div className="text-lg mb-1">{stage.icon}</div>
+                  <div className="font-medium">{stage.label}</div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Current Step Content */}
-          <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8 md:p-12">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-              <div>
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
-                    {steps[currentStep - 1].icon}
-                  </div>
-                  <span className="text-orange-400 font-semibold">Step {currentStep}</span>
-                </div>
-                <h3 className="text-2xl md:text-3xl font-bold text-white mb-4">
-                  {steps[currentStep - 1].title}
-                </h3>
-                <p className="text-gray-300 text-lg mb-6">
-                  {steps[currentStep - 1].description}
-                </p>
-                
-                {currentStep < 3 && (
-                  <button
-                    onClick={() => setCurrentStep(currentStep + 1)}
-                    className="flex items-center space-x-2 text-orange-400 hover:text-orange-300 transition-colors"
-                  >
-                    <span>Next Step</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              
-              <div className="relative">
-                <div className="bg-white/5 rounded-2xl p-4 border border-white/10">
-                  <div className="w-full h-48 bg-gray-700 rounded-xl flex items-center justify-center">
-                    <span className="text-gray-400">Screenshot {currentStep}</span>
-                  </div>
-                </div>
-                {currentStep === 1 && (
-                  <div className="absolute top-4 right-4 bg-orange-500 text-white px-2 py-1 rounded text-xs">
-                    letterboxd.com
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* Fun Facts */}
+          <div className="mt-8 text-sm text-gray-400">
+            <p>💡 Did you know? We're fetching data from The Movie Database (TMDb) to enrich your film collection with comprehensive metadata!</p>
           </div>
         </div>
-      </section>
+      </div>
+    );
+  }
 
-      {/* Upload Section */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-8">Ready to See Your Wrapped?</h2>
-          
-          {/* Upload Zone */}
-          <div 
-            className={`bg-white/10 backdrop-blur-lg border-2 border-dashed rounded-3xl p-12 transition-all cursor-pointer group relative ${
-              isDragging 
-                ? 'border-orange-400 bg-orange-400/10' 
-                : 'border-white/30 hover:border-orange-400'
-            } ${isUploading ? 'pointer-events-none' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('file-input')?.click()}
-          >
-            <input
-              id="file-input"
-              type="file"
-              multiple
-              accept=".zip,.csv"
-              onChange={handleFileInput}
-              className="hidden"
-            />
-            
-            {isUploading ? (
-              <div className="flex flex-col items-center">
-                <div className="animate-spin w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full mb-4"></div>
-                <h3 className="text-xl font-semibold text-white mb-2">Processing your data...</h3>
-                <p className="text-gray-300">This may take a few moments</p>
-              </div>
-            ) : (
-              <>
-                <Upload className="w-16 h-16 text-white/60 group-hover:text-orange-400 mx-auto mb-4 transition-colors" />
-                <h3 className="text-xl font-semibold text-white mb-2">Drop your Letterboxd ZIP file here</h3>
-                <p className="text-gray-300 mb-4">or click to browse</p>
-                <p className="text-sm text-gray-400">
-                  Supports ZIP files or individual CSV files (ratings.csv, diary.csv)
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Alternative Upload */}
-          <div className="mt-6">
-            <p className="text-gray-400 text-sm mb-4">Having trouble with ZIP files on mobile?</p>
-            <button 
-              className="text-orange-400 hover:text-orange-300 underline"
-              onClick={() => document.getElementById('file-input')?.click()}
-            >
-              Upload individual CSV files instead
-            </button>
+  return (
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-2xl text-center">
+        <h1 className="text-5xl font-bold mb-4">Letterboxd Wrapped</h1>
+        <p className="text-xl text-gray-400 mb-8">Upload your Letterboxd ZIP file to see your comprehensive year in review.</p>
+        
+        <div 
+          className="bg-gray-800 border-2 border-dashed border-gray-600 rounded-lg p-12 cursor-pointer hover:border-green-400 transition-colors"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={() => document.getElementById('file-input')?.click()}
+        >
+          <input
+            id="file-input"
+            type="file"
+            accept=".zip"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+          <div className="flex flex-col items-center">
+            <Upload className="w-12 h-12 text-gray-400 mb-4" />
+            <p className="text-lg mb-2">Drop your ZIP file here or click to browse</p>
+            <p className="text-sm text-gray-500">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
           </div>
         </div>
-      </section>
+        
+        {error && (
+          <div className="mt-4 p-4 bg-red-900 border border-red-700 rounded-lg">
+            <p className="text-red-300">{error}</p>
+          </div>
+        )}
 
-      {/* Footer */}
-      <footer className="container mx-auto px-4 py-8 text-center">
-        <p className="text-gray-400">
-          Made for movie lovers. Not affiliated with Letterboxd.
-        </p>
-      </footer>
+        {/* Features Preview */}
+        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <Film className="w-8 h-8 text-orange-400 mx-auto mb-2" />
+            <p className="text-gray-300">Comprehensive Film Analysis</p>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <Star className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+            <p className="text-gray-300">Rating Insights</p>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <Clock className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+            <p className="text-gray-300">Time Statistics</p>
+          </div>
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <Globe className="w-8 h-8 text-green-400 mx-auto mb-2" />
+            <p className="text-gray-300">Global Cinema</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
-};
-
-export default LetterboxdLanding;
+}

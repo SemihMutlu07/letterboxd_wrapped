@@ -1,193 +1,339 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Film, Star, Clock, TrendingUp } from 'lucide-react';
+import { motion, useInView, Variants } from 'framer-motion';
+import {
+  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Users, Languages, Sparkles, Download, Instagram, Twitter
+} from 'lucide-react';
+import { useRef } from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import React from 'react';
+
+// --- Interfaces for Stats Data ---
+interface CountItem { name: string; count: number; }
+interface ActorItem extends CountItem { profile_path?: string; }
+interface DecadeItem { decade: string; count: number; }
+interface LanguageItem { language: string; count: number; }
+interface InsightItem { title: string; description: string; }
 
 interface LetterboxdStats {
-  totalFilms: number;
-  averageRating: number;
-  totalRuntime: number;
-  topGenres: Array<{ name: string; count: number }>;
-  topDirectors: Array<{ name: string; count: number }>;
-  // Add more fields as we implement them
+  total_films: number;
+  metadata_coverage: number;
+  average_rating: number;
+  most_common_rating: number;
+  days_watched: number;
+  hours_watched: number;
+  favorite_genre: [string, number];
+  top_genres: CountItem[];
+  insights: InsightItem[];
+  top_directors: CountItem[];
+  total_directors: number;
+  most_watched_director: [string, number];
+  decades: DecadeItem[];
+  favorite_decade: [string, number];
+  top_countries: CountItem[];
+  total_countries: number;
+  average_runtime: number;
+  top_actors: ActorItem[];
+  top_languages: LanguageItem[];
+  analysis_date: string;
+  has_ratings_data: boolean;
+  has_diary_data: boolean;
+  has_watchlist_data: boolean;
+  has_reviews_data: boolean;
 }
 
-export default function ResultsPage() {
+// --- Reusable Components ---
+
+interface StatCardProps {
+  icon: React.ReactNode;
+  title: string;
+  value: string | number;
+  unit: string;
+  gradient: string;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ icon, title, value, unit, gradient }) => (
+  <motion.div
+    variants={itemVariants}
+    className={`p-6 rounded-3xl text-white shadow-2xl ${gradient}`}
+  >
+    <div className="flex items-center justify-center w-12 h-12 bg-white/20 rounded-xl mb-4">
+      {icon}
+    </div>
+    <div className="text-4xl font-black mb-1">{value} <span className="text-2xl opacity-80">{unit}</span></div>
+    <p className="text-base opacity-90 font-medium">{title}</p>
+  </motion.div>
+);
+
+interface SectionProps {
+    children: React.ReactNode;
+    className?: string;
+}
+
+const Section: React.FC<SectionProps> = ({ children, className = "" }) => (
+  <motion.section
+    initial="hidden"
+    whileInView="visible"
+    viewport={{ once: true, amount: 0.2 }}
+    variants={containerVariants}
+    className={`bg-white/5 backdrop-blur-2xl rounded-3xl p-6 md:p-8 border border-white/10 shadow-2xl ${className}`}
+  >
+    {children}
+  </motion.section>
+);
+
+interface SectionTitleProps {
+    icon: React.ReactNode;
+    title: string;
+    subtitle: string;
+}
+
+const SectionTitle: React.FC<SectionTitleProps> = ({ icon, title, subtitle }) => (
+  <div className="flex items-center mb-6">
+    <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center mr-4">
+      {icon}
+    </div>
+    <div>
+      <h3 className="text-2xl font-bold text-white">{title}</h3>
+      <p className="text-sm text-gray-400">{subtitle}</p>
+    </div>
+  </div>
+);
+
+// Animation Variants
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
+const itemVariants: Variants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: { y: 0, opacity: 1 }
+};
+const chartVariants: Variants = {
+    hidden: { opacity: 0, y: 50 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: 'easeOut' } },
+};
+
+// --- Main Page Component ---
+const ComprehensiveResultsPage = () => {
   const [stats, setStats] = useState<LetterboxdStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('session');
 
   useEffect(() => {
-    if (!sessionId) {
-      setError('No session ID provided');
-      setLoading(false);
-      return;
+    const savedStats = localStorage.getItem('letterboxdStats');
+    if (savedStats) {
+      try {
+        setStats(JSON.parse(savedStats));
+      } catch (err) {
+        console.error('Error parsing stats:', err);
+      }
     }
-
-    // For now, let's simulate the data loading
-    // Later this will fetch from our backend
-    setTimeout(() => {
-      setStats({
-        totalFilms: 247,
-        averageRating: 4.2,
-        totalRuntime: 24580, // minutes
-        topGenres: [
-          { name: 'Drama', count: 89 },
-          { name: 'Comedy', count: 56 },
-          { name: 'Thriller', count: 43 },
-          { name: 'Horror', count: 31 },
-          { name: 'Romance', count: 28 }
-        ],
-        topDirectors: [
-          { name: 'Christopher Nolan', count: 8 },
-          { name: 'Quentin Tarantino', count: 7 },
-          { name: 'Martin Scorsese', count: 6 },
-          { name: 'Denis Villeneuve', count: 5 },
-          { name: 'Jordan Peele', count: 4 }
-        ]
-      });
-      setLoading(false);
-    }, 2000);
-  }, [sessionId]);
+    setLoading(false);
+  }, []);
 
   if (loading) {
+    return <div className="min-h-screen bg-gray-900" />;
+  }
+
+  if (!stats) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
         <div className="text-center">
-          <div className="animate-spin w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <h2 className="text-2xl font-bold text-white mb-2">Analyzing Your Movies...</h2>
-          <p className="text-gray-300">This may take a few moments</p>
+          <h2 className="text-2xl font-bold mb-4">No data found</h2>
+          <p className="text-gray-400">Please upload your Letterboxd data first.</p>
+          <a href="/" className="mt-6 inline-block px-6 py-2 bg-orange-500 rounded-lg font-bold">
+            Go Back
+          </a>
         </div>
       </div>
     );
   }
 
-  if (error || !stats) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-white mb-2">Oops! Something went wrong</h2>
-          <p className="text-gray-300">{error || 'Failed to load your stats'}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const hoursWatched = Math.round(stats.totalRuntime / 60);
-  const daysWatched = Math.round(hoursWatched / 24 * 10) / 10;
-
+  // --- Data Transformations for Charts ---
+  const decadeData = [...stats.decades].sort((a, b) => parseInt(a.decade) - parseInt(b.decade));
+  const languageData = stats.top_languages.slice(0, 6);
+  const totalLanguageCount = languageData.reduce((acc, lang) => acc + lang.count, 0);
+  const COLORS = ['#FF8042', '#0088FE', '#00C49F', '#FFBB28', '#AF19FF', '#FF1943'];
+  const languageMap: { [key: string]: string } = {
+    en: 'English', fr: 'French', ja: 'Japanese', es: 'Spanish', ko: 'Korean',
+    de: 'German', it: 'Italian', ru: 'Russian', pt: 'Portuguese', zh: 'Chinese',
+    hi: 'Hindi', sv: 'Swedish', no: 'Norwegian', da: 'Danish', fi: 'Finnish'
+  };
+  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
-              Your <span className="bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent">
-                Letterboxd Wrapped
-              </span>
-            </h1>
-            <p className="text-xl text-gray-300">Here's your movie year in numbers</p>
-          </div>
-
-          {/* Main Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <div className="bg-gradient-to-br from-pink-500 to-orange-500 p-6 rounded-2xl text-white">
-              <Film className="w-8 h-8 mb-3" />
-              <h3 className="text-3xl font-bold mb-1">{stats.totalFilms}</h3>
-              <p className="text-sm opacity-90">Films Watched</p>
-            </div>
-            
-            <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-6 rounded-2xl text-white">
-              <Star className="w-8 h-8 mb-3" />
-              <h3 className="text-3xl font-bold mb-1">{stats.averageRating}★</h3>
-              <p className="text-sm opacity-90">Average Rating</p>
-            </div>
-            
-            <div className="bg-gradient-to-br from-green-500 to-teal-500 p-6 rounded-2xl text-white">
-              <Clock className="w-8 h-8 mb-3" />
-              <h3 className="text-3xl font-bold mb-1">{hoursWatched}h</h3>
-              <p className="text-sm opacity-90">{daysWatched} days of movies</p>
-            </div>
-            
-            <div className="bg-gradient-to-br from-yellow-500 to-red-500 p-6 rounded-2xl text-white">
-              <TrendingUp className="w-8 h-8 mb-3" />
-              <h3 className="text-3xl font-bold mb-1">{stats.topGenres[0].name}</h3>
-              <p className="text-sm opacity-90">Top Genre</p>
-            </div>
-          </div>
-
-          {/* Detailed Stats */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-            {/* Top Genres */}
-            <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Your Top Genres</h3>
-              <div className="space-y-4">
-                {stats.topGenres.map((genre, index) => (
-                  <div key={genre.name} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-orange-400 font-bold">{index + 1}</span>
-                      <span className="text-white">{genre.name}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-16 bg-white/20 rounded-full h-2">
-                        <div 
-                          className="bg-orange-400 h-2 rounded-full" 
-                          style={{width: `${(genre.count / stats.topGenres[0].count) * 100}%`}}
-                        ></div>
-                      </div>
-                      <span className="text-gray-300 text-sm">{genre.count}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top Directors */}
-            <div className="bg-white/10 backdrop-blur-lg rounded-3xl p-8">
-              <h3 className="text-2xl font-bold text-white mb-6">Your Favorite Directors</h3>
-              <div className="space-y-4">
-                {stats.topDirectors.map((director, index) => (
-                  <div key={director.name} className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-orange-400 font-bold">{index + 1}</span>
-                      <span className="text-white">{director.name}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-16 bg-white/20 rounded-full h-2">
-                        <div 
-                          className="bg-orange-400 h-2 rounded-full" 
-                          style={{width: `${(director.count / stats.topDirectors[0].count) * 100}%`}}
-                        ></div>
-                      </div>
-                      <span className="text-gray-300 text-sm">{director.count}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Share Section */}
-          <div className="text-center">
-            <h3 className="text-2xl font-bold text-white mb-6">Share Your Wrapped</h3>
-            <div className="flex flex-wrap justify-center gap-4">
-              <button className="bg-gradient-to-r from-pink-500 to-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:scale-105 transition-transform">
-                Instagram Story
-              </button>
-              <button className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-3 rounded-xl font-semibold hover:scale-105 transition-transform">
-                Twitter Card
-              </button>
-              <button className="bg-gradient-to-r from-green-500 to-teal-500 text-white px-6 py-3 rounded-xl font-semibold hover:scale-105 transition-transform">
-                Download PNG
-              </button>
-            </div>
-          </div>
+    <div className={`font-sans bg-gray-900 text-white`}>
+        <div className="absolute inset-0 z-0 opacity-20">
+             <div className="absolute top-0 left-0 w-96 h-96 bg-purple-600 rounded-full filter blur-3xl animate-blob"></div>
+             <div className="absolute top-0 right-0 w-96 h-96 bg-orange-600 rounded-full filter blur-3xl animate-blob animation-delay-2000"></div>
+             <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-blue-600 rounded-full filter blur-3xl animate-blob animation-delay-4000"></div>
         </div>
-      </div>
+      <main className="relative z-10 p-4 md:p-8 max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <header className="text-center py-12">
+          <motion.h1 
+            variants={itemVariants}
+            initial="hidden"
+            animate="visible"
+            className="text-5xl md:text-7xl font-black text-white mb-4 leading-tight"
+          >
+            Your <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">
+              Letterboxd
+            </span> Wrapped
+          </motion.h1>
+          <motion.p 
+            variants={itemVariants}
+            initial="hidden"
+            animate="visible"
+            transition={{delay: 0.2}}
+            className="text-lg text-gray-400"
+          >
+            A comprehensive analysis of your cinematic journey.
+          </motion.p>
+        </header>
+
+        {/* Main Stats Grid */}
+        <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        >
+          <StatCard icon={<Film size={28} />} title="Total Films" value={stats.total_films} unit="films" gradient="from-pink-500 to-orange-500" />
+          <StatCard icon={<Star size={28} />} title="Average Rating" value={stats.average_rating.toFixed(2)} unit="★" gradient="from-blue-500 to-purple-500" />
+          <StatCard icon={<Clock size={28} />} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-green-500 to-teal-500" />
+          <StatCard icon={<TrendingUp size={28} />} title="Top Genre" value={stats.favorite_genre[0]} unit="" gradient="from-yellow-500 to-red-500" />
+        </motion.div>
+
+        {/* Special Insights */}
+        {stats.insights && (
+            <Section>
+                <SectionTitle icon={<Sparkles size={24} className="text-yellow-400"/>} title="Special Insights" subtitle="Fun facts based on your viewing habits" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {stats.insights.slice(0, 3).map((insight) => (
+                    <motion.div variants={itemVariants} key={insight.title} className="bg-white/5 rounded-xl p-4">
+                        <h4 className="font-bold text-orange-400">{insight.title}</h4>
+                        <p className="text-sm text-gray-300">{insight.description}</p>
+                    </motion.div>
+                    ))}
+                </div>
+            </Section>
+        )}
+
+        {/* Directors, Actors & Runtime */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-8">
+                {/* Favorite Directors */}
+                <Section>
+                    <SectionTitle icon={<Award size={24} className="text-orange-400" />} title="Favorite Directors" subtitle={`${stats.total_directors} directors watched`} />
+                    <div className="relative h-80 overflow-y-auto pr-2 custom-scrollbar">
+                        {stats.top_directors.slice(0,15).map((director, index) => (
+                        <motion.div variants={itemVariants} key={director.name} className="flex justify-between items-center py-2 border-b border-white/5">
+                            <div className="flex items-center">
+                                <span className="text-sm font-bold w-8 text-gray-400">#{index + 1}</span>
+                                <span className="font-medium">{director.name}</span>
+                            </div>
+                            <span className="font-bold text-lg text-gray-300">{director.count}</span>
+                        </motion.div>
+                        ))}
+                         <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-white/5 to-transparent pointer-events-none"></div>
+                    </div>
+                </Section>
+                 {/* Top Actors */}
+                <Section>
+                    <SectionTitle icon={<Users size={24} className="text-pink-400" />} title="Most Watched Actors" subtitle="Your on-screen favorites" />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                    {stats.top_actors.slice(0, 3).map((actor) => (
+                        <motion.div variants={itemVariants} key={actor.name}>
+                        <div className="w-24 h-24 rounded-full bg-white/10 mx-auto mb-2 flex items-center justify-center">
+                            <Users size={32} className="text-gray-400" />
+                        </div>
+                        <h4 className="font-bold">{actor.name}</h4>
+                        <p className="text-sm text-gray-400">{actor.count} films</p>
+                        </motion.div>
+                    ))}
+                    </div>
+                </Section>
+            </div>
+            <div className="space-y-8">
+                {/* Runtime Record */}
+                <Section>
+                    <SectionTitle icon={<Clock size={24} className="text-teal-400" />} title="Average Runtime" subtitle="How long you like your movies" />
+                    <div className="text-center">
+                        <div className="text-6xl font-black text-white">{stats.average_runtime.toFixed(0)}</div>
+                        <p className="text-gray-300">minutes</p>
+                    </div>
+                </Section>
+                {/* Languages */}
+                <Section>
+                    <SectionTitle icon={<Languages size={24} className="text-blue-400" />} title="Languages" subtitle="Your cinematic linguistic profile" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                        <motion.div variants={chartVariants} className="w-full h-60">
+                            <ResponsiveContainer>
+                                <PieChart>
+                                    <Pie data={languageData} dataKey="count" nameKey="language" cx="50%" cy="50%" innerRadius={50} outerRadius={80} fill="#8884d8" paddingAngle={5}>
+                                        {languageData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                    </Pie>
+                                    <Tooltip
+                                        contentStyle={{
+                                            background: 'rgba(30, 41, 59, 0.8)',
+                                            border: '1px solid rgba(255,255,255,0.2)',
+                                            borderRadius: '1rem'
+                                        }}
+                                        formatter={(value: number, name: string) => [`${value} films`, languageMap[name] || name.toUpperCase()]}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </motion.div>
+                        <motion.div variants={containerVariants} className="space-y-2">
+                            {languageData.map((entry, index) => (
+                                <motion.div variants={itemVariants} key={entry.language} className="flex justify-between items-center text-sm">
+                                    <div className="flex items-center">
+                                        <div className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                                        <span className="font-medium text-gray-300">{languageMap[entry.language] || entry.language.toUpperCase()}</span>
+                                    </div>
+                                    <span className="font-bold text-white">{((entry.count / totalLanguageCount) * 100).toFixed(1)}%</span>
+                                </motion.div>
+                            ))}
+                        </motion.div>
+                    </div>
+                </Section>
+            </div>
+        </div>
+
+        {/* Decade Chart */}
+        <Section>
+            <SectionTitle icon={<Calendar size={24} className="text-purple-400" />} title="Films by Decade" subtitle="Your journey through film history" />
+            <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+                <ResponsiveContainer>
+                    <LineChart data={decadeData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                        <XAxis dataKey="decade" stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+                        <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }}/>
+                        <Tooltip 
+                            contentStyle={{ 
+                                background: 'rgba(30, 41, 59, 0.8)',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                borderRadius: '1rem' 
+                            }} 
+                        />
+                        <Line type="monotone" dataKey="count" stroke="#fb923c" strokeWidth={3} dot={{ r: 5 }} activeDot={{ r: 8 }} />
+                    </LineChart>
+                </ResponsiveContainer>
+            </motion.div>
+        </Section>
+        
+        {/* Footer */}
+        <footer className="text-center py-12">
+            <h3 className="text-3xl font-bold mb-4">Share Your Wrapped</h3>
+             <div className="flex justify-center gap-4 mt-4">
+                <button className="bg-pink-500 p-3 rounded-full hover:scale-110 transition-transform"><Instagram /></button>
+                <button className="bg-sky-500 p-3 rounded-full hover:scale-110 transition-transform"><Twitter /></button>
+                <button className="bg-green-500 p-3 rounded-full hover:scale-110 transition-transform"><Download /></button>
+            </div>
+        </footer>
+      </main>
     </div>
   );
-}
+};
+
+export default ComprehensiveResultsPage;
