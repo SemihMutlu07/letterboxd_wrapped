@@ -113,7 +113,7 @@ export default function LoadingPage() {
             )}
             
             <div className="text-sm text-gray-400 mt-6 min-h-[40px]">
-              <p>"{currentFact}"</p>
+              <p>&quot;{currentFact}&quot;</p>
             </div>
           </>
         )}

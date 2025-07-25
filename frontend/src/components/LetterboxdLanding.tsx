@@ -276,7 +276,7 @@ export default function LetterboxdLanding() {
                   <p>Follow these steps on the Letterboxd website to get your data:</p>
                   <ol className="list-decimal list-inside space-y-2">
                     <li>Go to your <strong className="text-orange-400">Profile</strong> and click on <strong className="text-orange-400">Settings</strong>.</li>
-                    <li>Select the <strong className="text-orange-400">Data</strong> tab from the settings menu (it's on the far right).</li>
+                    <li>Select the <strong className="text-orange-400">Data</strong> tab from the settings menu (it&apos;s on the far right).</li>
                     <li>Click the <strong className="text-orange-400">Export Your Data</strong> button.</li>
                     <li>Your data will be prepared and a <strong className="text-orange-400">.zip file</strong> will download.</li>
                     <li>Once downloaded, just drag and drop the file here!</li>
