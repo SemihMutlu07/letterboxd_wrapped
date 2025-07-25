@@ -103,7 +103,7 @@ const InstagramStoryTemplate = () => {
           {/* Header */}
           <motion.div variants={itemVariants} className="mb-12">
             <h1 className="text-3xl font-bold text-white mb-2">
-              @{data.userName}'s
+              @{data.userName}&apos;s
             </h1>
             <h2 className="text-4xl font-bold bg-gradient-to-r from-orange-400 to-pink-500 bg-clip-text text-transparent">
               Letterboxd Wrapped
@@ -156,7 +156,7 @@ const InstagramStoryTemplate = () => {
               className="bg-gradient-to-r from-green-500/20 to-teal-500/20 backdrop-blur-lg rounded-3xl p-6 border border-white/20"
             >
               <TrendingUp className="w-10 h-10 text-green-400 mx-auto mb-3" />
-              <h4 className="text-2xl font-bold text-white mb-1">You're a</h4>
+              <h4 className="text-2xl font-bold text-white mb-1">You&apos;re a</h4>
               <motion.div variants={numberVariants}>
                 <h3 className="text-4xl font-bold bg-gradient-to-r from-green-400 to-teal-400 bg-clip-text text-transparent mb-1">
                   {data.topGenre}
