@@ -19,6 +19,21 @@ export default function LetterboxdLanding() {
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const router = useRouter();
 
+  // Test backend connectivity on component mount
+  useEffect(() => {
+    const testBackend = async () => {
+      try {
+                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
+         console.log('Testing backend connectivity to:', apiUrl);
+        const response = await fetch(`${apiUrl}/docs`); // FastAPI docs endpoint
+        console.log('Backend test response:', response.status);
+      } catch (err) {
+        console.error('Backend connectivity test failed:', err);
+      }
+    };
+    testBackend();
+  }, []);
+
   // Poll progress endpoint during upload
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -26,7 +41,9 @@ export default function LetterboxdLanding() {
     if (isUploading) {
       intervalId = setInterval(async () => {
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/progress`);
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
+          console.log('API URL:', apiUrl); // Debug log
+          const response = await fetch(`${apiUrl}/api/progress`);
           if (response.ok) {
             const progressData = await response.json();
             setProgress(progressData);
@@ -62,10 +79,17 @@ export default function LetterboxdLanding() {
     formData.append('file', file);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/analyze`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
+      console.log('API URL for analyze:', apiUrl); // Debug log
+      console.log('Making request to:', `${apiUrl}/api/analyze`); // Debug log
+      
+      const response = await fetch(`${apiUrl}/api/analyze`, {
         method: 'POST',
         body: formData,
       });
+
+      console.log('Response status:', response.status); // Debug log
+      console.log('Response headers:', response.headers); // Debug log
 
       if (response.ok) {
         const result = await response.json();
@@ -77,6 +101,7 @@ export default function LetterboxdLanding() {
         throw new Error(errorData.detail || 'Analysis failed');
       }
     } catch (err) {
+      console.error('Fetch error details:', err); // Debug log
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       setIsUploading(false);
       setProgress(null);

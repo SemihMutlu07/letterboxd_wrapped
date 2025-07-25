@@ -95,8 +95,8 @@ const SectionTitle: React.FC<SectionTitleProps> = ({ icon, title, subtitle }) =>
       {icon}
     </div>
     <div>
-      <h3 className="text-2xl font-bold text-white">{title}</h3>
-      <p className="text-sm text-gray-400">{subtitle}</p>
+      <h3 className="text-3xl font-bold text-white">{title}</h3>
+      <p className="text-base text-gray-400">{subtitle}</p>
     </div>
   </div>
 );
@@ -175,7 +175,7 @@ const ComprehensiveResultsPage = () => {
             variants={itemVariants}
             initial="hidden"
             animate="visible"
-            className="text-5xl md:text-7xl font-black text-white mb-4 leading-tight"
+            className="text-6xl md:text-8xl font-black text-white mb-4 leading-tight"
           >
             Your <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">
               Letterboxd
@@ -186,7 +186,7 @@ const ComprehensiveResultsPage = () => {
             initial="hidden"
             animate="visible"
             transition={{delay: 0.2}}
-            className="text-lg text-gray-400"
+            className="text-xl text-gray-400"
           >
             A comprehensive analysis of your cinematic journey.
           </motion.p>
@@ -220,38 +220,23 @@ const ComprehensiveResultsPage = () => {
             </Section>
         )}
 
-        {/* Directors, Actors & Runtime */}
+        {/* Directors & Runtime */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
+            <div className="lg:col-span-2">
                 {/* Favorite Directors */}
                 <Section>
                     <SectionTitle icon={<Award size={24} className="text-orange-400" />} title="Favorite Directors" subtitle={`${stats.total_directors} directors watched`} />
-                    <div className="relative h-80 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="relative h-80 overflow-y-auto pr-4 custom-scrollbar">
                         {stats.top_directors.slice(0,15).map((director, index) => (
-                        <motion.div variants={itemVariants} key={director.name} className="flex justify-between items-center py-2 border-b border-white/5">
+                        <motion.div variants={itemVariants} key={director.name} className="flex justify-between items-center py-3 border-b border-white/5">
                             <div className="flex items-center">
-                                <span className="text-sm font-bold w-8 text-gray-400">#{index + 1}</span>
-                                <span className="font-medium">{director.name}</span>
+                                <span className="text-md font-bold w-10 text-gray-400">#{index + 1}</span>
+                                <span className="font-semibold text-xl">{director.name}</span>
                             </div>
-                            <span className="font-bold text-lg text-gray-300">{director.count}</span>
+                            <span className="font-bold text-2xl text-gray-300">{director.count}</span>
                         </motion.div>
                         ))}
                          <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-white/5 to-transparent pointer-events-none"></div>
-                    </div>
-                </Section>
-                 {/* Top Actors */}
-                <Section>
-                    <SectionTitle icon={<Users size={24} className="text-pink-400" />} title="Most Watched Actors" subtitle="Your on-screen favorites" />
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                    {stats.top_actors.slice(0, 3).map((actor) => (
-                        <motion.div variants={itemVariants} key={actor.name}>
-                        <div className="w-24 h-24 rounded-full bg-white/10 mx-auto mb-2 flex items-center justify-center">
-                            <Users size={32} className="text-gray-400" />
-                        </div>
-                        <h4 className="font-bold">{actor.name}</h4>
-                        <p className="text-sm text-gray-400">{actor.count} films</p>
-                        </motion.div>
-                    ))}
                     </div>
                 </Section>
             </div>
@@ -260,47 +245,77 @@ const ComprehensiveResultsPage = () => {
                 <Section>
                     <SectionTitle icon={<Clock size={24} className="text-teal-400" />} title="Average Runtime" subtitle="How long you like your movies" />
                     <div className="text-center">
-                        <div className="text-6xl font-black text-white">{stats.average_runtime.toFixed(0)}</div>
-                        <p className="text-gray-300">minutes</p>
-                    </div>
-                </Section>
-                {/* Languages */}
-                <Section>
-                    <SectionTitle icon={<Languages size={24} className="text-blue-400" />} title="Languages" subtitle="Your cinematic linguistic profile" />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                        <motion.div variants={chartVariants} className="w-full h-60">
-                            <ResponsiveContainer>
-                                <PieChart>
-                                    <Pie data={languageData} dataKey="count" nameKey="language" cx="50%" cy="50%" innerRadius={50} outerRadius={80} fill="#8884d8" paddingAngle={5}>
-                                        {languageData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                    </Pie>
-                                    <Tooltip
-                                        contentStyle={{
-                                            background: 'rgba(30, 41, 59, 0.8)',
-                                            border: '1px solid rgba(255,255,255,0.2)',
-                                            borderRadius: '1rem'
-                                        }}
-                                        formatter={(value: number, name: string) => [`${value} films`, languageMap[name] || name.toUpperCase()]}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </motion.div>
-                        <motion.div variants={containerVariants} className="space-y-2">
-                            {languageData.map((entry, index) => (
-                                <motion.div variants={itemVariants} key={entry.language} className="flex justify-between items-center text-sm">
-                                    <div className="flex items-center">
-                                        <div className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                                        <span className="font-medium text-gray-300">{languageMap[entry.language] || entry.language.toUpperCase()}</span>
-                                    </div>
-                                    <span className="font-bold text-white">{((entry.count / totalLanguageCount) * 100).toFixed(1)}%</span>
-                                </motion.div>
-                            ))}
-                        </motion.div>
+                        <div className="text-8xl font-black text-white">{stats.average_runtime.toFixed(0)}</div>
+                        <p className="text-gray-300 text-lg">minutes</p>
                     </div>
                 </Section>
             </div>
         </div>
 
+        {/* Languages & Top Countries */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <Section>
+                <SectionTitle icon={<Languages size={24} className="text-blue-400" />} title="Languages" subtitle="Your cinematic linguistic profile" />
+                <div className="flex flex-col items-center w-full">
+                    <motion.div variants={chartVariants} className="w-full h-72">
+                        <ResponsiveContainer>
+                            <PieChart>
+                                <Pie data={languageData} dataKey="count" nameKey="language" cx="50%" cy="50%" innerRadius={60} outerRadius={100} fill="#8884d8" paddingAngle={5}>
+                                    {languageData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                                </Pie>
+                                <Tooltip
+                                    cursor={{fill: 'rgba(255,255,255,0.1)'}}
+                                    contentStyle={{
+                                        background: 'rgba(30, 41, 59, 0.9)',
+                                        border: '1px solid rgba(255,255,255,0.2)',
+                                        borderRadius: '1rem',
+                                        color: '#fff'
+                                    }}
+                                    formatter={(value: number, name: string) => [`${value} films`, languageMap[name] || name.toUpperCase()]}
+                                />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </motion.div>
+                    <motion.div variants={containerVariants} className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-4">
+                        {languageData.map((entry, index) => (
+                            <motion.div variants={itemVariants} key={entry.language} className="flex items-center text-sm">
+                                <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                                <span className="font-medium text-gray-300">{languageMap[entry.language] || entry.language.toUpperCase()}</span>
+                                <span className="font-bold text-white ml-2">{((entry.count / totalLanguageCount) * 100).toFixed(1)}%</span>
+                            </motion.div>
+                        ))}
+                    </motion.div>
+                </div>
+            </Section>
+            <Section>
+                <SectionTitle icon={<TrendingUp size={24} className="text-green-400" />} title="Top Countries" subtitle={`Films from ${stats.total_countries} countries`} />
+                <div className="relative h-80 overflow-y-auto pr-4 custom-scrollbar">
+                    {stats.top_countries.map((country, index) => (
+                    <motion.div variants={itemVariants} key={country.name} className="flex justify-between items-center py-3 border-b border-white/5">
+                        <div className="flex items-center">
+                            <span className="text-md font-bold w-10 text-gray-400">#{index + 1}</span>
+                            <span className="font-semibold text-xl">{country.name}</span>
+                        </div>
+                        <span className="font-bold text-2xl text-gray-300">{country.count}</span>
+                    </motion.div>
+                    ))}
+                    <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-white/5 to-transparent pointer-events-none"></div>
+                </div>
+            </Section>
+        </div>
+
+        {/* Top Genres */}
+        <Section>
+            <SectionTitle icon={<TrendingUp size={24} className="text-yellow-400" />} title="Top Genres" subtitle="Your most-watched movie genres" />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {stats.top_genres.slice(0, 5).map((genre) => (
+                    <motion.div variants={itemVariants} key={genre.name} className="bg-white/5 rounded-xl p-4 text-center">
+                        <h4 className="font-bold text-lg text-white">{genre.name}</h4>
+                        <p className="text-sm text-gray-400">{genre.count} films</p>
+                    </motion.div>
+                ))}
+            </div>
+        </Section>
         {/* Decade Chart */}
         <Section>
             <SectionTitle icon={<Calendar size={24} className="text-purple-400" />} title="Films by Decade" subtitle="Your journey through film history" />
