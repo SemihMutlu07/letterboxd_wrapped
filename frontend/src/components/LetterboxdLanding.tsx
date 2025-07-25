@@ -26,7 +26,7 @@ export default function LetterboxdLanding() {
     if (isUploading) {
       intervalId = setInterval(async () => {
         try {
-          const response = await fetch('https://fastapi-production-2b21.up.railway.app/api/progress');
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/progress`);
           if (response.ok) {
             const progressData = await response.json();
             setProgress(progressData);
@@ -62,7 +62,7 @@ export default function LetterboxdLanding() {
     formData.append('file', file);
 
     try {
-      const response = await fetch('https://fastapi-production-2b21.up.railway.app/api/analyze', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/analyze`, {
         method: 'POST',
         body: formData,
       });

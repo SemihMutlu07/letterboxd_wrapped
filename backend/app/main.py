@@ -20,11 +20,17 @@ warnings.filterwarnings('ignore')
 
 load_dotenv()
 
+# --- CORS Configuration ---
+# We'll read the allowed origins from an environment variable.
+# This variable should be a comma-separated string of URLs.
+# Example: "http://localhost:3000,https://your-vercel-app.vercel.app"
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(',')
+
 # --- Configuration & Setup ---
 app = FastAPI(title="Letterboxd Wrapped API - Comprehensive Edition")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
