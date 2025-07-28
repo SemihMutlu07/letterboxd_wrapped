@@ -3,7 +3,6 @@ uvicorn
 pandas
 python-multipart
 Jinja2
-requests
 zipstream-ng
 aiofiles==24.1.0
 aiohappyeyeballs==2.6.1
