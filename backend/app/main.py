@@ -218,22 +218,33 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     """Process Letterboxd data with high-speed, concurrent analysis."""
     
     update_progress("loading", "Loading CSV data files...", 0, 4)
-    # This part is synchronous and fast (reading local files)
+    
+    # --- Load all CSV files ---
     ratings_df = pd.read_csv(csv_files['ratings.csv']) if 'ratings.csv' in csv_files else pd.DataFrame()
     diary_df = pd.read_csv(csv_files['diary.csv']) if 'diary.csv' in csv_files else pd.DataFrame()
     watchlist_df = pd.read_csv(csv_files['watchlist.csv']) if 'watchlist.csv' in csv_files else pd.DataFrame()
     reviews_df = pd.read_csv(csv_files['reviews.csv']) if 'reviews.csv' in csv_files else pd.DataFrame()
-    
+
     if ratings_df.empty and diary_df.empty:
         raise ValueError("❌ No usable data found. Need at least ratings.csv or diary.csv")
-    
+
     # --- Film Dataset Creation (Synchronous Pandas) ---
     all_films = []
+    # Combine ratings and diary, standardizing column names
     if not ratings_df.empty:
-        all_films.extend(ratings_df.rename(columns={'Name': 'title', 'Year': 'year'}).to_dict('records'))
+        df = ratings_df.rename(columns={'Name': 'title', 'Year': 'year', 'Rating': 'rating'})
+        all_films.extend(df.to_dict('records'))
     if not diary_df.empty:
-        all_films.extend(diary_df.rename(columns={'Name': 'title', 'Year': 'year'}).to_dict('records'))
-        
+        df = diary_df.rename(columns={'Name': 'title', 'Year': 'year', 'Rating': 'rating'})
+        # Avoid duplicating films if they are in both ratings and diary
+        if not all_films:
+            all_films.extend(df.to_dict('records'))
+        else:
+            # Add only diary entries for films not already present from ratings
+            temp_df = pd.DataFrame(all_films)
+            merged_df = df.merge(temp_df[['title', 'year']], on=['title', 'year'], how='left', indicator=True)
+            all_films.extend(merged_df[merged_df['_merge'] == 'left_only'].to_dict('records'))
+
     films_df = pd.DataFrame(all_films)
     unique_films = films_df[['title', 'year']].drop_duplicates().reset_index(drop=True)
     update_progress("processing", f"Found {len(unique_films)} unique films", 1, 3)
@@ -255,7 +266,17 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     update_progress("tmdb_metadata", "Metadata collection complete", len(unique_tmdb_ids), len(unique_tmdb_ids))
     
     # --- Final Data Merging and Analysis (Synchronous Pandas) ---
-    films_enriched = pd.merge(unique_films, metadata_df, on='tmdb_id', how='left')
+    films_enriched = pd.merge(unique_films, metadata_df, on='tmdb_id', how='left', suffixes=('_csv', '_tmdb'))
+    
+    # Consolidate title: prefer TMDb title, fallback to CSV title
+    if 'title_tmdb' in films_enriched.columns:
+        films_enriched['title'] = films_enriched['title_tmdb'].fillna(films_enriched['title_csv'])
+    else:
+        films_enriched['title'] = films_enriched['title_csv']
+    
+    # Clean up duplicated columns
+    films_enriched.drop(columns=[col for col in ['title_csv', 'title_tmdb'] if col in films_enriched.columns], inplace=True)
+    
     update_progress("analyzing", "Generating comprehensive statistics...", 0, 10)
     
     # The rest of the analysis is CPU-bound and remains synchronous
@@ -267,110 +288,68 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     stats['metadata_coverage'] = round((len(metadata_df) / len(unique_films)) * 100, 1) if len(unique_films) > 0 else 0
     update_progress("analyzing", "Basic stats complete", 1, 10)
     
-    # === RATING ANALYSIS ===
-    if 'Rating' in films_df.columns and films_df['Rating'].notna().any():
-        ratings = films_df['Rating'].dropna()
+    # === RATING ANALYSIS (Restored from original for more detail) ===
+    if 'rating' in films_df.columns and films_df['rating'].notna().any():
+        ratings = films_df['rating'].dropna()
         stats['average_rating'] = round(ratings.mean(), 2)
+        stats['median_rating'] = round(ratings.median(), 1)
         stats['rating_distribution'] = ratings.value_counts().sort_index().to_dict()
+        stats['total_rated_films'] = len(ratings)
+        stats['most_common_rating'] = ratings.mode().iloc[0] if not ratings.mode().empty else None
     update_progress("analyzing", "Rating analysis complete", 2, 10)
     
-    # === RUNTIME ANALYSIS ===
+    # === RUNTIME ANALYSIS (Restored and fixed) ===
     if 'runtime' in films_enriched.columns and films_enriched['runtime'].notna().any():
-        runtimes = films_enriched['runtime'].dropna().astype(int)
-        total_runtime = int(runtimes.sum())
-        stats['total_runtime'] = total_runtime
-        stats['hours_watched'] = round(total_runtime / 60, 1)
-        stats['days_watched'] = round(total_runtime / (60 * 24), 1)
-        stats['longest_film'] = films_enriched.loc[runtimes.idxmax()][['title', 'runtime']].to_dict()
-        stats['shortest_film'] = films_enriched.loc[runtimes.idxmin()][['title', 'runtime']].to_dict()
+        runtimes = films_enriched[films_enriched['runtime'] > 0]['runtime'].dropna()
+        if not runtimes.empty:
+            total_runtime = int(runtimes.sum())
+            stats['total_runtime'] = total_runtime
+            stats['hours_watched'] = round(total_runtime / 60, 1)
+            stats['days_watched'] = round(total_runtime / (60 * 24), 1)
+            stats['average_runtime'] = round(runtimes.mean(), 1)
+            stats['median_runtime'] = round(runtimes.median(), 1)
+            
+            longest_film_data = films_enriched.loc[runtimes.idxmax()]
+            shortest_film_data = films_enriched.loc[runtimes.idxmin()]
+            
+            stats['longest_film'] = {
+                'title': longest_film_data['title'],
+                'runtime': int(longest_film_data['runtime'])
+            }
+            stats['shortest_film'] = {
+                'title': shortest_film_data['title'],
+                'runtime': int(shortest_film_data['runtime'])
+            }
     update_progress("analyzing", "Runtime analysis complete", 3, 10)
     
-    # === DIRECTOR, GENRE, DECADE, COUNTRY, LANGUAGE, CAST ANALYSIS ===
-    for analysis_type in ['director', 'genre', 'decade', 'country', 'language', 'cast']:
-        plural_type = analysis_type + 's'
-        if plural_type in films_enriched.columns:
-            # Flatten lists if necessary (for genres, countries, etc.)
-            if isinstance(films_enriched[plural_type].iloc[0], list):
-                counts = Counter([item for sublist in films_enriched[plural_type].dropna() for item in sublist])
-            else:
-                counts = Counter(films_enriched[plural_type].dropna())
-            
-            stats[f'top_{plural_type}'] = [{'name': name, 'count': count} for name, count in counts.most_common(20)]
-        update_progress("analyzing", f"{analysis_type.capitalize()} analysis complete", 4 + ['director', 'genre', 'decade', 'country', 'language', 'cast'].index(analysis_type), 10)
+    # === DETAILED ANALYSIS (Restored from original) ===
+    director_counts = Counter(films_enriched['director'].dropna())
+    stats['top_directors'] = [{'name': name, 'count': count} for name, count in director_counts.most_common(20)]
+    update_progress("analyzing", "Director analysis complete", 4, 10)
 
-    # === SPECIAL INSIGHTS ===
-    insights = []
-    
-    if stats.get('days_watched', 0) > 0:
-        insights.append({
-            'title': 'Time Invested',
-            'description': f"You've spent {stats['days_watched']} days of your life watching movies!"
-        })
-    
-    if stats.get('favorite_director'):
-        director_name, count = stats['favorite_director']
-        insights.append({
-            'title': 'Director Obsession',
-            'description': f"You're a big fan of {director_name} - you've watched {count} of their films!"
-        })
-    
-    if stats.get('favorite_decade'):
-        decade, count = stats['favorite_decade']
-        insights.append({
-            'title': 'Time Traveler',
-            'description': f"You love {decade} cinema with {count} films from that era!"
-        })
-    
-    if stats.get('average_rating', 0) > 4:
-        insights.append({
-            'title': 'Easy to Please',
-            'description': f"You're generous with ratings - averaging {stats['average_rating']}★!"
-        })
-    elif stats.get('average_rating', 0) < 3:
-        insights.append({
-            'title': 'Tough Critic',
-            'description': f"You're a tough critic with an average rating of {stats['average_rating']}★"
-        })
-    
-    if len(stats.get('top_countries', [])) > 10:
-        insights.append({
-            'title': 'Global Cinema Explorer',
-            'description': f"You've watched films from {stats['total_countries']} different countries!"
-        })
+    genre_counts = Counter([g for genres in films_enriched['genres'].dropna() for g in genres])
+    stats['top_genres'] = [{'name': name, 'count': count} for name, count in genre_counts.most_common(15)]
+    update_progress("analyzing", "Genre analysis complete", 5, 10)
 
-    stats['insights'] = insights
+    decade_counts = Counter(films_enriched['decade'].dropna())
+    stats['decades'] = [{'decade': d, 'count': c} for d, c in sorted(decade_counts.items(), key=lambda x: x[0], reverse=True)]
+    update_progress("analyzing", "Decade analysis complete", 6, 10)
 
-    # === RECENT ACTIVITY (Last 12 months) ===
-    current_date = datetime.now()
-    year_ago = current_date - timedelta(days=365)
-    
-    recent_stats = {}
-    if 'date_watched' in films_df.columns:
-        recent_films = films_df[films_df['date_watched'] >= year_ago]
-        recent_stats['films_watched_last_year'] = len(recent_films)
-    
-    if 'date_rated' in films_df.columns:
-        recent_ratings = films_df[films_df['date_rated'] >= year_ago]
-        recent_stats['films_rated_last_year'] = len(recent_ratings)
-    
-    stats['recent_activity'] = recent_stats
+    country_counts = Counter([c for countries in films_enriched['countries'].dropna() for c in countries])
+    stats['top_countries'] = [{'name': name, 'count': count} for name, count in country_counts.most_common(15)]
+    update_progress("analyzing", "Country analysis complete", 7, 10)
 
-    # === ADDITIONAL METADATA ===
+    language_counts = Counter(films_enriched['language'].dropna())
+    stats['top_languages'] = [{'language': lang, 'count': count} for lang, count in language_counts.most_common(10)]
+    update_progress("analyzing", "Language analysis complete", 8, 10)
+
+    cast_counts = Counter([actor for cast_list in films_enriched['cast'].dropna() for actor in cast_list])
+    stats['top_actors'] = [{'name': name, 'count': count} for name, count in cast_counts.most_common(20)]
+    update_progress("analyzing", "Cast analysis complete", 9, 10)
+
+    # === FINAL WRAP-UP ===
     stats['analysis_date'] = datetime.now().isoformat()
-    stats['total_unique_films'] = len(unique_films)
-    stats['has_diary_data'] = not diary_df.empty
-    stats['has_ratings_data'] = not ratings_df.empty
-    stats['has_watchlist_data'] = not watchlist_df.empty
-    stats['has_reviews_data'] = not reviews_df.empty
-    
     update_progress("analyzing", "Analysis complete!", 10, 10)
-    
-    print(f"✅ Comprehensive analysis complete!")
-    print(f"   📊 {stats['total_films']} total films analyzed")
-    print(f"   🎭 {stats['total_directors']} directors discovered")
-    print(f"   🎨 {stats['total_genres']} genres explored")
-    print(f"   🌍 {stats['total_countries']} countries represented")
-    
     return stats
 
 # --- API Endpoints ---
