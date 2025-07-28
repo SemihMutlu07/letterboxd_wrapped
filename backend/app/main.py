@@ -10,7 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
-import requests
+import asyncio
+import aiohttp
+import aiofiles
 import time
 import hashlib
 from dotenv import load_dotenv
