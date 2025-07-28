@@ -23,14 +23,14 @@ interface LetterboxdStats {
   most_common_rating: number;
   days_watched: number;
   hours_watched: number;
-  favorite_genre: [string, number];
+  favorite_genre: CountItem;
   top_genres: CountItem[];
   insights: InsightItem[];
   top_directors: CountItem[];
   total_directors: number;
-  most_watched_director: [string, number];
+  most_watched_director: CountItem;
   decades: DecadeItem[];
-  favorite_decade: [string, number];
+  favorite_decade: CountItem;
   top_countries: CountItem[];
   total_countries: number;
   average_runtime: number;
@@ -202,7 +202,7 @@ const ComprehensiveResultsPage = () => {
           <StatCard icon={<Film size={28} />} title="Total Films" value={stats.total_films} unit="films" gradient="from-pink-500 to-orange-500" />
           <StatCard icon={<Star size={28} />} title="Average Rating" value={stats.average_rating.toFixed(2)} unit="★" gradient="from-blue-500 to-purple-500" />
           <StatCard icon={<Clock size={28} />} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-green-500 to-teal-500" />
-          <StatCard icon={<TrendingUp size={28} />} title="Top Genre" value={stats.favorite_genre[0]} unit="" gradient="from-yellow-500 to-red-500" />
+          <StatCard icon={<TrendingUp size={28} />} title="Top Genre" value={stats.favorite_genre.name} unit="" gradient="from-yellow-500 to-red-500" />
         </motion.div>
 
         {/* Special Insights */}
