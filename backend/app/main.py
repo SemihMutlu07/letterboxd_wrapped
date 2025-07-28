@@ -24,7 +24,7 @@ load_dotenv()
 # We'll read the allowed origins from an environment variable.
 # This variable should be a comma-separated string of URLs.
 # Example: "http://localhost:3000,https://your-vercel-app.vercel.app"
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(',')
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://letterboxd-wrapped.netlify.app").split(',')
 
 # --- Configuration & Setup ---
 app = FastAPI(title="Letterboxd Wrapped API - Comprehensive Edition")
