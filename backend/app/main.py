@@ -325,18 +325,35 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     # === DETAILED ANALYSIS (Restored from original) ===
     director_counts = Counter(films_enriched['director'].dropna())
     stats['top_directors'] = [{'name': name, 'count': count} for name, count in director_counts.most_common(20)]
+    stats['total_directors'] = len(director_counts)
+    if director_counts:
+        name, count = director_counts.most_common(1)[0]
+        stats['most_watched_director'] = {'name': name, 'count': count}
+    else:
+        stats['most_watched_director'] = None
     update_progress("analyzing", "Director analysis complete", 4, 10)
 
     genre_counts = Counter([g for genres in films_enriched['genres'].dropna() for g in genres])
     stats['top_genres'] = [{'name': name, 'count': count} for name, count in genre_counts.most_common(15)]
+    if genre_counts:
+        name, count = genre_counts.most_common(1)[0]
+        stats['favorite_genre'] = {'name': name, 'count': count}
+    else:
+        stats['favorite_genre'] = None
     update_progress("analyzing", "Genre analysis complete", 5, 10)
 
     decade_counts = Counter(films_enriched['decade'].dropna())
     stats['decades'] = [{'decade': d, 'count': c} for d, c in sorted(decade_counts.items(), key=lambda x: x[0], reverse=True)]
+    if decade_counts:
+        name, count = decade_counts.most_common(1)[0]
+        stats['favorite_decade'] = {'name': name, 'count': count}
+    else:
+        stats['favorite_decade'] = None
     update_progress("analyzing", "Decade analysis complete", 6, 10)
 
     country_counts = Counter([c for countries in films_enriched['countries'].dropna() for c in countries])
     stats['top_countries'] = [{'name': name, 'count': count} for name, count in country_counts.most_common(15)]
+    stats['total_countries'] = len(country_counts)
     update_progress("analyzing", "Country analysis complete", 7, 10)
 
     language_counts = Counter(films_enriched['language'].dropna())
@@ -346,6 +363,40 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     cast_counts = Counter([actor for cast_list in films_enriched['cast'].dropna() for actor in cast_list])
     stats['top_actors'] = [{'name': name, 'count': count} for name, count in cast_counts.most_common(20)]
     update_progress("analyzing", "Cast analysis complete", 9, 10)
+
+    # === SPECIAL INSIGHTS (Restored) ===
+    insights = []
+    if stats.get('days_watched', 0) > 0:
+        insights.append({
+            'title': 'Time Invested',
+            'description': f"You've spent {stats['days_watched']} days of your life watching movies!"
+        })
+    if stats.get('most_watched_director'):
+        insights.append({
+            'title': 'Director Obsession',
+            'description': f"You're a big fan of {stats['most_watched_director']['name']} - you've watched {stats['most_watched_director']['count']} of their films!"
+        })
+    if stats.get('favorite_decade'):
+        insights.append({
+            'title': 'Time Traveler',
+            'description': f"You love {stats['favorite_decade']['name']} cinema with {stats['favorite_decade']['count']} films from that era!"
+        })
+    if stats.get('average_rating', 0) > 4:
+        insights.append({
+            'title': 'Easy to Please',
+            'description': f"You're generous with ratings - averaging {stats['average_rating']}★!"
+        })
+    elif stats.get('average_rating', 0) < 3:
+        insights.append({
+            'title': 'Tough Critic',
+            'description': f"You're a tough critic with an average rating of {stats['average_rating']}★"
+        })
+    if stats.get('total_countries', 0) > 10:
+        insights.append({
+            'title': 'Global Cinema Explorer',
+            'description': f"You've watched films from {stats['total_countries']} different countries!"
+        })
+    stats['insights'] = insights
 
     # === FINAL WRAP-UP ===
     stats['analysis_date'] = datetime.now().isoformat()
