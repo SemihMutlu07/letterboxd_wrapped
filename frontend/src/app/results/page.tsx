@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { motion, Variants } from 'framer-motion';
 import {
-  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, Instagram, Twitter
+  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, Instagram, Twitter, User
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import React from 'react';
@@ -56,12 +56,12 @@ interface StatCardProps {
 const StatCard: React.FC<StatCardProps> = ({ icon, title, value, unit, gradient }) => (
   <motion.div
     variants={itemVariants}
-    className={`p-6 rounded-3xl text-white shadow-2xl ${gradient} transition-transform hover:scale-105`}
+    className={`p-6 md:p-8 rounded-3xl text-white shadow-2xl ${gradient} transition-transform hover:scale-105`}
   >
-    <div className="flex items-center justify-center w-16 h-16 bg-white/20 rounded-2xl mb-4">
+    <div className="flex items-center justify-center w-16 h-16 bg-white/20 rounded-2xl mb-6">
       {icon}
     </div>
-    <div className="text-5xl font-black mb-1">{value} <span className="text-3xl opacity-80">{unit}</span></div>
+    <div className="text-5xl font-black mb-2">{value} <span className="text-3xl opacity-80">{unit}</span></div>
     <p className="text-lg opacity-90 font-medium">{title}</p>
   </motion.div>
 );
@@ -135,10 +135,23 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
+const DecadeTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-800/80 backdrop-blur-sm p-3 rounded-lg border border-white/20 text-white shadow-lg">
+        <p className="font-bold text-lg mb-1">{label}</p>
+        <p className="text-base text-orange-400">{`${payload[0].value} films`}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 // --- Main Page Component ---
 const ComprehensiveResultsPage = () => {
   const [stats, setStats] = useState<LetterboxdStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [directorImages, setDirectorImages] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     const savedStats = localStorage.getItem('letterboxdStats');
@@ -152,18 +165,39 @@ const ComprehensiveResultsPage = () => {
     setLoading(false);
   }, []);
 
-  const groupedDirectors = useMemo(() => {
-    if (!stats?.top_directors) return [];
-    const groups: Record<number, string[]> = {};
-    stats.top_directors.forEach(director => {
-        if (!groups[director.count]) {
-            groups[director.count] = [];
+  useEffect(() => {
+    const fetchDirectorImages = async () => {
+        if (!stats?.top_directors || stats.top_directors.length === 0) return;
+        
+        const directorNames = stats.top_directors.slice(0, 15).map(d => d.name);
+
+        try {
+            const response = await fetch(`/api/tmdb-proxy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ directors: directorNames }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed with status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            setDirectorImages(data.images);
+
+        } catch (error) {
+            console.error(`Failed to fetch director images via proxy`, error);
+            const fallbackImages = directorNames.reduce((acc, name) => {
+                acc[name] = null;
+                return acc;
+            }, {} as Record<string, null>);
+            setDirectorImages(fallbackImages);
         }
-        groups[director.count].push(director.name);
-    });
-    return Object.entries(groups)
-        .map(([count, names]) => ({ count: parseInt(count), names }))
-        .sort((a, b) => b.count - a.count);
+    };
+
+    if (stats?.top_directors.length) {
+      fetchDirectorImages();
+    }
   }, [stats?.top_directors]);
 
   const generateShareUrl = (type: 'instagram' | 'twitter') => {
@@ -249,10 +283,10 @@ const ComprehensiveResultsPage = () => {
             animate="visible"
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"
         >
-          <StatCard icon={<Film size={32} />} title="Total Films" value={stats.total_films} unit="films" gradient="from-pink-500 to-orange-500" />
-          <StatCard icon={<Star size={32} />} title="Average Rating" value={stats.average_rating.toFixed(2)} unit="★" gradient="from-blue-500 to-purple-500" />
-          <StatCard icon={<Clock size={32} />} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-green-500 to-teal-500" />
-          <StatCard icon={<TrendingUp size={32} />} title="Top Genre" value={stats.favorite_genre.name} unit="" gradient="from-yellow-500 to-red-500" />
+          <StatCard icon={<Film size={36} className="text-amber-500"/>} title="Total Films" value={stats.total_films} unit="films" gradient="from-pink-500 to-orange-500" />
+          <StatCard icon={<Star size={36} className="text-amber-400"/>} title="Average Rating" value={stats.average_rating.toFixed(2)} unit="★" gradient="from-blue-500 to-purple-500" />
+          <StatCard icon={<Clock size={36} className="text-cyan-500"/>} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-green-500 to-teal-500" />
+          <StatCard icon={<TrendingUp size={36} className="text-violet-500"/>} title="Top Genre" value={stats.favorite_genre.name} unit="" gradient="from-yellow-500 to-red-500" />
         </motion.div>
 
         {/* Special Insights */}
@@ -262,8 +296,8 @@ const ComprehensiveResultsPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {stats.insights.slice(0, 3).map((insight) => (
                     <motion.div variants={itemVariants} key={insight.title} className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg rounded-2xl p-6">
-                        <h4 className="font-bold text-xl text-orange-300 mb-2">{insight.title}</h4>
-                        <p className="text-base text-gray-300">{insight.description}</p>
+                        <h4 className="font-bold text-2xl text-orange-400 mb-3">{insight.title}</h4>
+                        <p className="text-lg text-gray-200">{insight.description}</p>
                     </motion.div>
                     ))}
                 </div>
@@ -276,18 +310,32 @@ const ComprehensiveResultsPage = () => {
                 {/* Favorite Directors */}
                 <Section>
                     <SectionTitle icon={<Award size={28} className="text-orange-300" />} title="Favorite Directors" subtitle={`${stats.total_directors} directors watched`} />
-                    <div className="space-y-4 h-96 overflow-y-auto pr-4 custom-scrollbar">
-                        {groupedDirectors.slice(0, 15).map(({ count, names }) => (
-                            <motion.div variants={itemVariants} key={count} className="flex items-center justify-between py-3 border-b border-white/10">
-                                <p className="font-semibold text-lg text-white w-3/4">
-                                    {names.join(', ')}
-                                </p>
-                                <div className="flex items-baseline gap-2 text-right w-1/4">
-                                    <span className="font-bold text-3xl text-orange-400">{count}</span>
+                    <div className="space-y-2 h-96 overflow-y-auto pr-4 custom-scrollbar">
+                        {stats.top_directors.slice(0, 15).map((director) => {
+                           const imageUrl = directorImages[director.name];
+                           const isLoading = imageUrl === undefined;
+
+                           return (
+                            <motion.div variants={itemVariants} key={director.name} className="flex items-center gap-4 py-3 border-b border-white/10">
+                                {isLoading ? (
+                                    <div className="w-16 h-16 rounded-full bg-white/10 animate-pulse shrink-0"></div>
+                                ) : imageUrl ? (
+                                    <img src={imageUrl} alt={director.name} className="w-16 h-16 rounded-full object-cover shrink-0" />
+                                ) : (
+                                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                                        <User size={32} className="text-gray-400" />
+                                    </div>
+                                )}
+                                <div className="flex-grow min-w-0">
+                                    <p className="font-semibold text-lg text-white truncate">{director.name}</p>
+                                </div>
+                                <div className="flex items-baseline gap-2 text-right shrink-0">
+                                    <span className="font-bold text-3xl text-orange-400">{director.count}</span>
                                     <span className="text-gray-400">films</span>
                                 </div>
                             </motion.div>
-                        ))}
+                           )
+                        })}
                     </div>
                 </Section>
             </div>
@@ -307,10 +355,10 @@ const ComprehensiveResultsPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
           <Section className="lg:col-span-3">
               <SectionTitle icon={<Languages size={28} className="text-blue-300" />} title="Languages" subtitle="Your cinematic linguistic profile" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                   <motion.div variants={chartVariants} className="w-full h-80">
                       <ResponsiveContainer>
-                          <PieChart>
+                          <PieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                               <Pie data={languageData} dataKey="count" nameKey="language" cx="50%" cy="50%" innerRadius={70} outerRadius={110} fill="#8884d8" paddingAngle={5} cornerRadius={10}>
                                   {languageData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                               </Pie>
@@ -375,16 +423,11 @@ const ComprehensiveResultsPage = () => {
                     <LineChart data={decadeData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
                         <XAxis dataKey="decade" stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
                         <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }}/>
-                        <Tooltip 
-                            contentStyle={{ 
-                                background: 'rgba(15, 23, 42, 0.8)',
-                                backdropFilter: 'blur(4px)',
-                                border: '1px solid rgba(255,255,255,0.2)',
-                                borderRadius: '1rem',
-                                color: '#fff'
-                            }} 
+                        <Tooltip
+                            cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }}
+                            content={<DecadeTooltip />}
                         />
-                        <Line type="monotone" dataKey="count" stroke="#fb923c" strokeWidth={3} dot={{ r: 5, fill: '#fb923c' }} activeDot={{ r: 8 }} />
+                        <Line type="monotone" dataKey="count" name="Films" stroke="#fb923c" strokeWidth={3} dot={{ r: 5, fill: '#fb923c' }} activeDot={{ r: 8 }} />
                     </LineChart>
                 </ResponsiveContainer>
             </motion.div>
@@ -409,6 +452,7 @@ const ComprehensiveResultsPage = () => {
                 </a>
                 */}
             </div>
+            <p className="text-gray-400 mt-4 text-lg italic">Sharing options coming soon!</p>
         </footer>
       </main>
     </div>
