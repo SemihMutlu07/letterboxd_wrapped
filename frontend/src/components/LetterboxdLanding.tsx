@@ -5,83 +5,72 @@ import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucid
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
-interface ProgressData {
-  stage: string;
-  message: string;
-  progress: number;
-  total: number;
-}
-
 export default function LetterboxdLanding() {
-  const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    
-    if (isUploading && sessionId) {
-      intervalId = setInterval(async () => {
-        try {
-          const response = await fetch(`/api/progress?session=${sessionId}`);
-          if (response.ok) {
-            const progressData = await response.json();
-            setProgress(progressData);
-            
-            if (progressData.stage === 'complete') {
-              clearInterval(intervalId);
-              setTimeout(() => {
-                router.push(`/results?session=${sessionId}`);
-              }, 1500);
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching progress:', err);
-        }
-      }, 2000); // Poll every 2 seconds
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isUploading, sessionId, router]);
-
+  
+  
   const handleFile = useCallback(async (file: File) => {
     if (!file) return;
 
-    setIsUploading(true);
+    setLoading(true);
     setError(null);
-    setProgress({ stage: 'starting', message: 'Preparing analysis...', progress: 0, total: 1 });
-    
-    const formData = new FormData();
-    formData.append('file', file);
+    setUploadProgress(0);
 
     try {
-      const response = await fetch(`/api/analyze`, {
-        method: 'POST',
-        body: formData,
-      });
+        const formData = new FormData();
+        formData.append('file', file, file.name);
 
-      if (response.ok) {
-        const result = await response.json();
-        if (result.status === 'success') {
-          setSessionId(result.session_id);
-          localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
-        } else {
-            throw new Error(result.message || 'Analysis failed');
-        }
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Analysis failed');
-      }
-    } catch (err) {
-      console.error('Fetch error details:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-      setIsUploading(false);
-      setProgress(null);
+        const xhr = new XMLHttpRequest();
+        // The path needs to include the filename for the serverless function to work correctly
+        xhr.open('POST', `/api/analyze/${file.name}`, true);
+
+        xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+                const percentComplete = Math.round((event.loaded / event.total) * 100);
+                setUploadProgress(percentComplete);
+            }
+        };
+
+        xhr.onload = () => {
+            setLoading(false);
+            if (xhr.status === 200) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.status === 'success') {
+                        localStorage.setItem('letterboxdStats', JSON.stringify(response.stats));
+                        router.push('/results');
+                    } else {
+                        setError(response.message || 'Analysis failed. Please try again.');
+                    }
+                } catch (e) {
+                    setError('Failed to parse server response.');
+                }
+            } else {
+                try {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    setError(`Error: ${errorResponse.message || xhr.statusText}`);
+                } catch (e) {
+                    setError(`Error: ${xhr.statusText}. Please check the file and try again.`);
+                }
+            }
+        };
+
+        xhr.onerror = () => {
+            setLoading(false);
+            setError('An unexpected error occurred during upload. Please check your network and try again.');
+        };
+
+        xhr.send(formData);
+
+    } catch (err: any) {
+        setLoading(false);
+        setError(err.message || 'An unexpected error occurred.');
+
     }
   }, [router]);
 
@@ -98,119 +87,30 @@ export default function LetterboxdLanding() {
     }
   }, [handleFile]);
 
-  const getStageIcon = (stage: string) => {
-    switch (stage) {
-      case 'extracting': return '📦';
-      case 'loading': return '📁';
-      case 'processing': return '🎬';
-      case 'tmdb_matching': return '🔍';
-      case 'tmdb_metadata': return '📊';
-      case 'analyzing': return '🎯';
-      case 'complete': return '✅';
-      case 'error': return '❌';
-      default: return '⏳';
-    }
-  };
-
-  const getProgressPercentage = () => {
-    if (!progress || progress.total === 0) return 0;
-    return Math.min((progress.progress / progress.total) * 100, 100);
-  };
-
-  if (isUploading && progress) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-2xl text-center">
-          {/* Header */}
           <h1 className="text-4xl font-bold mb-4">Analyzing Your Films</h1>
-          <p className="text-xl text-gray-400 mb-8">Creating your comprehensive movie wrapped...</p>
+          <p className="text-xl text-gray-400 mb-8">Please wait while we process your data...</p>
           
-          {/* Progress Circle */}
           <div className="relative w-32 h-32 mx-auto mb-8">
             <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
-              {/* Background circle */}
+              <circle cx="50" cy="50" r="40" stroke="rgb(55, 65, 81)" strokeWidth="8" fill="none" />
               <circle
-                cx="50"
-                cy="50"
-                r="40"
-                stroke="rgb(55, 65, 81)"
-                strokeWidth="8"
-                fill="none"
-              />
-              {/* Progress circle */}
-              <circle
-                cx="50"
-                cy="50"
-                r="40"
-                stroke="rgb(249, 115, 22)"
-                strokeWidth="8"
-                fill="none"
-                strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 40}`}
-                strokeDashoffset={`${2 * Math.PI * 40 * (1 - getProgressPercentage() / 100)}`}
+                cx="50" cy="50" r="40" stroke="rgb(249, 115, 22)" strokeWidth="8" fill="none"
+                strokeLinecap="round" strokeDasharray={`${2 * Math.PI * 40}`}
+                strokeDashoffset={`${2 * Math.PI * 40 * (1 - uploadProgress / 100)}`}
                 className="transition-all duration-500 ease-out"
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl">{getStageIcon(progress.stage)}</span>
+            <div className="absolute inset-0 flex items-center justify-center text-3xl font-bold">
+              {uploadProgress}%
             </div>
           </div>
-
-          {/* Progress Details */}
-          <div className="bg-gray-800 rounded-xl p-6 mb-6">
-            <h3 className="text-xl font-semibold mb-2 text-orange-400">
-              {progress.stage.charAt(0).toUpperCase() + progress.stage.slice(1).replace('_', ' ')}
-            </h3>
-            <p className="text-gray-300 mb-4">{progress.message}</p>
-            
-            {/* Progress Bar */}
-            <div className="w-full bg-gray-700 rounded-full h-3 mb-2">
-              <div 
-                className="bg-gradient-to-r from-orange-400 to-pink-500 h-3 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${getProgressPercentage()}%` }}
-              />
-            </div>
-            <p className="text-sm text-gray-400">
-              {progress.progress} / {progress.total} 
-              {progress.total > 1 && ` (${Math.round(getProgressPercentage())}%)`}
-            </p>
-          </div>
-
-          {/* Stage Indicators */}
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-            {[
-              { key: 'extracting', label: 'Extract', icon: '📦' },
-              { key: 'loading', label: 'Load', icon: '📁' },
-              { key: 'processing', label: 'Process', icon: '🎬' },
-              { key: 'tmdb_matching', label: 'Match', icon: '🔍' },
-              { key: 'tmdb_metadata', label: 'Enrich', icon: '📊' },
-              { key: 'analyzing', label: 'Analyze', icon: '🎯' }
-            ].map((stage, index) => {
-              const isActive = progress.stage === stage.key;
-              const isComplete = ['extracting', 'loading', 'processing', 'tmdb_matching', 'tmdb_metadata', 'analyzing'].indexOf(progress.stage) > index;
-              
-              return (
-                <div 
-                  key={stage.key}
-                  className={`p-2 rounded-lg border transition-all ${
-                    isActive 
-                      ? 'bg-orange-500 border-orange-400 text-white' 
-                      : isComplete
-                      ? 'bg-green-600 border-green-500 text-white'
-                      : 'bg-gray-700 border-gray-600 text-gray-400'
-                  }`}
-                >
-                  <div className="text-lg mb-1">{stage.icon}</div>
-                  <div className="font-medium">{stage.label}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Fun Facts */}
-          <div className="mt-8 text-sm text-gray-400">
-            <p>💡 Did you know? We&apos;re fetching data from The Movie Database (TMDb) to enrich your film collection with comprehensive metadata!</p>
-          </div>
+          <p className="text-lg text-gray-300">
+            {uploadProgress < 100 ? 'Uploading...' : 'Processing...'}
+          </p>
         </div>
       </div>
     );
@@ -311,4 +211,5 @@ export default function LetterboxdLanding() {
       </div>
     </div>
   );
+}
 }
