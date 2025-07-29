@@ -17,56 +17,37 @@ export default function LetterboxdLanding() {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const router = useRouter();
 
-  // Test backend connectivity on component mount
-  useEffect(() => {
-    const testBackend = async () => {
-      try {
-                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-         console.log('Testing backend connectivity to:', apiUrl);
-        const response = await fetch(`${apiUrl}/docs`); // FastAPI docs endpoint
-        console.log('Backend test response:', response.status);
-      } catch (err) {
-        console.error('Backend connectivity test failed:', err);
-      }
-    };
-    testBackend();
-  }, []);
-
-  // Poll progress endpoint during upload
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
-    if (isUploading) {
+    if (isUploading && sessionId) {
       intervalId = setInterval(async () => {
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-          console.log('API URL:', apiUrl); // Debug log
-          const response = await fetch(`${apiUrl}/api/progress`);
+          const response = await fetch(`/api/progress?session=${sessionId}`);
           if (response.ok) {
             const progressData = await response.json();
             setProgress(progressData);
             
-            // If analysis is complete, stop polling and redirect
             if (progressData.stage === 'complete') {
               clearInterval(intervalId);
-              // Small delay to show completion message
               setTimeout(() => {
-                router.push('/results');
+                router.push(`/results?session=${sessionId}`);
               }, 1500);
             }
           }
         } catch (err) {
           console.error('Error fetching progress:', err);
         }
-      }, 500); // Poll every 500ms
+      }, 2000); // Poll every 2 seconds
     }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isUploading, router]);
+  }, [isUploading, sessionId, router]);
 
   const handleFile = useCallback(async (file: File) => {
     if (!file) return;
@@ -79,34 +60,30 @@ export default function LetterboxdLanding() {
     formData.append('file', file);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-      console.log('API URL for analyze:', apiUrl); // Debug log
-      console.log('Making request to:', `${apiUrl}/api/analyze`); // Debug log
-      
-      const response = await fetch(`${apiUrl}/api/analyze`, {
+      const response = await fetch(`/api/analyze`, {
         method: 'POST',
         body: formData,
       });
 
-      console.log('Response status:', response.status); // Debug log
-      console.log('Response headers:', response.headers); // Debug log
-
       if (response.ok) {
         const result = await response.json();
-        // Save stats to localStorage to pass to the results page
-        localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
-        // The redirect will happen via the progress polling
+        if (result.status === 'success') {
+          setSessionId(result.session_id);
+          localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+        } else {
+            throw new Error(result.message || 'Analysis failed');
+        }
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Analysis failed');
+        throw new Error(errorData.message || 'Analysis failed');
       }
     } catch (err) {
-      console.error('Fetch error details:', err); // Debug log
+      console.error('Fetch error details:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       setIsUploading(false);
       setProgress(null);
     }
-  }, []);
+  }, [router]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
