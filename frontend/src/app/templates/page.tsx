@@ -7,7 +7,7 @@ export default function TemplatesPage() {
         <h1 className="text-3xl font-bold text-white text-center mb-8">
           Template Preview
         </h1>
-        <InstagramStoryTemplate />
+        <InstagramStoryTemplate stats={null} />
       </div>
     </div>
   );
