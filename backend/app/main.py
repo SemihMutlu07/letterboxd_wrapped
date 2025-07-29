@@ -25,7 +25,7 @@ warnings.filterwarnings('ignore')
 load_dotenv()
 
 
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://letterboxd-wrapped.netlify.app").split(',')
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://wrapped-movies.netlify.app,https://letterboxd-wrapped.vercel.app").split(',')
 
 # --- Application Lifespan (for aiohttp session) ---
 @asynccontextmanager
