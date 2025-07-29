@@ -5,10 +5,9 @@ import { motion, Variants } from 'framer-motion';
 import {
   Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, TooltipProps } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import React from 'react';
 import Link from 'next/link';
-import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 
 // --- Interfaces for Stats Data ---
@@ -124,7 +123,8 @@ const languageMap: { [key: string]: string } = {
 };
 
 // Custom Tooltip for Recharts
-const CustomTooltip = ({ active, payload }: TooltipProps<ValueType, NameType>) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       const languageName = languageMap[data.language] || data.language.toUpperCase();
