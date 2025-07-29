@@ -3,11 +3,12 @@
 import { useEffect, useState, useMemo } from 'react';
 import { motion, Variants } from 'framer-motion';
 import {
-  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, Instagram, Twitter, User
+  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import React from 'react';
 import Link from 'next/link';
+
 
 // --- Interfaces for Stats Data ---
 interface CountItem { name: string; count: number; }
@@ -122,6 +123,7 @@ const languageMap: { [key: string]: string } = {
 };
 
 // Custom Tooltip for Recharts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -200,6 +202,7 @@ const ComprehensiveResultsPage = () => {
     }
   }, [stats?.top_directors]);
 
+  /*
   const generateShareUrl = (type: 'instagram' | 'twitter') => {
     if (!stats) return '';
     const baseUrl = `/api/og/${type === 'instagram' ? 'instagram-story' : 'twitter'}`;
@@ -212,6 +215,7 @@ const ComprehensiveResultsPage = () => {
     });
     return `${baseUrl}?${params.toString()}`;
   };
+  */
 
   if (loading) {
     return <div className="min-h-screen bg-slate-900" />;

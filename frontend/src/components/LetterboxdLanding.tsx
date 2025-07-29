@@ -10,8 +10,10 @@ export default function LetterboxdLanding() {
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const router = useRouter();
-
+  
+  
   const handleFile = useCallback(async (file: File) => {
     if (!file) return;
 
@@ -68,6 +70,7 @@ export default function LetterboxdLanding() {
     } catch (err: any) {
         setLoading(false);
         setError(err.message || 'An unexpected error occurred.');
+
     }
   }, [router]);
 

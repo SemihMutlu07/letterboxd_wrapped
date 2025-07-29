@@ -1,0 +1,7 @@
+pandas
+numpy
+aiohttp
+aiofiles
+python-dotenv
+vercel-python
+lxml 
