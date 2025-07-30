@@ -156,20 +156,6 @@ function LoadingContent() {
     };
   }, [sessionId, router, currentStage, completedStages]);
 
-  const progressSteps = useMemo(() => [
-    'Collecting movie metadata...',
-    'Analyzing your watch patterns...',
-    'Crunching the ratings...',
-    'Calculating total watch time...',
-    'Investigating your favorite directors...',
-    'Exploring your top genres...',
-    'Traveling through film history...',
-    'Mapping your cinematic world...',
-    'Tuning into languages...',
-    'Assembling your favorite cast...',
-    'Finalizing your results...'
-  ], []);
-
   return (
     <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4 font-sans">
       <motion.div 

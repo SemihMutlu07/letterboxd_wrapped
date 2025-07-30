@@ -5,7 +5,7 @@ import { motion, Variants } from 'framer-motion';
 import {
   Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, User
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, TooltipProps } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import React from 'react';
 import Link from 'next/link';
 
@@ -15,14 +15,13 @@ interface ActorItem extends CountItem { profile_path?: string; }
 interface DecadeItem { decade: string; count: number; }
 interface LanguageItem { language: string; count: number; }
 interface InsightItem { title: string; description: string; }
-interface DecadeData {
-    decade: string;
-    count: number;
+
+interface CustomTooltipProps {
+    active?: boolean;
+    payload?: any[];
+    label?: string;
 }
-interface LanguageData {
-    language: string;
-    count: number;
-}
+
 interface LetterboxdStats {
   total_films: number;
   metadata_coverage: number;
@@ -128,16 +127,10 @@ const languageMap: { [key: string]: string } = {
     hi: 'Hindi', sv: 'Swedish', no: 'Norwegian', da: 'Danish', fi: 'Finnish'
 };
 
-interface CustomTooltipProps {
-    active?: boolean;
-    payload?: any[];
-    label?: string;
-}
-
 // Custom Tooltip for Recharts
 const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
     if (active && payload && payload.length) {
-      const data = payload[0].payload;
+      const data = payload[0].payload as LanguageItem;
       const languageName = languageMap[data.language] || data.language.toUpperCase();
       return (
         <div className="bg-slate-800/80 backdrop-blur-sm p-3 rounded-lg border border-white/20 text-white shadow-lg">
