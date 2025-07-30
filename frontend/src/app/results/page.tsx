@@ -16,9 +16,14 @@ interface DecadeItem { decade: string; count: number; }
 interface LanguageItem { language: string; count: number; }
 interface InsightItem { title: string; description: string; }
 
-interface CustomTooltipProps {
+interface LanguageTooltipProps {
     active?: boolean;
-    payload?: any[];
+    payload?: { payload: LanguageItem }[];
+}
+
+interface DecadeTooltipProps {
+    active?: boolean;
+    payload?: { value: number }[];
     label?: string;
 }
 
@@ -128,9 +133,9 @@ const languageMap: { [key: string]: string } = {
 };
 
 // Custom Tooltip for Recharts
-const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
+const CustomTooltip: React.FC<LanguageTooltipProps> = ({ active, payload }) => {
     if (active && payload && payload.length) {
-      const data = payload[0].payload as LanguageItem;
+      const data = payload[0].payload;
       const languageName = languageMap[data.language] || data.language.toUpperCase();
       return (
         <div className="bg-slate-800/80 backdrop-blur-sm p-3 rounded-lg border border-white/20 text-white shadow-lg">
@@ -141,7 +146,7 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
     return null;
 };
 
-const DecadeTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
+const DecadeTooltip: React.FC<DecadeTooltipProps> = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-slate-800/80 backdrop-blur-sm p-3 rounded-lg border border-white/20 text-white shadow-lg">
