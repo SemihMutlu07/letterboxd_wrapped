@@ -151,7 +151,6 @@ const DecadeTooltip = ({ active, payload, label }: any) => {
 const ComprehensiveResultsPage = () => {
   const [stats, setStats] = useState<LetterboxdStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [directorImages, setDirectorImages] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     const savedStats = localStorage.getItem('letterboxdStats');
@@ -164,41 +163,6 @@ const ComprehensiveResultsPage = () => {
     }
     setLoading(false);
   }, []);
-
-  useEffect(() => {
-    const fetchDirectorImages = async () => {
-        if (!stats?.top_directors || stats.top_directors.length === 0) return;
-        
-        const directorNames = stats.top_directors.slice(0, 15).map(d => d.name);
-
-        try {
-            const response = await fetch(`/api/tmdb-proxy`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ directors: directorNames }),
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed with status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            setDirectorImages(data.images);
-
-        } catch (error) {
-            console.error(`Failed to fetch director images via proxy`, error);
-            const fallbackImages = directorNames.reduce((acc, name) => {
-                acc[name] = null;
-                return acc;
-            }, {} as Record<string, null>);
-            setDirectorImages(fallbackImages);
-        }
-    };
-
-    if (stats?.top_directors.length) {
-      fetchDirectorImages();
-    }
-  }, [stats?.top_directors]);
 
   const generateShareUrl = (type: 'instagram' | 'twitter') => {
     if (!stats) return '';
@@ -311,21 +275,11 @@ const ComprehensiveResultsPage = () => {
                 <Section>
                     <SectionTitle icon={<Award size={28} className="text-orange-300" />} title="Favorite Directors" subtitle={`${stats.total_directors} directors watched`} />
                     <div className="space-y-2 h-96 overflow-y-auto pr-4 custom-scrollbar">
-                        {stats.top_directors.slice(0, 15).map((director) => {
-                           const imageUrl = directorImages[director.name];
-                           const isLoading = imageUrl === undefined;
-
-                           return (
+                        {stats.top_directors.slice(0, 15).map((director) => (
                             <motion.div variants={itemVariants} key={director.name} className="flex items-center gap-4 py-3 border-b border-white/10">
-                                {isLoading ? (
-                                    <div className="w-16 h-16 rounded-full bg-white/10 animate-pulse shrink-0"></div>
-                                ) : imageUrl ? (
-                                    <img src={imageUrl} alt={director.name} className="w-16 h-16 rounded-full object-cover shrink-0" />
-                                ) : (
-                                    <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                                        <User size={32} className="text-gray-400" />
-                                    </div>
-                                )}
+                                <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                                    <User size={32} className="text-gray-400" />
+                                </div>
                                 <div className="flex-grow min-w-0">
                                     <p className="font-semibold text-lg text-white truncate">{director.name}</p>
                                 </div>
@@ -334,8 +288,7 @@ const ComprehensiveResultsPage = () => {
                                     <span className="text-gray-400">films</span>
                                 </div>
                             </motion.div>
-                           )
-                        })}
+                        ))}
                     </div>
                 </Section>
             </div>
