@@ -170,11 +170,6 @@ function LoadingContent() {
     'Finalizing your results...'
   ], []);
 
-  const currentStepIndex = useMemo(() => {
-    const index = progressSteps.indexOf(message);
-    return index === -1 ? (progress === 100 ? progressSteps.length : 0) : index;
-  }, [message, progress, progressSteps]);
-  
   return (
     <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4 font-sans">
       <motion.div 
