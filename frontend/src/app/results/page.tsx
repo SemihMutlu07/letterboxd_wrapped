@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, Variants } from 'framer-motion';
 import {
-  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, Instagram, Twitter, User
+  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, User
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, TooltipProps } from 'recharts';
 import React from 'react';
 import Link from 'next/link';
 
@@ -15,7 +15,14 @@ interface ActorItem extends CountItem { profile_path?: string; }
 interface DecadeItem { decade: string; count: number; }
 interface LanguageItem { language: string; count: number; }
 interface InsightItem { title: string; description: string; }
-
+interface DecadeData {
+    decade: string;
+    count: number;
+}
+interface LanguageData {
+    language: string;
+    count: number;
+}
 interface LetterboxdStats {
   total_films: number;
   metadata_coverage: number;
@@ -121,8 +128,14 @@ const languageMap: { [key: string]: string } = {
     hi: 'Hindi', sv: 'Swedish', no: 'Norwegian', da: 'Danish', fi: 'Finnish'
 };
 
+interface CustomTooltipProps {
+    active?: boolean;
+    payload?: any[];
+    label?: string;
+}
+
 // Custom Tooltip for Recharts
-const CustomTooltip = ({ active, payload }: any) => {
+const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       const languageName = languageMap[data.language] || data.language.toUpperCase();
@@ -135,7 +148,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-const DecadeTooltip = ({ active, payload, label }: any) => {
+const DecadeTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-slate-800/80 backdrop-blur-sm p-3 rounded-lg border border-white/20 text-white shadow-lg">
@@ -163,19 +176,6 @@ const ComprehensiveResultsPage = () => {
     }
     setLoading(false);
   }, []);
-
-  const generateShareUrl = (type: 'instagram' | 'twitter') => {
-    if (!stats) return '';
-    const baseUrl = `/api/og/${type === 'instagram' ? 'instagram-story' : 'twitter'}`;
-    const params = new URLSearchParams({
-        totalFilms: stats.total_films.toString(),
-        averageRating: stats.average_rating.toFixed(2),
-        daysWatched: stats.days_watched.toFixed(1),
-        topGenre: stats.favorite_genre.name,
-        topDirector: stats.most_watched_director.name,
-    });
-    return `${baseUrl}?${params.toString()}`;
-  };
 
   if (loading) {
     return <div className="min-h-screen bg-slate-900" />;
