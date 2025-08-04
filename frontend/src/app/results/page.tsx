@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { motion, Variants } from 'framer-motion';
 import {
-  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, User
+  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, User, Users
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import React from 'react';
 import Link from 'next/link';
 
@@ -52,6 +52,35 @@ interface LetterboxdStats {
   has_diary_data: boolean;
   has_watchlist_data: boolean;
   has_reviews_data: boolean;
+  longest_film: { title: string; runtime: number };
+  rating_distribution: Record<string, number>;
+  top_rewatches?: { name: string; count: number }[];
+  top_true_rewatches?: CountItem[];
+  most_logged_films?: CountItem[];
+  monthly_viewing_habits?: { month: string; count: number }[];
+  day_of_week_pattern?: { weekday: number; weekend: number };
+  cinematic_persona?: { persona: string; description: string };
+  director_deep_analysis?: { director_name: string; average_rating_given: number; total_films: number; relationship: string };
+  my_star?: { name: string; count: number };
+  sinefil_meter?: { type: string; score: number; description: string };
+  binge_analysis?: { total_sessions: number; longest_session: number; total_binge_films: number };
+  fun_statistics?: {
+    highest_budget_film?: { title: string; budget: number };
+    highest_grossing_film?: { title: string; revenue: number };
+    guilty_pleasure?: { title: string; tmdb_rating: number; your_rating: number };
+    favorite_genre_combo?: { combination: string; count: number };
+    world_tour?: { country: string; flag: string; count: number }[];
+    film_age_analysis?: { average_age: number; recent_percentage: number; type: string };
+  };
+  story_analytics?: {
+    time_spent_story?: string;
+    most_active_day?: { date: string; films: number; story: string };
+    rating_personality?: { type: string; description: string; average: number };
+    signature_duo?: { director: string; actor: string; count: number; story: string };
+    viewing_season?: { season: string; percentage: number; story: string };
+    cinematic_passport?: { countries: number; directors: number; country_story: string; director_story: string };
+    cinema_archetype?: { type: string; description: string; popularity_score: number; film_age: number };
+  };
 }
 
 // --- Reusable Components ---
@@ -208,8 +237,8 @@ const ComprehensiveResultsPage = () => {
   ];
   
   return (
-    <div className={`font-sans bg-slate-900 text-white`}>
-        <div className="absolute inset-0 z-0 opacity-40">
+    <div className={`font-sans bg-slate-900 text-white overflow-x-hidden relative`}>
+        <div className="absolute inset-0 z-0 opacity-40 overflow-x-hidden">
              <div className="absolute top-[-10rem] left-[-10rem] w-[40rem] h-[40rem] bg-purple-600/50 rounded-full filter blur-[150px] animate-blob"></div>
              <div className="absolute top-[-5rem] right-[-10rem] w-[40rem] h-[40rem] bg-orange-600/50 rounded-full filter blur-[150px] animate-blob animation-delay-2000"></div>
              <div className="absolute bottom-[-10rem] left-[15rem] w-[40rem] h-[40rem] bg-blue-600/50 rounded-full filter blur-[150px] animate-blob animation-delay-4000"></div>
@@ -250,6 +279,224 @@ const ComprehensiveResultsPage = () => {
           <StatCard icon={<Clock size={36} className="text-cyan-500"/>} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-green-500 to-teal-500" />
           <StatCard icon={<TrendingUp size={36} className="text-violet-500"/>} title="Top Genre" value={stats.favorite_genre.name} unit="" gradient="from-yellow-500 to-red-500" />
         </motion.div>
+
+        {/* Cinematic Persona */}
+        {stats.cinematic_persona && (
+            <Section>
+                <div className="text-center">
+                    <motion.div 
+                        variants={itemVariants}
+                        className="bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 p-8 rounded-3xl text-center"
+                    >
+                        <h2 className="text-5xl font-black text-white mb-4">🎬 YOUR CINEMATIC DNA</h2>
+                        <h3 className="text-4xl font-bold text-yellow-300 mb-6">{stats.cinematic_persona.persona}</h3>
+                        <p className="text-xl text-white/90 max-w-2xl mx-auto">{stats.cinematic_persona.description}</p>
+                    </motion.div>
+                </div>
+            </Section>
+        )}
+
+        {/* STORY ANALYTICS */}
+        {stats.story_analytics && (
+            <>
+                {/* Time Spent Story */}
+                {stats.story_analytics.time_spent_story && (
+                    <Section>
+                        <div className="text-center">
+                            <motion.div 
+                                variants={itemVariants}
+                                className="bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 p-8 rounded-3xl"
+                            >
+                                <h2 className="text-4xl font-black text-white mb-6">⏰ TIME WELL SPENT?</h2>
+                                <p className="text-2xl text-white/95 max-w-3xl mx-auto leading-relaxed">
+                                    {stats.story_analytics.time_spent_story}
+                                </p>
+                            </motion.div>
+                        </div>
+                    </Section>
+                )}
+
+                {/* Most Active Day */}
+                {stats.story_analytics.most_active_day && (
+                    <Section>
+                        <div className="text-center">
+                            <motion.div 
+                                variants={itemVariants}
+                                className="bg-gradient-to-br from-orange-500 via-red-500 to-pink-600 p-8 rounded-3xl"
+                            >
+                                <h2 className="text-4xl font-black text-white mb-6">🔥 YOUR MARATHON DAY</h2>
+                                <div className="text-8xl mb-4">📅</div>
+                                <p className="text-2xl text-white/95 max-w-3xl mx-auto leading-relaxed">
+                                    {stats.story_analytics.most_active_day.story}
+                                </p>
+                            </motion.div>
+                        </div>
+                    </Section>
+                )}
+                
+                {/* Rating Personality */}
+                {stats.story_analytics.rating_personality && (
+                    <Section>
+                        <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Your Rating Personality ⭐" subtitle="How you judge movies" />
+                        <div className="text-center bg-gradient-to-br from-yellow-500/20 to-amber-500/20 rounded-2xl p-8">
+                            <h3 className="text-4xl font-bold text-white mb-4">{stats.story_analytics.rating_personality.type}</h3>
+                            <div className="text-6xl font-black text-yellow-400 mb-4">{stats.story_analytics.rating_personality.average}★</div>
+                            <p className="text-xl text-white/90 max-w-2xl mx-auto">{stats.story_analytics.rating_personality.description}</p>
+                        </div>
+                    </Section>
+                )}
+
+                {/* Signature Duo */}
+                {stats.story_analytics.signature_duo && (
+                    <Section>
+                        <SectionTitle icon={<Users size={28} className="text-pink-400" />} title="Your Signature Combo 🎭" subtitle="Favorite director-actor pairing" />
+                        <div className="text-center bg-gradient-to-br from-pink-500/20 to-rose-500/20 rounded-2xl p-8">
+                            <div className="text-6xl mb-6">🤝</div>
+                            <h3 className="text-3xl font-bold text-white mb-2">
+                                {stats.story_analytics.signature_duo.director} × {stats.story_analytics.signature_duo.actor}
+                            </h3>
+                            <p className="text-xl text-pink-400 font-semibold mb-4">{stats.story_analytics.signature_duo.count} films together</p>
+                            <p className="text-lg text-white/90 max-w-2xl mx-auto">{stats.story_analytics.signature_duo.story}</p>
+                        </div>
+                    </Section>
+                )}
+                
+                {/* Viewing Season */}
+                {stats.story_analytics.viewing_season && (
+                    <Section>
+                        <SectionTitle icon={<Calendar size={28} className="text-green-400" />} title="Your Movie Season 🌍" subtitle="When you watch the most" />
+                        <div className="text-center bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-2xl p-8">
+                            <div className="text-7xl mb-4">
+                                {stats.story_analytics.viewing_season.season === 'Winter' && '❄️'}
+                                {stats.story_analytics.viewing_season.season === 'Spring' && '🌸'}
+                                {stats.story_analytics.viewing_season.season === 'Summer' && '☀️'}
+                                {stats.story_analytics.viewing_season.season === 'Fall' && '🍂'}
+                            </div>
+                            <h3 className="text-4xl font-bold text-white mb-4">{stats.story_analytics.viewing_season.season}</h3>
+                            <p className="text-xl text-white/90 max-w-2xl mx-auto">{stats.story_analytics.viewing_season.story}</p>
+                        </div>
+                    </Section>
+                )}
+                
+                {/* Cinematic Passport */}
+                {stats.story_analytics.cinematic_passport && (
+                    <Section>
+                        <SectionTitle icon={<Globe size={28} className="text-blue-400" />} title="Your Cinematic Passport 🗺️" subtitle="New worlds you discovered" />
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-2xl p-6">
+                                <div className="text-5xl mb-4 text-center">🌍</div>
+                                <h4 className="text-xl font-bold text-white mb-3 text-center">Country Discovery</h4>
+                                <p className="text-white/90 text-center">{stats.story_analytics.cinematic_passport.country_story}</p>
+                            </div>
+                            <div className="bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-2xl p-6">
+                                <div className="text-5xl mb-4 text-center">🎬</div>
+                                <h4 className="text-xl font-bold text-white mb-3 text-center">Director Discovery</h4>
+                                <p className="text-white/90 text-center">{stats.story_analytics.cinematic_passport.director_story}</p>
+                            </div>
+                        </div>
+                    </Section>
+                )}
+
+                {/* Cinema Archetype */}
+                {stats.story_analytics.cinema_archetype && (
+                    <Section>
+                        <div className="text-center">
+                            <motion.div 
+                                variants={itemVariants}
+                                className="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 p-10 rounded-3xl"
+                            >
+                                <h2 className="text-5xl font-black text-white mb-4">🏆 YOUR 2025 CINEMA IDENTITY</h2>
+                                <div className="text-8xl mb-6">🎪</div>
+                                <h3 className="text-5xl font-bold text-yellow-300 mb-6">{stats.story_analytics.cinema_archetype.type}</h3>
+                                <p className="text-2xl text-white/95 max-w-3xl mx-auto leading-relaxed mb-8">
+                                    {stats.story_analytics.cinema_archetype.description}
+                                </p>
+                                <div className="grid grid-cols-2 gap-8 max-w-md mx-auto">
+                                    <div className="bg-black/20 rounded-xl p-4">
+                                        <p className="text-sm text-gray-300">Popularity Score</p>
+                                        <p className="text-2xl font-bold text-white">{stats.story_analytics.cinema_archetype.popularity_score}</p>
+                                    </div>
+                                    <div className="bg-black/20 rounded-xl p-4">
+                                        <p className="text-sm text-gray-300">Average Film Age</p>
+                                        <p className="text-2xl font-bold text-white">{stats.story_analytics.cinema_archetype.film_age} years</p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </Section>
+                )}
+            </>
+        )}
+
+        {/* My Star & Director Analysis */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* My Star */}
+            {stats.my_star && (
+                <Section>
+                    <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Your Star ⭐" subtitle="Most watched actor/actress" />
+                    <div className="text-center bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-2xl p-8">
+                        <div className="text-6xl mb-4">🌟</div>
+                        <h3 className="text-3xl font-bold text-white mb-2">{stats.my_star.name}</h3>
+                        <p className="text-xl text-yellow-400 font-semibold">{stats.my_star.count} films together</p>
+                        <p className="text-gray-300 mt-2">You're their most loyal fan!</p>
+                    </div>
+                </Section>
+            )}
+
+            {/* Director Deep Analysis */}
+            {stats.director_deep_analysis && (
+                <Section>
+                    <SectionTitle icon={<Award size={28} className="text-orange-400" />} title="Director Relationship 🎯" subtitle="Your connection with your favorite director" />
+                    <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-2xl p-6">
+                        <h3 className="text-2xl font-bold text-white mb-4">{stats.director_deep_analysis.director_name}</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">Average rating given:</span>
+                                <span className="text-orange-400 font-bold">{stats.director_deep_analysis.average_rating_given}★</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-gray-300">Films watched:</span>
+                                <span className="text-white font-bold">{stats.director_deep_analysis.total_films}</span>
+                            </div>
+                            <div className="text-center mt-4 p-3 bg-black/20 rounded-lg">
+                                <span className="text-yellow-300 font-semibold">
+                                    You're a {stats.director_deep_analysis.relationship} viewer!
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </Section>
+            )}
+        </div>
+
+        {/* Cinema Enthusiast Meter */}
+        {stats.sinefil_meter && (
+            <Section>
+                <SectionTitle icon={<TrendingUp size={28} className="text-indigo-400" />} title="Your Cinema Scale 📊" subtitle="Popular vs Niche film preferences" />
+                <div className="text-center">
+                    <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl p-8 mb-6">
+                        <h3 className="text-4xl font-bold text-white mb-4">{stats.sinefil_meter.type}</h3>
+                        <div className="flex justify-center items-center mb-4">
+                            <div className="text-6xl font-black text-indigo-400">{stats.sinefil_meter.score}</div>
+                            <div className="text-xl text-gray-400 ml-2">/ 100</div>
+                        </div>
+                        <p className="text-xl text-white/90">{stats.sinefil_meter.description}</p>
+                    </div>
+                    
+                    {/* Visual meter */}
+                    <div className="w-full bg-gray-700 rounded-full h-6 mb-4">
+                        <div 
+                            className="bg-gradient-to-r from-indigo-500 to-purple-500 h-6 rounded-full transition-all duration-1000"
+                            style={{ width: `${Math.min(stats.sinefil_meter.score, 100)}%` }}
+                        ></div>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-400">
+                        <span>Independent Cinephile</span>
+                        <span>Popular Explorer</span>
+                    </div>
+                </div>
+            </Section>
+        )}
 
         {/* Special Insights */}
         {stats.insights && (
@@ -293,10 +540,17 @@ const ComprehensiveResultsPage = () => {
             <div className="space-y-8">
                 {/* Runtime Record */}
                 <Section>
-                    <SectionTitle icon={<Clock size={24} className="text-teal-400" />} title="Average Runtime" subtitle="How long you like your movies" />
+                    <SectionTitle icon={<Clock size={24} className="text-teal-400" />} title="Runtime Analysis" subtitle="How long you like your movies" />
                     <div className="text-center my-8">
                         <div className="text-8xl font-black text-white">{stats.average_runtime.toFixed(0)}</div>
-                        <p className="text-gray-300 text-lg">minutes</p>
+                        <p className="text-gray-300 text-lg">minutes average</p>
+                    </div>
+                    <div className="text-center">
+                        <div>
+                            <p className="text-gray-400 text-sm">Longest Film</p>
+                            <p className="font-bold text-lg">{stats.longest_film.title}</p>
+                            <p className="text-teal-400 font-mono">{stats.longest_film.runtime} min</p>
+                        </div>
                     </div>
                 </Section>
             </div>
@@ -384,6 +638,190 @@ const ComprehensiveResultsPage = () => {
             </motion.div>
         </Section>
         
+        {/* Rating Distribution */}
+        <Section>
+            <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Rating Distribution" subtitle="How you rate films" />
+            <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+                <ResponsiveContainer>
+                    <BarChart data={Object.entries(stats.rating_distribution).map(([rating, count]) => ({ rating: `${rating}★`, count }))}>
+                        <XAxis dataKey="rating" stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+                        <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }}/>
+                        <Tooltip
+                            cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                            contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem' }}
+                        />
+                        <Bar dataKey="count" fill="#8884d8" />
+                    </BarChart>
+                </ResponsiveContainer>
+            </motion.div>
+        </Section>
+
+        {/* Monthly Viewing Habits */}
+        {stats.monthly_viewing_habits && stats.monthly_viewing_habits.length > 0 && (
+            <Section>
+                <SectionTitle icon={<Calendar size={28} className="text-green-400" />} title="Monthly Viewing Habits" subtitle="Your film watching patterns throughout the year" />
+                <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+                    <ResponsiveContainer>
+                        <BarChart data={stats.monthly_viewing_habits}>
+                            <XAxis 
+                                dataKey="month" 
+                                stroke="#9ca3af" 
+                                tick={{ fill: '#9ca3af' }}
+                                angle={-45}
+                                textAnchor="end"
+                                height={80}
+                            />
+                            <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }}/>
+                            <Tooltip
+                                cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem' }}
+                            />
+                            <Bar dataKey="count" fill="#10b981" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </motion.div>
+            </Section>
+        )}
+
+        {/* Weekday vs Weekend Breakdown */}
+        {stats.day_of_week_pattern && (
+            <Section>
+                <SectionTitle icon={<Clock size={28} className="text-indigo-400" />} title="Weekday vs. Weekend Breakdown" subtitle="When do you prefer to watch movies?" />
+                <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+                    <ResponsiveContainer>
+                        <PieChart>
+                            <Pie 
+                                data={[
+                                    { name: 'Weekday', value: stats.day_of_week_pattern.weekday, fill: '#6366f1' },
+                                    { name: 'Weekend', value: stats.day_of_week_pattern.weekend, fill: '#f59e0b' }
+                                ]}
+                                dataKey="value" 
+                                nameKey="name" 
+                                cx="50%" 
+                                cy="50%" 
+                                innerRadius={60} 
+                                outerRadius={120} 
+                                paddingAngle={5}
+                                cornerRadius={10}
+                            >
+                            </Pie>
+                            <Tooltip
+                                cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem' }}
+                            />
+                        </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex justify-center gap-6 mt-4">
+                        <div className="flex items-center">
+                            <div className="w-4 h-4 rounded-full bg-indigo-500 mr-2"></div>
+                            <span className="text-gray-300">Weekday ({stats.day_of_week_pattern.weekday})</span>
+                        </div>
+                        <div className="flex items-center">
+                            <div className="w-4 h-4 rounded-full bg-amber-500 mr-2"></div>
+                            <span className="text-gray-300">Weekend ({stats.day_of_week_pattern.weekend})</span>
+                        </div>
+                    </div>
+                </motion.div>
+            </Section>
+        )}
+
+        {/* Binge Analysis & Fun Stats */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Binge-watching Analysis */}
+            {stats.binge_analysis && (
+                <Section>
+                    <SectionTitle icon={<Calendar size={28} className="text-red-400" />} title="Your Binge Sessions 🍿" subtitle="Movie marathon analysis" />
+                    <div className="bg-gradient-to-br from-red-500/20 to-pink-500/20 rounded-2xl p-6">
+                        <div className="text-center mb-6">
+                            <div className="text-5xl mb-4">🏃‍♂️</div>
+                            <h3 className="text-2xl font-bold text-white">Marathon Explorer!</h3>
+                        </div>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-300">Total marathons:</span>
+                                <span className="text-red-400 font-bold text-xl">{stats.binge_analysis.total_sessions}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-300">Longest marathon:</span>
+                                <span className="text-white font-bold text-xl">{stats.binge_analysis.longest_session} films</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-300">Marathon films:</span>
+                                <span className="text-pink-400 font-bold text-xl">{stats.binge_analysis.total_binge_films}</span>
+                            </div>
+                        </div>
+                    </div>
+                </Section>
+            )}
+
+            {/* Fun Statistics */}
+            {stats.fun_statistics && (
+                <Section>
+                    <SectionTitle icon={<Sparkles size={28} className="text-cyan-400" />} title="Fun Statistics ✨" subtitle="Surprising film facts" />
+                    <div className="space-y-4">
+                        {stats.fun_statistics.highest_budget_film && (
+                            <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-xl p-4">
+                                <h4 className="text-sm text-gray-400 mb-1">💰 Highest Budget Film</h4>
+                                <p className="font-bold text-white">{stats.fun_statistics.highest_budget_film.title}</p>
+                                <p className="text-green-400 text-sm">${(stats.fun_statistics.highest_budget_film.budget / 1000000).toFixed(1)}M</p>
+                            </div>
+                        )}
+
+                        {stats.fun_statistics.guilty_pleasure && (
+                            <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl p-4">
+                                <h4 className="text-sm text-gray-400 mb-1">😅 Your Guilty Pleasure</h4>
+                                <p className="font-bold text-white">{stats.fun_statistics.guilty_pleasure.title}</p>
+                                <p className="text-pink-400 text-sm">
+                                    TMDb: {stats.fun_statistics.guilty_pleasure.tmdb_rating}★ / You: {stats.fun_statistics.guilty_pleasure.your_rating}★
+                                </p>
+                            </div>
+                        )}
+
+                        {stats.fun_statistics.favorite_genre_combo && (
+                            <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-xl p-4">
+                                <h4 className="text-sm text-gray-400 mb-1">🎭 Favorite Genre Combo</h4>
+                                <p className="font-bold text-white">{stats.fun_statistics.favorite_genre_combo.combination}</p>
+                                <p className="text-orange-400 text-sm">{stats.fun_statistics.favorite_genre_combo.count} films</p>
+                            </div>
+                        )}
+
+                        {stats.fun_statistics.film_age_analysis && (
+                            <div className="bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-xl p-4">
+                                <h4 className="text-sm text-gray-400 mb-1">📅 Your Time Journey</h4>
+                                <p className="font-bold text-white">You're a {stats.fun_statistics.film_age_analysis.type}!</p>
+                                <p className="text-blue-400 text-sm">
+                                    Average film age: {stats.fun_statistics.film_age_analysis.average_age} years
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </Section>
+            )}
+        </div>
+
+        {/* Cinematic World Tour */}
+        {stats.fun_statistics?.world_tour && stats.fun_statistics.world_tour.length > 0 && (
+            <Section>
+                <SectionTitle icon={<Globe size={28} className="text-emerald-400" />} title="Cinematic World Tour 🌍" subtitle="Countries explored through film" />
+                <div className="text-center mb-6">
+                    <h3 className="text-2xl font-bold text-white mb-2">You traveled to {stats.fun_statistics.world_tour.length} countries through cinema this year!</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    {stats.fun_statistics.world_tour.map((country, index) => (
+                        <motion.div 
+                            variants={itemVariants} 
+                            key={country.country}
+                            className="bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl p-6 text-center"
+                        >
+                            <div className="text-4xl mb-2">{country.flag}</div>
+                            <h4 className="font-bold text-white text-sm mb-1">{country.country}</h4>
+                            <p className="text-emerald-400 font-semibold">{country.count} films</p>
+                        </motion.div>
+                    ))}
+                </div>
+            </Section>
+        )}
+
         {/* Footer */}
         <footer className="text-center py-12">
             <h3 className="text-3xl font-bold mb-4">Share Your Wrapped</h3>
