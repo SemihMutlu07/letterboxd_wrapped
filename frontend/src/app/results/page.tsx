@@ -243,8 +243,8 @@ const ComprehensiveResultsPage = () => {
   }
 
   // --- Data Transformations for Charts ---
-  const decadeData = [...stats.decades].sort((a, b) => parseInt(a.decade) - parseInt(b.decade));
-  const languageData = stats.top_languages.slice(0, 7);
+  const decadeData = stats.decades ? [...stats.decades].sort((a, b) => parseInt(a.decade) - parseInt(b.decade)) : [];
+  const languageData = stats.top_languages ? stats.top_languages.slice(0, 7) : [];
   const totalLanguageCount = languageData.reduce((acc, lang) => acc + lang.count, 0);
   const COLORS = ['#FF6B6B', '#4D96FF', '#6BCB77', '#FFD93D', '#9D6A74', '#FF8C42', '#A06CD5'];
   
@@ -524,7 +524,7 @@ const ComprehensiveResultsPage = () => {
                             <div className="text-4xl md:text-6xl mb-4">🌟</div>
                             <h3 className="text-xl md:text-3xl font-bold text-white mb-2">{stats.my_star.name}</h3>
                             <p className="text-xl text-yellow-400 font-semibold">{stats.my_star.count} films together</p>
-                            <p className="text-gray-300 mt-2">You're their most loyal fan!</p>
+                            <p className="text-gray-300 mt-2">You&apos;re their most loyal fan!</p>
                         </div>
                     </Section>
                 )}
@@ -546,7 +546,7 @@ const ComprehensiveResultsPage = () => {
                                 </div>
                                 <div className="text-center mt-4 p-3 bg-black/20 rounded-lg">
                                     <span className="text-yellow-300 font-semibold">
-                                        You're a {stats.director_deep_analysis.relationship} viewer!
+                                        You&apos;re a {stats.director_deep_analysis.relationship} viewer!
                                     </span>
                                 </div>
                             </div>
@@ -814,7 +814,7 @@ const ComprehensiveResultsPage = () => {
                         <div className="mt-4 p-4 bg-slate-800/50 rounded-xl">
                             <p className="text-gray-300 text-center">
                                 {stats.day_of_week_pattern.weekday > stats.day_of_week_pattern.weekend 
-                                    ? "You're a weekday cinema lover! 📚" 
+                                    ? "You&apos;re a weekday cinema lover! 📚" 
                                     : "Weekend movie marathons are your thing! 🍿"}
                             </p>
                         </div>
@@ -857,7 +857,7 @@ const ComprehensiveResultsPage = () => {
                         {stats.fun_statistics.film_age_analysis && (
                             <div className="bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-xl p-4">
                                 <h4 className="text-sm text-gray-400 mb-1">📅 Your Time Journey</h4>
-                                <p className="font-bold text-white">You're a {stats.fun_statistics.film_age_analysis.type}!</p>
+                                <p className="font-bold text-white">You&apos;re a {stats.fun_statistics.film_age_analysis.type}!</p>
                                 <p className="text-blue-400 text-sm">
                                     Average film age: {stats.fun_statistics.film_age_analysis.average_age} years
                                 </p>
@@ -875,7 +875,7 @@ const ComprehensiveResultsPage = () => {
                     <h3 className="text-2xl font-bold text-white mb-2">You traveled to {stats.fun_statistics.world_tour.length} countries through cinema this year!</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    {stats.fun_statistics.world_tour.map((country, index) => (
+                    {stats.fun_statistics.world_tour.map((country) => (
                         <motion.div 
                             variants={itemVariants} 
                             key={country.country}
