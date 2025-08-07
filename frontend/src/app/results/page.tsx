@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { motion, Variants } from 'framer-motion';
+import { toPng } from 'html-to-image';
 import {
-  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, User, Users
+  Film, Star, Clock, TrendingUp, Calendar, Award, Globe, Languages, Sparkles, User, Users, Share2
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import React from 'react';
@@ -46,6 +47,7 @@ interface LetterboxdStats {
   total_countries: number;
   average_runtime: number;
   top_actors: ActorItem[];
+  movie_crush?: { name: string; profile_path: string; count: number };
   top_languages: LanguageItem[];
   analysis_date: string;
   has_ratings_data: boolean;
@@ -63,7 +65,6 @@ interface LetterboxdStats {
   director_deep_analysis?: { director_name: string; average_rating_given: number; total_films: number; relationship: string };
   my_star?: { name: string; count: number };
   sinefil_meter?: { type: string; score: number; description: string };
-  binge_analysis?: { total_sessions: number; longest_session: number; total_binge_films: number };
   fun_statistics?: {
     highest_budget_film?: { title: string; budget: number };
     highest_grossing_film?: { title: string; revenue: number };
@@ -81,6 +82,9 @@ interface LetterboxdStats {
     cinematic_passport?: { countries: number; directors: number; country_story: string; director_story: string };
     cinema_archetype?: { type: string; description: string; popularity_score: number; film_age: number };
   };
+  secret_obsession?: string;
+  runtime_persona?: string;
+  furthest_destination?: string;
 }
 
 // --- Reusable Components ---
@@ -101,7 +105,7 @@ const StatCard: React.FC<StatCardProps> = ({ icon, title, value, unit, gradient 
     <div className="flex items-center justify-center w-16 h-16 bg-white/20 rounded-2xl mb-6">
       {icon}
     </div>
-    <div className="text-5xl font-black mb-2">{value} <span className="text-3xl opacity-80">{unit}</span></div>
+            <div className="text-3xl md:text-5xl font-black mb-2">{value} <span className="text-xl md:text-3xl opacity-80">{unit}</span></div>
     <p className="text-lg opacity-90 font-medium">{title}</p>
   </motion.div>
 );
@@ -135,7 +139,7 @@ const SectionTitle: React.FC<SectionTitleProps> = ({ icon, title, subtitle }) =>
       {icon}
     </div>
     <div>
-      <h3 className="text-4xl font-bold text-white tracking-tight">{title}</h3>
+              <h3 className="text-2xl md:text-4xl font-bold text-white tracking-tight">{title}</h3>
       <p className="text-md text-gray-400 mt-1">{subtitle}</p>
     </div>
   </div>
@@ -204,6 +208,22 @@ const ComprehensiveResultsPage = () => {
     setLoading(false);
   }, []);
 
+  const handleShare = () => {
+    const element = document.getElementById('letterboxd-wrapped-results');
+    if (element) {
+      toPng(element, { cacheBust: true, })
+        .then((dataUrl) => {
+          const link = document.createElement('a');
+          link.download = 'my-letterboxd-wrapped.png';
+          link.href = dataUrl;
+          link.click();
+        })
+        .catch((err) => {
+          console.error('Failed to capture image', err);
+        });
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-slate-900" />;
   }
@@ -229,11 +249,11 @@ const ComprehensiveResultsPage = () => {
   const COLORS = ['#FF6B6B', '#4D96FF', '#6BCB77', '#FFD93D', '#9D6A74', '#FF8C42', '#A06CD5'];
   
   const genreGradients = [
-      'from-pink-500 to-orange-500',
-      'from-cyan-500 to-blue-500',
-      'from-violet-500 to-purple-500',
-      'from-amber-500 to-red-500',
-      'from-lime-500 to-green-500',
+      'from-pink-900/80 to-orange-800/80',
+      'from-cyan-900/80 to-blue-800/80',
+      'from-violet-900/80 to-purple-800/80',
+      'from-amber-900/80 to-red-800/80',
+      'from-lime-900/80 to-green-800/80',
   ];
   
   return (
@@ -243,9 +263,9 @@ const ComprehensiveResultsPage = () => {
              <div className="absolute top-[-5rem] right-[-10rem] w-[40rem] h-[40rem] bg-orange-600/50 rounded-full filter blur-[150px] animate-blob animation-delay-2000"></div>
              <div className="absolute bottom-[-10rem] left-[15rem] w-[40rem] h-[40rem] bg-blue-600/50 rounded-full filter blur-[150px] animate-blob animation-delay-4000"></div>
         </div>
-      <main className="relative z-10 p-4 md:p-8 max-w-7xl mx-auto space-y-12">
+      <main id="letterboxd-wrapped-results" className="relative z-10 p-4 md:p-8 max-w-7xl mx-auto space-y-8 md:space-y-12">
         {/* Header */}
-        <header className="text-center py-16">
+        <header className="text-center py-8 md:py-16">
           <motion.h1 
             variants={itemVariants}
             initial="hidden"
@@ -272,12 +292,12 @@ const ComprehensiveResultsPage = () => {
             variants={containerVariants}
             initial="hidden"
             animate="visible"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8"
         >
-          <StatCard icon={<Film size={36} className="text-amber-500"/>} title="Total Films" value={stats.total_films} unit="films" gradient="from-pink-500 to-orange-500" />
-          <StatCard icon={<Star size={36} className="text-amber-400"/>} title="Average Rating" value={stats.average_rating.toFixed(2)} unit="★" gradient="from-blue-500 to-purple-500" />
-          <StatCard icon={<Clock size={36} className="text-cyan-500"/>} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-green-500 to-teal-500" />
-          <StatCard icon={<TrendingUp size={36} className="text-violet-500"/>} title="Top Genre" value={stats.favorite_genre.name} unit="" gradient="from-yellow-500 to-red-500" />
+          <StatCard icon={<Film size={36} className="text-amber-400"/>} title="Total Films" value={stats.total_films} unit="films" gradient="from-slate-800 to-orange-900" />
+          <StatCard icon={<Star size={36} className="text-yellow-400"/>} title="Average Rating" value={stats.average_rating.toFixed(2)} unit="★" gradient="from-slate-800 to-yellow-900" />
+          <StatCard icon={<Clock size={36} className="text-sky-400"/>} title="Days Watched" value={stats.days_watched.toFixed(1)} unit="days" gradient="from-slate-800 to-sky-900" />
+          <StatCard icon={<TrendingUp size={36} className="text-rose-400"/>} title="Top Genre" value={stats.favorite_genre.name} unit="" gradient="from-slate-800 to-rose-900" />
         </motion.div>
 
         {/* Cinematic Persona */}
@@ -288,10 +308,29 @@ const ComprehensiveResultsPage = () => {
                         variants={itemVariants}
                         className="bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 p-8 rounded-3xl text-center"
                     >
-                        <h2 className="text-5xl font-black text-white mb-4">🎬 YOUR CINEMATIC DNA</h2>
-                        <h3 className="text-4xl font-bold text-yellow-300 mb-6">{stats.cinematic_persona.persona}</h3>
+                        <h2 className="text-3xl md:text-5xl font-black text-white mb-4">🎬 YOUR CINEMATIC DNA</h2>
+                        <h3 className="text-2xl md:text-4xl font-bold text-yellow-300 mb-6">{stats.cinematic_persona.persona}</h3>
                         <p className="text-xl text-white/90 max-w-2xl mx-auto">{stats.cinematic_persona.description}</p>
                     </motion.div>
+                </div>
+            </Section>
+        )}
+
+        {/* --- Your Movie Crush --- */}
+        {stats.movie_crush && (
+            <Section>
+                <SectionTitle icon={<Star size={28} className="text-pink-400" />} title="Your On-Screen Crush" subtitle="The actor you couldn't get enough of" />
+                <div className="flex flex-col items-center text-center">
+                    <motion.div variants={itemVariants} className="relative w-48 h-48 md:w-64 md:h-64 mb-6">
+                        <img 
+                            src={`https://image.tmdb.org/t/p/w500${stats.movie_crush.profile_path}`} 
+                            alt={stats.movie_crush.name}
+                            className="rounded-full object-cover w-full h-full shadow-lg border-4 border-pink-500/50"
+                        />
+                         <div className="absolute -top-2 -right-2 text-3xl animate-pulse">💖</div>
+                    </motion.div>
+                    <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.movie_crush.name}</h3>
+                    <p className="text-xl text-pink-300 font-semibold">{stats.movie_crush.count} films together</p>
                 </div>
             </Section>
         )}
@@ -299,6 +338,52 @@ const ComprehensiveResultsPage = () => {
         {/* STORY ANALYTICS */}
         {stats.story_analytics && (
             <>
+                <Section>
+                    <SectionTitle icon={<Award size={28} className="text-orange-300" />} title="Your Signature Director" subtitle="The director whose vision you trust the most." />
+                    <div className="text-center">
+                        <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.most_watched_director.name}</h3>
+                        <p className="text-xl text-orange-400 font-semibold">{stats.most_watched_director.count} films</p>
+                    </div>
+                </Section>
+                <Section>
+                    <SectionTitle icon={<Film size={28} className="text-rose-400" />} title="Your Cinematic Home" subtitle="When in doubt, this is your go-to genre." />
+                    <div className="text-center">
+                        <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.favorite_genre.name}</h3>
+                        <p className="text-xl text-rose-400 font-semibold">{stats.favorite_genre.count} films</p>
+                    </div>
+                </Section>
+                <Section>
+                    <SectionTitle icon={<Globe size={28} className="text-emerald-400" />} title="Your Cinematic Passport" subtitle="" />
+                    <div className="text-center">
+                        <p className="text-xl text-white/90 max-w-2xl mx-auto">Your film journey took you to <span className="font-bold text-emerald-400">{stats.total_countries}</span> different countries this year, with your most frequent exotic destination being <span className="font-bold text-emerald-400">{stats.furthest_destination}</span>.</p>
+                    </div>
+                </Section>
+                <Section>
+                    <SectionTitle icon={<Calendar size={28} className="text-sky-400" />} title="Your Time Machine Destination" subtitle={`You explored the cinematic treasures of the ${stats.favorite_decade.name} most often.`} />
+                    <div className="text-center">
+                        <h3 className="text-6xl md:text-8xl font-black text-white">{stats.favorite_decade.name}</h3>
+                    </div>
+                </Section>
+                {stats.secret_obsession && (
+                    <Section>
+                        <SectionTitle icon={<Sparkles size={28} className="text-yellow-400" />} title="Your Secret Obsession" subtitle={`Beyond genres, you have a special interest in movies featuring ${stats.secret_obsession}.`} />
+                        <div className="text-center">
+                            <h3 className="text-4xl md:text-5xl font-bold text-white capitalize">{stats.secret_obsession}</h3>
+                        </div>
+                    </Section>
+                )}
+                <Section>
+                    <SectionTitle icon={<Clock size={28} className="text-indigo-400" />} title="The Marathoner vs. The Sprinter" subtitle={`Your average film was ${stats.average_runtime.toFixed(0)} minutes.`} />
+                    <div className="text-center">
+                        <h3 className="text-4xl md:text-5xl font-bold text-white">{stats.runtime_persona}</h3>
+                        <p className="text-xl text-white/90 max-w-2xl mx-auto mt-4">
+                            {stats.runtime_persona === 'The Marathoner' && "You love epic stories and aren't afraid of a long runtime."}
+                            {stats.runtime_persona === 'The Sprinter' && "You prefer concise stories that get straight to the point."}
+                            {stats.runtime_persona === 'The Balanced Viewer' && "You enjoy a mix of both long and short films."}
+                        </p>
+                    </div>
+                </Section>
+
                 {/* Time Spent Story */}
                 {stats.story_analytics.time_spent_story && (
                     <Section>
@@ -307,7 +392,7 @@ const ComprehensiveResultsPage = () => {
                                 variants={itemVariants}
                                 className="bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-600 p-8 rounded-3xl"
                             >
-                                <h2 className="text-4xl font-black text-white mb-6">⏰ TIME WELL SPENT?</h2>
+                                <h2 className="text-2xl md:text-4xl font-black text-white mb-6">⏰ TIME WELL SPENT?</h2>
                                 <p className="text-2xl text-white/95 max-w-3xl mx-auto leading-relaxed">
                                     {stats.story_analytics.time_spent_story}
                                 </p>
@@ -324,8 +409,8 @@ const ComprehensiveResultsPage = () => {
                                 variants={itemVariants}
                                 className="bg-gradient-to-br from-orange-500 via-red-500 to-pink-600 p-8 rounded-3xl"
                             >
-                                <h2 className="text-4xl font-black text-white mb-6">🔥 YOUR MARATHON DAY</h2>
-                                <div className="text-8xl mb-4">📅</div>
+                                <h2 className="text-2xl md:text-4xl font-black text-white mb-6">🔥 YOUR MARATHON DAY</h2>
+                                <div className="text-5xl md:text-8xl mb-4">📅</div>
                                 <p className="text-2xl text-white/95 max-w-3xl mx-auto leading-relaxed">
                                     {stats.story_analytics.most_active_day.story}
                                 </p>
@@ -339,8 +424,8 @@ const ComprehensiveResultsPage = () => {
                     <Section>
                         <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Your Rating Personality ⭐" subtitle="How you judge movies" />
                         <div className="text-center bg-gradient-to-br from-yellow-500/20 to-amber-500/20 rounded-2xl p-8">
-                            <h3 className="text-4xl font-bold text-white mb-4">{stats.story_analytics.rating_personality.type}</h3>
-                            <div className="text-6xl font-black text-yellow-400 mb-4">{stats.story_analytics.rating_personality.average}★</div>
+                            <h3 className="text-2xl md:text-4xl font-bold text-white mb-4">{stats.story_analytics.rating_personality.type}</h3>
+                            <div className="text-4xl md:text-6xl font-black text-yellow-400 mb-4">{stats.story_analytics.rating_personality.average}★</div>
                             <p className="text-xl text-white/90 max-w-2xl mx-auto">{stats.story_analytics.rating_personality.description}</p>
                         </div>
                     </Section>
@@ -372,7 +457,7 @@ const ComprehensiveResultsPage = () => {
                                 {stats.story_analytics.viewing_season.season === 'Summer' && '☀️'}
                                 {stats.story_analytics.viewing_season.season === 'Fall' && '🍂'}
                             </div>
-                            <h3 className="text-4xl font-bold text-white mb-4">{stats.story_analytics.viewing_season.season}</h3>
+                            <h3 className="text-2xl md:text-4xl font-bold text-white mb-4">{stats.story_analytics.viewing_season.season}</h3>
                             <p className="text-xl text-white/90 max-w-2xl mx-auto">{stats.story_analytics.viewing_season.story}</p>
                         </div>
                     </Section>
@@ -384,12 +469,12 @@ const ComprehensiveResultsPage = () => {
                         <SectionTitle icon={<Globe size={28} className="text-blue-400" />} title="Your Cinematic Passport 🗺️" subtitle="New worlds you discovered" />
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-2xl p-6">
-                                <div className="text-5xl mb-4 text-center">🌍</div>
+                                <div className="text-3xl md:text-5xl mb-4 text-center">🌍</div>
                                 <h4 className="text-xl font-bold text-white mb-3 text-center">Country Discovery</h4>
                                 <p className="text-white/90 text-center">{stats.story_analytics.cinematic_passport.country_story}</p>
                             </div>
                             <div className="bg-gradient-to-br from-purple-500/20 to-indigo-500/20 rounded-2xl p-6">
-                                <div className="text-5xl mb-4 text-center">🎬</div>
+                                <div className="text-3xl md:text-5xl mb-4 text-center">🎬</div>
                                 <h4 className="text-xl font-bold text-white mb-3 text-center">Director Discovery</h4>
                                 <p className="text-white/90 text-center">{stats.story_analytics.cinematic_passport.director_story}</p>
                             </div>
@@ -405,13 +490,13 @@ const ComprehensiveResultsPage = () => {
                                 variants={itemVariants}
                                 className="bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 p-10 rounded-3xl"
                             >
-                                <h2 className="text-5xl font-black text-white mb-4">🏆 YOUR 2025 CINEMA IDENTITY</h2>
-                                <div className="text-8xl mb-6">🎪</div>
-                                <h3 className="text-5xl font-bold text-yellow-300 mb-6">{stats.story_analytics.cinema_archetype.type}</h3>
+                                <h2 className="text-3xl md:text-5xl font-black text-white mb-4">🏆 YOUR 2025 CINEMA IDENTITY</h2>
+                                <div className="text-5xl md:text-8xl mb-6">🎪</div>
+                                <h3 className="text-2xl md:text-5xl font-bold text-yellow-300 mb-6">{stats.story_analytics.cinema_archetype.type}</h3>
                                 <p className="text-2xl text-white/95 max-w-3xl mx-auto leading-relaxed mb-8">
                                     {stats.story_analytics.cinema_archetype.description}
                                 </p>
-                                <div className="grid grid-cols-2 gap-8 max-w-md mx-auto">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-md mx-auto">
                                     <div className="bg-black/20 rounded-xl p-4">
                                         <p className="text-sm text-gray-300">Popularity Score</p>
                                         <p className="text-2xl font-bold text-white">{stats.story_analytics.cinema_archetype.popularity_score}</p>
@@ -429,45 +514,47 @@ const ComprehensiveResultsPage = () => {
         )}
 
         {/* My Star & Director Analysis */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* My Star */}
-            {stats.my_star && (
-                <Section>
-                    <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Your Star ⭐" subtitle="Most watched actor/actress" />
-                    <div className="text-center bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-2xl p-8">
-                        <div className="text-6xl mb-4">🌟</div>
-                        <h3 className="text-3xl font-bold text-white mb-2">{stats.my_star.name}</h3>
-                        <p className="text-xl text-yellow-400 font-semibold">{stats.my_star.count} films together</p>
-                        <p className="text-gray-300 mt-2">You're their most loyal fan!</p>
-                    </div>
-                </Section>
-            )}
+        {(stats.my_star || stats.director_deep_analysis) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+                {/* My Star */}
+                {stats.my_star && (
+                    <Section>
+                        <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Your Star ⭐" subtitle="Most watched actor/actress" />
+                        <div className="text-center bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-2xl p-8">
+                            <div className="text-4xl md:text-6xl mb-4">🌟</div>
+                            <h3 className="text-xl md:text-3xl font-bold text-white mb-2">{stats.my_star.name}</h3>
+                            <p className="text-xl text-yellow-400 font-semibold">{stats.my_star.count} films together</p>
+                            <p className="text-gray-300 mt-2">You're their most loyal fan!</p>
+                        </div>
+                    </Section>
+                )}
 
-            {/* Director Deep Analysis */}
-            {stats.director_deep_analysis && (
-                <Section>
-                    <SectionTitle icon={<Award size={28} className="text-orange-400" />} title="Director Relationship 🎯" subtitle="Your connection with your favorite director" />
-                    <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-2xl p-6">
-                        <h3 className="text-2xl font-bold text-white mb-4">{stats.director_deep_analysis.director_name}</h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between">
-                                <span className="text-gray-300">Average rating given:</span>
-                                <span className="text-orange-400 font-bold">{stats.director_deep_analysis.average_rating_given}★</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-300">Films watched:</span>
-                                <span className="text-white font-bold">{stats.director_deep_analysis.total_films}</span>
-                            </div>
-                            <div className="text-center mt-4 p-3 bg-black/20 rounded-lg">
-                                <span className="text-yellow-300 font-semibold">
-                                    You're a {stats.director_deep_analysis.relationship} viewer!
-                                </span>
+                {/* Director Deep Analysis */}
+                {stats.director_deep_analysis && (
+                    <Section>
+                        <SectionTitle icon={<Award size={28} className="text-orange-400" />} title="Director Relationship 🎯" subtitle="Your connection with your favorite director" />
+                        <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-2xl p-6">
+                            <h3 className="text-2xl font-bold text-white mb-4">{stats.director_deep_analysis.director_name}</h3>
+                            <div className="space-y-3">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-300">Average rating given:</span>
+                                    <span className="text-orange-400 font-bold">{stats.director_deep_analysis.average_rating_given}★</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-300">Films watched:</span>
+                                    <span className="text-white font-bold">{stats.director_deep_analysis.total_films}</span>
+                                </div>
+                                <div className="text-center mt-4 p-3 bg-black/20 rounded-lg">
+                                    <span className="text-yellow-300 font-semibold">
+                                        You're a {stats.director_deep_analysis.relationship} viewer!
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </Section>
-            )}
-        </div>
+                    </Section>
+                )}
+            </div>
+        )}
 
         {/* Cinema Enthusiast Meter */}
         {stats.sinefil_meter && (
@@ -475,9 +562,9 @@ const ComprehensiveResultsPage = () => {
                 <SectionTitle icon={<TrendingUp size={28} className="text-indigo-400" />} title="Your Cinema Scale 📊" subtitle="Popular vs Niche film preferences" />
                 <div className="text-center">
                     <div className="bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl p-8 mb-6">
-                        <h3 className="text-4xl font-bold text-white mb-4">{stats.sinefil_meter.type}</h3>
+                        <h3 className="text-2xl md:text-4xl font-bold text-white mb-4">{stats.sinefil_meter.type}</h3>
                         <div className="flex justify-center items-center mb-4">
-                            <div className="text-6xl font-black text-indigo-400">{stats.sinefil_meter.score}</div>
+                            <div className="text-4xl md:text-6xl font-black text-indigo-400">{stats.sinefil_meter.score}</div>
                             <div className="text-xl text-gray-400 ml-2">/ 100</div>
                         </div>
                         <p className="text-xl text-white/90">{stats.sinefil_meter.description}</p>
@@ -502,7 +589,7 @@ const ComprehensiveResultsPage = () => {
         {stats.insights && (
             <Section>
                 <SectionTitle icon={<Sparkles size={28} className="text-yellow-300"/>} title="Special Insights" subtitle="Fun facts from your viewing habits" />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                     {stats.insights.slice(0, 3).map((insight) => (
                     <motion.div variants={itemVariants} key={insight.title} className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-lg rounded-2xl p-6">
                         <h4 className="font-bold text-2xl text-orange-400 mb-3">{insight.title}</h4>
@@ -514,13 +601,13 @@ const ComprehensiveResultsPage = () => {
         )}
 
         {/* Directors & Runtime */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
             <div className="lg:col-span-2">
                 {/* Favorite Directors */}
                 <Section>
                     <SectionTitle icon={<Award size={28} className="text-orange-300" />} title="Favorite Directors" subtitle={`${stats.total_directors} directors watched`} />
-                    <div className="space-y-2 h-96 overflow-y-auto pr-4 custom-scrollbar">
-                        {stats.top_directors.slice(0, 15).map((director) => (
+                    <div className="space-y-2">
+                        {stats.top_directors.slice(0, 5).map((director) => (
                             <motion.div variants={itemVariants} key={director.name} className="flex items-center gap-4 py-3 border-b border-white/10">
                                 <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center shrink-0">
                                     <User size={32} className="text-gray-400" />
@@ -542,7 +629,7 @@ const ComprehensiveResultsPage = () => {
                 <Section>
                     <SectionTitle icon={<Clock size={24} className="text-teal-400" />} title="Runtime Analysis" subtitle="How long you like your movies" />
                     <div className="text-center my-8">
-                        <div className="text-8xl font-black text-white">{stats.average_runtime.toFixed(0)}</div>
+                        <div className="text-5xl md:text-8xl font-black text-white">{stats.average_runtime.toFixed(0)}</div>
                         <p className="text-gray-300 text-lg">minutes average</p>
                     </div>
                     <div className="text-center">
@@ -557,11 +644,11 @@ const ComprehensiveResultsPage = () => {
         </div>
 
         {/* Languages & Top Countries */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          <Section className="lg:col-span-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+          <Section>
               <SectionTitle icon={<Languages size={28} className="text-blue-300" />} title="Languages" subtitle="Your cinematic linguistic profile" />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-                  <motion.div variants={chartVariants} className="w-full h-80">
+              <div className="flex flex-col lg:grid lg:grid-cols-2 gap-8 items-center">
+                  <motion.div variants={chartVariants} className="w-full h-64 md:h-80">
                       <ResponsiveContainer>
                           <PieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                               <Pie data={languageData} dataKey="count" nameKey="language" cx="50%" cy="50%" innerRadius={70} outerRadius={110} fill="#8884d8" paddingAngle={5} cornerRadius={10}>
@@ -585,16 +672,16 @@ const ComprehensiveResultsPage = () => {
                   </motion.div>
               </div>
           </Section>
-          <Section className="lg:col-span-2">
+          <Section>
               <SectionTitle icon={<Globe size={28} className="text-green-300" />} title="Top Countries" subtitle={`Films from ${stats.total_countries} countries`} />
-              <div className="space-y-3 h-96 overflow-y-auto pr-4 custom-scrollbar">
-                  {stats.top_countries.slice(0, 15).map((country, index) => (
-                  <motion.div variants={itemVariants} key={country.name} className="flex justify-between items-center py-2">
+              <div className="space-y-2">
+                  {stats.top_countries.slice(0, 8).map((country, index) => (
+                  <motion.div variants={itemVariants} key={country.name} className="flex justify-between items-center py-1">
                       <div className="flex items-center">
-                          <span className="text-md font-bold w-10 text-gray-400">#{index + 1}</span>
+                          <span className="text-sm font-bold w-8 text-gray-400">#{index + 1}</span>
                           <span className="font-semibold text-lg">{country.name}</span>
                       </div>
-                      <span className="font-bold text-xl text-gray-300 bg-white/5 py-1 px-3 rounded-lg">{country.count}</span>
+                      <span className="font-bold text-lg text-gray-300 bg-white/5 py-1 px-2 rounded-lg">{country.count}</span>
                   </motion.div>
                   ))}
               </div>
@@ -604,12 +691,12 @@ const ComprehensiveResultsPage = () => {
         {/* Top Genres */}
         <Section>
             <SectionTitle icon={<TrendingUp size={28} className="text-yellow-300" />} title="Top Genres" subtitle="Your most-watched movie genres" />
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
                 {stats.top_genres.slice(0, 5).map((genre, i) => (
                 <motion.div 
                     variants={itemVariants} 
                     key={genre.name} 
-                    className={`relative rounded-2xl p-6 text-center transition-transform duration-300 hover:scale-105 group overflow-hidden`}
+                    className={`relative rounded-2xl p-4 md:p-6 text-center transition-transform duration-300 hover:scale-105 group overflow-hidden`}
                 >
                     <div className={`absolute inset-0 bg-gradient-to-br ${genreGradients[i % genreGradients.length]} opacity-60 group-hover:opacity-80 transition-opacity`}></div>
                     <div className="relative">
@@ -623,7 +710,7 @@ const ComprehensiveResultsPage = () => {
         {/* Decade Chart */}
         <Section>
             <SectionTitle icon={<Calendar size={28} className="text-purple-400" />} title="Films by Decade" subtitle="Your journey through film history" />
-            <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+            <motion.div variants={chartVariants} className="w-full h-64 md:h-80 mt-4">
                 <ResponsiveContainer>
                     <LineChart data={decadeData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
                         <XAxis dataKey="decade" stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
@@ -641,7 +728,7 @@ const ComprehensiveResultsPage = () => {
         {/* Rating Distribution */}
         <Section>
             <SectionTitle icon={<Star size={28} className="text-yellow-400" />} title="Rating Distribution" subtitle="How you rate films" />
-            <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+            <motion.div variants={chartVariants} className="w-full h-64 md:h-80 mt-4">
                 <ResponsiveContainer>
                     <BarChart data={Object.entries(stats.rating_distribution).map(([rating, count]) => ({ rating: `${rating}★`, count }))}>
                         <XAxis dataKey="rating" stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
@@ -660,7 +747,7 @@ const ComprehensiveResultsPage = () => {
         {stats.monthly_viewing_habits && stats.monthly_viewing_habits.length > 0 && (
             <Section>
                 <SectionTitle icon={<Calendar size={28} className="text-green-400" />} title="Monthly Viewing Habits" subtitle="Your film watching patterns throughout the year" />
-                <motion.div variants={chartVariants} className="w-full h-80 mt-4">
+                <motion.div variants={chartVariants} className="w-full h-64 md:h-80 mt-4">
                     <ResponsiveContainer>
                         <BarChart data={stats.monthly_viewing_habits}>
                             <XAxis 
@@ -687,77 +774,59 @@ const ComprehensiveResultsPage = () => {
         {stats.day_of_week_pattern && (
             <Section>
                 <SectionTitle icon={<Clock size={28} className="text-indigo-400" />} title="Weekday vs. Weekend Breakdown" subtitle="When do you prefer to watch movies?" />
-                <motion.div variants={chartVariants} className="w-full h-80 mt-4">
-                    <ResponsiveContainer>
-                        <PieChart>
-                            <Pie 
-                                data={[
-                                    { name: 'Weekday', value: stats.day_of_week_pattern.weekday, fill: '#6366f1' },
-                                    { name: 'Weekend', value: stats.day_of_week_pattern.weekend, fill: '#f59e0b' }
-                                ]}
-                                dataKey="value" 
-                                nameKey="name" 
-                                cx="50%" 
-                                cy="50%" 
-                                innerRadius={60} 
-                                outerRadius={120} 
-                                paddingAngle={5}
-                                cornerRadius={10}
-                            >
-                            </Pie>
-                            <Tooltip
-                                cursor={{ fill: 'rgba(255,255,255,0.1)' }}
-                                contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem' }}
-                            />
-                        </PieChart>
-                    </ResponsiveContainer>
-                    <div className="flex justify-center gap-6 mt-4">
-                        <div className="flex items-center">
-                            <div className="w-4 h-4 rounded-full bg-indigo-500 mr-2"></div>
-                            <span className="text-gray-300">Weekday ({stats.day_of_week_pattern.weekday})</span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                    <motion.div variants={chartVariants} className="w-full h-64 lg:h-80">
+                        <ResponsiveContainer>
+                            <PieChart>
+                                <Pie 
+                                    data={[
+                                        { name: 'Weekday', value: stats.day_of_week_pattern.weekday, fill: '#6366f1' },
+                                        { name: 'Weekend', value: stats.day_of_week_pattern.weekend, fill: '#f59e0b' }
+                                    ]}
+                                    dataKey="value" 
+                                    nameKey="name" 
+                                    cx="50%" 
+                                    cy="50%" 
+                                    innerRadius={60} 
+                                    outerRadius={100} 
+                                    paddingAngle={5}
+                                    cornerRadius={10}
+                                >
+                                </Pie>
+                                <Tooltip
+                                    cursor={{ fill: 'rgba(255,255,255,0.1)' }}
+                                    contentStyle={{ backgroundColor: 'rgba(31, 41, 55, 0.8)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.5rem' }}
+                                />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </motion.div>
+                    <div className="flex flex-col gap-6 lg:gap-8">
+                        <div className="flex items-center text-lg">
+                            <div className="w-6 h-6 rounded-full bg-indigo-500 mr-4"></div>
+                            <span className="text-gray-300 font-medium">Weekday</span>
+                            <span className="text-white font-bold ml-auto text-xl">{stats.day_of_week_pattern.weekday}</span>
                         </div>
-                        <div className="flex items-center">
-                            <div className="w-4 h-4 rounded-full bg-amber-500 mr-2"></div>
-                            <span className="text-gray-300">Weekend ({stats.day_of_week_pattern.weekend})</span>
+                        <div className="flex items-center text-lg">
+                            <div className="w-6 h-6 rounded-full bg-amber-500 mr-4"></div>
+                            <span className="text-gray-300 font-medium">Weekend</span>
+                            <span className="text-white font-bold ml-auto text-xl">{stats.day_of_week_pattern.weekend}</span>
+                        </div>
+                        <div className="mt-4 p-4 bg-slate-800/50 rounded-xl">
+                            <p className="text-gray-300 text-center">
+                                {stats.day_of_week_pattern.weekday > stats.day_of_week_pattern.weekend 
+                                    ? "You're a weekday cinema lover! 📚" 
+                                    : "Weekend movie marathons are your thing! 🍿"}
+                            </p>
                         </div>
                     </div>
-                </motion.div>
+                </div>
             </Section>
         )}
 
-        {/* Binge Analysis & Fun Stats */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Binge-watching Analysis */}
-            {stats.binge_analysis && (
-                <Section>
-                    <SectionTitle icon={<Calendar size={28} className="text-red-400" />} title="Your Binge Sessions 🍿" subtitle="Movie marathon analysis" />
-                    <div className="bg-gradient-to-br from-red-500/20 to-pink-500/20 rounded-2xl p-6">
-                        <div className="text-center mb-6">
-                            <div className="text-5xl mb-4">🏃‍♂️</div>
-                            <h3 className="text-2xl font-bold text-white">Marathon Explorer!</h3>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-300">Total marathons:</span>
-                                <span className="text-red-400 font-bold text-xl">{stats.binge_analysis.total_sessions}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-300">Longest marathon:</span>
-                                <span className="text-white font-bold text-xl">{stats.binge_analysis.longest_session} films</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-300">Marathon films:</span>
-                                <span className="text-pink-400 font-bold text-xl">{stats.binge_analysis.total_binge_films}</span>
-                            </div>
-                        </div>
-                    </div>
-                </Section>
-            )}
-
-            {/* Fun Statistics */}
-            {stats.fun_statistics && (
-                <Section>
-                    <SectionTitle icon={<Sparkles size={28} className="text-cyan-400" />} title="Fun Statistics ✨" subtitle="Surprising film facts" />
+        {/* Fun Statistics */}
+        {stats.fun_statistics && (
+            <Section>
+                <SectionTitle icon={<Sparkles size={28} className="text-cyan-400" />} title="Fun Statistics ✨" subtitle="Surprising film facts" />
                     <div className="space-y-4">
                         {stats.fun_statistics.highest_budget_film && (
                             <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 rounded-xl p-4">
@@ -797,7 +866,6 @@ const ComprehensiveResultsPage = () => {
                     </div>
                 </Section>
             )}
-        </div>
 
         {/* Cinematic World Tour */}
         {stats.fun_statistics?.world_tour && stats.fun_statistics.world_tour.length > 0 && (
@@ -806,7 +874,7 @@ const ComprehensiveResultsPage = () => {
                 <div className="text-center mb-6">
                     <h3 className="text-2xl font-bold text-white mb-2">You traveled to {stats.fun_statistics.world_tour.length} countries through cinema this year!</h3>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                     {stats.fun_statistics.world_tour.map((country, index) => (
                         <motion.div 
                             variants={itemVariants} 
@@ -824,24 +892,17 @@ const ComprehensiveResultsPage = () => {
 
         {/* Footer */}
         <footer className="text-center py-12">
-            <h3 className="text-3xl font-bold mb-4">Share Your Wrapped</h3>
+            <h3 className="text-2xl md:text-3xl font-bold mb-4">Share Your Wrapped</h3>
              <div className="flex justify-center gap-4 mt-4">
-                {/* 
-                <a href={generateShareUrl('instagram')} target="_blank" rel="noopener noreferrer"
-                  className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-full hover:scale-110 transition-transform"
-                  aria-label="Share on Instagram"
+                <button
+                  onClick={handleShare}
+                  className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-full hover:scale-110 transition-transform text-white flex items-center gap-2"
+                  aria-label="Share your results"
                 >
-                  <Instagram />
-                </a>
-                <a href={generateShareUrl('twitter')} target="_blank" rel="noopener noreferrer"
-                  className="bg-sky-500 p-4 rounded-full hover:scale-110 transition-transform"
-                  aria-label="Share on Twitter"
-                >
-                  <Twitter />
-                </a>
-                */}
+                  <Share2 />
+                  <span>Share</span>
+                </button>
             </div>
-            <p className="text-gray-400 mt-4 text-lg italic">Sharing options coming soon!</p>
         </footer>
       </main>
     </div>
