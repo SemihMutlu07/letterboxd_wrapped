@@ -1,5 +1,6 @@
 'use client';
 
+import JSZip from 'jszip';
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -100,12 +101,47 @@ export default function LetterboxdLanding() {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+        const item = items[0].webkitGetAsEntry();
+        if (item?.isFile) {
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        } else if (item?.isDirectory) {
+            const zip = new JSZip();
+            const directory = item as any; // Allow access to experimental API
+            const files = await readAllDirectoryEntries(directory.createReader());
+            
+            await Promise.all(files.map(async (fileEntry: any) => {
+                const file: File = await new Promise(resolve => fileEntry.file(resolve));
+                zip.file(file.name, file);
+            }));
+
+            const content = await zip.generateAsync({ type: "blob" });
+            const zippedFile = new File([content], "letterboxd-export.zip", { type: "application/zip" });
+            handleFile(zippedFile);
+        }
     }
-  }, [handleFile]);
+}, [handleFile]);
+
+async function readAllDirectoryEntries(directoryReader: any) {
+    let entries: any[] = [];
+    let readEntries: any[] = await readEntriesPromise(directoryReader);
+    while (readEntries.length > 0) {
+        entries.push(...readEntries);
+        readEntries = await readEntriesPromise(directoryReader);
+    }
+    return entries;
+}
+
+async function readEntriesPromise(directoryReader: any): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+        directoryReader.readEntries(resolve, reject);
+    });
+}
+
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -246,13 +282,18 @@ export default function LetterboxdLanding() {
           <input
             id="file-input"
             type="file"
-            accept=".zip"
             onChange={handleFileInput}
             className="hidden"
+            // @ts-ignore
+            webkitdirectory="true"
+            mozdirectory="true"
+            msdirectory="true"
+            odirectory="true"
+            directory="true"
           />
           <div className="flex flex-col items-center">
             <Upload className="w-12 h-12 text-gray-400 mb-4" />
-            <p className="text-lg mb-2">Drop your ZIP file here or click to browse</p>
+            <p className="text-lg mb-2">Drop your ZIP file or folder here, or click to browse</p>
             <p className="text-sm text-gray-500">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
           </div>
         </div>

@@ -338,32 +338,40 @@ const ComprehensiveResultsPage = () => {
         {/* STORY ANALYTICS */}
         {stats.story_analytics && (
             <>
-                <Section>
-                    <SectionTitle icon={<Award size={28} className="text-orange-300" />} title="Your Signature Director" subtitle="The director whose vision you trust the most." />
-                    <div className="text-center">
-                        <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.most_watched_director.name}</h3>
-                        <p className="text-xl text-orange-400 font-semibold">{stats.most_watched_director.count} films</p>
-                    </div>
-                </Section>
-                <Section>
-                    <SectionTitle icon={<Film size={28} className="text-rose-400" />} title="Your Cinematic Home" subtitle="When in doubt, this is your go-to genre." />
-                    <div className="text-center">
-                        <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.favorite_genre.name}</h3>
-                        <p className="text-xl text-rose-400 font-semibold">{stats.favorite_genre.count} films</p>
-                    </div>
-                </Section>
-                <Section>
-                    <SectionTitle icon={<Globe size={28} className="text-emerald-400" />} title="Your Cinematic Passport" subtitle="" />
-                    <div className="text-center">
-                        <p className="text-xl text-white/90 max-w-2xl mx-auto">Your film journey took you to <span className="font-bold text-emerald-400">{stats.total_countries}</span> different countries this year, with your most frequent exotic destination being <span className="font-bold text-emerald-400">{stats.furthest_destination}</span>.</p>
-                    </div>
-                </Section>
-                <Section>
-                    <SectionTitle icon={<Calendar size={28} className="text-sky-400" />} title="Your Time Machine Destination" subtitle={`You explored the cinematic treasures of the ${stats.favorite_decade.name} most often.`} />
-                    <div className="text-center">
-                        <h3 className="text-6xl md:text-8xl font-black text-white">{stats.favorite_decade.name}</h3>
-                    </div>
-                </Section>
+                {stats.most_watched_director && (
+                    <Section>
+                        <SectionTitle icon={<Award size={28} className="text-orange-300" />} title="Your Signature Director" subtitle="The director whose vision you trust the most." />
+                        <div className="text-center">
+                            <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.most_watched_director.name}</h3>
+                            <p className="text-xl text-orange-400 font-semibold">{stats.most_watched_director.count} films</p>
+                        </div>
+                    </Section>
+                )}
+                {stats.favorite_genre && (
+                    <Section>
+                        <SectionTitle icon={<Film size={28} className="text-rose-400" />} title="Your Cinematic Home" subtitle="When in doubt, this is your go-to genre." />
+                        <div className="text-center">
+                            <h3 className="text-3xl md:text-4xl font-bold text-white">{stats.favorite_genre.name}</h3>
+                            <p className="text-xl text-rose-400 font-semibold">{stats.favorite_genre.count} films</p>
+                        </div>
+                    </Section>
+                )}
+                {stats.total_countries > 0 && stats.furthest_destination && (
+                    <Section>
+                        <SectionTitle icon={<Globe size={28} className="text-emerald-400" />} title="Your Cinematic Passport" subtitle="" />
+                        <div className="text-center">
+                            <p className="text-xl text-white/90 max-w-2xl mx-auto">Your film journey took you to <span className="font-bold text-emerald-400">{stats.total_countries}</span> different countries this year, with your most frequent exotic destination being <span className="font-bold text-emerald-400">{stats.furthest_destination}</span>.</p>
+                        </div>
+                    </Section>
+                )}
+                {stats.favorite_decade && (
+                    <Section>
+                        <SectionTitle icon={<Calendar size={28} className="text-sky-400" />} title="Your Time Machine Destination" subtitle={`You explored the cinematic treasures of the ${stats.favorite_decade.name} most often.`} />
+                        <div className="text-center">
+                            <h3 className="text-6xl md:text-8xl font-black text-white">{stats.favorite_decade.name}</h3>
+                        </div>
+                    </Section>
+                )}
                 {stats.secret_obsession && (
                     <Section>
                         <SectionTitle icon={<Sparkles size={28} className="text-yellow-400" />} title="Your Secret Obsession" subtitle={`Beyond genres, you have a special interest in movies featuring ${stats.secret_obsession}.`} />
@@ -372,17 +380,19 @@ const ComprehensiveResultsPage = () => {
                         </div>
                     </Section>
                 )}
-                <Section>
-                    <SectionTitle icon={<Clock size={28} className="text-indigo-400" />} title="The Marathoner vs. The Sprinter" subtitle={`Your average film was ${stats.average_runtime.toFixed(0)} minutes.`} />
-                    <div className="text-center">
-                        <h3 className="text-4xl md:text-5xl font-bold text-white">{stats.runtime_persona}</h3>
-                        <p className="text-xl text-white/90 max-w-2xl mx-auto mt-4">
-                            {stats.runtime_persona === 'The Marathoner' && "You love epic stories and aren't afraid of a long runtime."}
-                            {stats.runtime_persona === 'The Sprinter' && "You prefer concise stories that get straight to the point."}
-                            {stats.runtime_persona === 'The Balanced Viewer' && "You enjoy a mix of both long and short films."}
-                        </p>
-                    </div>
-                </Section>
+                {stats.runtime_persona && stats.average_runtime && (
+                    <Section>
+                        <SectionTitle icon={<Clock size={28} className="text-indigo-400" />} title="The Marathoner vs. The Sprinter" subtitle={`Your average film was ${stats.average_runtime.toFixed(0)} minutes.`} />
+                        <div className="text-center">
+                            <h3 className="text-4xl md:text-5xl font-bold text-white">{stats.runtime_persona}</h3>
+                            <p className="text-xl text-white/90 max-w-2xl mx-auto mt-4">
+                                {stats.runtime_persona === 'The Marathoner' && "You love epic stories and aren't afraid of a long runtime."}
+                                {stats.runtime_persona === 'The Sprinter' && "You prefer concise stories that get straight to the point."}
+                                {stats.runtime_persona === 'The Balanced Viewer' && "You enjoy a mix of both long and short films."}
+                            </p>
+                        </div>
+                    </Section>
+                )}
 
                 {/* Time Spent Story */}
                 {stats.story_analytics.time_spent_story && (
