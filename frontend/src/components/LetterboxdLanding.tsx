@@ -24,9 +24,7 @@ export default function LetterboxdLanding() {
     const testBackend = async () => {
       try {
                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-         console.log('Testing backend connectivity to:', apiUrl);
         const response = await fetch(`${apiUrl}/`); // FastAPI root endpoint
-        console.log('Backend test response:', response.status);
       } catch (err) {
         console.error('Backend connectivity test failed:', err);
       }
@@ -42,7 +40,6 @@ export default function LetterboxdLanding() {
       intervalId = setInterval(async () => {
         try {
           const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-          console.log('API URL:', apiUrl); // Debug log
           const response = await fetch(`${apiUrl}/api/progress`);
           if (response.ok) {
             const progressData = await response.json();
@@ -60,7 +57,7 @@ export default function LetterboxdLanding() {
         } catch (err) {
           console.error('Error fetching progress:', err);
         }
-      }, 500); // Poll every 500ms
+      }, 1500); // Poll every 1500ms
     }
 
     return () => {
@@ -80,16 +77,11 @@ export default function LetterboxdLanding() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-      console.log('API URL for analyze:', apiUrl); // Debug log
-      console.log('Making request to:', `${apiUrl}/api/analyze`); // Debug log
       
       const response = await fetch(`${apiUrl}/api/analyze`, {
         method: 'POST',
         body: formData,
       });
-
-      console.log('Response status:', response.status); // Debug log
-      console.log('Response headers:', response.headers); // Debug log
 
       if (response.ok) {
         const result = await response.json();
