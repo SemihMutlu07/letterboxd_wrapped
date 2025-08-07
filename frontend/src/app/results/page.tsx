@@ -196,6 +196,7 @@ const ComprehensiveResultsPage = () => {
   const [stats, setStats] = useState<LetterboxdStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [shareLayout, setShareLayout] = useState<'horizontal' | 'vertical' | 'square'>('horizontal');
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     const savedStats = localStorage.getItem('letterboxdStats');
@@ -209,8 +210,8 @@ const ComprehensiveResultsPage = () => {
     setLoading(false);
   }, []);
 
-  const handleShare = () => {
-    // Populate the share card with data
+  const handleShare = async () => {
+    setIsDownloading(true);
     const shareCard = document.getElementById(`shareable-wrapped-${shareLayout}`);
     if (shareCard && stats) {
         const totalFilms = shareCard.querySelector('.share-total-films');
@@ -228,22 +229,25 @@ const ComprehensiveResultsPage = () => {
         const decade = shareCard.querySelector('.share-time-machine');
         if (decade) decade.textContent = stats.favorite_decade?.name || 'N/A';
 
-        // Make it visible for capture
         shareCard.style.display = 'block';
+        
+        // Brief delay to ensure rendering
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-        toPng(shareCard, { cacheBust: true })
-            .then((dataUrl) => {
-                const link = document.createElement('a');
-                link.download = `my-letterboxd-wrapped-${shareLayout}.png`;
-                link.href = dataUrl;
-                link.click();
-                // Hide it again after capture
-                shareCard.style.display = 'none';
-            })
-            .catch((err) => {
-                console.error('Failed to capture image', err);
-                shareCard.style.display = 'none';
-            });
+        try {
+            const dataUrl = await toPng(shareCard, { cacheBust: true });
+            const link = document.createElement('a');
+            link.download = `my-letterboxd-wrapped-${shareLayout}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch (err) {
+            console.error('Failed to capture image', err);
+        } finally {
+            shareCard.style.display = 'none';
+            setIsDownloading(false);
+        }
+    } else {
+        setIsDownloading(false);
     }
   };
 
@@ -973,11 +977,12 @@ const ComprehensiveResultsPage = () => {
              <div className="flex justify-center gap-4 mt-4">
                 <button
                   onClick={handleShare}
-                  className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-full hover:scale-110 transition-transform text-white flex items-center gap-2"
+                  disabled={isDownloading}
+                  className="bg-gradient-to-br from-purple-500 to-pink-500 p-4 rounded-full hover:scale-110 transition-transform text-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Share your results"
                 >
                   <Share2 />
-                  <span>Share</span>
+                  <span>{isDownloading ? 'Downloading...' : 'Share'}</span>
                 </button>
             </div>
         </footer>
