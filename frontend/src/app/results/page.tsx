@@ -322,6 +322,7 @@ const ComprehensiveResultsPage = () => {
                 <SectionTitle icon={<Star size={28} className="text-pink-400" />} title="Your On-Screen Crush" subtitle="The actor you couldn't get enough of" />
                 <div className="flex flex-col items-center text-center">
                     <motion.div variants={itemVariants} className="relative w-48 h-48 md:w-64 md:h-64 mb-6">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img 
                             src={`https://image.tmdb.org/t/p/w500${stats.movie_crush.profile_path}`} 
                             alt={stats.movie_crush.name}

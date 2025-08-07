@@ -26,6 +26,9 @@ export default function LetterboxdLanding() {
       try {
                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
         const response = await fetch(`${apiUrl}/`); // FastAPI root endpoint
+        if (!response.ok) {
+          throw new Error(`Backend test failed with status: ${response.status}`);
+        }
       } catch (err) {
         console.error('Backend connectivity test failed:', err);
       }
@@ -111,10 +114,10 @@ export default function LetterboxdLanding() {
             if (file) handleFile(file);
         } else if (item?.isDirectory) {
             const zip = new JSZip();
-            const directory = item as any; // Allow access to experimental API
+            const directory = item as unknown as { createReader: () => CustomFileSystemDirectoryReader };
             const files = await readAllDirectoryEntries(directory.createReader());
             
-            await Promise.all(files.map(async (fileEntry: any) => {
+            await Promise.all(files.map(async (fileEntry) => {
                 const file: File = await new Promise(resolve => fileEntry.file(resolve));
                 zip.file(file.name, file);
             }));
@@ -126,9 +129,16 @@ export default function LetterboxdLanding() {
     }
 }, [handleFile]);
 
-async function readAllDirectoryEntries(directoryReader: any) {
-    let entries: any[] = [];
-    let readEntries: any[] = await readEntriesPromise(directoryReader);
+interface CustomFileSystemDirectoryReader extends FileSystemDirectoryReader {
+    createReader(): FileSystemDirectoryReader;
+}
+
+interface CustomFileSystemFileEntry extends FileSystemFileEntry {
+    file(callback: (file: File) => void): void;
+}
+async function readAllDirectoryEntries(directoryReader: CustomFileSystemDirectoryReader): Promise<CustomFileSystemFileEntry[]> {
+    const entries: CustomFileSystemFileEntry[] = [];
+    let readEntries: CustomFileSystemFileEntry[] = await readEntriesPromise(directoryReader);
     while (readEntries.length > 0) {
         entries.push(...readEntries);
         readEntries = await readEntriesPromise(directoryReader);
@@ -136,9 +146,9 @@ async function readAllDirectoryEntries(directoryReader: any) {
     return entries;
 }
 
-async function readEntriesPromise(directoryReader: any): Promise<any[]> {
+async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryReader): Promise<CustomFileSystemFileEntry[]> {
     return new Promise((resolve, reject) => {
-        directoryReader.readEntries(resolve, reject);
+        directoryReader.readEntries(resolve as (value: FileSystemEntry[]) => void, reject);
     });
 }
 
@@ -284,11 +294,15 @@ async function readEntriesPromise(directoryReader: any): Promise<any[]> {
             type="file"
             onChange={handleFileInput}
             className="hidden"
-            // @ts-ignore
+            // @ts-expect-error: Experimental directory property
             webkitdirectory="true"
+            // @ts-expect-error: Experimental directory property
             mozdirectory="true"
+            // @ts-expect-error: Experimental directory property
             msdirectory="true"
+            // @ts-expect-error: Experimental directory property
             odirectory="true"
+            // @ts-expect-error: Experimental directory property
             directory="true"
           />
           <div className="flex flex-col items-center">
