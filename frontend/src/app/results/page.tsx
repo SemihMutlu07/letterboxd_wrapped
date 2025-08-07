@@ -195,6 +195,7 @@ const DecadeTooltip: React.FC<DecadeTooltipProps> = ({ active, payload, label })
 const ComprehensiveResultsPage = () => {
   const [stats, setStats] = useState<LetterboxdStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shareLayout, setShareLayout] = useState<'horizontal' | 'vertical' | 'square'>('horizontal');
 
   useEffect(() => {
     const savedStats = localStorage.getItem('letterboxdStats');
@@ -210,13 +211,22 @@ const ComprehensiveResultsPage = () => {
 
   const handleShare = () => {
     // Populate the share card with data
-    const shareCard = document.getElementById('shareable-wrapped-card');
+    const shareCard = document.getElementById(`shareable-wrapped-${shareLayout}`);
     if (shareCard && stats) {
-        document.getElementById('share-total-films')!.innerText = stats.total_films.toString();
-        document.getElementById('share-movie-crush')!.innerText = stats.movie_crush?.name || 'N/A';
-        document.getElementById('share-signature-director')!.innerText = stats.most_watched_director?.name || 'N/A';
-        document.getElementById('share-comfort-genre')!.innerText = stats.favorite_genre?.name || 'N/A';
-        document.getElementById('share-time-machine')!.innerText = stats.favorite_decade?.name || 'N/A';
+        const totalFilms = shareCard.querySelector('.share-total-films');
+        if (totalFilms) totalFilms.textContent = stats.total_films.toString();
+
+        const movieCrush = shareCard.querySelector('.share-movie-crush');
+        if (movieCrush) movieCrush.textContent = stats.movie_crush?.name || 'N/A';
+        
+        const director = shareCard.querySelector('.share-signature-director');
+        if (director) director.textContent = stats.most_watched_director?.name || 'N/A';
+
+        const genre = shareCard.querySelector('.share-comfort-genre');
+        if (genre) genre.textContent = stats.favorite_genre?.name || 'N/A';
+
+        const decade = shareCard.querySelector('.share-time-machine');
+        if (decade) decade.textContent = stats.favorite_decade?.name || 'N/A';
 
         // Make it visible for capture
         shareCard.style.display = 'block';
@@ -224,7 +234,7 @@ const ComprehensiveResultsPage = () => {
         toPng(shareCard, { cacheBust: true })
             .then((dataUrl) => {
                 const link = document.createElement('a');
-                link.download = 'my-letterboxd-wrapped-summary.png';
+                link.download = `my-letterboxd-wrapped-${shareLayout}.png`;
                 link.href = dataUrl;
                 link.click();
                 // Hide it again after capture
@@ -271,30 +281,41 @@ const ComprehensiveResultsPage = () => {
   
   return (
     <div className={`font-sans bg-slate-900 text-white overflow-x-hidden relative`}>
-        {/* Hidden Shareable Card */}
-        <div id="shareable-wrapped-card" style={{ display: 'none', position: 'absolute', left: '-9999px' }} className="p-8 bg-slate-800 text-white rounded-lg shadow-xl w-[400px]">
-            <h2 className="text-3xl font-bold text-center mb-4 text-orange-400">My Letterboxd Wrapped</h2>
-            <div className="space-y-4">
-                <div className="flex justify-between items-baseline">
-                    <span className="font-semibold text-lg">Total Films Watched:</span>
-                    <span id="share-total-films" className="text-2xl font-bold"></span>
+        {/* Hidden Shareable Cards */}
+        <div id="shareable-wrapped-horizontal" style={{ display: 'none', position: 'absolute', left: '-9999px' }} className="p-8 bg-slate-800 text-white rounded-lg shadow-xl w-[1200px] h-[630px]">
+            <h2 className="text-5xl font-bold text-center mb-8 text-orange-400">My Letterboxd Wrapped</h2>
+            <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-4">
+                    <div className="flex justify-between items-baseline"><span className="font-semibold text-3xl">Total Films:</span><span className="share-total-films text-4xl font-bold"></span></div>
+                    <div className="flex justify-between items-baseline"><span className="font-semibold text-3xl">Movie Crush:</span><span className="share-movie-crush text-3xl font-bold"></span></div>
                 </div>
-                <div className="flex justify-between items-baseline">
-                    <span className="font-semibold text-lg">Movie Crush:</span>
-                    <span id="share-movie-crush" className="text-xl font-bold"></span>
+                <div className="space-y-4">
+                    <div className="flex justify-between items-baseline"><span className="font-semibold text-3xl">Signature Director:</span><span className="share-signature-director text-3xl font-bold"></span></div>
+                    <div className="flex justify-between items-baseline"><span className="font-semibold text-3xl">Comfort Genre:</span><span className="share-comfort-genre text-3xl font-bold"></span></div>
+                    <div className="flex justify-between items-baseline"><span className="font-semibold text-3xl">Time Machine:</span><span className="share-time-machine text-3xl font-bold"></span></div>
                 </div>
-                <div className="flex justify-between items-baseline">
-                    <span className="font-semibold text-lg">Signature Director:</span>
-                    <span id="share-signature-director" className="text-xl font-bold"></span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                    <span className="font-semibold text-lg">Comfort Genre:</span>
-                    <span id="share-comfort-genre" className="text-xl font-bold"></span>
-                </div>
-                <div className="flex justify-between items-baseline">
-                    <span className="font-semibold text-lg">Time Machine:</span>
-                    <span id="share-time-machine" className="text-xl font-bold"></span>
-                </div>
+            </div>
+        </div>
+
+        <div id="shareable-wrapped-vertical" style={{ display: 'none', position: 'absolute', left: '-9999px' }} className="p-8 bg-slate-800 text-white rounded-lg shadow-xl w-[1080px] h-[1920px]">
+            <h2 className="text-8xl font-bold text-center mb-16 text-orange-400">My Letterboxd Wrapped</h2>
+            <div className="space-y-12">
+                <div className="text-center"><div className="font-semibold text-5xl mb-4">Total Films</div><div className="share-total-films text-7xl font-bold"></div></div>
+                <div className="text-center"><div className="font-semibold text-5xl mb-4">Movie Crush</div><div className="share-movie-crush text-6xl font-bold"></div></div>
+                <div className="text-center"><div className="font-semibold text-5xl mb-4">Signature Director</div><div className="share-signature-director text-6xl font-bold"></div></div>
+                <div className="text-center"><div className="font-semibold text-5xl mb-4">Comfort Genre</div><div className="share-comfort-genre text-6xl font-bold"></div></div>
+                <div className="text-center"><div className="font-semibold text-5xl mb-4">Time Machine</div><div className="share-time-machine text-6xl font-bold"></div></div>
+            </div>
+        </div>
+
+        <div id="shareable-wrapped-square" style={{ display: 'none', position: 'absolute', left: '-9999px' }} className="p-8 bg-slate-800 text-white rounded-lg shadow-xl w-[1080px] h-[1080px]">
+            <h2 className="text-6xl font-bold text-center mb-12 text-orange-400">My Letterboxd Wrapped</h2>
+            <div className="space-y-8">
+                <div className="flex justify-between items-baseline"><span className="font-semibold text-4xl">Total Films:</span><span className="share-total-films text-5xl font-bold"></span></div>
+                <div className="flex justify-between items-baseline"><span className="font-semibold text-4xl">Movie Crush:</span><span className="share-movie-crush text-4xl font-bold"></span></div>
+                <div className="flex justify-between items-baseline"><span className="font-semibold text-4xl">Signature Director:</span><span className="share-signature-director text-4xl font-bold"></span></div>
+                <div className="flex justify-between items-baseline"><span className="font-semibold text-4xl">Comfort Genre:</span><span className="share-comfort-genre text-4xl font-bold"></span></div>
+                <div className="flex justify-between items-baseline"><span className="font-semibold text-4xl">Time Machine:</span><span className="share-time-machine text-4xl font-bold"></span></div>
             </div>
         </div>
 
@@ -944,6 +965,11 @@ const ComprehensiveResultsPage = () => {
         {/* Footer */}
         <footer className="text-center py-12">
             <h3 className="text-2xl md:text-3xl font-bold mb-4">Share Your Wrapped</h3>
+            <div className="flex justify-center gap-4 mb-4">
+                <button onClick={() => setShareLayout('horizontal')} className={`px-4 py-2 rounded-lg ${shareLayout === 'horizontal' ? 'bg-orange-500' : 'bg-slate-700'}`}>16:9</button>
+                <button onClick={() => setShareLayout('vertical')} className={`px-4 py-2 rounded-lg ${shareLayout === 'vertical' ? 'bg-orange-500' : 'bg-slate-700'}`}>Vertical</button>
+                <button onClick={() => setShareLayout('square')} className={`px-4 py-2 rounded-lg ${shareLayout === 'square' ? 'bg-orange-500' : 'bg-slate-700'}`}>Square</button>
+            </div>
              <div className="flex justify-center gap-4 mt-4">
                 <button
                   onClick={handleShare}
