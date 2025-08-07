@@ -239,7 +239,8 @@ def extract_files(upload_file: UploadFile) -> Dict[str, str]:
     with open(file_path, "wb") as buffer:
         buffer.write(upload_file.file.read())
 
-    extract_dir = upload_dir / upload_file.filename.replace('.zip', '_extracted')
+    # Use a generic name for the extracted directory
+    extract_dir = upload_dir / f"{upload_file.filename}_extracted"
     extract_dir.mkdir(exist_ok=True)
     
     with zipfile.ZipFile(file_path, 'r') as zip_ref:
@@ -1087,8 +1088,13 @@ async def get_progress():
 async def analyze_comprehensive_data(file: UploadFile = File(...)):
     """Analyze Letterboxd data with high-speed, concurrent processing."""
     
-    if not file.filename.endswith('.zip'):
-        raise HTTPException(status_code=400, detail="Please upload a ZIP file.")
+    # We can be more lenient with the file type, as long as it's a zip archive
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File name cannot be empty.")
+
+    # No longer checking for .zip extension
+    # if not file.filename.endswith('.zip'):
+    #     raise HTTPException(status_code=400, detail="Please upload a ZIP file.")
     
     try:
         update_progress("starting", f"Starting analysis of {file.filename}", 0, 1)
