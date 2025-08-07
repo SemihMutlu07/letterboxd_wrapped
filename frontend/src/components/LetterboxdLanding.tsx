@@ -69,15 +69,17 @@ export default function LetterboxdLanding() {
     };
   }, [isUploading, router]);
 
-  const handleFile = useCallback(async (file: File) => {
-    if (!file) return;
+  const handleFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
 
     setIsUploading(true);
     setError(null);
     setProgress({ stage: 'starting', message: 'Preparing analysis...', progress: 0, total: 1 });
     
     const formData = new FormData();
-    formData.append('file', file);
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+    }
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
@@ -89,15 +91,13 @@ export default function LetterboxdLanding() {
 
       if (response.ok) {
         const result = await response.json();
-        // Save stats to localStorage to pass to the results page
         localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
-        // The redirect will happen via the progress polling
       } else {
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Analysis failed');
       }
     } catch (err) {
-      console.error('Fetch error details:', err); // Debug log
+      console.error('Fetch error details:', err);
       setError(err instanceof Error ? err.message : 'An unknown error occurred.');
       setIsUploading(false);
       setProgress(null);
@@ -108,11 +108,9 @@ export default function LetterboxdLanding() {
     e.preventDefault();
     const items = e.dataTransfer.items;
     if (items && items.length > 0) {
+        // Handle folder drop
         const item = items[0].webkitGetAsEntry();
-        if (item?.isFile) {
-            const file = e.dataTransfer.files[0];
-            if (file) handleFile(file);
-        } else if (item?.isDirectory) {
+        if (item?.isDirectory) {
             const zip = new JSZip();
             const directory = item as unknown as { createReader: () => CustomFileSystemDirectoryReader };
             const files = await readAllDirectoryEntries(directory.createReader());
@@ -124,10 +122,15 @@ export default function LetterboxdLanding() {
 
             const content = await zip.generateAsync({ type: "blob" });
             const zippedFile = new File([content], "letterboxd-export.zip", { type: "application/zip" });
-            handleFile(zippedFile);
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(zippedFile);
+            handleFiles(dataTransfer.files);
+        } else {
+            // Handle file drop
+            handleFiles(e.dataTransfer.files);
         }
     }
-}, [handleFile]);
+  }, [handleFiles]);
 
 interface CustomFileSystemDirectoryReader extends FileSystemDirectoryReader {
     createReader(): FileSystemDirectoryReader;
@@ -154,10 +157,8 @@ async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryRead
 
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0]);
-    }
-  }, [handleFile]);
+    handleFiles(e.target.files);
+  }, [handleFiles]);
 
   const getStageIcon = (stage: string) => {
     switch (stage) {
@@ -292,22 +293,14 @@ async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryRead
           <input
             id="file-input"
             type="file"
+            multiple
+            accept=".zip,.csv"
             onChange={handleFileInput}
             className="hidden"
-            // @ts-expect-error: Experimental directory property
-            webkitdirectory="true"
-            // @ts-expect-error: Experimental directory property
-            mozdirectory="true"
-            // @ts-expect-error: Experimental directory property
-            msdirectory="true"
-            // @ts-expect-error: Experimental directory property
-            odirectory="true"
-            // @ts-expect-error: Experimental directory property
-            directory="true"
           />
           <div className="flex flex-col items-center">
             <Upload className="w-12 h-12 text-gray-400 mb-4" />
-            <p className="text-lg mb-2">Drop your ZIP file or folder here, or click to browse</p>
+            <p className="text-lg mb-2">Drop your .zip file here, or select multiple .csv files</p>
             <p className="text-sm text-gray-500">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
           </div>
         </div>

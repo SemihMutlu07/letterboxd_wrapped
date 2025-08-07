@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 import warnings
 from contextlib import asynccontextmanager
+import uuid
 
 warnings.filterwarnings('ignore')
 
@@ -227,36 +228,10 @@ async def fetch_comprehensive_film_details(session: aiohttp.ClientSession, tmdb_
         print(f"Error fetching comprehensive details for ID {tmdb_id}: {e}")
         return {'tmdb_id': tmdb_id}
 
-# --- Data Processing Logic (File I/O part remains synchronous) ---
-def extract_files(upload_file: UploadFile) -> Dict[str, str]:
-    """Extract CSV files from uploaded ZIP"""
-    update_progress("extracting", "Extracting ZIP file...", 0, 1)
-    
-    upload_dir = Path("uploads")
-    upload_dir.mkdir(exist_ok=True)
-    
-    file_path = upload_dir / upload_file.filename
-    with open(file_path, "wb") as buffer:
-        buffer.write(upload_file.file.read())
 
-    # Use a generic name for the extracted directory
-    extract_dir = upload_dir / f"{upload_file.filename}_extracted"
-    extract_dir.mkdir(exist_ok=True)
-    
-    with zipfile.ZipFile(file_path, 'r') as zip_ref:
-        zip_ref.extractall(extract_dir)
-        
-    csv_files = {}
-    required_files = [
-        'watched.csv', 'diary.csv', 'ratings.csv', 'reviews.csv',
-        'watchlist.csv', 'films.csv', 'comments.csv', 'profile.csv'
-    ]
-    for item in os.listdir(extract_dir):
-        if any(required in item.lower() for required in required_files):
-            csv_files[item.lower()] = os.path.join(extract_dir, item)
-            
-    update_progress("extracting", f"Found CSV files: {list(csv_files.keys())}", 1, 1)
-    return csv_files
+# This function is no longer needed as its logic is integrated into the endpoint.
+# def extract_files(upload_file: UploadFile) -> Dict[str, str]:
+#     ...
 
 async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, csv_files: Dict[str, str]) -> Dict[str, Any]:
     """Process Letterboxd data with high-speed, concurrent analysis."""
@@ -1085,27 +1060,67 @@ async def get_progress():
     return current_progress
 
 @app.post("/api/analyze")
-async def analyze_comprehensive_data(file: UploadFile = File(...)):
-    """Analyze Letterboxd data with high-speed, concurrent processing."""
-    
-    # We can be more lenient with the file type, as long as it's a zip archive
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="File name cannot be empty.")
+async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...)):
+    """
+    Analyze Letterboxd data from either a single ZIP file or multiple CSV files.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
 
-    # No longer checking for .zip extension
-    # if not file.filename.endswith('.zip'):
-    #     raise HTTPException(status_code=400, detail="Please upload a ZIP file.")
+    upload_dir = Path("uploads")
+    upload_dir.mkdir(exist_ok=True)
     
+    # Create a unique temporary folder for this request
+    request_dir = upload_dir / str(uuid.uuid4())
+    request_dir.mkdir(exist_ok=True)
+    
+    csv_files = {}
+
     try:
-        update_progress("starting", f"Starting analysis of {file.filename}", 0, 1)
-        csv_files = extract_files(file)
+        # Scenario 1: Single ZIP file (any name)
+        if len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(('.zip', '.utc')):
+            upload_file = files[0]
+            update_progress("extracting", f"Extracting {upload_file.filename}...", 0, 1)
+            
+            with zipfile.ZipFile(upload_file.file, 'r') as zip_ref:
+                zip_ref.extractall(request_dir)
+            
+            update_progress("extracting", "Extraction complete.", 1, 1)
+
+        # Scenario 2: Multiple CSV files
+        elif all(f.filename and f.filename.lower().endswith('.csv') for f in files):
+            update_progress("processing", f"Processing {len(files)} CSV files...", 0, len(files))
+            for i, upload_file in enumerate(files):
+                safe_filename = Path(upload_file.filename).name
+                file_path = request_dir / safe_filename
+                with open(file_path, "wb") as buffer:
+                    buffer.write(upload_file.file.read())
+                update_progress("processing", f"Saved {safe_filename}", i + 1, len(files))
+        else:
+            raise HTTPException(status_code=400, detail="Invalid input. Please upload a single ZIP file or multiple CSV files.")
+
+        # Discover CSV files in the directory
+        required_files = [
+            'watched.csv', 'diary.csv', 'ratings.csv', 'reviews.csv',
+            'watchlist.csv', 'films.csv', 'comments.csv', 'profile.csv'
+        ]
+        for item in os.listdir(request_dir):
+            item_lower = item.lower()
+            for req_file in required_files:
+                if req_file.split('.')[0] in item_lower:
+                     csv_files[req_file] = os.path.join(request_dir, item)
+                     break
         
-        # Use the session from the application state
+        if not csv_files:
+            raise HTTPException(status_code=400, detail="No valid Letterboxd CSV files found in the upload.")
+
         stats = await process_comprehensive_letterboxd_data(app.state.aiohttp_session, csv_files)
         
         update_progress("complete", "Analysis complete! Returning stats.", 1, 1)
         return {"status": "success", "stats": stats}
-        
+
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid ZIP archive.")
     except Exception as e:
         error_msg = f"Analysis failed: {str(e)}"
         update_progress("error", error_msg, 0, 1)
