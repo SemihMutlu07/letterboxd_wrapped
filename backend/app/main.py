@@ -164,9 +164,16 @@ async def fetch_comprehensive_film_details(session: aiohttp.ClientSession, tmdb_
         writers = [c['name'] for c in credits.get('crew', []) if c['job'] in ['Writer', 'Screenplay', 'Story']] if credits else []
         cast = [c['name'] for c in credits.get('cast', [])[:10]] if credits else []
         genres = [g['name'] for g in details.get('genres', [])]
+        
+        # Enhanced: Store both name lists (for backward compatibility) AND full objects
         countries = [c['name'] for c in details.get('production_countries', [])]
+        production_countries = details.get('production_countries', [])  # Full objects with iso_3166_1, name
+        
         companies = [c['name'] for c in details.get('production_companies', [])]
+        
+        # Enhanced: Store both name lists (for backward compatibility) AND full objects  
         keyword_list = [k['name'] for k in keywords.get('keywords', [])] if keywords else []
+        keywords_full = keywords.get('keywords', []) if keywords else []  # Full objects with id, name
         
         release_date = details.get('release_date', '')
         decade = None
@@ -178,15 +185,43 @@ async def fetch_comprehensive_film_details(session: aiohttp.ClientSession, tmdb_
                 pass
 
         return {
-            'tmdb_id': tmdb_id, 'title': details.get('title', ''), 'original_title': details.get('original_title', ''),
-            'release_date': release_date, 'runtime': details.get('runtime'), 'language': details.get('original_language'),
-            'budget': details.get('budget', 0), 'revenue': details.get('revenue', 0), 'popularity': details.get('popularity', 0),
-            'vote_average': details.get('vote_average', 0), 'vote_count': details.get('vote_count', 0), 'decade': decade,
-            'tagline': details.get('tagline', ''), 'overview': details.get('overview', ''),
-            'director': directors[0] if directors else None, 'directors': directors, 'writers': writers, 'cast': cast,
-            'genres': genres, 'countries': countries, 'companies': companies, 'keywords': keyword_list,
-            'adult': details.get('adult', False), 'status': details.get('status', ''),
-            'poster_path': details.get('poster_path', ''), 'backdrop_path': details.get('backdrop_path', '')
+            'tmdb_id': tmdb_id, 
+            'title': details.get('title', ''), 
+            'original_title': details.get('original_title', ''),
+            'release_date': release_date, 
+            'runtime': details.get('runtime'), 
+            'language': details.get('original_language'),
+            
+            # Enhanced: Ensure these critical fields are always present with defaults
+            'budget': details.get('budget', 0), 
+            'revenue': details.get('revenue', 0), 
+            'popularity': details.get('popularity', 0.0),
+            
+            'vote_average': details.get('vote_average', 0), 
+            'vote_count': details.get('vote_count', 0), 
+            'decade': decade,
+            'tagline': details.get('tagline', ''), 
+            'overview': details.get('overview', ''),
+            'director': directors[0] if directors else None, 
+            'directors': directors, 
+            'writers': writers, 
+            'cast': cast,
+            'genres': genres, 
+            
+            # Enhanced: Both backward-compatible and full object versions
+            'countries': countries,  # Backward compatibility - list of country names
+            'production_countries': production_countries,  # Full objects for advanced analysis
+            
+            'companies': companies, 
+            
+            # Enhanced: Both backward-compatible and full object versions
+            'keywords': keyword_list,  # Backward compatibility - list of keyword names
+            'keywords_full': keywords_full,  # Full objects for advanced analysis
+            
+            'adult': details.get('adult', False), 
+            'status': details.get('status', ''),
+            'poster_path': details.get('poster_path', ''), 
+            'backdrop_path': details.get('backdrop_path', '')
         }
     except Exception as e:
         print(f"Error fetching comprehensive details for ID {tmdb_id}: {e}")
@@ -280,6 +315,101 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     # The rest of the analysis is CPU-bound and remains synchronous
     stats = {}
     
+    # === ENRICHED FILM DATA FOR STORYTELLING ===
+    # Make enriched film-level data available for future personality/storytelling features
+    stats['enriched_films_summary'] = {
+        'total_enriched': len(films_enriched[films_enriched['tmdb_id'].notna()]),
+        'budget_data_available': len(films_enriched[films_enriched['budget'] > 0]),
+        'revenue_data_available': len(films_enriched[films_enriched['revenue'] > 0]),
+        'popularity_data_available': len(films_enriched[films_enriched['popularity'] > 0]),
+        'keywords_data_available': len(films_enriched[films_enriched['keywords_full'].apply(lambda x: isinstance(x, list) and len(x) > 0)]),
+        'countries_data_available': len(films_enriched[films_enriched['production_countries'].apply(lambda x: isinstance(x, list) and len(x) > 0)])
+    }
+    
+    # Data Quality & Coverage Report for Storytelling Features
+    total_films = len(films_enriched)
+    stats['data_quality_report'] = {
+        'total_films_analyzed': total_films,
+        'tmdb_match_rate': round((len(films_enriched[films_enriched['tmdb_id'].notna()]) / total_films) * 100, 1) if total_films > 0 else 0,
+        'budget_coverage': round((len(films_enriched[films_enriched['budget'] > 0]) / total_films) * 100, 1) if total_films > 0 else 0,
+        'revenue_coverage': round((len(films_enriched[films_enriched['revenue'] > 0]) / total_films) * 100, 1) if total_films > 0 else 0,
+        'popularity_coverage': round((len(films_enriched[films_enriched['popularity'] > 0]) / total_films) * 100, 1) if total_films > 0 else 0,
+        'keywords_coverage': round((len(films_enriched[films_enriched['keywords_full'].apply(lambda x: isinstance(x, list) and len(x) > 0)]) / total_films) * 100, 1) if total_films > 0 else 0,
+        'countries_coverage': round((len(films_enriched[films_enriched['production_countries'].apply(lambda x: isinstance(x, list) and len(x) > 0)]) / total_films) * 100, 1) if total_films > 0 else 0,
+        'storytelling_readiness': 'excellent' if total_films > 0 and (len(films_enriched[films_enriched['tmdb_id'].notna()]) / total_films) > 0.8 else 'good' if total_films > 0 and (len(films_enriched[films_enriched['tmdb_id'].notna()]) / total_films) > 0.6 else 'limited'
+    }
+    
+    # Store aggregated data that will enable rich storytelling features
+    if not films_enriched.empty:
+        # Budget & Revenue Analysis for "Expensive Taste" or "Indie Lover" personas
+        valid_budgets = films_enriched[films_enriched['budget'] > 0]['budget']
+        valid_revenues = films_enriched[films_enriched['revenue'] > 0]['revenue']
+        
+        if not valid_budgets.empty:
+            stats['budget_analytics'] = {
+                'average_budget': float(valid_budgets.mean()),
+                'median_budget': float(valid_budgets.median()),
+                'total_budget_watched': float(valid_budgets.sum()),
+                'highest_budget': float(valid_budgets.max()),
+                'budget_range_preference': 'high' if valid_budgets.median() > 50000000 else 'medium' if valid_budgets.median() > 10000000 else 'low'
+            }
+        
+        if not valid_revenues.empty:
+            stats['revenue_analytics'] = {
+                'average_revenue': float(valid_revenues.mean()),
+                'median_revenue': float(valid_revenues.median()),
+                'total_revenue_watched': float(valid_revenues.sum()),
+                'highest_revenue': float(valid_revenues.max())
+            }
+        
+        # Popularity Score Analysis for "Mainstream vs Niche" persona
+        valid_popularity = films_enriched[films_enriched['popularity'] > 0]['popularity']
+        if not valid_popularity.empty:
+            stats['popularity_analytics'] = {
+                'average_popularity': float(valid_popularity.mean()),
+                'median_popularity': float(valid_popularity.median()),
+                'popularity_variance': float(valid_popularity.std()) if len(valid_popularity) > 1 else 0,
+                'mainstream_percentage': float((valid_popularity > 20).mean() * 100),
+                'niche_percentage': float((valid_popularity < 5).mean() * 100)
+            }
+        
+        # Keywords Analysis for "Thematic Interests" storytelling
+        all_keywords = []
+        for keywords_list in films_enriched['keywords_full'].dropna():
+            if isinstance(keywords_list, list):
+                all_keywords.extend([kw.get('name', '') for kw in keywords_list if isinstance(kw, dict)])
+        
+        if all_keywords:
+            from collections import Counter
+            keyword_counts = Counter(all_keywords)
+            stats['keywords_analytics'] = {
+                'total_unique_keywords': len(keyword_counts),
+                'top_keywords': [{'keyword': k, 'count': v} for k, v in keyword_counts.most_common(20)],
+                'keyword_diversity': len(keyword_counts) / len(all_keywords) if all_keywords else 0
+            }
+        
+        # Production Countries Analysis for "World Cinema Explorer" storytelling
+        all_countries = []
+        for countries_list in films_enriched['production_countries'].dropna():
+            if isinstance(countries_list, list):
+                all_countries.extend([country.get('name', '') for country in countries_list if isinstance(country, dict)])
+        
+        if all_countries:
+            from collections import Counter
+            country_counts = Counter(all_countries)
+            stats['countries_analytics'] = {
+                'total_countries_explored': len(country_counts),
+                'top_countries_detailed': [
+                    {
+                        'country': country, 
+                        'count': count,
+                        'percentage': (count / len(all_countries)) * 100
+                    } for country, count in country_counts.most_common(10)
+                ],
+                'geographic_diversity': len(country_counts) / len(all_countries) if all_countries else 0,
+                'international_percentage': float((1 - country_counts.get('United States', 0) / len(all_countries)) * 100) if all_countries else 0
+            }
+    
     # === BASIC STATS ===
     stats['total_films'] = len(films_df)
     stats['films_with_metadata'] = len(metadata_df)
@@ -319,20 +449,6 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
                 'runtime': int(shortest_film_data['runtime'])
             }
     update_progress("analyzing", "Runtime analysis complete", 3, 10)
-
-    # === REWATCH ANALYSIS ===
-    if not diary_df.empty:
-        # Method A: True Rewatches (films watched more than once)
-        rewatch_counts = diary_df.groupby(['Name', 'Year']).size().reset_index(name='watch_count')
-        true_rewatches = rewatch_counts[rewatch_counts['watch_count'] > 1].sort_values(by='watch_count', ascending=False)
-        stats['top_true_rewatches'] = true_rewatches.head(10).rename(columns={'Name': 'name', 'watch_count': 'count'}).to_dict('records')
-        
-        # Method B: Most Logged Films (all films, sorted by total log count)
-        most_logged = rewatch_counts.sort_values(by='watch_count', ascending=False)
-        stats['most_logged_films'] = most_logged.head(10).rename(columns={'Name': 'name', 'watch_count': 'count'}).to_dict('records')
-        
-        # Keep the original for backward compatibility
-        stats['top_rewatches'] = true_rewatches.rename(columns={'Name': 'name', 'watch_count': 'count'}).to_dict('records')
 
     # === DATE-BASED ANALYSIS ===
     if not diary_df.empty and 'Watched Date' in diary_df.columns:
@@ -479,35 +595,6 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
                 'type': cinema_type,
                 'score': round(avg_popularity, 1),
                 'description': description
-            }
-    
-    # Binge-watching Detection
-    if not diary_df.empty and 'parsed_date' in diary_df.columns:
-        diary_sorted = diary_df.sort_values('parsed_date')
-        binge_sessions = []
-        current_session = []
-        
-        for i, row in diary_sorted.iterrows():
-            if not current_session:
-                current_session = [row]
-            else:
-                time_diff = (row['parsed_date'] - current_session[-1]['parsed_date']).total_seconds() / 3600
-                if time_diff <= 48:  # 48 hours window
-                    current_session.append(row)
-                else:
-                    if len(current_session) >= 2:
-                        binge_sessions.append(len(current_session))
-                    current_session = [row]
-        
-        # Check last session
-        if len(current_session) >= 2:
-            binge_sessions.append(len(current_session))
-        
-        if binge_sessions:
-            stats['binge_analysis'] = {
-                'total_sessions': len(binge_sessions),
-                'longest_session': max(binge_sessions),
-                'total_binge_films': sum(binge_sessions)
             }
     
     # Fun Statistics
@@ -691,6 +778,23 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
                 'description': rating_description,
                 'average': round(avg_rating, 1)
             }
+
+    # Data-driven rating persona
+    stats['rating_personality'] = None
+    if 'rating' in films_df.columns:
+        ratings = films_df['rating'].dropna()
+        if not ratings.empty:
+            avg_rating = ratings.mean()
+            std_dev = ratings.std()
+
+            if avg_rating > 4.0:
+                stats['rating_personality'] = 'The Generous Critic'
+            elif avg_rating < 3.0:
+                stats['rating_personality'] = 'The Picky Gourmet'
+            elif std_dev > 1.2: # Assuming a high standard deviation threshold
+                stats['rating_personality'] = 'The All-or-Nothing Judge'
+            else:
+                stats['rating_personality'] = 'The Balanced Reviewer'
     
     # İmza İkilin: Yönetmen & Aktör Kombosu
     if not films_enriched.empty and 'director' in films_enriched.columns and 'cast' in films_enriched.columns:
@@ -888,6 +992,26 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     stats['top_actors'] = [{'name': name, 'count': count} for name, count in cast_counts.most_common(20)]
     update_progress("analyzing", "Cast analysis complete", 9, 10)
 
+    # === Movie Crush Feature ===
+    stats['movie_crush'] = None
+    if cast_counts:
+        top_actor_name, count = cast_counts.most_common(1)[0]
+        
+        # Perform a single API call to find the actor and their image
+        person_search_data = await tmdb_get(session, 'search/person', {'query': top_actor_name})
+        
+        if person_search_data and person_search_data.get('results'):
+            # Assume the first result is the correct person
+            top_person_details = person_search_data['results'][0]
+            profile_path = top_person_details.get('profile_path')
+            
+            if profile_path:
+                stats['movie_crush'] = {
+                    'name': top_actor_name,
+                    'profile_path': profile_path,
+                    'count': count
+                }
+
     # === SPECIAL INSIGHTS (Restored) ===
     insights = []
     if stats.get('days_watched', 0) > 0:
@@ -924,6 +1048,32 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
 
     # === FINAL WRAP-UP ===
     stats['analysis_date'] = datetime.now().isoformat()
+    
+    # "Secret Obsession" (Keyword Analysis)
+    stats['secret_obsession'] = None
+    if 'keywords_analytics' in stats and 'top_keywords' in stats['keywords_analytics']:
+        genre_names = {genre['name'].lower() for genre in stats.get('top_genres', [])}
+        for keyword in stats['keywords_analytics']['top_keywords']:
+            if keyword['keyword'].lower() not in genre_names:
+                stats['secret_obsession'] = keyword['keyword']
+                break
+
+    # "Runtime Persona" (Marathoner/Sprinter)
+    stats['runtime_persona'] = "The Balanced Viewer"
+    if 'average_runtime' in stats:
+        if stats['average_runtime'] > 130:
+            stats['runtime_persona'] = "The Marathoner"
+        elif stats['average_runtime'] < 100:
+            stats['runtime_persona'] = "The Sprinter"
+
+    # "Cinematic Passport" (Furthest Destination)
+    stats['furthest_destination'] = None
+    if 'top_countries' in stats:
+        for country in stats['top_countries']:
+            if country['name'] not in ['USA', 'UK']:
+                stats['furthest_destination'] = country['name']
+                break
+
     update_progress("analyzing", "Analysis complete!", 10, 10)
     return stats
 

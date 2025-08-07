@@ -25,7 +25,7 @@ export default function LetterboxdLanding() {
       try {
                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
          console.log('Testing backend connectivity to:', apiUrl);
-        const response = await fetch(`${apiUrl}/docs`); // FastAPI docs endpoint
+        const response = await fetch(`${apiUrl}/`); // FastAPI root endpoint
         console.log('Backend test response:', response.status);
       } catch (err) {
         console.error('Backend connectivity test failed:', err);
