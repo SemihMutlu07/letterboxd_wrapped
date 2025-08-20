@@ -456,6 +456,27 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
                 'weekday': weekday_count,
                 'weekend': weekend_count
             }
+            
+            # Data Timeline Analysis
+            earliest_date = valid_dates['parsed_date'].min()
+            latest_date = valid_dates['parsed_date'].max()
+            total_days = (latest_date - earliest_date).days
+            
+            # Create period description
+            if total_days <= 365:
+                period_description = f"Analyzing your last {total_days} days of cinematic history"
+            elif total_days <= 730:
+                period_description = f"Exploring {total_days} days of your film journey"
+            else:
+                years = total_days // 365
+                period_description = f"Journeying through {years} years of your cinematic legacy"
+            
+            stats['data_timeline'] = {
+                'earliest_date': earliest_date.isoformat(),
+                'latest_date': latest_date.isoformat(),
+                'total_days': total_days,
+                'period_description': period_description
+            }
      
     # === ADVANCED ANALYTICS & CINEMATIC DNA ===
     
@@ -557,19 +578,23 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
         if not popularity_scores.empty:
             avg_popularity = popularity_scores.mean()
             
-            if avg_popularity > 50:
-                cinema_type = "Popular Explorer"
-                description = "You follow mainstream and popular films religiously!"
-            elif avg_popularity > 20:
+            # Invert the score so higher numbers = more independent cinephile
+            cinephile_score = 100 - min(avg_popularity, 100)
+            
+            # Use the inverted score for categories (higher = more cinephile)
+            if cinephile_score >= 80:
+                cinema_type = "Independent Cinephile"
+                description = "You love discovering obscure and independent films!"
+            elif cinephile_score >= 50:
                 cinema_type = "Balanced Cinephile"
                 description = "You enjoy both popular and niche films equally!"
             else:
-                cinema_type = "Independent Cinephile"
-                description = "You love discovering obscure and independent films!"
-                
+                cinema_type = "Popular Explorer"
+                description = "You follow mainstream and popular films religiously!"
+            
             stats['sinefil_meter'] = {
                 'type': cinema_type,
-                'score': round(avg_popularity, 1),
+                'score': round(cinephile_score, 1),
                 'description': description
             }
     
@@ -947,7 +972,7 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     update_progress("analyzing", "Genre analysis complete", 5, 10)
 
     decade_counts = Counter(films_enriched['decade'].dropna())
-    stats['decades'] = [{'decade': d, 'count': c} for d, c in sorted(decade_counts.items(), key=lambda x: x[0], reverse=True)]
+    stats['decades'] = [{'decade': d, 'count': c} for d, c in sorted(decade_counts.items(), key=lambda x: int(x[0].replace('s', '')) if x[0] and x[0] != 'Unknown' else 0)]
     if decade_counts:
         name, count = decade_counts.most_common(1)[0]
         stats['favorite_decade'] = {'name': name, 'count': count}

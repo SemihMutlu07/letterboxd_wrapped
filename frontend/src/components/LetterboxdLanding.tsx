@@ -24,7 +24,7 @@ export default function LetterboxdLanding() {
   useEffect(() => {
     const testBackend = async () => {
       try {
-                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         const response = await fetch(`${apiUrl}/`); // FastAPI root endpoint
         if (!response.ok) {
           throw new Error(`Backend test failed with status: ${response.status}`);
@@ -43,7 +43,7 @@ export default function LetterboxdLanding() {
     if (isUploading) {
       intervalId = setInterval(async () => {
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiUrl}/api/progress`);
           if (response.ok) {
             const progressData = await response.json();
@@ -69,21 +69,39 @@ export default function LetterboxdLanding() {
     };
   }, [isUploading, router]);
 
+  // Package arbitrary selection (zip, csvs, or folder) into a single .zip for backend compatibility
+  const zipFiles = useCallback(async (files: FileList): Promise<File> => {
+    const zip = new JSZip();
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const rel = (f as any).webkitRelativePath && (f as any).webkitRelativePath.length > 0 ? (f as any).webkitRelativePath : f.name;
+      zip.file(rel, f);
+    }
+    const content = await zip.generateAsync({ type: 'blob' });
+    return new File([content], 'letterboxd-export.zip', { type: 'application/zip' });
+  }, []);
+
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
     setError(null);
     setProgress({ stage: 'starting', message: 'Preparing analysis...', progress: 0, total: 1 });
-    
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-        formData.append('files', files[i]);
+
+    let payloadZip: File;
+    const single = files.length === 1 ? files[0] : null;
+    const isZip = single && /\.zip$/i.test(single.name);
+    if (isZip && single) {
+      payloadZip = single;
+    } else {
+      payloadZip = await zipFiles(files);
     }
 
+    const formData = new FormData();
+    formData.append('files', payloadZip);
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://wrapped-backend.onrender.com';
-      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiUrl}/api/analyze`, {
         method: 'POST',
         body: formData,
@@ -102,32 +120,39 @@ export default function LetterboxdLanding() {
       setIsUploading(false);
       setProgress(null);
     }
-  }, []);
+  }, [zipFiles]);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     const items = e.dataTransfer.items;
     if (items && items.length > 0) {
-        // Handle folder drop
-        const item = items[0].webkitGetAsEntry();
-        if (item?.isDirectory) {
-            const zip = new JSZip();
-            const directory = item as unknown as { createReader: () => CustomFileSystemDirectoryReader };
-            const files = await readAllDirectoryEntries(directory.createReader());
-            
-            await Promise.all(files.map(async (fileEntry) => {
-                const file: File = await new Promise(resolve => fileEntry.file(resolve));
-                zip.file(file.name, file);
-            }));
-
-            const content = await zip.generateAsync({ type: "blob" });
-            const zippedFile = new File([content], "letterboxd-export.zip", { type: "application/zip" });
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(zippedFile);
-            handleFiles(dataTransfer.files);
+        // Handle folder drop (macOS Finder) or multiple files
+        const entry = (items[0] as any).webkitGetAsEntry?.();
+        if (entry?.isDirectory) {
+          const zip = new JSZip();
+          const addRecursively = async (ent: any, prefix: string) => {
+            if (ent.isFile) {
+              const f: File = await new Promise((resolve) => ent.file(resolve));
+              zip.file(`${prefix}${ent.name}`, f);
+            } else if (ent.isDirectory) {
+              const reader = ent.createReader();
+              const readAll = async () => {
+                const batch: any[] = await new Promise((r) => reader.readEntries(r));
+                if (!batch || batch.length === 0) return;
+                for (const child of batch) await addRecursively(child, `${prefix}${ent.name}/`);
+                await readAll();
+              };
+              await readAll();
+            }
+          };
+          await addRecursively(entry, '');
+          const blob = await zip.generateAsync({ type: 'blob' });
+          const zipped = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
+          const dt = new DataTransfer();
+          dt.items.add(zipped);
+          handleFiles(dt.files);
         } else {
-            // Handle file drop
-            handleFiles(e.dataTransfer.files);
+          handleFiles(e.dataTransfer.files);
         }
     }
   }, [handleFiles]);
@@ -282,7 +307,7 @@ async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryRead
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-2xl text-center">
         <h1 className="text-5xl font-bold mb-4">Letterboxd Wrapped</h1>
-        <p className="text-xl text-gray-400 mb-8">Upload your Letterboxd ZIP file to see your comprehensive year in review.</p>
+        <p className="text-xl text-gray-400 mb-8">Upload your Letterboxd ZIP or drop the exported folder — we support Mac, Windows, iOS and Android.</p>
         
         <div 
           className="bg-gray-800 border-2 border-dashed border-gray-600 rounded-lg p-12 cursor-pointer hover:border-green-400 transition-colors"
@@ -294,15 +319,35 @@ async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryRead
             id="file-input"
             type="file"
             multiple
-            accept=".zip,.csv"
+            accept=".zip,.csv,.CSV"
             onChange={handleFileInput}
             className="hidden"
           />
           <div className="flex flex-col items-center">
             <Upload className="w-12 h-12 text-gray-400 mb-4" />
-            <p className="text-lg mb-2">Drop your .zip file here, or select multiple .csv files</p>
+            <p className="text-lg mb-2">Drop your .zip, exported folder, or select multiple .csv files</p>
             <p className="text-sm text-gray-500">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
           </div>
+        </div>
+
+        {/* Optional folder picker for users whose export was auto-unzipped */}
+        <div className="mt-3">
+          <button
+            onClick={() => document.getElementById('dir-input')?.click()}
+            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors text-sm"
+          >
+            Or choose exported folder
+          </button>
+          <input
+            id="dir-input"
+            type="file"
+            // @ts-ignore non-standard but supported in Chromium/WebKit
+            webkitdirectory=""
+            directory=""
+            multiple
+            onChange={handleFileInput}
+            className="hidden"
+          />
         </div>
         
         {error && (
