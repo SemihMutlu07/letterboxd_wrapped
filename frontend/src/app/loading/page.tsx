@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertTriangle, Film, BarChart2, Star, Users, Globe, Languages, Calendar as CalendarIcon, Clapperboard, Server } from 'lucide-react';
 
@@ -9,17 +9,11 @@ interface RawProgressEvent {
   message: string;
 }
 
-const movieQuotes = [
-  "I'm going to make him an offer he can't refuse.",
-  "May the Force be with you.",
-  "Here's looking at you, kid.",
-  "I'll be back.",
-  "You can't handle the truth!",
-  "Houston, we have a problem.",
-  "There's no place like home.",
-  "The first rule of Fight Club is: You do not talk about Fight Club.",
-  "To infinity and beyond!",
-  "Keep your friends close, but your enemies closer."
+// Minimal trivia pool; will get contextualized as data streams in
+const triviaSeed = [
+  'Did you know? The average cinephile watches 250 films per year.',
+  'Film stock grain sizes varied wildly in the 70s—expect texture!',
+  'Criterion has over 1,000 spine numbers... where do you rank?',
 ];
 
 const friendlyMessages: { [key: string]: string } = {
@@ -92,8 +86,22 @@ function LoadingContent() {
   const [progress, setProgress] = useState(0);
   const [currentIcon, setCurrentIcon] = useState<React.ReactNode>(<Film size={18} />);
   const [completedStages, setCompletedStages] = useState<string[]>([]);
-  const [currentQuote, setCurrentQuote] = useState(movieQuotes[0]);
+  const [discoveries, setDiscoveries] = useState<{ type: 'insight' | 'warning' | 'achievement' | 'fun_fact'; message: string; icon: React.ReactNode; timestamp: number }[]>([]);
+  const [trivia, setTrivia] = useState<string>(triviaSeed[0]);
   const [error, setError] = useState<string | null>(null);
+  const [processingSpeed, setProcessingSpeed] = useState<'normal' | 'slow'>('normal');
+  const [filmCount, setFilmCount] = useState<number | null>(null);
+
+  // Narrative beats
+  const stageNarratives = useMemo(() => ({
+    0: "Let's see what stories you've collected...",
+    20: 'Interesting... you have quite the collection here...',
+    40: 'Patterns emerging. Directors leaving their mark... ',
+    60: 'Your taste is getting clearer. Distinct, bold.',
+    80: 'Almost there. The picture is becoming clear...',
+    95: 'Final touches on your cinematic portrait...',
+    100: 'Your year in film is ready. Lights up.'
+  }), []);
 
   useEffect(() => {
     if (!sessionId) {
@@ -138,6 +146,18 @@ function LoadingContent() {
         setCompletedStages(prev => [...prev, stage]);
         setCurrentStage(stage);
       }
+
+      // Create small discoveries from the message content
+      const now = Date.now();
+      if (friendlyMessage.toLowerCase().includes('genre')) {
+        setDiscoveries(prev => [...prev.slice(-6), { type: 'insight', message: 'Mapping your top genres...', icon: <Clapperboard size={16} />, timestamp: now }]);
+      }
+      if (friendlyMessage.toLowerCase().includes('director')) {
+        setDiscoveries(prev => [...prev.slice(-6), { type: 'insight', message: 'Auteur detection in progress…', icon: <Users size={16} />, timestamp: now }]);
+      }
+      if (friendlyMessage.toLowerCase().includes('analyzing')) {
+        setDiscoveries(prev => [...prev.slice(-6), { type: 'fun_fact', message: 'Reading your reels… counting frames…', icon: <Film size={16} />, timestamp: now }]);
+      }
     };
 
     eventSource.onerror = (err) => {
@@ -146,23 +166,40 @@ function LoadingContent() {
       eventSource.close();
     };
 
-    const quoteInterval = setInterval(() => {
-      setCurrentQuote(movieQuotes[Math.floor(Math.random() * movieQuotes.length)]);
-    }, 5000);
+    const speedTimer = setTimeout(() => setProcessingSpeed('slow'), 20000);
 
     return () => {
       eventSource.close();
-      clearInterval(quoteInterval);
+      clearTimeout(speedTimer);
     };
   }, [sessionId, router, currentStage, completedStages]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen text-white flex items-center justify-center p-0 font-sans relative overflow-hidden"
+      style={{ background: 'radial-gradient(80% 60% at 50% 10%, rgba(139,0,0,0.25), transparent), #1a0505' }}
+    >
+      {/* Film grain and vignette */}
+      <div className="pointer-events-none absolute inset-0" style={{ boxShadow: 'inset 0 0 300px rgba(0,0,0,0.8)' }} />
+      <div className="pointer-events-none absolute inset-0 mix-blend-soft-light opacity-20" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'100%25\' height=\'100%25\'%3E%3Cfilter id=\'g\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'2\' stitchTiles=\'stitch\'/%3E%3CfeColorMatrix type=\'saturate\' values=\'0\'/%3E%3C/feFilter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23g)\'/%3E%3C/svg%3E")' }} />
+      {/* Dust particles */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        {Array.from({ length: 40 }).map((_, i) => (
+          <span key={i} className="absolute block w-[2px] h-[2px] bg-white/40 rounded-full"
+            style={{
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+              animation: `float ${8 + Math.random() * 12}s linear infinite`,
+              animationDelay: `${Math.random() * 5}s`,
+              opacity: 0.5
+            }}
+          />
+        ))}
+      </div>
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-2xl bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 md:p-12 shadow-2xl border border-white/10"
+        className="w-full max-w-5xl bg-black/30 backdrop-blur-xl rounded-[28px] p-6 md:p-10 shadow-2xl border border-white/10 mx-4"
       >
         <AnimatePresence>
           {error ? (
@@ -179,58 +216,118 @@ function LoadingContent() {
             </motion.div>
           ) : (
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <div className="text-center mb-8">
-                <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">
-                  Your <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span> Wrapped
-                </h1>
-                <p className="text-slate-300 text-lg mt-3">Please wait while we analyze your film history...</p>
+              {/* Header */}
+              <div className="text-center mb-6">
+                <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">Developing Your Film Reel</h1>
+                <p className="text-red-200/80 mt-1">Darkroom active — please keep still.</p>
               </div>
 
-              {/* Progress Bar */}
-              <div className="mb-6">
-                <div className="w-full bg-slate-700/50 rounded-full h-3.5">
-                  <motion.div 
-                    className="bg-gradient-to-r from-purple-500 to-orange-500 h-3.5 rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
-                  />
+              {/* Speed/Warning */}
+              {processingSpeed === 'slow' && (
+                <div className="text-sm bg-red-900/40 border border-red-800/40 rounded-xl p-3 mb-4">
+                  ⚠️ Large library detected — this might take a moment. {filmCount && filmCount > 2000 && `Wow, ${filmCount} films! You're a true cinephile.`}
                 </div>
-                <div className="flex justify-between text-sm font-medium text-slate-400 mt-2">
-                  <div className="flex items-center gap-2">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={message}
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        transition={{ duration: 0.3 }}
-                        className="flex items-center gap-2"
-                      >
-                         {currentIcon}
-                         <span>{message}</span>
-                      </motion.div>
+              )}
+
+              {/* Film Strip Development */}
+              <div className="relative overflow-hidden rounded-2xl border border-red-800/30 bg-black/30 p-4">
+                <div className="grid grid-cols-6 gap-3">
+                  {['Opening the Vault','Reading the Reels','Auteur Detection','Genre Mapping','World Tour','Final Touches'].map((title, idx) => {
+                    const pct = Math.round(progress);
+                    const developed = pct >= (idx + 1) * 16;
+                    return (
+                      <div key={idx} className={`relative aspect-[3/4] rounded-lg overflow-hidden ring-1 ${developed ? 'ring-red-400/50' : 'ring-white/10'} bg-gradient-to-b from-red-900/40 to-black`}>
+                        <div className={`absolute inset-0 ${developed ? 'opacity-100' : 'opacity-20'} transition-opacity duration-700`} style={{ backgroundImage: 'linear-gradient(transparent 75%, rgba(0,0,0,0.8))' }} />
+                        <div className="absolute bottom-2 left-2 right-2 text-[10px] uppercase tracking-widest text-red-200/80">{title}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Sprockets */}
+                <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-b from-black to-red-950" />
+                <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-b from-black to-red-950" />
+              </div>
+
+              {/* Live Discovery Feed */}
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-black/30 rounded-xl border border-white/10 p-4">
+                  <div className="text-xs uppercase tracking-widest text-red-200/70 mb-2">Live Discoveries</div>
+                  <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                    <AnimatePresence initial={false}>
+                      {discoveries.slice(-6).map(d => (
+                        <motion.div key={d.timestamp}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          className="text-sm text-red-100/90 flex items-center gap-2"
+                        >
+                          {d.icon}<span>{d.message}</span>
+                        </motion.div>
+                      ))}
                     </AnimatePresence>
                   </div>
-                  <span className="font-bold text-white">{Math.round(progress)}%</span>
+                </div>
+                <div className="bg-black/30 rounded-xl border border-white/10 p-4 flex flex-col">
+                  <div className="text-xs uppercase tracking-widest text-red-200/70 mb-2">Darkroom Notes</div>
+                  <AnimatePresence mode="wait">
+                    <motion.div key={currentStage}
+                      initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
+                      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                      exit={{ opacity: 0, y: -20, filter: 'blur(10px)' }}
+                      className="text-sm text-red-100/90"
+                    >
+                      {message}
+                    </motion.div>
+                  </AnimatePresence>
+                  <div className="text-xs text-red-300/70 mt-2">{stageNarratives[Math.floor(progress / 20) * 20 as 0|20|40|60|80|100]}</div>
                 </div>
               </div>
-              
-              {/* Animated Quote */}
-              <div className="text-center bg-black/20 p-4 rounded-xl mt-10 min-h-[60px] flex items-center justify-center">
-                <AnimatePresence mode="wait">
-                  <motion.p
-                    key={currentQuote}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.5 }}
-                    className="text-slate-300 italic text-md"
-                  >
-                    &quot;{currentQuote}&quot;
-                  </motion.p>
-                </AnimatePresence>
+
+              {/* Segmented progress and ETA */}
+              <div className="mt-6">
+                <div className="grid grid-cols-2 gap-2 text-[11px] mb-1 text-red-200/80">
+                  <div>Metadata</div>
+                  <div>Analysis</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="h-2 rounded bg-red-950/60 overflow-hidden"><div className="h-full bg-red-500" style={{ width: `${Math.min(progress, 20) * 5}%` }} /></div>
+                  <div className="h-2 rounded bg-red-950/60 overflow-hidden"><div className="h-full bg-red-400" style={{ width: `${progress > 20 ? ((progress - 20) / 80) * 100 : 0}%` }} /></div>
+                </div>
+                <div className="mt-2 text-right text-xs text-red-200/80">~ {Math.max(0, Math.round((100 - progress) / 2))} seconds remaining</div>
               </div>
+
+              {/* Technical details collapsible */}
+              <details className="mt-6 text-sm text-red-100/90">
+                <summary className="cursor-pointer select-none text-red-200/80">🤓 Show nerdy details</summary>
+                <div className="mt-2 max-h-32 overflow-y-auto space-y-1">
+                  {[message, ...discoveries.map(d => d.message)].slice(0, 10).map((m, i) => (
+                    <div key={i} className="opacity-90">• {m}</div>
+                  ))}
+                </div>
+              </details>
+
+              {/* Skeleton preview when close to done */}
+              {progress > 60 && (
+                <div className="mt-6 bg-black/30 border border-white/10 rounded-xl p-4">
+                  <div className="text-xs uppercase tracking-widest text-red-200/70 mb-2">Preview</div>
+                  <div className="opacity-60 blur-sm" style={{ opacity: progress / 100 }}>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="h-16 bg-white/10 rounded" />
+                      <div className="h-16 bg-white/10 rounded" />
+                      <div className="h-16 bg-white/10 rounded" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Abort / fallback */}
+              {progress > 30 && (
+                <div className="mt-6 text-center">
+                  <button className="px-4 py-2 rounded-md bg-red-700/70 border border-red-500/40 text-white text-sm">
+                    Skip detailed analysis — get basic stats now
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
