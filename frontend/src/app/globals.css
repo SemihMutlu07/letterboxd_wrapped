@@ -29,3 +29,57 @@ body {
 .animate-blob {
   animation: blob 10s infinite;
 }
+
+/* Recharts: ensure slice colors are not overridden by text color */
+.recharts-wrapper .recharts-sector { 
+  fill-opacity: 1 !important; 
+}
+
+/* Force Recharts pie slice colors */
+.recharts-pie-sector {
+  fill-opacity: 1 !important;
+}
+
+.recharts-pie .recharts-sector {
+  fill-opacity: 1 !important;
+}
+
+/* Override any global fill colors for pie charts */
+.recharts-pie .recharts-sector,
+.recharts-pie-sector,
+.recharts-pie .recharts-cell {
+  fill-opacity: 1 !important;
+}
+
+/* Force pie chart colors with specific selectors */
+.recharts-pie .recharts-sector {
+  fill-opacity: 1 !important;
+}
+
+.recharts-pie .recharts-sector:nth-child(1) { fill: #f97316 !important; }
+.recharts-pie .recharts-sector:nth-child(2) { fill: #a855f7 !important; }
+.recharts-pie .recharts-sector:nth-child(3) { fill: #3b82f6 !important; }
+.recharts-pie .recharts-sector:nth-child(4) { fill: #10b981 !important; }
+.recharts-pie .recharts-sector:nth-child(5) { fill: #eab308 !important; }
+.recharts-pie .recharts-sector:nth-child(6) { fill: #059669 !important; }
+.recharts-pie .recharts-sector:nth-child(7) { fill: #ec4899 !important; }
+.recharts-pie .recharts-sector:nth-child(8) { fill: #22c55e !important; }
+
+/* Additional force rules for pie chart colors */
+.recharts-pie .recharts-cell {
+  fill-opacity: 1 !important;
+}
+
+.recharts-pie .recharts-cell:nth-child(1) { fill: #f97316 !important; }
+.recharts-pie .recharts-cell:nth-child(2) { fill: #a855f7 !important; }
+.recharts-pie .recharts-cell:nth-child(3) { fill: #3b82f6 !important; }
+.recharts-pie .recharts-cell:nth-child(4) { fill: #10b981 !important; }
+.recharts-pie .recharts-cell:nth-child(5) { fill: #eab308 !important; }
+.recharts-pie .recharts-cell:nth-child(6) { fill: #059669 !important; }
+.recharts-pie .recharts-cell:nth-child(7) { fill: #ec4899 !important; }
+.recharts-pie .recharts-cell:nth-child(8) { fill: #22c55e !important; }
+
+/* Override any global color inheritance */
+.recharts-pie * {
+  fill-opacity: 1 !important;
+}

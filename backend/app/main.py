@@ -5,7 +5,7 @@ import zipfile
 from typing import List, Dict, Any, Optional
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from collections import Counter, defaultdict
@@ -20,6 +20,7 @@ from pathlib import Path
 import warnings
 from contextlib import asynccontextmanager
 import uuid
+from io import BytesIO
 
 warnings.filterwarnings('ignore')
 
@@ -87,6 +88,25 @@ def update_progress(stage: str, message: str, progress: int = 0, total: int = 0)
         "total": total
     })
     print(f"📊 {stage}: {message} ({progress}/{total})")
+
+# --- Simple Rate Limiter (memory) ---
+RATE_LIMIT_WINDOW_SECONDS = 600  # 10 minutes
+RATE_LIMIT_MAX_REQUESTS = 3
+rate_limiter: dict[str, list[float]] = {}
+
+def _rl_prune(now: float, events: list[float]) -> list[float]:
+    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+    return [t for t in events if t >= cutoff]
+
+def check_rate_limit(client_key: str) -> bool:
+    now = time.time()
+    events = rate_limiter.get(client_key, [])
+    events = _rl_prune(now, events)
+    allowed = len(events) < RATE_LIMIT_MAX_REQUESTS
+    if allowed:
+        events.append(now)
+        rate_limiter[client_key] = events
+    return allowed
 
 # --- Enhanced TMDB Client Logic (Async) ---
 async def tmdb_get(session: aiohttp.ClientSession, endpoint: str, params: dict = None, cache: bool = True):
@@ -1151,9 +1171,175 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
         update_progress("error", error_msg, 0, 1)
         raise HTTPException(status_code=500, detail=error_msg)
 
+@app.get("/api/tmdb/person/search")
+async def search_tmdb_person(name: str, role: str = None):
+    """
+    Search for a person on TMDB and return their profile image.
+    This endpoint proxies TMDB API calls to keep the API key secure on the backend.
+    """
+    if not name:
+        raise HTTPException(status_code=400, detail="Name parameter is required")
+    
+    try:
+        # Use the existing tmdb_get function
+        params = {'query': name, 'include_adult': 'false'}
+        person_data = await tmdb_get(app.state.aiohttp_session, 'search/person', params)
+        
+        if person_data and person_data.get('results'):
+            # Get the first result (most relevant)
+            person = person_data['results'][0]
+            
+            # Debug logging for problematic cases
+            if name.lower() in ['woody allen', 'allen, woody', 'woody allen']:
+                print(f"🔍 Debug: Searching for {name} as {role}")
+                print(f"📋 Found {len(person_data['results'])} results")
+                for i, result in enumerate(person_data['results'][:3]):
+                    print(f"  {i+1}. {result.get('name')} - Dept: {result.get('known_for_department')} - Popularity: {result.get('popularity')}")
+            
+            # If role is specified, try to find a better match
+            if role and len(person_data['results']) > 1:
+                # First, try to find exact role match
+                for result in person_data['results']:
+                    if role.lower() == 'director' and result.get('known_for_department') == 'Directing':
+                        person = result
+                        break
+                    elif role.lower() == 'actor' and result.get('known_for_department') == 'Acting':
+                        person = result
+                        break
+                
+                # If no exact match found, try to find someone who has the role in their known_for
+                if person == person_data['results'][0]:  # Still using first result
+                    for result in person_data['results']:
+                        known_for = result.get('known_for', [])
+                        if role.lower() == 'director':
+                            # Check if they have directing credits in known_for
+                            for work in known_for:
+                                if work.get('job') == 'Director' or work.get('department') == 'Directing':
+                                    person = result
+                                    break
+                        elif role.lower() == 'actor':
+                            # Check if they have acting credits in known_for
+                            for work in known_for:
+                                if work.get('job') == 'Actor' or work.get('department') == 'Acting':
+                                    person = result
+                                    break
+                        if person != person_data['results'][0]:  # Found a better match
+                            break
+            
+            # Debug logging for final selection
+            if name.lower() in ['woody allen', 'allen, woody', 'woody allen']:
+                print(f"✅ Selected: {person.get('name')} - Dept: {person.get('known_for_department')} - Profile: {person.get('profile_path')}")
+            
+            profile_path = person.get('profile_path')
+            if profile_path:
+                return {
+                    "found": True,
+                    "person_id": person.get('id'),
+                    "profile_path": profile_path,
+                    "name": person.get('name'),
+                    "known_for_department": person.get('known_for_department'),
+                    "url": f"https://image.tmdb.org/t/p/w300{profile_path}"
+                }
+            else:
+                return {
+                    "found": False,
+                    "person_id": person.get('id'),
+                    "name": person.get('name'),
+                    "message": "No profile image available"
+                }
+        else:
+            return {"found": False, "message": "No person found"}
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TMDB API error: {str(e)}")
+
 @app.get("/")
 async def root():
     return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend"}
+
+# --- Feedback & Report Endpoints (Prompt 3) ---
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
+def _client_key(request: Request) -> str:
+    xfwd = request.headers.get('x-forwarded-for')
+    if xfwd:
+        return xfwd.split(',')[0].strip()
+    return request.client.host if request.client else 'unknown'
+
+@app.post("/api/feedback")
+async def submit_feedback(
+    request: Request,
+    sessionId: str = Form(...),
+    kind: str = Form("general"),
+    message: str = Form(""),
+    include_names: bool = Form(False),
+    attachment: UploadFile | None = File(None),
+):
+    client_key = _client_key(request)
+    if not check_rate_limit(client_key):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
+    # Read optional attachment with size guard
+    attachment_bytes: bytes | None = None
+    if attachment is not None:
+        chunked = await attachment.read()
+        if len(chunked) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="Attachment too large (max 5 MB)")
+        attachment_bytes = chunked
+
+    # Persist a minimal record to disk for diagnostics
+    reports_dir = Path("uploads") / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    issue_id = str(uuid.uuid4())[:8]
+
+    payload = {
+        "issue_id": issue_id,
+        "sessionId": sessionId,
+        "kind": kind,
+        "message": message[:4000],
+        "include_names": include_names,
+        "received_at": datetime.utcnow().isoformat(),
+        "client": client_key,
+    }
+    meta_path = reports_dir / f"feedback-{issue_id}.json"
+    meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if attachment_bytes is not None:
+        (reports_dir / f"feedback-{issue_id}.bin").write_bytes(attachment_bytes)
+
+    return {"ok": True, "issue_id": issue_id}
+
+
+@app.post("/api/report")
+async def submit_report(
+    request: Request,
+    sessionId: str = Form(...),
+    include_names: bool = Form(False),
+    bundle: UploadFile = File(...),
+):
+    client_key = _client_key(request)
+    if not check_rate_limit(client_key):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+
+    data = await bundle.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Bundle too large (max 5 MB)")
+
+    reports_dir = Path("uploads") / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    issue_id = str(uuid.uuid4())[:8]
+
+    payload = {
+        "issue_id": issue_id,
+        "sessionId": sessionId,
+        "include_names": include_names,
+        "received_at": datetime.utcnow().isoformat(),
+        "client": client_key,
+    }
+    (reports_dir / f"report-{issue_id}.meta.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (reports_dir / f"report-{issue_id}.bin").write_bytes(data)
+
+    return {"ok": True, "issue_id": issue_id}
 
 if __name__ == "__main__":
     import uvicorn

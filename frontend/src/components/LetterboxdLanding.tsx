@@ -74,7 +74,7 @@ export default function LetterboxdLanding() {
     const zip = new JSZip();
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
-      const rel = (f as any).webkitRelativePath && (f as any).webkitRelativePath.length > 0 ? (f as any).webkitRelativePath : f.name;
+      const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath && (f as File & { webkitRelativePath?: string }).webkitRelativePath!.length > 0 ? (f as File & { webkitRelativePath?: string }).webkitRelativePath! : f.name;
       zip.file(rel, f);
     }
     const content = await zip.generateAsync({ type: 'blob' });
@@ -127,17 +127,17 @@ export default function LetterboxdLanding() {
     const items = e.dataTransfer.items;
     if (items && items.length > 0) {
         // Handle folder drop (macOS Finder) or multiple files
-        const entry = (items[0] as any).webkitGetAsEntry?.();
+        const entry = (items[0] as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry })?.webkitGetAsEntry?.();
         if (entry?.isDirectory) {
           const zip = new JSZip();
-          const addRecursively = async (ent: any, prefix: string) => {
+          const addRecursively = async (ent: FileSystemEntry, prefix: string) => {
             if (ent.isFile) {
-              const f: File = await new Promise((resolve) => ent.file(resolve));
+              const f: File = await new Promise((resolve) => (ent as FileSystemFileEntry).file(resolve));
               zip.file(`${prefix}${ent.name}`, f);
             } else if (ent.isDirectory) {
-              const reader = ent.createReader();
+              const reader = (ent as FileSystemDirectoryEntry).createReader();
               const readAll = async () => {
-                const batch: any[] = await new Promise((r) => reader.readEntries(r));
+                const batch: FileSystemEntry[] = await new Promise((r) => reader.readEntries(r));
                 if (!batch || batch.length === 0) return;
                 for (const child of batch) await addRecursively(child, `${prefix}${ent.name}/`);
                 await readAll();
@@ -156,30 +156,6 @@ export default function LetterboxdLanding() {
         }
     }
   }, [handleFiles]);
-
-interface CustomFileSystemDirectoryReader extends FileSystemDirectoryReader {
-    createReader(): FileSystemDirectoryReader;
-}
-
-interface CustomFileSystemFileEntry extends FileSystemFileEntry {
-    file(callback: (file: File) => void): void;
-}
-async function readAllDirectoryEntries(directoryReader: CustomFileSystemDirectoryReader): Promise<CustomFileSystemFileEntry[]> {
-    const entries: CustomFileSystemFileEntry[] = [];
-    let readEntries: CustomFileSystemFileEntry[] = await readEntriesPromise(directoryReader);
-    while (readEntries.length > 0) {
-        entries.push(...readEntries);
-        readEntries = await readEntriesPromise(directoryReader);
-    }
-    return entries;
-}
-
-async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryReader): Promise<CustomFileSystemFileEntry[]> {
-    return new Promise((resolve, reject) => {
-        directoryReader.readEntries(resolve as (value: FileSystemEntry[]) => void, reject);
-    });
-}
-
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     handleFiles(e.target.files);
@@ -304,117 +280,175 @@ async function readEntriesPromise(directoryReader: CustomFileSystemDirectoryRead
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-2xl text-center">
-        <h1 className="text-5xl font-bold mb-4">Letterboxd Wrapped</h1>
-        <p className="text-xl text-gray-400 mb-8">Upload your Letterboxd ZIP or drop the exported folder — we support Mac, Windows, iOS and Android.</p>
-        
-        <div 
-          className="bg-gray-800 border-2 border-dashed border-gray-600 rounded-lg p-12 cursor-pointer hover:border-green-400 transition-colors"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
-          onClick={() => document.getElementById('file-input')?.click()}
-        >
-          <input
-            id="file-input"
-            type="file"
-            multiple
-            accept=".zip,.csv,.CSV"
-            onChange={handleFileInput}
-            className="hidden"
-          />
-          <div className="flex flex-col items-center">
-            <Upload className="w-12 h-12 text-gray-400 mb-4" />
-            <p className="text-lg mb-2">Drop your .zip, exported folder, or select multiple .csv files</p>
-            <p className="text-sm text-gray-500">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
-          </div>
-        </div>
+    <div className="relative min-h-screen bg-slate-900 text-white">
+      {/* Decorative background blobs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-20 -left-20 h-72 w-72 sm:h-96 sm:w-96 rounded-full bg-purple-600/15 blur-3xl" />
+        <div className="absolute -bottom-24 -right-20 h-80 w-80 sm:h-[28rem] sm:w-[28rem] rounded-full bg-orange-500/15 blur-3xl" />
+      </div>
 
-        {/* Optional folder picker for users whose export was auto-unzipped */}
-        <div className="mt-3">
-          <button
-            onClick={() => document.getElementById('dir-input')?.click()}
-            className="px-4 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors text-sm"
-          >
-            Or choose exported folder
-          </button>
-          <input
-            id="dir-input"
-            type="file"
-            // @ts-ignore non-standard but supported in Chromium/WebKit
-            webkitdirectory=""
-            directory=""
-            multiple
-            onChange={handleFileInput}
-            className="hidden"
-          />
-        </div>
-        
-        {error && (
-          <div className="mt-4 p-4 bg-red-900 border border-red-700 rounded-lg">
-            <p className="text-red-300">{error}</p>
-          </div>
-        )}
+      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div className="space-y-8">
+          {/* Hero header */}
+          <header className="text-center">
+            <h1 className="font-black tracking-tight leading-tight text-[clamp(28px,6vw,56px)]">
+              <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span>
+              <span> Wrapped</span>
+            </h1>
+            <p className="mx-auto mt-3 max-w-2xl text-slate-300 text-base sm:text-lg leading-relaxed">
+              Upload your Letterboxd ZIP or drop the exported folder — we support Mac, Windows, iOS and Android.
+            </p>
+          </header>
 
-        {/* How to Export Section */}
-        <div className="mt-8 w-full max-w-xl mx-auto text-left">
-          <button
-            onClick={() => setIsInstructionsOpen(!isInstructionsOpen)}
-            className="w-full flex justify-between items-center p-4 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition-colors"
-          >
-            <div className="flex items-center">
-              <HelpCircle className="w-5 h-5 mr-3 text-gray-400" />
-              <span className="font-semibold text-gray-200">How to Export Your Letterboxd Data</span>
-            </div>
-            <motion.div
-              animate={{ rotate: isInstructionsOpen ? 180 : 0 }}
-              transition={{ duration: 0.3 }}
+          {/* Dropzone */}
+          <section aria-label="Upload your Letterboxd data">
+            {/* Desktop dropzone */}
+            <div
+              className="hidden sm:flex rounded-3xl border-2 border-dashed border-slate-600/60 bg-slate-800/40 p-8 lg:p-10 min-h-[220px] sm:min-h-[260px] items-center justify-center text-center cursor-pointer transition-colors shadow-none hover:shadow-lg hover:border-orange-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 max-w-3xl mx-auto"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('file-input')?.click()}
+              role="button"
+              tabIndex={0}
             >
-              <ChevronDown className="w-5 h-5 text-gray-400" />
-            </motion.div>
-          </button>
-          <AnimatePresence>
-            {isInstructionsOpen && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                className="overflow-hidden"
-              >
-                <div className="mt-2 p-6 bg-gray-800/50 border border-gray-700 rounded-lg text-gray-300 space-y-3">
-                  <p>Follow these steps on the Letterboxd website to get your data:</p>
-                  <ol className="list-decimal list-inside space-y-2">
-                    <li>Go to your <strong className="text-orange-400">Profile</strong> and click on <strong className="text-orange-400">Settings</strong>.</li>
-                    <li>Select the <strong className="text-orange-400">Data</strong> tab from the settings menu (it&apos;s on the far right).</li>
-                    <li>Click the <strong className="text-orange-400">Export Your Data</strong> button.</li>
-                    <li>Your data will be prepared and a <strong className="text-orange-400">.zip file</strong> will download.</li>
-                    <li>Once downloaded, just drag and drop the file here!</li>
-                  </ol>
+              <input
+                id="file-input"
+                type="file"
+                multiple
+                accept=".zip,.csv,.CSV"
+                onChange={handleFileInput}
+                className="hidden"
+              />
+              <div className="flex flex-col items-center">
+                <div className="mb-4 h-14 w-14 rounded-2xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center transition-colors">
+                  <Upload className="w-7 h-7 text-slate-300" />
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
+                <p className="mt-1 text-sm text-slate-400">.zip, exported folder, or multiple .csv files</p>
+                <p className="mt-1 text-xs text-slate-400">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
+              </div>
+            </div>
 
-        {/* Features Preview */}
-        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div className="bg-gray-800 p-4 rounded-lg">
-            <Film className="w-8 h-8 text-orange-400 mx-auto mb-2" />
-            <p className="text-gray-300">Comprehensive Film Analysis</p>
-          </div>
-          <div className="bg-gray-800 p-4 rounded-lg">
-            <Star className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-            <p className="text-gray-300">Rating Insights</p>
-          </div>
-          <div className="bg-gray-800 p-4 rounded-lg">
-            <Clock className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-            <p className="text-gray-300">Time Statistics</p>
-          </div>
-          <div className="bg-gray-800 p-4 rounded-lg">
-            <Globe className="w-8 h-8 text-green-400 mx-auto mb-2" />
-            <p className="text-gray-300">Global Cinema</p>
-          </div>
+            {/* Mobile upload CTA (no large dropzone) */}
+            <div className="sm:hidden">
+              <div className="mx-auto max-w-md bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 text-center">
+                <div className="mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-slate-200" />
+                </div>
+                <div className="text-sm text-slate-300 mb-3">Upload your Letterboxd export (.zip or .csv)</div>
+                <button
+                  onClick={() => document.getElementById('file-input')?.click()}
+                  className="inline-flex items-center justify-center w-full min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
+                >
+                  Choose files
+                </button>
+                <div className="mt-2 text-[12px] text-slate-400">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</div>
+              </div>
+            </div>
+
+            {/* Optional folder picker for users whose export was auto-unzipped */}
+            <div className="mt-3 hidden sm:flex justify-center">
+              <button
+                onClick={() => document.getElementById('dir-input')?.click()}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50"
+              >
+                Or choose exported folder
+              </button>
+              <input
+                id="dir-input"
+                type="file"
+                // @ts-expect-error non-standard but supported in Chromium/WebKit
+                webkitdirectory=""
+                directory=""
+                multiple
+                onChange={handleFileInput}
+                className="hidden"
+              />
+            </div>
+          </section>
+
+          {error && (
+            <div className="mx-auto max-w-xl rounded-xl border border-red-700/70 bg-red-900/60 p-4">
+              <p className="text-red-200 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* How to Export Section */}
+          <section className="mx-auto w-full max-w-2xl text-left">
+            <div className="rounded-2xl border border-slate-700/60 bg-slate-800/40 px-4 sm:px-6 py-3 sm:py-4">
+              <button
+                onClick={() => setIsInstructionsOpen(!isInstructionsOpen)}
+                className="w-full flex justify-between items-center text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50"
+              >
+                <div className="flex items-center">
+                  <HelpCircle className="w-5 h-5 mr-3 text-gray-400" />
+                  <span className="font-semibold text-base sm:text-lg text-gray-200">How to Export Your Letterboxd Data</span>
+                </div>
+                <motion.div
+                  animate={{ rotate: isInstructionsOpen ? 180 : 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <ChevronDown className="w-5 h-5 text-gray-400" />
+                </motion.div>
+              </button>
+              <AnimatePresence>
+                {isInstructionsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-3 sm:mt-4 p-4 sm:p-5 rounded-xl border border-slate-700/60 bg-slate-800/40 text-slate-300 space-y-3 text-sm sm:text-base">
+                      <p>Follow these steps on the Letterboxd App / Website to get your data:</p>
+                      <ol className="list-decimal list-inside space-y-2 pl-1">
+                        <li>Go to your <strong className="text-orange-400">Profile</strong> and click on <strong className="text-orange-400">Settings</strong>.</li>
+                        <li>Select the <strong className="text-orange-400">Data</strong> tab from the settings menu (it&apos;s on the far right).</li>
+                        <li>Click the <strong className="text-orange-400">Export Your Data</strong> button.</li>
+                        <li>Your data will be prepared and a <strong className="text-orange-400">.zip file</strong> will download.</li>
+                        <li>Once downloaded, just drag and drop the file here!</li>
+                      </ol>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </section>
+
+          {/* Features Preview */}
+          <section>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 text-sm">
+              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
+                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
+                  <Film className="w-6 h-6 text-orange-400" />
+                </div>
+                <div className="font-semibold">Comprehensive Film Analysis</div>
+                <div className="text-slate-400 text-sm mt-1">Trends, genres, directors.</div>
+              </div>
+              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
+                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
+                  <Star className="w-6 h-6 text-yellow-400" />
+                </div>
+                <div className="font-semibold">Rating Insights</div>
+                <div className="text-slate-400 text-sm mt-1">Averages, distributions, favorites.</div>
+              </div>
+              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
+                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-blue-400" />
+                </div>
+                <div className="font-semibold">Time Statistics</div>
+                <div className="text-slate-400 text-sm mt-1">Diary streaks and seasons.</div>
+              </div>
+              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
+                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
+                  <Globe className="w-6 h-6 text-green-400" />
+                </div>
+                <div className="font-semibold">Global Cinema</div>
+                <div className="text-slate-400 text-sm mt-1">Countries, languages, regions.</div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
