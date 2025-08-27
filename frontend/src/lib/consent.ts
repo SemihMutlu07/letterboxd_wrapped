@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabase } from '@/lib/supabaseClient';
 import { getSessionId } from './session';
 import { ensureSessionRow } from './sessions';
 
@@ -21,6 +21,7 @@ export async function saveConsentDecision(
       meta: meta || {}
     };
 
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from('consents')
       .insert(payload)
