@@ -6,9 +6,6 @@ import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucid
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import PreResultsConsentModal from './PreResultsConsentModal';
-import { getSessionId } from '@/lib/session';
-import { markConsentModalAsShown } from '@/lib/sessionUtils';
-import { trackEvent } from '@/lib/analytics';
 import { ensureSessionRow } from '@/lib/sessions';
 
 
@@ -21,6 +18,22 @@ export default function LetterboxdLanding() {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
   const router = useRouter();
+
+  // Simple inline implementations for essential functions
+  const getSessionId = () => {
+    if (typeof window === 'undefined') return '00000000-0000-4000-8000-000000000000';
+    let id = sessionStorage.getItem('session_id');
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? `session_${Date.now()}`);
+      sessionStorage.setItem('session_id', id);
+    }
+    return id;
+  };
+
+  const markConsentModalAsShown = () => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem('consent_modal_shown', 'true');
+  };
 
   // Initialize session ID and ensure session row exists on component mount
   useEffect(() => {
@@ -74,11 +87,11 @@ export default function LetterboxdLanding() {
     if (!files || files.length === 0) return;
 
     // Track file upload
-    trackEvent('files_uploaded', {
-      file_count: files.length,
-      file_types: Array.from(files).map(f => f.type || 'unknown'),
-      total_size: Array.from(files).reduce((sum, f) => sum + f.size, 0)
-    });
+    // trackEvent('files_uploaded', { // TODO: Re-enable when analytics is ready
+    //   file_count: files.length,
+    //   file_types: Array.from(files).map(f => f.type || 'unknown'),
+    //   total_size: Array.from(files).reduce((sum, f) => sum + f.size, 0)
+    // });
 
     setIsUploading(true);
     setError(null);
@@ -110,10 +123,10 @@ export default function LetterboxdLanding() {
         console.log('[Landing] Stats saved to localStorage');
         
         // Track analysis completion with consent-gated film stats
-        trackEvent('analysis_started', { 
-          has_stats: !!result.stats,
-          stats_keys: result.stats ? Object.keys(result.stats) : []
-        });
+        // trackEvent('analysis_started', { // TODO: Re-enable when analytics is ready
+        //   has_stats: !!result.stats,
+        //   stats_keys: result.stats ? Object.keys(result.stats) : []
+        // });
         
         // Navigate directly to results page since analysis is complete
         console.log('[Landing] Navigating to results page');
@@ -131,24 +144,24 @@ export default function LetterboxdLanding() {
       setIsUploading(false);
       
       // Track error
-      trackEvent('analysis_error', { 
-        error: errorMessage,
-        stage: 'upload'
-      });
+      // trackEvent('analysis_error', { // TODO: Re-enable when analytics is ready
+      //   error: errorMessage,
+      //   stage: 'upload'
+      // });
     }
   }, [zipFiles, router]);
 
   const handleConsentAccept = () => {
     markConsentModalAsShown();
     setShowConsentModal(false);
-    trackEvent('consent_given', { decision: 'accept' });
+    // trackEvent('consent_given', { decision: 'accept' }); // TODO: Re-enable when analytics is ready
     router.push('/results');
   };
 
   const handleConsentDecline = () => {
     markConsentModalAsShown();
     setShowConsentModal(false);
-    trackEvent('consent_given', { decision: 'decline' });
+    // trackEvent('consent_given', { decision: 'decline' }); // TODO: Re-enable when analytics is ready
     router.push('/results');
   };
 

@@ -6,12 +6,8 @@ import { User, Heart } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
-import { setCachedUrl } from '@/lib/tmdbCache';
 import FeedbackFab from '@/components/FeedbackFab';
-import { trackEvent, trackAnalyticsEvent, trackFilmStats } from '@/lib/analytics';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
-import { getSessionId } from '@/lib/session';
-import { hasConsentModalBeenShown, markConsentModalAsShown, saveConsentDecision as saveConsentToStorage } from '@/lib/sessionUtils';
 
 // Dynamic imports for Recharts with SSR disabled
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
@@ -262,22 +258,22 @@ const DirectorCard: React.FC<DirectorCardProps> = ({ director, rank }) => {
           if (data.found && data.url) {
             if (__DEV__) console.log(`✅ Setting director image URL: ${data.url}`);
             imgCache.set(cacheKey, data.url);
-            await setCachedUrl(director.name, 'director', data.url);
+            // await setCachedUrl(director.name, 'director', data.url); // TODO: Re-enable when tmdbCache is ready
             setImageUrl(data.url);
           } else {
             if (__DEV__) console.log(`❌ No image found for director: ${director.name}`, data);
             imgCache.set(cacheKey, null);
-            await setCachedUrl(director.name, 'director', null);
+            // await setCachedUrl(director.name, 'director', null); // TODO: Re-enable when tmdbCache is ready
           }
         } else {
           if (__DEV__) console.error(`❌ TMDB API error for director ${director.name}:`, response.status, response.statusText);
           imgCache.set(cacheKey, null);
-          await setCachedUrl(director.name, 'director', null);
+          // await setCachedUrl(director.name, 'director', null); // TODO: Re-enable when tmdbCache is ready
         }
       } catch (error) {
         if (__DEV__) console.error(`💥 Error fetching director image for ${director.name}:`, error);
         imgCache.set(cacheKey, null);
-        await setCachedUrl(director.name, 'director', null);
+        // await setCachedUrl(director.name, 'director', null); // TODO: Re-enable when tmdbCache is ready
       } finally {
         setImageLoading(false);
         // release semaphore
@@ -410,22 +406,22 @@ const ActorCard: React.FC<ActorCardProps> = ({ actor, rank, variant = 'small', s
           if (data.found && data.url) {
             if (__DEV__) console.log(`✅ Setting actor image URL: ${data.url}`);
             imgCache.set(cacheKey, data.url);
-            await setCachedUrl(actor.name, 'actor', data.url);
+            // await setCachedUrl(actor.name, 'actor', data.url); // TODO: Re-enable when tmdbCache is ready
             setImageUrl(data.url);
           } else {
             if (__DEV__) console.log(`❌ No image found for actor: ${actor.name}`, data);
             imgCache.set(cacheKey, null);
-            await setCachedUrl(actor.name, 'actor', null);
+            // await setCachedUrl(actor.name, 'actor', null); // TODO: Re-enable when tmdbCache is ready
           }
         } else {
           if (__DEV__) console.error(`❌ TMDB API error for actor ${actor.name}:`, response.status, response.statusText);
           imgCache.set(cacheKey, null);
-          await setCachedUrl(actor.name, 'actor', null);
+          // await setCachedUrl(actor.name, 'actor', null); // TODO: Re-enable when tmdbCache is ready
         }
       } catch (error) {
         if (__DEV__) console.error(`💥 Error fetching actor image for ${actor.name}:`, error);
         imgCache.set(cacheKey, null);
-        await setCachedUrl(actor.name, 'actor', null);
+        // await setCachedUrl(actor.name, 'actor', null); // TODO: Re-enable when tmdbCache is ready
       } finally {
         setImageLoading(false);
         try { if (releaseFn) releaseFn(); released = true; } catch {}
@@ -544,6 +540,32 @@ const ComprehensiveResultsPage = () => {
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
 
+  // Simple inline implementations for essential functions
+  const getSessionId = () => {
+    if (typeof window === 'undefined') return '00000000-0000-4000-8000-000000000000';
+    let id = sessionStorage.getItem('session_id');
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? `session_${Date.now()}`);
+      sessionStorage.setItem('session_id', id);
+    }
+    return id;
+  };
+
+  const hasConsentModalBeenShown = () => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('consent_modal_shown') === 'true';
+  };
+
+  const markConsentModalAsShown = () => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem('consent_modal_shown', 'true');
+  };
+
+  const saveConsentToStorage = (decision: 'accept' | 'decline') => {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem('consent_decision', decision);
+  };
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 480);
     onResize();
@@ -561,7 +583,7 @@ const ComprehensiveResultsPage = () => {
       const depths = [25, 50, 75, 100];
       depths.forEach(depth => {
         if (scrollPercent >= depth && !scrollDepthsTracked.has(depth)) {
-          trackAnalyticsEvent('scroll_depth', { depth });
+          // trackAnalyticsEvent('scroll_depth', { depth }); // TODO: Re-enable when analytics is ready
           setScrollDepthsTracked(prev => new Set([...prev, depth]));
         }
       });
@@ -592,8 +614,8 @@ const ComprehensiveResultsPage = () => {
     setLoading(false);
     
     // Track page view
-    trackEvent('page_view', { page: 'results' });
-    trackAnalyticsEvent('results_view');
+    // trackEvent('page_view', { page: 'results' }); // TODO: Re-enable when analytics is ready
+    // trackAnalyticsEvent('results_view'); // TODO: Re-enable when analytics is ready
     console.log('[Results] Page view tracked');
   }, []);
 
@@ -617,18 +639,18 @@ const ComprehensiveResultsPage = () => {
     markConsentModalAsShown(); // This is equivalent to setting 'consentGateSeen'
     saveConsentToStorage('accept');
     setShowConsentModal(false);
-    trackEvent('consent_given', { decision: 'accept', session_id: sessionId });
+    // trackEvent('consent_given', { decision: 'accept', session_id: sessionId }); // TODO: Re-enable when analytics is ready
     
     // Track film stats after consent is given
     if (stats) {
-      trackFilmStats({
-        total_films: stats.total_films,
-        average_rating: stats.average_rating,
-        top_genres: stats.top_genres?.map(g => g.name) || [],
-        top_directors: stats.top_directors?.map(d => d.name) || [],
-        countries_watched: stats.top_countries?.map(c => c.name) || [],
-        languages_watched: stats.top_languages?.map(l => l.language) || []
-      });
+      // trackFilmStats({ // TODO: Re-enable when analytics is ready
+      //   total_films: stats.total_films,
+      //   average_rating: stats.average_rating,
+      //   top_genres: stats.top_genres?.map(g => g.name) || [],
+      //   top_directors: stats.top_directors?.map(d => d.name) || [],
+      //   countries_watched: stats.top_countries?.map(c => c.name) || [],
+      //   languages_watched: stats.top_languages?.map(l => l.language) || []
+      // });
     }
   };
 
@@ -636,7 +658,7 @@ const ComprehensiveResultsPage = () => {
     markConsentModalAsShown(); // This is equivalent to setting 'consentGateSeen'
     saveConsentToStorage('decline');
     setShowConsentModal(false);
-    trackEvent('consent_given', { decision: 'decline', session_id: sessionId });
+    // trackEvent('consent_given', { decision: 'decline', session_id: sessionId }); // TODO: Re-enable when analytics is ready
   };
 
   // ALWAYS called - null-safe hooks

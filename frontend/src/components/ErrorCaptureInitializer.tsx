@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from 'react';
-import { initErrorCapture } from '@/lib/errorCapture';
+
 
 export default function ErrorCaptureInitializer() {
   useEffect(() => {
     // Initialize global error capture
-    initErrorCapture();
+    // initErrorCapture(); // TODO: Re-enable when errorCapture is ready
   }, []);
 
   // This component doesn't render anything

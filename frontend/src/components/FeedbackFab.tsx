@@ -4,7 +4,7 @@ import React from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { MessageSquare, X, Upload, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { trackEvent, trackAnalyticsEvent } from '@/lib/analytics';
+
 
 interface FeedbackFabProps {
   sessionId?: string | null;
@@ -81,11 +81,11 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
     }
     
     // Track feedback submission
-    trackEvent('feedback_submitted', {
-      type,
-      include_names: includeNames,
-      message_length: text.length
-    });
+    // trackEvent('feedback_submitted', { // TODO: Re-enable when analytics is ready
+    //   type,
+    //   include_names: includeNames,
+    //   message_length: text.length
+    // });
     
     setSuccess(true);
     setShowSuccessToast(true);
@@ -107,7 +107,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
         aria-label="Feedback"
         onClick={() => {
           setOpen(true);
-          trackAnalyticsEvent('feedback_open');
+          // trackAnalyticsEvent('feedback_open'); // TODO: Re-enable when analytics is ready
         }}
         disabled={isSubmitting}
         className={`fixed bottom-4 right-4 z-40 min-h-[44px] rounded-full text-white font-semibold px-4 py-2 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 transition-all duration-200 ${

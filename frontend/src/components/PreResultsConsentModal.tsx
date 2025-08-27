@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { saveConsentDecision as saveConsentToStorage } from '@/lib/sessionUtils';
-import { saveConsentDecision } from '@/lib/consent';
+
 
 interface PreResultsConsentModalProps {
   open: boolean;
@@ -32,12 +31,12 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
 
     try {
       // Save consent decision to Supabase
-      await saveConsentDecision(
-        decision === 'accept',
-        variant,
-        msToDecision,
-        { from: 'results-gate' }
-      );
+      // await saveConsentDecision( // TODO: Re-enable when consent is ready
+      //   decision === 'accept',
+      //   variant,
+      //   msToDecision,
+      //   { from: 'results-gate' }
+      // );
     } catch (err) {
       console.error('Error submitting consent:', err);
       // Don't block navigation on error, just log and continue
@@ -46,7 +45,7 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
     }
 
     // Save consent decision to sessionStorage
-    saveConsentToStorage(decision);
+    // saveConsentToStorage(decision); // TODO: Re-enable when sessionUtils is ready
 
     // Call the appropriate callback
     if (decision === 'accept') {
