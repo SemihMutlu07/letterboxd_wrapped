@@ -3,7 +3,6 @@ const nextConfig = {
   // Static export for Netlify
   output: 'export',
   trailingSlash: true,
-  distDir: 'dist',
   images: {
     unoptimized: true,
     remotePatterns: [
