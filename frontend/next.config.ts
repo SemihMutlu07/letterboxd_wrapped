@@ -15,10 +15,7 @@ const nextConfig = {
       },
     ],
   },
-  // Experimental features for better build compatibility
-  experimental: {
-    esmExternals: false,
-  },
+
 }
 
 module.exports = nextConfig
