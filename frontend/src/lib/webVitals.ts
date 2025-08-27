@@ -1,5 +1,5 @@
 import { onCLS, onFCP, onINP, onLCP, onTTFB, type Metric } from 'web-vitals';
-import { supabase } from './supabaseClient';
+import { getSupabase } from './supabaseClient';
 import { getSessionId } from './session';
 
 type MetricName = 'CLS' | 'FCP' | 'LCP' | 'TTFB' | 'INP';
@@ -46,6 +46,7 @@ async function insertWebVital(payload: VitalsPayload) {
     nav_type: payload.nav_type,
   };
 
+  const supabase = getSupabase();
   // 1st attempt: base + extras
   let { error } = await supabase.from('web_vitals').insert({ ...base, ...extras });
 
