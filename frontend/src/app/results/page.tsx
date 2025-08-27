@@ -7,8 +7,12 @@ import dynamic from 'next/dynamic';
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getCachedUrl, setCachedUrl } from '../../lib/tmdbCache';
+import { getCachedUrl, setCachedUrl } from '@/lib/tmdbCache';
 import FeedbackFab from '@/components/FeedbackFab';
+import { trackEvent, trackAnalyticsEvent, trackFilmStats } from '@/lib/analytics';
+import PreResultsConsentModal from '@/components/PreResultsConsentModal';
+import { getSessionId } from '@/lib/session';
+import { hasConsentModalBeenShown, markConsentModalAsShown, saveConsentDecision as saveConsentToStorage } from '@/lib/sessionUtils';
 
 // Dynamic imports for Recharts with SSR disabled
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
@@ -539,6 +543,11 @@ const ComprehensiveResultsPage = () => {
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const reduce = useReducedMotion();
+  const [scrollDepthsTracked, setScrollDepthsTracked] = useState<Set<number>>(new Set());
+  
+  // Consent modal state
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 480);
@@ -547,19 +556,93 @@ const ComprehensiveResultsPage = () => {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Track scroll depth
   useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const scrollPercent = Math.round((scrollTop / docHeight) * 100);
+      
+      const depths = [25, 50, 75, 100];
+      depths.forEach(depth => {
+        if (scrollPercent >= depth && !scrollDepthsTracked.has(depth)) {
+          trackAnalyticsEvent('scroll_depth', { depth });
+          setScrollDepthsTracked(prev => new Set([...prev, depth]));
+        }
+      });
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [scrollDepthsTracked]);
+
+  useEffect(() => {
+    console.log('[Results] Page loading...');
     const savedStats = localStorage.getItem('letterboxdStats');
+    console.log('[Results] Saved stats found:', !!savedStats);
+    
     if (savedStats) {
       try {
-        setStats(JSON.parse(savedStats));
+        const parsedStats = JSON.parse(savedStats);
+        console.log('[Results] Stats parsed successfully, keys:', Object.keys(parsedStats));
+        setStats(parsedStats);
       } catch (err) {
         if (process.env.NODE_ENV !== 'production') {
           console.error('Error parsing stats:', err);
         }
       }
+    } else {
+      console.log('[Results] No saved stats found in localStorage');
     }
     setLoading(false);
+    
+    // Track page view
+    trackEvent('page_view', { page: 'results' });
+    trackAnalyticsEvent('results_view');
+    console.log('[Results] Page view tracked');
   }, []);
+
+  // Initialize session ID and check for consent modal
+  useEffect(() => {
+    const currentSessionId = getSessionId();
+    setSessionId(currentSessionId);
+    
+    // Show consent modal after 0.5 seconds if not shown before
+    const timer = setTimeout(() => {
+      if (!hasConsentModalBeenShown()) {
+        setShowConsentModal(true);
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Handle consent modal actions
+  const handleConsentAccept = () => {
+    markConsentModalAsShown(); // This is equivalent to setting 'consentGateSeen'
+    saveConsentToStorage('accept');
+    setShowConsentModal(false);
+    trackEvent('consent_given', { decision: 'accept', session_id: sessionId });
+    
+    // Track film stats after consent is given
+    if (stats) {
+      trackFilmStats({
+        total_films: stats.total_films,
+        average_rating: stats.average_rating,
+        top_genres: stats.top_genres?.map(g => g.name) || [],
+        top_directors: stats.top_directors?.map(d => d.name) || [],
+        countries_watched: stats.top_countries?.map(c => c.name) || [],
+        languages_watched: stats.top_languages?.map(l => l.language) || []
+      });
+    }
+  };
+
+  const handleConsentDecline = () => {
+    markConsentModalAsShown(); // This is equivalent to setting 'consentGateSeen'
+    saveConsentToStorage('decline');
+    setShowConsentModal(false);
+    trackEvent('consent_given', { decision: 'decline', session_id: sessionId });
+  };
 
   // ALWAYS called - null-safe hooks
   const decadeData = useMemo(() => {
@@ -631,6 +714,13 @@ const ComprehensiveResultsPage = () => {
   return (
     <LazyMotion features={domAnimation}>
     <div className="font-sans bg-slate-900 text-white overflow-x-hidden relative min-h-screen">
+      {/* Consent Modal */}
+      <PreResultsConsentModal
+        open={showConsentModal}
+        onAccept={handleConsentAccept}
+        onDecline={handleConsentDecline}
+        sessionId={sessionId}
+      />
       {/* Subtle background gradients */}
       <div className="fixed inset-0 -z-10">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full filter blur-[120px]" />
@@ -790,9 +880,9 @@ const ComprehensiveResultsPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
           {/* Languages */}
           <Section title="Languages" subtitle="Your linguistic journey">
-            <div className="w-full h-64 md:h-80">
+            <div className="w-full h-56 md:h-64 py-3 md:py-0">
               <ResponsiveContainer>
-                <PieChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <PieChart margin={{ top: 8, bottom: 8 }}>
                   <Pie 
                     data={languageData} 
                     dataKey="count" 
@@ -1058,6 +1148,21 @@ const ComprehensiveResultsPage = () => {
         <footer className="text-center py-12">
             <p className="text-gray-400">Thank you for exploring your cinematic journey with us!</p>
         </footer>
+
+        {/* Dev helper button */}
+        {process.env.NODE_ENV !== 'production' && (
+          <div className="fixed bottom-3 right-3 text-xs text-slate-300/70">
+            <button
+              className="block underline"
+              onClick={() => {
+                sessionStorage.removeItem('consent_modal_shown');
+                setShowConsentModal(true);
+              }}
+            >
+              test consent modal
+            </button>
+          </div>
+        )}
       </main>
       {/* Feedback hidden for now */}
       <div className="hidden">
