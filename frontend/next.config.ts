@@ -1,17 +1,20 @@
-// frontend/next.config.ts
-import type { NextConfig } from 'next';
-import path from 'path';
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   output: 'export',
   images: { unoptimized: true },
-  webpack(config) {
-    config.resolve.alias = {
-      ...(config.resolve.alias || {}),
-      '@': path.join(__dirname, 'src'), // "@/..." -> "frontend/src/..."
-    };
+  webpack: (config: any) => {
+    // Ensure the alias is set correctly
+    if (!config.resolve) {
+      config.resolve = {};
+    }
+    if (!config.resolve.alias) {
+      config.resolve.alias = {};
+    }
+    
+    config.resolve.alias['@'] = require('path').resolve(__dirname, 'src');
+    
     return config;
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;

@@ -4,10 +4,9 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, Variants, useReducedMotion, LazyMotion, domAnimation } from 'framer-motion';
 import { User, Heart } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getCachedUrl, setCachedUrl } from '@/lib/tmdbCache';
+import { setCachedUrl } from '@/lib/tmdbCache';
 import FeedbackFab from '@/components/FeedbackFab';
 import { trackEvent, trackAnalyticsEvent, trackFilmStats } from '@/lib/analytics';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
@@ -248,8 +247,6 @@ const DirectorCard: React.FC<DirectorCardProps> = ({ director, rank }) => {
       
       // Check cache first
       const cacheKey = `director-${director.name}`;
-      const local = getCachedUrl(director.name, 'director');
-      if (local !== undefined) { if (local) setImageUrl(local); return; }
       if (imgCache.has(cacheKey)) { const cachedUrl = imgCache.get(cacheKey); if (cachedUrl) setImageUrl(cachedUrl); return; }
       
       setImageLoading(true);
@@ -265,22 +262,22 @@ const DirectorCard: React.FC<DirectorCardProps> = ({ director, rank }) => {
           if (data.found && data.url) {
             if (__DEV__) console.log(`✅ Setting director image URL: ${data.url}`);
             imgCache.set(cacheKey, data.url);
-            setCachedUrl(director.name, 'director', data.url);
+            await setCachedUrl(director.name, 'director', data.url);
             setImageUrl(data.url);
           } else {
             if (__DEV__) console.log(`❌ No image found for director: ${director.name}`, data);
             imgCache.set(cacheKey, null);
-            setCachedUrl(director.name, 'director', null);
+            await setCachedUrl(director.name, 'director', null);
           }
         } else {
           if (__DEV__) console.error(`❌ TMDB API error for director ${director.name}:`, response.status, response.statusText);
           imgCache.set(cacheKey, null);
-          setCachedUrl(director.name, 'director', null);
+          await setCachedUrl(director.name, 'director', null);
         }
       } catch (error) {
         if (__DEV__) console.error(`💥 Error fetching director image for ${director.name}:`, error);
         imgCache.set(cacheKey, null);
-        setCachedUrl(director.name, 'director', null);
+        await setCachedUrl(director.name, 'director', null);
       } finally {
         setImageLoading(false);
         // release semaphore
@@ -398,8 +395,6 @@ const ActorCard: React.FC<ActorCardProps> = ({ actor, rank, variant = 'small', s
       
       // Check cache first
       const cacheKey = `actor-${actor.name}`;
-      const local = getCachedUrl(actor.name, 'actor');
-      if (local !== undefined) { if (local) setImageUrl(local); return; }
       if (imgCache.has(cacheKey)) { const cachedUrl = imgCache.get(cacheKey); if (cachedUrl) setImageUrl(cachedUrl); return; }
       
       setImageLoading(true);
@@ -415,22 +410,22 @@ const ActorCard: React.FC<ActorCardProps> = ({ actor, rank, variant = 'small', s
           if (data.found && data.url) {
             if (__DEV__) console.log(`✅ Setting actor image URL: ${data.url}`);
             imgCache.set(cacheKey, data.url);
-            setCachedUrl(actor.name, 'actor', data.url);
+            await setCachedUrl(actor.name, 'actor', data.url);
             setImageUrl(data.url);
           } else {
             if (__DEV__) console.log(`❌ No image found for actor: ${actor.name}`, data);
             imgCache.set(cacheKey, null);
-            setCachedUrl(actor.name, 'actor', null);
+            await setCachedUrl(actor.name, 'actor', null);
           }
         } else {
           if (__DEV__) console.error(`❌ TMDB API error for actor ${actor.name}:`, response.status, response.statusText);
           imgCache.set(cacheKey, null);
-          setCachedUrl(actor.name, 'actor', null);
+          await setCachedUrl(actor.name, 'actor', null);
         }
       } catch (error) {
         if (__DEV__) console.error(`💥 Error fetching actor image for ${actor.name}:`, error);
         imgCache.set(cacheKey, null);
-        setCachedUrl(actor.name, 'actor', null);
+        await setCachedUrl(actor.name, 'actor', null);
       } finally {
         setImageLoading(false);
         try { if (releaseFn) releaseFn(); released = true; } catch {}
