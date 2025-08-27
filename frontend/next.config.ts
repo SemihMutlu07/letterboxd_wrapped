@@ -1,11 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Only use static export for production builds
-  ...(process.env.NODE_ENV === 'production' && {
-    output: 'export',
-    trailingSlash: true,
-    distDir: 'dist',
-  }),
+  // Static export for Netlify
+  output: 'export',
+  trailingSlash: true,
+  distDir: 'dist',
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -16,6 +14,10 @@ const nextConfig = {
         pathname: '/t/p/**',
       },
     ],
+  },
+  // Experimental features for better build compatibility
+  experimental: {
+    esmExternals: false,
   },
 }
 
