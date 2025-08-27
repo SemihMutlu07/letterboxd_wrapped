@@ -56,7 +56,7 @@ out/
 build
 
 # Deployment
-.vercel
+
 
 # IDE
 .vscode/
