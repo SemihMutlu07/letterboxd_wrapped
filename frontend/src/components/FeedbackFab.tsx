@@ -3,8 +3,8 @@
 import React from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { MessageSquare, X, Upload, CheckCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
-import { trackEvent, trackAnalyticsEvent } from '@/lib/analytics';
+import { supabase } from '../lib/supabaseClient';
+import { trackEvent, trackAnalyticsEvent } from '../lib/analytics';
 
 interface FeedbackFabProps {
   sessionId?: string | null;

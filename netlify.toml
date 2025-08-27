@@ -7,7 +7,4 @@
   NODE_VERSION = "20"
   NPM_VERSION = "10"
 
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
-
 

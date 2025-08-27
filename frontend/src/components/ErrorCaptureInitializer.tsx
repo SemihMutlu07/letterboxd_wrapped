@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from 'react';
-import { initErrorCapture } from '@/lib/errorCapture';
+import { initErrorCapture } from '../lib/errorCapture';
 
 export default function ErrorCaptureInitializer() {
   useEffect(() => {

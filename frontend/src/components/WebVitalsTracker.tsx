@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { initWebVitals } from '@/lib/webVitals';
+import { initWebVitals } from '../lib/webVitals';
 
 export default function WebVitalsTracker() {
   const pathname = usePathname();
