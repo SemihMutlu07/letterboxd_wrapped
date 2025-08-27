@@ -3,7 +3,7 @@
 import React from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { MessageSquare, X, Upload, CheckCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { getSupabase } from '@/lib/supabaseClient';
 
 
 interface FeedbackFabProps {
@@ -64,6 +64,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
       path: typeof location !== 'undefined' ? location.pathname : null,
     };
 
+    const supabase = getSupabase();
     const { data, error } = await supabase
       .from('feedback')
       .insert(payload)
