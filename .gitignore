@@ -105,3 +105,13 @@ jspm_packages/
 
 # Next.js build output
 .next
+
+# Ignore only top-level build libs, but NEVER ignore app source libs
+/lib/
+/**/dist/
+/**/build/
+
+# allow source lib under frontend/src
+!frontend/src/lib/
+!frontend/src/lib/**
+
