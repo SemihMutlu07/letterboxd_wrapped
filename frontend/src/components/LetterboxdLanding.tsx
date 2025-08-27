@@ -5,20 +5,39 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import PreResultsConsentModal from './PreResultsConsentModal';
+import { getSessionId } from '@/lib/session';
+import { markConsentModalAsShown } from '@/lib/sessionUtils';
+import { trackEvent } from '@/lib/analytics';
+import { ensureSessionRow } from '@/lib/sessions';
 
-interface ProgressData {
-  stage: string;
-  message: string;
-  progress: number;
-  total: number;
-}
+
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<ProgressData | null>(null);
+
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [sessionId, setSessionId] = useState<string>('');
   const router = useRouter();
+
+  // Initialize session ID and ensure session row exists on component mount
+  useEffect(() => {
+    const initSession = async () => {
+      const id = getSessionId();
+      setSessionId(id);
+      
+      // Ensure session row exists in database
+      try {
+        await ensureSessionRow();
+      } catch (err) {
+        console.error('Failed to ensure session row:', err);
+      }
+    };
+    
+    initSession();
+  }, []);
 
   // Test backend connectivity on component mount
   useEffect(() => {
@@ -37,37 +56,7 @@ export default function LetterboxdLanding() {
   }, []);
 
   // Poll progress endpoint during upload
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    
-    if (isUploading) {
-      intervalId = setInterval(async () => {
-        try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-          const response = await fetch(`${apiUrl}/api/progress`);
-          if (response.ok) {
-            const progressData = await response.json();
-            setProgress(progressData);
-            
-            // If analysis is complete, stop polling and redirect
-            if (progressData.stage === 'complete') {
-              clearInterval(intervalId);
-              // Small delay to show completion message
-              setTimeout(() => {
-                router.push('/results');
-              }, 1500);
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching progress:', err);
-        }
-      }, 1500); // Poll every 1500ms
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isUploading, router]);
+  // Polling removed - analysis is now synchronous
 
   // Package arbitrary selection (zip, csvs, or folder) into a single .zip for backend compatibility
   const zipFiles = useCallback(async (files: FileList): Promise<File> => {
@@ -84,9 +73,15 @@ export default function LetterboxdLanding() {
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
+    // Track file upload
+    trackEvent('files_uploaded', {
+      file_count: files.length,
+      file_types: Array.from(files).map(f => f.type || 'unknown'),
+      total_size: Array.from(files).reduce((sum, f) => sum + f.size, 0)
+    });
+
     setIsUploading(true);
     setError(null);
-    setProgress({ stage: 'starting', message: 'Preparing analysis...', progress: 0, total: 1 });
 
     let payloadZip: File;
     const single = files.length === 1 ? files[0] : null;
@@ -109,18 +104,53 @@ export default function LetterboxdLanding() {
 
       if (response.ok) {
         const result = await response.json();
+        console.log('[Landing] Analysis completed, saving stats to localStorage');
+        console.log('[Landing] Stats keys:', result.stats ? Object.keys(result.stats) : 'no stats');
         localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+        console.log('[Landing] Stats saved to localStorage');
+        
+        // Track analysis completion with consent-gated film stats
+        trackEvent('analysis_started', { 
+          has_stats: !!result.stats,
+          stats_keys: result.stats ? Object.keys(result.stats) : []
+        });
+        
+        // Navigate directly to results page since analysis is complete
+        console.log('[Landing] Navigating to results page');
+        router.push('/results');
+        
+
       } else {
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Analysis failed');
       }
     } catch (err) {
       console.error('Fetch error details:', err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(errorMessage);
       setIsUploading(false);
-      setProgress(null);
+      
+      // Track error
+      trackEvent('analysis_error', { 
+        error: errorMessage,
+        stage: 'upload'
+      });
     }
-  }, [zipFiles]);
+  }, [zipFiles, router]);
+
+  const handleConsentAccept = () => {
+    markConsentModalAsShown();
+    setShowConsentModal(false);
+    trackEvent('consent_given', { decision: 'accept' });
+    router.push('/results');
+  };
+
+  const handleConsentDecline = () => {
+    markConsentModalAsShown();
+    setShowConsentModal(false);
+    trackEvent('consent_given', { decision: 'decline' });
+    router.push('/results');
+  };
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -161,119 +191,18 @@ export default function LetterboxdLanding() {
     handleFiles(e.target.files);
   }, [handleFiles]);
 
-  const getStageIcon = (stage: string) => {
-    switch (stage) {
-      case 'extracting': return '📦';
-      case 'loading': return '📁';
-      case 'processing': return '🎬';
-      case 'tmdb_matching': return '🔍';
-      case 'tmdb_metadata': return '📊';
-      case 'analyzing': return '🎯';
-      case 'complete': return '✅';
-      case 'error': return '❌';
-      default: return '⏳';
-    }
-  };
 
-  const getProgressPercentage = () => {
-    if (!progress || progress.total === 0) return 0;
-    return Math.min((progress.progress / progress.total) * 100, 100);
-  };
 
-  if (isUploading && progress) {
+  if (isUploading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-2xl text-center">
-          {/* Header */}
           <h1 className="text-4xl font-bold mb-4">Analyzing Your Films</h1>
           <p className="text-xl text-gray-400 mb-8">Creating your comprehensive movie wrapped...</p>
           
-          {/* Progress Circle */}
-          <div className="relative w-32 h-32 mx-auto mb-8">
-            <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 100 100">
-              {/* Background circle */}
-              <circle
-                cx="50"
-                cy="50"
-                r="40"
-                stroke="rgb(55, 65, 81)"
-                strokeWidth="8"
-                fill="none"
-              />
-              {/* Progress circle */}
-              <circle
-                cx="50"
-                cy="50"
-                r="40"
-                stroke="rgb(249, 115, 22)"
-                strokeWidth="8"
-                fill="none"
-                strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 40}`}
-                strokeDashoffset={`${2 * Math.PI * 40 * (1 - getProgressPercentage() / 100)}`}
-                className="transition-all duration-500 ease-out"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl">{getStageIcon(progress.stage)}</span>
-            </div>
-          </div>
-
-          {/* Progress Details */}
-          <div className="bg-gray-800 rounded-xl p-6 mb-6">
-            <h3 className="text-xl font-semibold mb-2 text-orange-400">
-              {progress.stage.charAt(0).toUpperCase() + progress.stage.slice(1).replace('_', ' ')}
-            </h3>
-            <p className="text-gray-300 mb-4">{progress.message}</p>
-            
-            {/* Progress Bar */}
-            <div className="w-full bg-gray-700 rounded-full h-3 mb-2">
-              <div 
-                className="bg-gradient-to-r from-orange-400 to-pink-500 h-3 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${getProgressPercentage()}%` }}
-              />
-            </div>
-            <p className="text-sm text-gray-400">
-              {progress.progress} / {progress.total} 
-              {progress.total > 1 && ` (${Math.round(getProgressPercentage())}%)`}
-            </p>
-          </div>
-
-          {/* Stage Indicators */}
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-            {[
-              { key: 'extracting', label: 'Extract', icon: '📦' },
-              { key: 'loading', label: 'Load', icon: '📁' },
-              { key: 'processing', label: 'Process', icon: '🎬' },
-              { key: 'tmdb_matching', label: 'Match', icon: '🔍' },
-              { key: 'tmdb_metadata', label: 'Enrich', icon: '📊' },
-              { key: 'analyzing', label: 'Analyze', icon: '🎯' }
-            ].map((stage, index) => {
-              const isActive = progress.stage === stage.key;
-              const isComplete = ['extracting', 'loading', 'processing', 'tmdb_matching', 'tmdb_metadata', 'analyzing'].indexOf(progress.stage) > index;
-              
-              return (
-                <div 
-                  key={stage.key}
-                  className={`p-2 rounded-lg border transition-all ${
-                    isActive 
-                      ? 'bg-orange-500 border-orange-400 text-white' 
-                      : isComplete
-                      ? 'bg-green-600 border-green-500 text-white'
-                      : 'bg-gray-700 border-gray-600 text-gray-400'
-                  }`}
-                >
-                  <div className="text-lg mb-1">{stage.icon}</div>
-                  <div className="font-medium">{stage.label}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Fun Facts */}
-          <div className="mt-8 text-sm text-gray-400">
-            <p>💡 Did you know? We&apos;re fetching data from The Movie Database (TMDb) to enrich your film collection with comprehensive metadata!</p>
-          </div>
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-400 mx-auto mb-8"></div>
+          
+          <p className="text-gray-300">Please wait while we process your data...</p>
         </div>
       </div>
     );
@@ -287,16 +216,16 @@ export default function LetterboxdLanding() {
         <div className="absolute -bottom-24 -right-20 h-80 w-80 sm:h-[28rem] sm:w-[28rem] rounded-full bg-orange-500/15 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+      <div className="relative mx-auto max-w-[720px] px-4 py-8 sm:py-12">
         <div className="space-y-8">
           {/* Hero header */}
           <header className="text-center">
-            <h1 className="font-black tracking-tight leading-tight text-[clamp(28px,6vw,56px)]">
+            <h1 className="font-black tracking-tight leading-tight text-[clamp(28px,6vw,44px)]">
               <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span>
               <span> Wrapped</span>
             </h1>
-            <p className="mx-auto mt-3 max-w-2xl text-slate-300 text-base sm:text-lg leading-relaxed">
-              Upload your Letterboxd ZIP or drop the exported folder — we support Mac, Windows, iOS and Android.
+            <p className="mx-auto mt-1 text-slate-300 text-base leading-relaxed">
+              Upload your Letterboxd ZIP or drop the exported folder.
             </p>
           </header>
 
@@ -304,7 +233,7 @@ export default function LetterboxdLanding() {
           <section aria-label="Upload your Letterboxd data">
             {/* Desktop dropzone */}
             <div
-              className="hidden sm:flex rounded-3xl border-2 border-dashed border-slate-600/60 bg-slate-800/40 p-8 lg:p-10 min-h-[220px] sm:min-h-[260px] items-center justify-center text-center cursor-pointer transition-colors shadow-none hover:shadow-lg hover:border-orange-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 max-w-3xl mx-auto"
+              className="hidden sm:flex rounded-3xl border-2 border-dashed border-slate-600/60 bg-slate-800/40 p-6 md:p-8 min-h-[220px] sm:min-h-[260px] items-center justify-center text-center cursor-pointer transition-colors shadow-none hover:shadow-lg hover:border-orange-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 max-w-3xl mx-auto"
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               onClick={() => document.getElementById('file-input')?.click()}
@@ -329,28 +258,30 @@ export default function LetterboxdLanding() {
               </div>
             </div>
 
-            {/* Mobile upload CTA (no large dropzone) */}
+            {/* Mobile upload CTA */}
             <div className="sm:hidden">
-              <div className="mx-auto max-w-md bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 text-center">
-                <div className="mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
-                  <Upload className="w-6 h-6 text-slate-200" />
-                </div>
-                <div className="text-sm text-slate-300 mb-3">Upload your Letterboxd export (.zip or .csv)</div>
-                <button
-                  onClick={() => document.getElementById('file-input')?.click()}
-                  className="inline-flex items-center justify-center w-full min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
-                >
-                  Choose files
-                </button>
-                <div className="mt-2 text-[12px] text-slate-400">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</div>
-              </div>
+              <button
+                onClick={() => document.getElementById('file-input')?.click()}
+                className="w-full max-w-md mx-auto min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 flex items-center justify-center gap-3"
+              >
+                <Upload className="w-5 h-5" />
+                Export your folder
+              </button>
+              <input
+                id="file-input"
+                type="file"
+                multiple
+                accept=".zip,.csv,.CSV"
+                onChange={handleFileInput}
+                className="hidden"
+              />
             </div>
 
             {/* Optional folder picker for users whose export was auto-unzipped */}
             <div className="mt-3 hidden sm:flex justify-center">
               <button
                 onClick={() => document.getElementById('dir-input')?.click()}
-                className="min-h-[44px] px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50"
               >
                 Or choose exported folder
               </button>
@@ -418,39 +349,39 @@ export default function LetterboxdLanding() {
 
           {/* Features Preview */}
           <section>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 text-sm">
-              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
-                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
-                  <Film className="w-6 h-6 text-orange-400" />
-                </div>
-                <div className="font-semibold">Comprehensive Film Analysis</div>
-                <div className="text-slate-400 text-sm mt-1">Trends, genres, directors.</div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50">
+                <Film className="w-6 h-6 text-orange-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Film Analysis</div>
+                <div className="text-slate-400 text-xs mt-1">Trends & genres</div>
               </div>
-              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
-                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
-                  <Star className="w-6 h-6 text-yellow-400" />
-                </div>
-                <div className="font-semibold">Rating Insights</div>
-                <div className="text-slate-400 text-sm mt-1">Averages, distributions, favorites.</div>
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50">
+                <Star className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Rating Insights</div>
+                <div className="text-slate-400 text-xs mt-1">Averages & favorites</div>
               </div>
-              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
-                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-blue-400" />
-                </div>
-                <div className="font-semibold">Time Statistics</div>
-                <div className="text-slate-400 text-sm mt-1">Diary streaks and seasons.</div>
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50">
+                <Clock className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Time Stats</div>
+                <div className="text-slate-400 text-xs mt-1">Streaks & seasons</div>
               </div>
-              <div className="h-full rounded-2xl border border-slate-700/60 bg-slate-800/40 p-4 sm:p-5 text-center transition transform hover:-translate-y-[2px]">
-                <div className="mx-auto mb-2 h-10 w-10 rounded-xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center">
-                  <Globe className="w-6 h-6 text-green-400" />
-                </div>
-                <div className="font-semibold">Global Cinema</div>
-                <div className="text-slate-400 text-sm mt-1">Countries, languages, regions.</div>
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50">
+                <Globe className="w-6 h-6 text-green-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Global Cinema</div>
+                <div className="text-slate-400 text-xs mt-1">Countries & languages</div>
               </div>
             </div>
           </section>
         </div>
       </div>
+
+      {/* Pre-results Consent Modal */}
+      <PreResultsConsentModal
+        open={showConsentModal}
+        onAccept={handleConsentAccept}
+        onDecline={handleConsentDecline}
+        sessionId={sessionId}
+      />
     </div>
   );
 }
