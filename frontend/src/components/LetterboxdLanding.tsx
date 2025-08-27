@@ -6,10 +6,10 @@ import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucid
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import PreResultsConsentModal from './PreResultsConsentModal';
-import { getSessionId } from '@/lib/session';
-import { markConsentModalAsShown } from '@/lib/sessionUtils';
-import { trackEvent } from '@/lib/analytics';
-import { ensureSessionRow } from '@/lib/sessions';
+import { getSessionId } from '../lib/session';
+import { markConsentModalAsShown } from '../lib/sessionUtils';
+import { trackEvent } from '../lib/analytics';
+import { ensureSessionRow } from '../lib/sessions';
 
 
 

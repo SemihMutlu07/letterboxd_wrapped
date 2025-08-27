@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { saveConsentDecision as saveConsentToStorage } from '@/lib/sessionUtils';
-import { saveConsentDecision } from '@/lib/consent';
+import { saveConsentDecision as saveConsentToStorage } from '../lib/sessionUtils';
+import { saveConsentDecision } from '../lib/consent';
 
 interface PreResultsConsentModalProps {
   open: boolean;
