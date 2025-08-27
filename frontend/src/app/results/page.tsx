@@ -6,12 +6,12 @@ import { User, Heart } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import Image from 'next/image';
-import { setCachedUrl } from '../../lib/tmdbCache';
-import FeedbackFab from '../../components/FeedbackFab';
-import { trackEvent, trackAnalyticsEvent, trackFilmStats } from '../../lib/analytics';
-import PreResultsConsentModal from '../../components/PreResultsConsentModal';
-import { getSessionId } from '../../lib/session';
-import { hasConsentModalBeenShown, markConsentModalAsShown, saveConsentDecision as saveConsentToStorage } from '../../lib/sessionUtils';
+import { setCachedUrl } from '@/lib/tmdbCache';
+import FeedbackFab from '@/components/FeedbackFab';
+import { trackEvent, trackAnalyticsEvent, trackFilmStats } from '@/lib/analytics';
+import PreResultsConsentModal from '@/components/PreResultsConsentModal';
+import { getSessionId } from '@/lib/session';
+import { hasConsentModalBeenShown, markConsentModalAsShown, saveConsentDecision as saveConsentToStorage } from '@/lib/sessionUtils';
 
 // Dynamic imports for Recharts with SSR disabled
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
