@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import PreResultsConsentModal from './PreResultsConsentModal';
 import { ensureSessionRow } from '@/lib/sessions';
+import { analyzeFiles, testBackend } from '@/lib/api';
 
 
 
@@ -54,18 +55,14 @@ export default function LetterboxdLanding() {
 
   // Test backend connectivity on component mount
   useEffect(() => {
-    const testBackend = async () => {
+    const testBackendConnectivity = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${apiUrl}/`); // FastAPI root endpoint
-        if (!response.ok) {
-          throw new Error(`Backend test failed with status: ${response.status}`);
-        }
+        await testBackend();
       } catch (err) {
         console.error('Backend connectivity test failed:', err);
       }
     };
-    testBackend();
+    testBackendConnectivity();
   }, []);
 
   // Poll progress endpoint during upload
@@ -109,34 +106,21 @@ export default function LetterboxdLanding() {
     formData.append('files', payloadZip);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/analyze`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('[Landing] Analysis completed, saving stats to localStorage');
-        console.log('[Landing] Stats keys:', result.stats ? Object.keys(result.stats) : 'no stats');
-        localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
-        console.log('[Landing] Stats saved to localStorage');
-        
-        // Track analysis completion with consent-gated film stats
-        // trackEvent('analysis_started', { // TODO: Re-enable when analytics is ready
-        //   has_stats: !!result.stats,
-        //   stats_keys: result.stats ? Object.keys(result.stats) : []
-        // });
-        
-        // Navigate directly to results page since analysis is complete
-        console.log('[Landing] Navigating to results page');
-        router.push('/results');
-        
-
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Analysis failed');
-      }
+      const result = await analyzeFiles(formData);
+      console.log('[Landing] Analysis completed, saving stats to localStorage');
+      console.log('[Landing] Stats keys:', result.stats ? Object.keys(result.stats) : 'no stats');
+      localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+      console.log('[Landing] Stats saved to localStorage');
+      
+      // Track analysis completion with consent-gated film stats
+      // trackEvent('analysis_started', { // TODO: Re-enable when analytics is ready
+      //   has_stats: !!result.stats,
+      //   stats_keys: result.stats ? Object.keys(result.stats) : []
+      // });
+      
+      // Navigate directly to results page since analysis is complete
+      console.log('[Landing] Navigating to results page');
+      router.push('/results');
     } catch (err) {
       console.error('Fetch error details:', err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';

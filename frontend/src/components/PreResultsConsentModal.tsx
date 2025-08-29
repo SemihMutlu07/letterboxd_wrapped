@@ -26,7 +26,7 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
   }, [open]);
 
   const handleDecision = async (decision: 'accept' | 'decline') => {
-    const msToDecision = Math.round(performance.now() - startTime);
+    // const msToDecision = Math.round(performance.now() - startTime);
     setIsSubmitting(true);
 
     try {

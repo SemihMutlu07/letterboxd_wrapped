@@ -1,12 +1,20 @@
 [build]
   base = "frontend"
   command = "npm run build"
-  publish = "out"
+  publish = "frontend/out"
+  functions = "frontend/netlify/functions"
 
 [build.environment]
   NODE_VERSION = "18"
 
+# API routes -> Netlify Functions (must come BEFORE SPA redirect)
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback
 [[redirects]]
   from = "/*"
-  to = "/index.html"
+  to   = "/index.html"
   status = 200
