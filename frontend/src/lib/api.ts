@@ -161,3 +161,37 @@ export async function testBackend() {
     throw enhancedError;
   }
 }
+
+// Parse Letterboxd username from filename
+export async function parseLetterboxdUsername(filename: string) {
+  try {
+    const r = await fetch('/api/parse-username', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ filename }),
+    });
+    
+    if (!r.ok) {
+      throw new Error(`parse-username ${r.status}`);
+    }
+    
+    const data = await r.json();
+    
+    // Validate response structure
+    if (!data || typeof data !== 'object' || !('username' in data)) {
+      throw new Error('Invalid response from username parsing service');
+    }
+    
+    return data;
+  } catch (error) {
+    const enhancedError = handleApiError(error, 'username parsing');
+    
+    // Return a structured error response
+    return {
+      username: null,
+      error: enhancedError.message
+    };
+  }
+}

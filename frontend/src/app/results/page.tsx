@@ -104,6 +104,9 @@ export default function ResultsPage() {
     if (storedUsername) {
       setUsername(storedUsername);
     }
+    
+    // Log the stored username for debugging
+    console.log('[LB] session username:', sessionStorage.getItem('lb_username'));
   }, []);
 
   useEffect(() => { const id = getSessionId(); setSessionId(id); const t = setTimeout(() => { if (!hasModal()) setShowConsentModal(true); }, 500); return () => clearTimeout(t); }, []);
