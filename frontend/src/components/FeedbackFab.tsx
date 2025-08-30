@@ -165,18 +165,29 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
         return acc;
       }, {} as Record<string, unknown>);
 
-      const supabase = getSupabase();
-      const { error, data } = await supabase.from('feedback').insert(filteredPayload).select();
+          const supabase = getSupabase();
+      const { error } = await supabase.from('feedback').insert(filteredPayload);
 
-      if (error) {
-        // Bilinen supabase hata kodları için kullanıcı dostu mesaj
+    if (error) {
+        // Enhanced error handling for Supabase errors
         const map: Record<string, string> = {
           '23505': 'You have already submitted feedback with this session. Please wait before submitting again.',
           '23502': 'Missing required information. Please fill in all required fields.',
           '23514': 'Invalid data provided. Please check your input and try again.',
           '42P01': 'Database configuration error. Please contact support.',
-          '42501': 'Permission denied. Please contact support.'
+          '42501': 'Permission denied. Please contact support.',
+          '401': 'Authentication failed. Please check your Supabase configuration.',
+          '403': 'Access denied. Please check your database permissions.'
         };
+        
+        // Handle 401/403 specifically
+        if (error.code === '401' || error.code === '403') {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Supabase auth error:', error);
+          }
+          throw new Error('Database authentication failed. Please check your configuration.');
+        }
+        
         throw new Error(map[error.code as string] || `Database error: ${error.message}`);
       }
 
@@ -253,8 +264,8 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                     <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
-                  </button>
-                </div>
+              </button>
+            </div>
               </div>
 
               {/* Content */}
@@ -262,7 +273,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                 {/* Category */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-3">Category</label>
-                  <div className="flex gap-2">
+              <div className="flex gap-2">
                     {([
                       { key: 'bug', label: '🐞 Bug', color: 'from-red-500 to-red-600' },
                       { key: 'idea', label: '💡 Idea', color: 'from-blue-500 to-blue-600' },
@@ -278,9 +289,9 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                         }`}
                       >
                         {label}
-                      </button>
-                    ))}
-                  </div>
+                  </button>
+                ))}
+              </div>
                 </div>
 
                 {/* Message */}
@@ -288,8 +299,8 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                   <label htmlFor="feedback-message" className="block text-sm font-medium text-slate-300 mb-2">
                     Message
                   </label>
-                  <div className="relative">
-                    <textarea
+                             <div className="relative">
+                 <textarea
                       ref={textareaRef}
                       id="feedback-message"
                       value={message}
@@ -318,14 +329,14 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                         {s}
                       </button>
                     ))}
-                  </div>
-                </div>
+                 </div>
+               </div>
 
                 {/* Options */}
                 <div className="space-y-5">
                   <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
+                 <input 
+                   type="checkbox" 
                       checked={includeDiagnostics}
                       onChange={(e) => setIncludeDiagnostics(e.target.checked)}
                       className="mt-1 w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 rounded focus:ring-orange-400/60"
@@ -355,10 +366,10 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                           <span className="text-sm text-slate-300">Send anonymously</span>
                           <p className="text-xs text-slate-500">No name, no contact.</p>
                         </div>
-                      </label>
+               </label>
 
                       <label className="flex items-center gap-3 cursor-pointer">
-                        <input
+                 <input 
                           type="radio"
                           name="privacy"
                           value="identified"
@@ -393,7 +404,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                               <div>
                                 <label htmlFor="contact" className="block text-sm font-medium text-slate-300 mb-2">
                                   Contact (Optional)
-                                </label>
+               </label>
                                 <input
                                   id="contact"
                                   type="text"
@@ -403,8 +414,8 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                                   className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
                                 />
                               </div>
-                            </div>
-                          )}
+                 </div>
+               )}
                         </div>
                       </label>
                     </div>
@@ -420,38 +431,38 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
               {/* Footer */}
               <div className="px-6 py-4 border-t border-slate-700/60 bg-slate-800/50">
                 <div className="flex gap-3">
-                  <button
+                 <button 
                     onClick={handleClose}
-                    disabled={isSubmitting}
+                   disabled={isSubmitting}
                     className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-                  >
+                 >
                     Cancel
-                  </button>
-                  <button
-                    onClick={handleSubmit}
+                 </button>
+                 <button 
+                   onClick={handleSubmit} 
                     disabled={isEmpty || isOverLimit || isSubmitting}
                     className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <>
+                 >
+                   {isSubmitting ? (
+                     <>
                         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         Gönderiliyor…
-                      </>
-                    ) : (
+                     </>
+                   ) : (
                       'Send Feedback'
-                    )}
-                  </button>
-                </div>
-              </div>
+                   )}
+                 </button>
+               </div>
+            </div>
             </motion.div>
-          </div>
-        )}
+                 </div>
+       )}
       </AnimatePresence>
 
-      {/* Success Toast */}
+       {/* Success Toast */}
       <AnimatePresence>
         {showSuccess && (
           <motion.div
@@ -460,15 +471,15 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 100 }}
           >
-            <div className="flex items-center gap-2">
+           <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span>Feedback sent! Thank you.</span>
-            </div>
+           </div>
           </motion.div>
-        )}
+       )}
       </AnimatePresence>
-    </>
-  );
-}
+     </>
+   );
+ }
