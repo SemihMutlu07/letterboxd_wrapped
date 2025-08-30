@@ -188,9 +188,9 @@ export default function LetterboxdLanding() {
           setIsUploading(false);
           return;
         }
-      } catch (error) {
+      } catch {
         if (process.env.NODE_ENV === 'development') {
-          console.error('ZIP processing error:', error);
+          console.error('ZIP processing error');
         }
         setError('Failed to process ZIP file. The file may be corrupted or password-protected.');
         setIsUploading(false);
@@ -199,7 +199,7 @@ export default function LetterboxdLanding() {
     } else {
       try {
         payloadZip = await zipFiles(files);
-      } catch (error) {
+      } catch {
         setError('Failed to prepare files for upload. Please try again.');
         setIsUploading(false);
         return;

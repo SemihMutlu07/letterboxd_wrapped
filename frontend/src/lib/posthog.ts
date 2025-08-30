@@ -20,7 +20,7 @@ export function initPostHog() {
       api_host,
       capture_pageview: false,   // we'll send pageviews manually after consent
       autocapture: false,        // keep noise down
-      loaded: (posthog) => {
+      loaded: () => {
         if (process.env.NODE_ENV === 'development') {
           console.log('PostHog initialized successfully');
         }
@@ -38,7 +38,7 @@ export function initPostHog() {
   }
 }
 
-export function captureEvent(event: string, properties?: Record<string, any>) {
+export function captureEvent(event: string, properties?: Record<string, unknown>) {
   try {
     // Check if user has given consent
     if (typeof window === 'undefined') return;
