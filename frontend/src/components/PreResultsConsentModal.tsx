@@ -35,12 +35,33 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
         if (!alive) return;
         
         setVariant((flagVariant as 'control' | 'friendly') ?? 'control');
-        captureEvent('consent_modal_view', { variant: flagVariant });
-             } catch {
-         if (!alive) return;
-         setVariant('control');
-         captureEvent('consent_modal_view', { variant: 'control' });
-       }
+        
+        // Capture view event with error handling
+        try {
+          captureEvent('consent_modal_view', { variant: flagVariant });
+        } catch (analyticsError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to capture consent modal view:', analyticsError);
+          }
+        }
+      } catch (error) {
+        if (!alive) return;
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Feature flag loading failed, using control variant:', error);
+        }
+        
+        setVariant('control');
+        
+        // Still try to capture the view event
+        try {
+          captureEvent('consent_modal_view', { variant: 'control' });
+        } catch (analyticsError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to capture consent modal view (fallback):', analyticsError);
+          }
+        }
+      }
     };
 
     loadVariant();
@@ -61,22 +82,43 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
       //   { from: 'results-gate' }
       // );
     } catch (err) {
-      console.error('Error submitting consent:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error submitting consent:', err);
+      }
       // Don't block navigation on error, just log and continue
     }
 
-    // Handle PostHog consent
+    // Handle PostHog consent with error handling
     if (decision === 'accept') {
-      initPostHog();
-      captureEvent('consent_decision', {
-        decision,
-        ab_variant: variant,
-        ms_to_decision: msToDecision,
-      });
+      try {
+        initPostHog();
+      } catch (initError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('PostHog initialization failed:', initError);
+        }
+      }
+      
+      try {
+        captureEvent('consent_decision', {
+          decision,
+          ab_variant: variant,
+          ms_to_decision: msToDecision,
+        });
+      } catch (analyticsError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Failed to capture consent decision:', analyticsError);
+        }
+      }
     }
 
     // Save consent decision to sessionStorage
-    sessionStorage.setItem('consent_decision', decision);
+    try {
+      sessionStorage.setItem('consent_decision', decision);
+    } catch (storageError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to save consent to sessionStorage:', storageError);
+      }
+    }
 
     // Call the appropriate callback
     if (decision === 'accept') {
