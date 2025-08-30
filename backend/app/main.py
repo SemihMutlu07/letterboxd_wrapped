@@ -1209,17 +1209,36 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
         else:
             raise HTTPException(status_code=400, detail="Invalid input. Please upload a single ZIP file or multiple CSV files.")
 
-        # Discover CSV files in the directory
+        # Discover CSV files in the directory (enhanced for Mac exports)
         required_files = [
-            'watched.csv', 'diary.csv', 'ratings.csv', 'reviews.csv',
+            'diary.csv', 'ratings.csv', 'watched.csv', 'reviews.csv',
             'watchlist.csv', 'films.csv', 'comments.csv', 'profile.csv'
         ]
-        for item in os.listdir(request_dir):
-            item_lower = item.lower()
-            for req_file in required_files:
-                if req_file.split('.')[0] in item_lower:
-                     csv_files[req_file] = os.path.join(request_dir, item)
-                     break
+        
+        # Recursively search for CSV files (handles nested folders from Mac exports)
+        def find_csv_files(directory):
+            csv_found = {}
+            for root, dirs, files in os.walk(directory):
+                for file in files:
+                    if file.lower().endswith('.csv'):
+                        file_lower = file.lower()
+                        for req_file in required_files:
+                            if req_file.split('.')[0] in file_lower:
+                                csv_found[req_file] = os.path.join(root, file)
+                                break
+            return csv_found
+        
+        csv_files = find_csv_files(request_dir)
+        
+        # If no CSV files found in subdirectories, check root directory
+        if not csv_files:
+            for item in os.listdir(request_dir):
+                if os.path.isfile(os.path.join(request_dir, item)):
+                    item_lower = item.lower()
+                    for req_file in required_files:
+                        if req_file.split('.')[0] in item_lower:
+                             csv_files[req_file] = os.path.join(request_dir, item)
+                             break
         
         if not csv_files:
             raise HTTPException(status_code=400, detail="No valid Letterboxd CSV files found in the upload.")
