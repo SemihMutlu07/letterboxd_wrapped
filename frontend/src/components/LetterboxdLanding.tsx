@@ -103,45 +103,66 @@ export default function LetterboxdLanding() {
       }
     }
 
-    // Track file upload
-    // trackEvent('files_uploaded', { // TODO: Re-enable when analytics is ready
-    //   file_count: files.length,
-    //   file_types: Array.from(files).map(f => f.type || 'unknown'),
-    //   total_size: Array.from(files).reduce((sum, f) => sum + f.size, 0)
-    // });
-
     setIsUploading(true);
     setError(null);
 
     let payloadZip: File;
     const single = files.length === 1 ? files[0] : null;
     const isZip = single && /\.zip$/i.test(single.name);
+    
     if (isZip && single) {
-      // Normalize macOS exports: pull CSV files to root so backend finds them
+      // Enhanced Mac ZIP handling: extract CSVs from nested folders
       try {
         const inZip = await JSZip.loadAsync(single);
         const outZip = new JSZip();
         let foundCsv = false;
+        const csvFiles: Array<{name: string, blob: Blob}> = [];
+        
+        // First pass: collect all CSV files
         const tasks: Promise<void>[] = [];
-        inZip.forEach((p, file) => {
-          if (/\.csv$/i.test(p)) {
+        inZip.forEach((path, file) => {
+          if (/\.csv$/i.test(path)) {
             foundCsv = true;
-            const name = p.split('/').pop() || p;
             tasks.push(
               file.async('blob').then((blob) => {
-                outZip.file(name, blob);
+                // Extract filename from path (handle nested folders)
+                const name = path.split('/').pop() || path;
+                csvFiles.push({ name, blob });
               })
             );
           }
         });
+        
         if (foundCsv) {
           await Promise.all(tasks);
+          
+          // Sort CSV files by priority: diary > ratings > watched > others
+          const priorityOrder = ['diary', 'ratings', 'watched', 'reviews', 'watchlist'];
+          csvFiles.sort((a, b) => {
+            const aName = a.name.toLowerCase();
+            const bName = b.name.toLowerCase();
+            const aPriority = priorityOrder.findIndex(p => aName.includes(p));
+            const bPriority = priorityOrder.findIndex(p => bName.includes(p));
+            if (aPriority === -1 && bPriority === -1) return 0;
+            if (aPriority === -1) return 1;
+            if (bPriority === -1) return -1;
+            return aPriority - bPriority;
+          });
+          
+          // Add files to output ZIP
+          csvFiles.forEach(({ name, blob }) => {
+            outZip.file(name, blob);
+          });
+          
           const blob = await outZip.generateAsync({ type: 'blob' });
           payloadZip = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
         } else {
           payloadZip = single;
         }
-      } catch {
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('ZIP processing error:', error);
+        }
         payloadZip = single;
       }
     } else {
@@ -155,29 +176,24 @@ export default function LetterboxdLanding() {
       const result = await analyzeFiles(formData);
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
       
-      // Track analysis completion with consent-gated film stats
-      // trackEvent('analysis_started', { // TODO: Re-enable when analytics is ready
-      //   has_stats: !!result.stats,
-      //   stats_keys: result.stats ? Object.keys(result.stats) : []
-      // });
-      
       // Navigate to results page
       router.push('/results');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      // Helpful guidance for macOS users and CSV detection issues
+      
+      // Enhanced error messages for Mac users
       if (/No valid Letterboxd CSV files/i.test(errorMessage)) {
-        setError('Analysis failed: No valid Letterboxd CSV files were detected. On macOS, the ZIP may contain CSVs inside a folder. Try the "Or choose exported folder" option below, or re-upload the ZIP using Chrome/Edge/Firefox on desktop.');
+        setError(
+          'No valid Letterboxd CSV files found. This often happens on Mac when Safari auto-extracts the ZIP. ' +
+          'Try one of these solutions:\n\n' +
+          '1. Use the "Or choose exported folder" option below\n' +
+          '2. Use Chrome/Edge/Firefox instead of Safari\n' +
+          '3. Re-upload the original ZIP file'
+        );
       } else {
         setError(errorMessage);
       }
       setIsUploading(false);
-      
-      // Track error
-      // trackEvent('analysis_error', { // TODO: Re-enable when analytics is ready
-      //   error: errorMessage,
-      //   stage: 'upload'
-      // });
     }
   }, [zipFiles, router]);
 
@@ -301,7 +317,8 @@ export default function LetterboxdLanding() {
                 </div>
                 <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
                 <p className="mt-1 text-sm text-slate-400">.zip, exported folder, or multiple .csv files</p>
-                <p className="mt-1 text-xs text-slate-400">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
+                <p className="mt-1 text-xs text-slate-400">Supports: diary.csv, ratings.csv, watched.csv, reviews.csv</p>
+                <p className="mt-1 text-xs text-orange-400">💡 Mac users: If Safari auto-extracted your ZIP, use "Or choose exported folder" below</p>
                 {detectedUsername && (
                   <p className="mt-2 text-xs text-orange-400 font-medium">
                     Detected username: {detectedUsername}
@@ -392,6 +409,15 @@ export default function LetterboxdLanding() {
                         <li>Your data will be prepared and a <strong className="text-orange-400">.zip file</strong> will download.</li>
                         <li>Once downloaded, just drag and drop the file here!</li>
                       </ol>
+                      
+                      <div className="mt-4 p-3 rounded-lg bg-orange-900/30 border border-orange-700/50">
+                        <p className="text-sm font-medium text-orange-300 mb-2">📱 Mac Users:</p>
+                        <ul className="text-xs text-orange-200 space-y-1">
+                          <li>• Safari may auto-extract the ZIP into a folder</li>
+                          <li>• If that happens, use "Or choose exported folder" option above</li>
+                          <li>• Or use Chrome/Edge/Firefox for better ZIP handling</li>
+                        </ul>
+                      </div>
                     </div>
                   </motion.div>
                 )}
