@@ -6,6 +6,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  NEXT_PUBLIC_API_BASE = "https://wrapped-backend.onrender.com"
 
 # API routes -> Netlify Functions (must come BEFORE SPA redirect)
 [[redirects]]

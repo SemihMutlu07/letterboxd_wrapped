@@ -29,9 +29,15 @@ load_dotenv()
 
 CORS_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "https://movieswrapped.netlify.app",
+    "https://letterboxd-wrapped.netlify.app",
     "https://wrapped-backend.onrender.com"
 ]
+
+# Add all Netlify domains dynamically
+if os.getenv("ALLOW_ALL_NETLIFY", "true").lower() == "true":
+    CORS_ORIGINS.append("https://*.netlify.app")
 
 # --- Application Lifespan (for aiohttp session) ---
 @asynccontextmanager
@@ -1164,6 +1170,11 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     return stats
 
 # --- API Endpoints ---
+@app.get("/")
+async def root():
+    """Health check endpoint"""
+    return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend"}
+
 @app.get("/api/progress")
 async def get_progress():
     """Get current analysis progress"""
