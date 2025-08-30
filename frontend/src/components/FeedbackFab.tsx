@@ -134,7 +134,23 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
         if (process.env.NODE_ENV !== 'production') {
           console.error('Supabase error:', error);
         }
-        throw new Error(`Database error: ${error.message}`);
+        
+        // Handle specific Supabase errors
+        if (error.code === '23505') { // Unique constraint violation
+          throw new Error('You have already submitted feedback with this session. Please wait before submitting again.');
+        } else if (error.code === '23502') { // Not null violation
+          throw new Error('Missing required information. Please fill in all required fields.');
+        } else if (error.code === '23514') { // Check constraint violation
+          throw new Error('Invalid data provided. Please check your input and try again.');
+        } else if (error.code === '42P01') { // Table doesn't exist
+          throw new Error('Database configuration error. Please contact support.');
+        } else if (error.code === '42501') { // Insufficient privilege
+          throw new Error('Permission denied. Please contact support.');
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
+        } else {
+          throw new Error(`Database error: ${error.message}`);
+        }
       }
 
       if (process.env.NODE_ENV !== 'production') {
@@ -146,19 +162,33 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
       // Capture PostHog event if consent given
       const consentDecision = sessionStorage.getItem('consent_decision');
       if (consentDecision === 'accept') {
-        captureEvent('feedback_submitted', { 
-          category,
-          privacy_mode: privacyMode === 'anonymous' ? 'anonymous' : 'identified'
-        });
+        try {
+          captureEvent('feedback_submitted', { 
+            category,
+            privacy_mode: privacyMode === 'anonymous' ? 'anonymous' : 'identified'
+          });
+        } catch (analyticsError) {
+          // Don't fail feedback submission if analytics fails
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Analytics error:', analyticsError);
+          }
+        }
       }
 
       // Confetti animation
       if (!reduce) {
-        confetti({
-          particleCount: 30,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
+        try {
+          confetti({
+            particleCount: 30,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        } catch (confettiError) {
+          // Don't fail if confetti doesn't work
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Confetti error:', confettiError);
+          }
+        }
       }
 
       // Auto close after success
@@ -183,6 +213,8 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
       if (process.env.NODE_ENV !== 'production') {
         console.error('Detailed error:', errorMessage);
       }
+      
+      // Show user-friendly error message
       alert(`Feedback submission failed: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);

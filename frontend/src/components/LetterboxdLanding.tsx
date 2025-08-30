@@ -83,7 +83,34 @@ export default function LetterboxdLanding() {
   }, []);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      setError('No files selected. Please choose your Letterboxd export files.');
+      return;
+    }
+
+    // Validate file types and sizes
+    const maxFileSize = 50 * 1024 * 1024; // 50MB
+    const allowedTypes = ['.csv', '.zip', '.CSV', '.ZIP'];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Check file size
+      if (file.size > maxFileSize) {
+        setError(`File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 50MB.`);
+        return;
+      }
+      
+      // Check file type
+      const hasValidExtension = allowedTypes.some(ext => 
+        file.name.toLowerCase().endsWith(ext)
+      );
+      
+      if (!hasValidExtension) {
+        setError(`File "${file.name}" is not a supported format. Please upload .csv or .zip files only.`);
+        return;
+      }
+    }
 
     // Extract username from CSV files
     let detectedUsername: string | null = null;
@@ -157,16 +184,26 @@ export default function LetterboxdLanding() {
           const blob = await outZip.generateAsync({ type: 'blob' });
           payloadZip = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
         } else {
-          payloadZip = single;
+          setError('No CSV files found in the ZIP archive. Please ensure your Letterboxd export contains CSV files.');
+          setIsUploading(false);
+          return;
         }
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error('ZIP processing error:', error);
         }
-        payloadZip = single;
+        setError('Failed to process ZIP file. The file may be corrupted or password-protected.');
+        setIsUploading(false);
+        return;
       }
     } else {
-      payloadZip = await zipFiles(files);
+      try {
+        payloadZip = await zipFiles(files);
+      } catch (error) {
+        setError('Failed to prepare files for upload. Please try again.');
+        setIsUploading(false);
+        return;
+      }
     }
 
     const formData = new FormData();
@@ -190,8 +227,20 @@ export default function LetterboxdLanding() {
           '2. Use Chrome/Edge/Firefox instead of Safari\n' +
           '3. Re-upload the original ZIP file'
         );
+      } else if (/Network error/i.test(errorMessage)) {
+        setError(
+          'Network connection error. Please check your internet connection and try again.'
+        );
+      } else if (/timeout/i.test(errorMessage)) {
+        setError(
+          'Request timed out. The server may be busy. Please try again in a few moments.'
+        );
+      } else if (/File too large/i.test(errorMessage)) {
+        setError(
+          'The file is too large to process. Please try with a smaller export or contact support.'
+        );
       } else {
-        setError(errorMessage);
+        setError(`Analysis failed: ${errorMessage}`);
       }
       setIsUploading(false);
     }
