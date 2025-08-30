@@ -7,8 +7,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import PreResultsConsentModal from './PreResultsConsentModal';
 import { ensureSessionRow } from '@/lib/sessions';
-import { analyzeFiles, testBackend } from '@/lib/api';
-import { parseLetterboxdUsername } from '@/lib/filename';
+import { analyzeFiles, testBackend, parseLetterboxdUsername } from '@/lib/api';
 
 
 
@@ -112,13 +111,18 @@ export default function LetterboxdLanding() {
       }
     }
 
-    // Extract username from CSV files
+    // Extract username from CSV files using backend parsing
     let detectedUsername: string | null = null;
     for (let i = 0; i < files.length; i++) {
-      const username = parseLetterboxdUsername(files[i].name);
-      if (username) {
-        detectedUsername = username;
-        break;
+      try {
+        const result = await parseLetterboxdUsername(files[i].name);
+        if (result.username) {
+          detectedUsername = result.username;
+          console.log('[LB] Parsed from backend:', result.username);
+          break;
+        }
+      } catch (error) {
+        console.warn('[LB] Failed to parse username from:', files[i].name, error);
       }
     }
     
