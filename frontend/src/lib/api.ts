@@ -1,5 +1,5 @@
 // API base configuration
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000';
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'https://wrapped-backend.onrender.com';
 
 // Build absolute URLs with query parameters
 export function buildUrl(path: string, params: Record<string, string> = {}) {
