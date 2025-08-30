@@ -318,7 +318,7 @@ export default function LetterboxdLanding() {
                 <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
                 <p className="mt-1 text-sm text-slate-400">.zip, exported folder, or multiple .csv files</p>
                 <p className="mt-1 text-xs text-slate-400">Supports: diary.csv, ratings.csv, watched.csv, reviews.csv</p>
-                <p className="mt-1 text-xs text-orange-400">💡 Mac users: If Safari auto-extracted your ZIP, use "Or choose exported folder" below</p>
+                <p className="mt-1 text-xs text-orange-400">💡 Mac users: If Safari auto-extracted your ZIP, use &quot;Or choose exported folder&quot; below</p>
                 {detectedUsername && (
                   <p className="mt-2 text-xs text-orange-400 font-medium">
                     Detected username: {detectedUsername}
@@ -414,7 +414,7 @@ export default function LetterboxdLanding() {
                         <p className="text-sm font-medium text-orange-300 mb-2">📱 Mac Users:</p>
                         <ul className="text-xs text-orange-200 space-y-1">
                           <li>• Safari may auto-extract the ZIP into a folder</li>
-                          <li>• If that happens, use "Or choose exported folder" option above</li>
+                          <li>• If that happens, use &quot;Or choose exported folder&quot; option above</li>
                           <li>• Or use Chrome/Edge/Firefox for better ZIP handling</li>
                         </ul>
                       </div>
