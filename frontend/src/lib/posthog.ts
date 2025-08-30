@@ -1,8 +1,10 @@
 'use client';
 import posthog from 'posthog-js';
 
+let isInitialized = false;
+
 export function initPostHog() {
-  if (typeof window === 'undefined' || posthog.__loaded) return;
+  if (typeof window === 'undefined' || posthog.__loaded || isInitialized) return;
 
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (!key) {
@@ -16,6 +18,17 @@ export function initPostHog() {
     // Use our first-party proxy path
     const api_host = '/ingest';
 
+    // Check for existing distinct ID in localStorage
+    const existingDistinctId = typeof window !== 'undefined' ? localStorage.getItem('ph_distinct_id') : null;
+    
+    const bootstrapConfig: { isIdentifiedID: boolean; distinctID?: string } = {
+      isIdentifiedID: false
+    };
+    
+    if (existingDistinctId) {
+      bootstrapConfig.distinctID = existingDistinctId;
+    }
+
     posthog.init(key, {
       api_host,
       capture_pageview: false,   // we'll send pageviews manually after consent
@@ -25,11 +38,10 @@ export function initPostHog() {
           console.log('PostHog initialized successfully');
         }
       },
-      bootstrap: {
-        distinctID: null, // Let PostHog generate this
-        isIdentifiedID: false
-      }
+      bootstrap: bootstrapConfig
     });
+    
+    isInitialized = true;
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('Failed to initialize PostHog:', error);
