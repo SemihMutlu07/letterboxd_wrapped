@@ -136,28 +136,37 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
     setIsSubmitting(true);
 
     try {
-      // Payload – display_name zorunlu değil; identified seçiliyse lbUsername kullanıyoruz, yoksa null
-      const basePayload: any = {
+      // Build payload with only allowed fields
+      const payload: Record<string, unknown> = {
         session_id: sessionId,
         message: message.trim(),
         category, // 'bug' | 'idea' | 'general'
+        user_agent: navigator.userAgent,
+        path: window.location.pathname,
       };
 
+      // Add identified user fields if privacy mode is 'identified'
       if (privacyMode === 'identified') {
-        basePayload.display_name = lbUsername || null;
-        basePayload.contact = contact || null;
-        basePayload.source_username = lbUsername || null;
+        payload.display_name = lbUsername || null;
+        payload.contact = contact || null;
+        payload.source_username = lbUsername || null;
       }
 
-      if (includeDiagnostics) {
-        basePayload.user_agent = navigator.userAgent;
-        basePayload.path = window.location.pathname;
-        basePayload.timestamp = new Date().toISOString();
-        basePayload.viewport = `${window.innerWidth}x${window.innerHeight}`;
-      }
+      // Whitelist filter - only allow known fields
+      const allowedFields = [
+        'session_id', 'message', 'category', 'user_agent', 'path',
+        'display_name', 'contact', 'source_username', 'identity'
+      ];
+      
+      const filteredPayload = Object.keys(payload).reduce((acc, key) => {
+        if (allowedFields.includes(key)) {
+          acc[key] = payload[key];
+        }
+        return acc;
+      }, {} as Record<string, unknown>);
 
       const supabase = getSupabase();
-      const { error, data } = await supabase.from('feedback').insert(basePayload).select();
+      const { error, data } = await supabase.from('feedback').insert(filteredPayload).select();
 
       if (error) {
         // Bilinen supabase hata kodları için kullanıcı dostu mesaj
