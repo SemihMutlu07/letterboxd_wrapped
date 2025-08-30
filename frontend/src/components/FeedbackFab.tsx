@@ -1,17 +1,19 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import { getSupabase } from '@/lib/supabaseClient';
 import { initPostHog, captureEvent } from '@/lib/posthog';
-import confetti from 'canvas-confetti';
+
+type Category = 'bug' | 'idea' | 'general';
+type Privacy = 'anonymous' | 'identified';
 
 interface FeedbackFabProps {
-  sessionId: string;
+  sessionId: string; // TEXT kolonu ile uyumlu
 }
 
-const QUICK_SUGGESTIONS = {
+const QUICK_SUGGESTIONS: Record<Category, string[]> = {
   bug: [
     "The date analysis seems incorrect",
     "Actor images aren't loading properly",
@@ -32,19 +34,29 @@ const QUICK_SUGGESTIONS = {
   ]
 };
 
+function safeGetSessionStorage(key: string) {
+  try {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
   const reduce = useReducedMotion();
+
+  // UI state
   const [isOpen, setIsOpen] = useState(false);
-  const [category, setCategory] = useState<'bug' | 'idea' | 'general'>('general');
+  const [category, setCategory] = useState<Category>('general');
   const [message, setMessage] = useState('');
-  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
-  const [privacyMode, setPrivacyMode] = useState<'anonymous' | 'identified'>('anonymous');
-  const [displayName, setDisplayName] = useState('');
+  const [privacyMode, setPrivacyMode] = useState<Privacy>('anonymous');
   const [contact, setContact] = useState('');
 
+  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  
+
   const modalRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -52,30 +64,36 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
   const isOverLimit = message.length > MAX_LENGTH;
   const isEmpty = message.trim().length === 0;
 
-  // Prefill display name with parsed Letterboxd username if available
-  useEffect(() => {
-    if (privacyMode === 'identified' && !displayName) {
-      const lbUsername = sessionStorage.getItem('lb_username');
-      if (lbUsername) {
-        setDisplayName(lbUsername);
-      }
-    }
-  }, [privacyMode, displayName]);
+  // Derived username (Letterboxd) – tek kaynaktan, otomatik
+  const lbUsername = safeGetSessionStorage('lb_username') || '';
 
+  // Body scroll lock + autofocus
   useEffect(() => {
-    if (isOpen) {
-      textareaRef.current?.focus();
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
+    if (!isOpen) return;
+    textareaRef.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
-  // Handle Enter key in textarea
+  // Kısayollar
+  useEffect(() => {
+    if (!isOpen) return;
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && handleClose();
+    const onCmdEnter = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
+    document.addEventListener('keydown', onEsc);
+    document.addEventListener('keydown', onCmdEnter);
+    return () => {
+      document.removeEventListener('keydown', onEsc);
+      document.removeEventListener('keydown', onCmdEnter);
+    };
+  }, [isOpen, isEmpty, isOverLimit, isSubmitting, message, category, privacyMode, contact]);
+
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -86,8 +104,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
   const handleOpen = () => {
     setIsOpen(true);
     initPostHog();
-    const consentDecision = sessionStorage.getItem('consent_decision');
-    if (consentDecision === 'accept') {
+    if (safeGetSessionStorage('consent_decision') === 'accept') {
       captureEvent('feedback_opened');
     }
   };
@@ -99,167 +116,90 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
     setCategory('general');
     setIncludeDiagnostics(true);
     setPrivacyMode('anonymous');
-    setDisplayName('');
     setContact('');
     setIsSubmitting(false);
     setShowSuccess(false);
   }, [isSubmitting]);
 
-  const handleSubmit = useCallback(async () => {
-    if (isEmpty || isOverLimit || isSubmitting) return;
-
-    setIsSubmitting(true);
-
-    try {
-      const payload = {
-        session_id: sessionId,
-        message: message.trim(),
-        category, // 'bug' | 'idea' | 'general'
-        user_agent: navigator.userAgent,
-        path: window.location.pathname,
-        ...(privacyMode === 'identified' && {
-          display_name: displayName || null,
-          contact: contact || null,
-          source_username: sessionStorage.getItem('lb_username') || null
-        })
-      };
-
-      const supabase = getSupabase();
-      const { error, data } = await supabase
-        .from('feedback')
-        .insert(payload)
-        .select();
-
-      if (error) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('Supabase error:', error);
-        }
-        
-        // Handle specific Supabase errors
-        if (error.code === '23505') { // Unique constraint violation
-          throw new Error('You have already submitted feedback with this session. Please wait before submitting again.');
-        } else if (error.code === '23502') { // Not null violation
-          throw new Error('Missing required information. Please fill in all required fields.');
-        } else if (error.code === '23514') { // Check constraint violation
-          throw new Error('Invalid data provided. Please check your input and try again.');
-        } else if (error.code === '42P01') { // Table doesn't exist
-          throw new Error('Database configuration error. Please contact support.');
-        } else if (error.code === '42501') { // Insufficient privilege
-          throw new Error('Permission denied. Please contact support.');
-        } else if (error.message.includes('network') || error.message.includes('fetch')) {
-          throw new Error('Network error. Please check your internet connection and try again.');
-        } else {
-          throw new Error(`Database error: ${error.message}`);
-        }
-      }
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('Feedback submitted successfully:', data);
-      }
-
-      setShowSuccess(true);
-      
-      // Capture PostHog event if consent given
-      const consentDecision = sessionStorage.getItem('consent_decision');
-      if (consentDecision === 'accept') {
-        try {
-          captureEvent('feedback_submitted', { 
-            category,
-            privacy_mode: privacyMode === 'anonymous' ? 'anonymous' : 'identified'
-          });
-        } catch (analyticsError) {
-          // Don't fail feedback submission if analytics fails
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('Analytics error:', analyticsError);
-          }
-        }
-      }
-
-      // Confetti animation
-      if (!reduce) {
-        try {
-          confetti({
-            particleCount: 30,
-            spread: 70,
-            origin: { y: 0.6 }
-          });
-        } catch (confettiError) {
-          // Don't fail if confetti doesn't work
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('Confetti error:', confettiError);
-          }
-        }
-      }
-
-      // Auto close after success
-      setTimeout(() => {
-        handleClose();
-      }, 1200);
-
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Error submitting feedback:', error);
-      }
-      
-      // Show more specific error information
-      let errorMessage = 'Failed to send feedback. Please try again.';
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      } else if (typeof error === 'object' && error !== null) {
-        errorMessage = JSON.stringify(error);
-      }
-      
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Detailed error:', errorMessage);
-      }
-      
-      // Show user-friendly error message
-      alert(`Feedback submission failed: ${errorMessage}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [isEmpty, isOverLimit, isSubmitting, sessionId, message, category, privacyMode, displayName, contact, reduce, handleClose]);
-
   const addSuggestion = (suggestion: string) => {
-    const currentText = message;
-    const separator = currentText && !currentText.endsWith(' ') ? ' ' : '';
-    setMessage(currentText + separator + suggestion);
+    const sep = message && !message.endsWith(' ') ? ' ' : '';
+    const next = (message + sep + suggestion).slice(0, MAX_LENGTH);
+    setMessage(next);
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
+    if (e.target === e.currentTarget) handleClose();
   };
 
-  // Keyboard event handlers
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        handleClose();
+  const handleSubmit = useCallback(async () => {
+    if (isEmpty || isOverLimit || isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      // Payload – display_name zorunlu değil; identified seçiliyse lbUsername kullanıyoruz, yoksa null
+      const basePayload: any = {
+        session_id: sessionId,
+        message: message.trim(),
+        category, // 'bug' | 'idea' | 'general'
+      };
+
+      if (privacyMode === 'identified') {
+        basePayload.display_name = lbUsername || null;
+        basePayload.contact = contact || null;
+        basePayload.source_username = lbUsername || null;
       }
-    };
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        handleSubmit();
+      if (includeDiagnostics) {
+        basePayload.user_agent = navigator.userAgent;
+        basePayload.path = window.location.pathname;
+        basePayload.timestamp = new Date().toISOString();
+        basePayload.viewport = `${window.innerWidth}x${window.innerHeight}`;
       }
-    };
 
-    document.addEventListener('keydown', handleEscape);
-    document.addEventListener('keydown', handleKeyDown);
+      const supabase = getSupabase();
+      const { error, data } = await supabase.from('feedback').insert(basePayload).select();
 
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, handleClose, handleSubmit]);
+      if (error) {
+        // Bilinen supabase hata kodları için kullanıcı dostu mesaj
+        const map: Record<string, string> = {
+          '23505': 'You have already submitted feedback with this session. Please wait before submitting again.',
+          '23502': 'Missing required information. Please fill in all required fields.',
+          '23514': 'Invalid data provided. Please check your input and try again.',
+          '42P01': 'Database configuration error. Please contact support.',
+          '42501': 'Permission denied. Please contact support.'
+        };
+        throw new Error(map[error.code as string] || `Database error: ${error.message}`);
+      }
+
+      setShowSuccess(true);
+
+      if (safeGetSessionStorage('consent_decision') === 'accept') {
+        try {
+          captureEvent('feedback_submitted', {
+            category,
+            privacy_mode: privacyMode,
+            has_contact: Boolean(contact)
+          });
+        } catch { /* analytics düşse bile form başarılı */ }
+      }
+
+      if (!reduce) {
+        try {
+          confetti({ particleCount: 30, spread: 70, origin: { y: 0.6 } });
+        } catch { /* görsel efekt sorunları yoksayılır */ }
+      }
+
+      setTimeout(() => handleClose(), 1000);
+    } catch (err: any) {
+      alert(`Feedback submission failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [isEmpty, isOverLimit, isSubmitting, sessionId, message, category, privacyMode, contact, reduce, handleClose, lbUsername]);
 
   return (
     <>
-      {/* FAB Button */}
+      {/* FAB */}
       <motion.button
         onClick={handleOpen}
         className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-orange-500 hover:bg-orange-600 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:ring-offset-2 focus:ring-offset-slate-900"
@@ -272,11 +212,10 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
         </svg>
       </motion.button>
 
-      {/* Modal/Sheet */}
+      {/* Modal */}
       <AnimatePresence>
         {isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
             <motion.div
               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               initial={{ opacity: 0 }}
@@ -285,11 +224,9 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
               onClick={handleBackdropClick}
               aria-hidden="true"
             />
-
-            {/* Modal Content */}
-                         <motion.div
-               ref={modalRef}
-               className="relative w-full max-w-4xl mx-auto bg-slate-900 rounded-2xl shadow-xl border border-slate-700/60 overflow-hidden"
+            <motion.div
+              ref={modalRef}
+              className="relative w-full max-w-4xl mx-auto bg-slate-900 rounded-2xl shadow-xl border border-slate-700/60 overflow-hidden"
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -311,20 +248,20 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                 </div>
               </div>
 
-                             {/* Content */}
-               <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                {/* Category Chips */}
+              {/* Content */}
+              <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                {/* Category */}
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-3">Category</label>
                   <div className="flex gap-2">
-                    {[
+                    {([
                       { key: 'bug', label: '🐞 Bug', color: 'from-red-500 to-red-600' },
                       { key: 'idea', label: '💡 Idea', color: 'from-blue-500 to-blue-600' },
                       { key: 'general', label: '✨ General', color: 'from-purple-500 to-purple-600' }
-                    ].map(({ key, label, color }) => (
+                    ] as const).map(({ key, label, color }) => (
                       <button
                         key={key}
-                        onClick={() => setCategory(key as typeof category)}
+                        onClick={() => setCategory(key)}
                         className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                           category === key
                             ? `bg-gradient-to-r ${color} text-white shadow-lg`
@@ -337,22 +274,22 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                   </div>
                 </div>
 
-                {/* Message Textarea */}
+                {/* Message */}
                 <div>
                   <label htmlFor="feedback-message" className="block text-sm font-medium text-slate-300 mb-2">
                     Message
                   </label>
                   <div className="relative">
-                                         <textarea
-                       ref={textareaRef}
-                       id="feedback-message"
-                       value={message}
-                       onChange={(e) => setMessage(e.target.value)}
-                       onKeyDown={handleTextareaKeyDown}
-                       placeholder="Tell us what you think... (Press Enter to send, Shift+Enter for new line)"
-                       className="w-full min-h-[150px] px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
-                       maxLength={MAX_LENGTH}
-                     />
+                    <textarea
+                      ref={textareaRef}
+                      id="feedback-message"
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onKeyDown={handleTextareaKeyDown}
+                      placeholder="Tell us what you think... (Enter: send, Shift+Enter: newline)"
+                      className="w-full min-h-[150px] px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
+                      maxLength={MAX_LENGTH}
+                    />
                     <div className="absolute bottom-2 right-2 text-xs text-slate-500">
                       {message.length}/{MAX_LENGTH}
                     </div>
@@ -363,138 +300,112 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Quick suggestions</label>
                   <div className="flex flex-wrap gap-2">
-                    {QUICK_SUGGESTIONS[category].map((suggestion, index) => (
+                    {QUICK_SUGGESTIONS[category].map((s, i) => (
                       <button
-                        key={index}
-                        onClick={() => addSuggestion(suggestion)}
+                        key={i}
+                        onClick={() => addSuggestion(s)}
                         className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors"
                       >
-                        {suggestion}
+                        {s}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* Options */}
-                <div className="space-y-3">
-                                     <label className="flex items-start gap-3 cursor-pointer">
-                     <input
-                       type="checkbox"
-                       checked={includeDiagnostics}
-                       onChange={(e) => setIncludeDiagnostics(e.target.checked)}
-                       className="mt-1 w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 rounded focus:ring-orange-400/60"
-                     />
-                     <div className="flex-1">
-                       <span className="text-sm text-slate-300">Attach diagnostics</span>
-                       <div className="relative group">
-                         <button
-                           type="button"
-                           className="flex items-center gap-1 mt-1 text-xs text-slate-500 hover:text-slate-400 transition-colors"
-                           onClick={(e) => e.preventDefault()}
-                         >
-                           <span>What&apos;s this?</span>
-                           <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-                           </svg>
-                         </button>
-                         
-                         {/* Tooltip */}
-                         <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-800 border border-slate-600 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                           <div className="text-xs text-slate-300 leading-relaxed">
-                             <p className="font-medium mb-1">Diagnostics include:</p>
-                             <ul className="space-y-1 text-slate-400">
-                               <li>• Browser & device info</li>
-                               <li>• Session ID for tracking</li>
-                               <li>• Current page path</li>
-                               <li>• Timestamp</li>
-                             </ul>
-                             <p className="mt-2 text-slate-500">
-                               This helps us debug issues faster and improve the tool.
-                             </p>
-                           </div>
-                           {/* Arrow */}
-                           <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-800"></div>
-                         </div>
-                       </div>
-                     </div>
-                   </label>
+                <div className="space-y-5">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeDiagnostics}
+                      onChange={(e) => setIncludeDiagnostics(e.target.checked)}
+                      className="mt-1 w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 rounded focus:ring-orange-400/60"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm text-slate-300">Attach diagnostics</span>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Browser info, page path, timestamp, viewport (debug için faydalı).
+                      </p>
+                    </div>
+                  </label>
 
-                                     {/* Privacy Mode Selection */}
-                   <div>
-                     <label className="block text-sm font-medium text-slate-300 mb-3">Privacy</label>
-                     <div className="space-y-3">
-                       <label className="flex items-center gap-3 cursor-pointer">
-                         <input
-                           type="radio"
-                           name="privacy"
-                           value="anonymous"
-                           checked={privacyMode === 'anonymous'}
-                           onChange={(e) => setPrivacyMode(e.target.value as 'anonymous' | 'identified')}
-                           className="w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 focus:ring-orange-400/60"
-                         />
-                         <div>
-                           <span className="text-sm text-slate-300">Send anonymously</span>
-                           <p className="text-xs text-slate-500">Send feedback anonymously</p>
-                         </div>
-                       </label>
-                       
-                       <label className="flex items-center gap-3 cursor-pointer">
-                         <input
-                           type="radio"
-                           name="privacy"
-                           value="identified"
-                           checked={privacyMode === 'identified'}
-                           onChange={(e) => setPrivacyMode(e.target.value as 'anonymous' | 'identified')}
-                           className="w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 focus:ring-orange-400/60"
-                         />
-                         <div>
-                           <span className="text-sm text-slate-300">Share with name</span>
-                           <p className="text-xs text-slate-500">Share with your name and contact</p>
-                         </div>
-                       </label>
-                     </div>
-                   </div>
+                  {/* Privacy */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-3">Privacy</label>
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="privacy"
+                          value="anonymous"
+                          checked={privacyMode === 'anonymous'}
+                          onChange={(e) => setPrivacyMode(e.target.value as Privacy)}
+                          className="w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 focus:ring-orange-400/60"
+                        />
+                        <div>
+                          <span className="text-sm text-slate-300">Send anonymously</span>
+                          <p className="text-xs text-slate-500">No name, no contact.</p>
+                        </div>
+                      </label>
 
-                   {/* Identified User Fields */}
-                   {privacyMode === 'identified' && (
-                     <div className="space-y-3 pl-7 border-l-2 border-slate-700">
-                       <div>
-                         <label htmlFor="display-name" className="block text-sm font-medium text-slate-300 mb-2">
-                           Display Name
-                         </label>
-                         <input
-                           id="display-name"
-                           type="text"
-                           value={displayName}
-                           onChange={(e) => setDisplayName(e.target.value)}
-                           placeholder="Your name or username"
-                           className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
-                         />
-                       </div>
-                       
-                       <div>
-                         <label htmlFor="contact" className="block text-sm font-medium text-slate-300 mb-2">
-                           Contact (Optional)
-                         </label>
-                         <input
-                           id="contact"
-                           type="text"
-                           value={contact}
-                           onChange={(e) => setContact(e.target.value)}
-                           placeholder="Email or @handle"
-                           className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
-                         />
-                       </div>
-                       
-                       
-                     </div>
-                   )}
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="privacy"
+                          value="identified"
+                          checked={privacyMode === 'identified'}
+                          onChange={(e) => setPrivacyMode(e.target.value as Privacy)}
+                          className="w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 focus:ring-orange-400/60"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm text-slate-300">Share with name</span>
+                          <p className="text-xs text-slate-500">
+                            Uses your parsed Letterboxd username {lbUsername ? `(“${lbUsername}”)` : '(if available)'}.
+                          </p>
+
+                          {/* Identified details */}
+                          {privacyMode === 'identified' && (
+                            <div className="mt-3 space-y-3 pl-7 border-l-2 border-slate-700">
+                              {/* Display Name gizli – otomatik dolu */}
+                              {lbUsername ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400">Name</span>
+                                  <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-200 text-sm">
+                                    {lbUsername}
+                                  </span>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-500">
+                                  Username not detected from file name; we’ll still accept your feedback.
+                                </p>
+                              )}
+
+                              {/* Contact (optional) */}
+                              <div>
+                                <label htmlFor="contact" className="block text-sm font-medium text-slate-300 mb-2">
+                                  Contact (Optional)
+                                </label>
+                                <input
+                                  id="contact"
+                                  type="text"
+                                  value={contact}
+                                  onChange={(e) => setContact(e.target.value)}
+                                  placeholder="Email or @handle"
+                                  className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
+                  </div>
                 </div>
 
-                                 {/* Privacy Notice */}
-                 <div className="text-xs text-slate-500 text-center py-2 border-t border-slate-700/60">
-                   Your feedback helps us create better movie insights. No ads, just better recommendations! 🎬
-                 </div>
+                {/* Privacy notice */}
+                <div className="text-xs text-slate-500 text-center py-2 border-t border-slate-700/60">
+                  Your feedback helps us create better movie insights. No ads, just better recommendations! 🎬
+                </div>
               </div>
 
               {/* Footer */}
