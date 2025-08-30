@@ -52,10 +52,10 @@ export function FilmHistory({
             />
             <Tooltip
               cursor={{ stroke: primary, strokeWidth: 2, strokeDasharray: '5 5', strokeOpacity: 0.7 }}
-              content={({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) =>
+              content={({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string | number }) =>
                 active && payload?.length ? (
                   <div className="bg-slate-900/95 backdrop-blur-sm p-3 rounded-lg border border-orange-500/40 text-white shadow-2xl">
-                    <p className="font-bold text-lg mb-1">{label}</p>
+                    <p className="font-bold text-lg mb-1">{String(label)}</p>
                     <p className="text-orange-400 font-semibold">{`${payload[0].value} films`}</p>
                   </div>
                 ) : null

@@ -8,12 +8,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PreResultsConsentModal from './PreResultsConsentModal';
 import { ensureSessionRow } from '@/lib/sessions';
 import { analyzeFiles, testBackend } from '@/lib/api';
+import { parseLetterboxdUsername } from '@/lib/filename';
 
 
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detectedUsername, setDetectedUsername] = useState<string | null>(null);
 
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
@@ -43,10 +45,10 @@ export default function LetterboxdLanding() {
       setSessionId(id);
       
       // Ensure session row exists in database
-      try {
+            try {
         await ensureSessionRow();
-      } catch (err) {
-        console.error('Failed to ensure session row:', err);
+      } catch {
+        // Silent error handling
       }
     };
     
@@ -56,10 +58,10 @@ export default function LetterboxdLanding() {
   // Test backend connectivity on component mount
   useEffect(() => {
     const testBackendConnectivity = async () => {
-      try {
+            try {
         await testBackend();
-      } catch (err) {
-        console.error('Backend connectivity test failed:', err);
+      } catch {
+        // Silent error handling
       }
     };
     testBackendConnectivity();
@@ -83,6 +85,24 @@ export default function LetterboxdLanding() {
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
+    // Extract username from CSV files
+    let detectedUsername: string | null = null;
+    for (let i = 0; i < files.length; i++) {
+      const username = parseLetterboxdUsername(files[i].name);
+      if (username) {
+        detectedUsername = username;
+        break;
+      }
+    }
+    
+    if (detectedUsername) {
+      setDetectedUsername(detectedUsername);
+      sessionStorage.setItem('lb_username', detectedUsername);
+      if (process.env.NODE_ENV === 'development') {
+        console.info('Letterboxd username detected:', detectedUsername);
+      }
+    }
+
     // Track file upload
     // trackEvent('files_uploaded', { // TODO: Re-enable when analytics is ready
     //   file_count: files.length,
@@ -97,7 +117,33 @@ export default function LetterboxdLanding() {
     const single = files.length === 1 ? files[0] : null;
     const isZip = single && /\.zip$/i.test(single.name);
     if (isZip && single) {
-      payloadZip = single;
+      // Normalize macOS exports: pull CSV files to root so backend finds them
+      try {
+        const inZip = await JSZip.loadAsync(single);
+        const outZip = new JSZip();
+        let foundCsv = false;
+        const tasks: Promise<void>[] = [];
+        inZip.forEach((p, file) => {
+          if (/\.csv$/i.test(p)) {
+            foundCsv = true;
+            const name = p.split('/').pop() || p;
+            tasks.push(
+              file.async('blob').then((blob) => {
+                outZip.file(name, blob);
+              })
+            );
+          }
+        });
+        if (foundCsv) {
+          await Promise.all(tasks);
+          const blob = await outZip.generateAsync({ type: 'blob' });
+          payloadZip = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
+        } else {
+          payloadZip = single;
+        }
+      } catch {
+        payloadZip = single;
+      }
     } else {
       payloadZip = await zipFiles(files);
     }
@@ -107,10 +153,7 @@ export default function LetterboxdLanding() {
 
     try {
       const result = await analyzeFiles(formData);
-      console.log('[Landing] Analysis completed, saving stats to localStorage');
-      console.log('[Landing] Stats keys:', result.stats ? Object.keys(result.stats) : 'no stats');
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
-      console.log('[Landing] Stats saved to localStorage');
       
       // Track analysis completion with consent-gated film stats
       // trackEvent('analysis_started', { // TODO: Re-enable when analytics is ready
@@ -118,13 +161,16 @@ export default function LetterboxdLanding() {
       //   stats_keys: result.stats ? Object.keys(result.stats) : []
       // });
       
-      // Navigate directly to results page since analysis is complete
-      console.log('[Landing] Navigating to results page');
+      // Navigate to results page
       router.push('/results');
     } catch (err) {
-      console.error('Fetch error details:', err);
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(errorMessage);
+      // Helpful guidance for macOS users and CSV detection issues
+      if (/No valid Letterboxd CSV files/i.test(errorMessage)) {
+        setError('Analysis failed: No valid Letterboxd CSV files were detected. On macOS, the ZIP may contain CSVs inside a folder. Try the "Or choose exported folder" option below, or re-upload the ZIP using Chrome/Edge/Firefox on desktop.');
+      } else {
+        setError(errorMessage);
+      }
       setIsUploading(false);
       
       // Track error
@@ -224,6 +270,10 @@ export default function LetterboxdLanding() {
             <p className="mx-auto mt-1 text-slate-300 text-base leading-relaxed">
               Upload your Letterboxd ZIP or drop the exported folder.
             </p>
+            {/* Desktop disclaimer */}
+            <div className="mt-3 mx-auto max-w-xl rounded-lg border border-white/10 bg-slate-800/40 px-3 py-2 text-slate-300 text-xs sm:text-sm">
+              For the smoothest experience, we recommend using a desktop or laptop browser. The Letterboxd mobile app can sometimes block file downloads/exports, which may prevent uploading your data here.
+            </div>
           </header>
 
           {/* Dropzone */}
@@ -252,6 +302,11 @@ export default function LetterboxdLanding() {
                 <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
                 <p className="mt-1 text-sm text-slate-400">.zip, exported folder, or multiple .csv files</p>
                 <p className="mt-1 text-xs text-slate-400">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
+                {detectedUsername && (
+                  <p className="mt-2 text-xs text-orange-400 font-medium">
+                    Detected username: {detectedUsername}
+                  </p>
+                )}
               </div>
             </div>
 

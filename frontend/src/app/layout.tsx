@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import PlausibleProvider from 'next-plausible';
-import WebVitalsTracker from '@/components/WebVitalsTracker';
+
 import ErrorCaptureInitializer from '@/components/ErrorCaptureInitializer';
+import PageViewTracker from '@/components/PageViewTracker';
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -24,8 +25,9 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         {children}
-        <WebVitalsTracker />
         <ErrorCaptureInitializer />
+        {/* PostHog pageview tracker */}
+        {typeof window !== 'undefined' && <PageViewTracker />}
       </body>
     </html>
   );

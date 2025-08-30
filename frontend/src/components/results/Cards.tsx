@@ -2,17 +2,23 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { Heart, User } from 'lucide-react';
 import { searchPerson } from '@/lib/api';
 
-export const itemVariants = {
+export const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
-  visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } },
+  visible: { 
+    y: 0, 
+    opacity: 1, 
+    transition: { 
+      stiffness: 100 
+    } 
+  },
 };
 
 export const imgCache = new Map<string, string | null>();
-const __DEV__ = process.env.NODE_ENV !== 'production';
+// Development flag
 
 let activeRequests = 0;
 const MAX_CONCURRENT = 5;
@@ -115,10 +121,10 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = ({ 
         } else {
           imgCache.set(cacheKey, null);
         }
-      } catch (e) {
-        if (__DEV__) console.error('director image error', e);
-        imgCache.set(`director-${director.name}`, null);
-      } finally {
+              } catch {
+          // Silent error handling
+          imgCache.set(`director-${director.name}`, null);
+        } finally {
         setImageLoading(false);
         try {
           if (releaseFn) releaseFn();
@@ -232,10 +238,10 @@ export const ActorCard: React.FC<{
         } else {
           imgCache.set(cacheKey, null);
         }
-      } catch (e) {
-        if (__DEV__) console.error('actor image error', e);
-        imgCache.set(`actor-${actor.name}`, null);
-      } finally {
+              } catch {
+          // Silent error handling
+          imgCache.set(`actor-${actor.name}`, null);
+        } finally {
         setImageLoading(false);
         try {
           if (releaseFn) releaseFn();

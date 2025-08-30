@@ -1,6 +1,6 @@
 'use client';
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Download, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { X, Download, Monitor, Smartphone } from 'lucide-react';
 import ShareCard from './ShareCard';
 import { toPng } from 'html-to-image';
 
@@ -14,76 +14,53 @@ type Props = {
   cardProps: Parameters<typeof ShareCard>[0];
 };
 
-export default function ShareModal({ open, onClose, orientation, setOrientation, cardProps }: Props) {
-  const [isSaving, setIsSaving] = useState(false);
-  const [scale, setScale] = useState(0.6);
-  const [isZoomed, setIsZoomed] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+export default function ShareModal({
+  open,
+  onClose,
+  orientation,
+  setOrientation,
+  cardProps,
+}: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.6);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-  const target = orientation === 'horizontal' ? { w: 1200, h: 630 } : { w: 630, h: 1200 };
+  // Vertical is coming soon; lock export dimensions to horizontal
+  const target = useMemo(() => ({ w: 1200, h: 630 }), []);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+  // Lock body scroll when open
+  useEffect(() => {
     if (!open) return;
-    
-    switch (e.key) {
-      case 'Escape':
-        if (isZoomed) {
-          setIsZoomed(false);
-        } else {
-          onClose();
-        }
-        break;
-      case 'ArrowLeft':
-        if (!isZoomed && orientation === 'vertical') setOrientation('horizontal');
-        break;
-      case 'ArrowRight':
-        if (!isZoomed && orientation === 'horizontal') setOrientation('vertical');
-        break;
-      case 'z':
-      case 'Z':
-        setIsZoomed(!isZoomed);
-        break;
-    }
-  }, [open, orientation, isZoomed, onClose, setOrientation]);
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const calculateScale = () => {
-      const padding = 40;
-      const headerHeight = 90;
-      const footerHeight = 60;
-      
-      const availableW = el.clientWidth - padding * 2;
-      const availableH = el.clientHeight - headerHeight - footerHeight - padding * 2;
-      
-      const scaleW = availableW / target.w;
-      const scaleH = availableH / target.h;
-      
-      const maxScale = orientation === 'vertical' ? 0.65 : 0.7;
-      const optimalScale = Math.min(scaleW, scaleH, maxScale);
-      
-      setScale(Math.max(0.2, optimalScale));
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
     };
+  }, [open]);
 
-    calculateScale();
-    const ro = new ResizeObserver(calculateScale);
-    ro.observe(el);
-    
+  // Auto scale to fit viewport
+  const recomputeScale = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const padding = 32; // internal safe padding
+    const availW = vp.clientWidth - padding * 2;
+    const availH = vp.clientHeight - padding * 2;
+    const s = Math.min(availW / target.w, availH / target.h, 1);
+    setScale(Math.max(0.3, s));
+  }, [target.w, target.h]);
+
+  useEffect(() => {
+    recomputeScale();
+    const ro = new ResizeObserver(recomputeScale);
+    const el = viewportRef.current;
+    if (el) ro.observe(el);
     return () => ro.disconnect();
-  }, [orientation, target.w, target.h]);
+  }, [recomputeScale, orientation]);
 
   const handleSavePNG = async () => {
     if (!cardRef.current || isSaving) return;
-    
     setIsSaving(true);
     try {
       const dataUrl = await toPng(cardRef.current, {
@@ -91,22 +68,22 @@ export default function ShareModal({ open, onClose, orientation, setOrientation,
         height: target.h,
         pixelRatio: 2,
         backgroundColor: '#0B1220',
-        style: {
-          transform: 'scale(1)',
-          transformOrigin: 'top left',
-        }
+        // neutralize preview transform
+        style: { transform: 'scale(1)', transformOrigin: 'top left' },
+        cacheBust: true,
+        skipFonts: false,
       });
-      
-      const link = document.createElement('a');
-      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      link.download = `letterboxd-wrapped-${date}.png`;
-      link.href = dataUrl;
-      link.click();
-      
+
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      a.download = `letterboxd-wrapped-${orientation}-${stamp}.png`;
+      a.href = dataUrl;
+      a.click();
+
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 2000);
-    } catch (error) {
-      console.error('Failed to save image:', error);
+      setTimeout(() => setShowSuccess(false), 1600);
+    } catch {
+      // Silent error handling
     } finally {
       setIsSaving(false);
     }
@@ -115,124 +92,93 @@ export default function ShareModal({ open, onClose, orientation, setOrientation,
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
-        className="absolute inset-0 bg-black/90 backdrop-blur-md" 
-        onClick={onClose}
-      />
-      
-      <div 
-        ref={containerRef}
-        className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl w-[min(1400px,98vw)] h-[98vh] overflow-hidden shadow-2xl border border-white/10"
-      >
-        <div className="flex items-center justify-between px-8 py-6 bg-gradient-to-r from-slate-800/80 to-slate-700/80 backdrop-blur-sm border-b border-white/10">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-1">
-              Share Your Wrapped
-            </h2>
-            <p className="text-slate-300 text-sm">
-              Create stunning images for social media
-            </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Modal shell */}
+      <div className="relative w-[95vw] max-w-6xl h-[92vh] bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-white truncate">Share Your Wrapped</h2>
+            <p className="text-sm text-slate-400 mt-0.5">Choose format and download</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-800/60 rounded-xl p-1 border border-white/10">
-              <button
-                onClick={() => setOrientation('horizontal')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  orientation === 'horizontal' 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                Horizontal
-              </button>
-              <button
-                onClick={() => setOrientation('vertical')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  orientation === 'vertical' 
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                Vertical
-              </button>
+          {/* Format toggle (Vertical coming soon) */}
+          <div className="flex items-center gap-2 bg-slate-800/70 border border-white/10 rounded-lg p-1">
+            <button
+              onClick={() => setOrientation('horizontal')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium transition ${
+                orientation === 'horizontal'
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-slate-300 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Monitor size={16} />
+              Horizontal <span className="opacity-70">(1200×630)</span>
+            </button>
+            <span className="flex items-center gap-2 px-3.5 py-2 rounded-md text-sm text-slate-400">
+              <Smartphone size={16} /> Vertical <span className="opacity-60">(Coming soon)</span>
+            </span>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-slate-300 hover:text-white"
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Preview viewport */}
+        <div ref={viewportRef} className="flex-1 min-h-0 p-6 flex items-center justify-center overflow-hidden">
+          <div
+            className="relative"
+            style={{
+              width: target.w * scale,
+              height: target.h * scale,
+            }}
+          >
+            <div
+              ref={cardRef}
+              className="origin-top-left"
+              style={{
+                width: target.w,
+                height: target.h,
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+                filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.4))',
+              }}
+            >
+              <ShareCard {...cardProps} orientation={'horizontal'} />
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {showSuccess && (
-              <div className="text-green-400 text-sm font-medium animate-pulse">
-                ✓ Downloaded!
-              </div>
-            )}
-            
-            <button
-              onClick={handleSavePNG}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-xl font-semibold text-base transition-all duration-300 shadow-lg hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60 transform hover:scale-105 disabled:transform-none border border-white/10"
-            >
-              <Download size={18} />
-              {isSaving ? 'Saving...' : 'Download PNG'}
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors text-slate-300 hover:text-white"
-            >
-              <X size={24} />
-            </button>
           </div>
         </div>
 
-        <div className="flex flex-col h-full overflow-hidden">
-          <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
-            <div className="absolute top-4 right-4 flex gap-2 z-10">
-              <button
-                onClick={() => setIsZoomed(!isZoomed)}
-                className="p-2 bg-slate-800/80 hover:bg-slate-700/80 rounded-lg transition-colors text-slate-300 hover:text-white backdrop-blur-sm border border-white/10"
-                title={isZoomed ? "Zoom out (Z)" : "Zoom in (Z)"}
-              >
-                {isZoomed ? <ZoomOut size={18} /> : <ZoomIn size={18} />}
-              </button>
-              <button
-                onClick={() => setOrientation(orientation === 'horizontal' ? 'vertical' : 'horizontal')}
-                className="p-2 bg-slate-800/80 hover:bg-slate-700/80 rounded-lg transition-colors text-slate-300 hover:text-white backdrop-blur-sm border border-white/10"
-                title="Rotate (←/→)"
-              >
-                <RotateCcw size={18} />
-              </button>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-white/10 bg-slate-800/30">
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-xs text-slate-500">
+              PNG • 2× quality • {target.w}×{target.h}
             </div>
 
-            <div className="relative w-full h-full flex items-center justify-center">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-3xl blur-3xl scale-110" />
-              
-              <div
-                className="relative transition-all duration-500 ease-out flex items-center justify-center"
-                style={{ 
-                  transform: isZoomed ? 'scale(1.3)' : `scale(${scale})`,
-                  cursor: isZoomed ? 'zoom-out' : 'zoom-in',
-                  maxWidth: '100%',
-                  maxHeight: '100%'
-                }}
-                onClick={() => setIsZoomed(!isZoomed)}
-              >
-                <div className="origin-center">
-                  <ShareCard ref={cardRef} {...cardProps} orientation={orientation} />
-                </div>
-              </div>
-
-              {isZoomed && (
-                <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md backdrop-blur-sm">
-                  Zoomed • Click to exit
+            <div className="flex items-center gap-3">
+              {showSuccess && (
+                <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  Downloaded!
                 </div>
               )}
-            </div>
-          </div>
-
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-800/40 to-slate-700/40 backdrop-blur-sm border-t border-white/10">
-            <div className="text-center text-slate-400 text-xs">
-              <p>Format: PNG • Quality: 2x • Size: {target.w}×{target.h} • Use arrow keys to switch • Z to zoom • ESC to close</p>
+              <button
+                onClick={handleSavePNG}
+                disabled={isSaving}
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-semibold transition shadow-lg disabled:cursor-not-allowed"
+              >
+                <Download size={18} />
+                {isSaving ? 'Generating…' : 'Download PNG'}
+              </button>
             </div>
           </div>
         </div>

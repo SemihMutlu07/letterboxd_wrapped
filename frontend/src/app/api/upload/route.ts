@@ -12,9 +12,6 @@ export async function POST(request: NextRequest) {
         // const buffer = Buffer.from(bytes);
 
         // This is a placeholder for your actual upload logic
-        for (const [key, value] of data.entries()) {
-            console.log(key, value);
-        }
 
         return NextResponse.json({ success: true });
     } catch (error) {

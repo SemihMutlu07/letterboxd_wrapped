@@ -11,12 +11,10 @@ export function buildUrl(path: string, params: Record<string, string> = {}) {
 // Search for person (director/actor) in TMDB
 export async function searchPerson(name: string, role: 'director' | 'actor' = 'director') {
   const url = `${API_BASE}/api/tmdb/person/search?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
-  console.log('[search] GET', url);
   
   try {
     const r = await fetch(url);
     if (!r.ok) {
-      console.error(`[search] HTTP ${r.status} for ${name} (${role})`);
       return {
         found: false,
         message: `API error: ${r.status}`,
@@ -25,8 +23,7 @@ export async function searchPerson(name: string, role: 'director' | 'actor' = 'd
       };
     }
     return r.json();
-  } catch (error) {
-    console.error(`[search] Network error for ${name} (${role}):`, error);
+  } catch {
     return {
       found: false,
       message: 'Network error',
@@ -39,7 +36,6 @@ export async function searchPerson(name: string, role: 'director' | 'actor' = 'd
 // Analyze uploaded files
 export async function analyzeFiles(formData: FormData) {
   const url = `${API_BASE}/api/analyze`;
-  console.log('[analyze] POST', url);
   
   try {
     const r = await fetch(url, {
@@ -47,12 +43,10 @@ export async function analyzeFiles(formData: FormData) {
       body: formData,
     });
     if (!r.ok) {
-      console.error(`[analyze] HTTP ${r.status}`);
       throw new Error(`analyze ${r.status}`);
     }
     return r.json();
   } catch (error) {
-    console.error('[analyze] Network error:', error);
     throw error;
   }
 }
@@ -60,17 +54,14 @@ export async function analyzeFiles(formData: FormData) {
 // Test backend connectivity
 export async function testBackend() {
   const url = `${API_BASE}/`;
-  console.log('[test] GET', url);
   
   try {
     const r = await fetch(url);
     if (!r.ok) {
-      console.error(`[test] HTTP ${r.status}`);
       throw new Error(`test ${r.status}`);
     }
     return r.json();
   } catch (error) {
-    console.error('[test] Network error:', error);
     throw error;
   }
 }

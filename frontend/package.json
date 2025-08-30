@@ -10,8 +10,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/react-modal": "^3.16.3",
-
+    "canvas-confetti": "^1.9.3",
     "chart.js": "^4.5.0",
     "fabric": "^6.7.1",
     "framer-motion": "^12.23.6",
