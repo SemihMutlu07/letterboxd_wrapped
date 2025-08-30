@@ -18,3 +18,17 @@
   from = "/*"
   to   = "/index.html"
   status = 200
+
+# --- PostHog first-party proxy ---
+[[redirects]]
+  from = "/ingest/array/:splat"
+  to = "https://us-assets.i.posthog.com/array/:splat"
+  status = 200
+  force = true
+
+# catch-all for decide, flags, e, batch, sse, etc.
+[[redirects]]
+  from = "/ingest/:splat"
+  to = "https://us.i.posthog.com/:splat"
+  status = 200
+  force = true

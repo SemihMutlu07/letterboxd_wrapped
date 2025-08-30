@@ -1,24 +1,27 @@
+'use client';
 import posthog from 'posthog-js';
 
-declare global {
-  interface Window {
-    posthog?: typeof posthog;
-  }
-}
+export function initPostHog() {
+  if (typeof window === 'undefined' || posthog.__loaded) return;
 
-export function initPosthog() {
-  if (typeof window === 'undefined') return;
-  if (window.posthog) return;
-  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
-  if (!key || !host) return;
+  const key = process.env.NEXT_PUBLIC_POSTHOG_KEY!;
+  if (!key) return;
+
+  // Use our first-party proxy path
+  const api_host = '/ingest';
+
   posthog.init(key, {
-    api_host: host,
-    capture_pageview: false,
-    capture_pageleave: true,
+    api_host,
+    capture_pageview: false,   // we'll send pageviews manually after consent
+    autocapture: false,        // keep noise down
   });
-  window.posthog = posthog;
 }
 
-export default posthog;
+export function captureEvent(name: string, props?: Record<string, unknown>) {
+  try {
+    const decision = sessionStorage.getItem('consent_decision');
+    if (decision !== 'accept') return; // gate by consent
+    posthog.capture(name, props);
+  } catch { /* no-op */ }
+}
 

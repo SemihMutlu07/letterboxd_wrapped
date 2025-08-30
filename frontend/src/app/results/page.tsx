@@ -1,48 +1,46 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import PreResultsConsentModal from '../../components/PreResultsConsentModal';
-import ShareModal from '../../components/ShareModal';
-import HeroStats from '../../containers/results/HeroStats';
-import CrushAndDirectors from '../../containers/results/CrushAndDirectors';
-import Genres from '../../containers/results/Genres';
-import LanguagesChart, { CountriesList } from '../../containers/results/Charts';
-import { FilmHistory, RatingsBar } from '../../containers/results/FilmAndRatings';
-import QuickFacts from '../../containers/results/QuickFacts';
-import CinemaScale from '../../containers/results/CinemaScale';
-import { CountItem } from '../../components/results/Cards';
-import { searchPerson } from '../../lib/api';
+import ShareModal from '@/components/ShareModal';
+import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
+import CountriesList from '@/containers/results/CountriesList';
+import PreResultsConsentModal from '@/components/PreResultsConsentModal';
+import FeedbackFab from '@/components/FeedbackFab';
+import { searchPerson } from '@/lib/api';
 
-// Types
-type Count = CountItem;
-interface DecadeItem { decade: string; count: number }
-interface LanguageItem { language: string; count: number }
-interface InsightItem { title: string; description: string }
+// Import all the section components
+import HeroStats from '@/containers/results/HeroStats';
+import CrushAndDirectors from '@/containers/results/CrushAndDirectors';
+import Genres from '@/containers/results/Genres';
+import { FilmHistory, RatingsBar } from '@/containers/results/FilmAndRatings';
+import QuickFacts from '@/containers/results/QuickFacts';
+import CinemaScale from '@/containers/results/CinemaScale';
+
+type Count = { name: string; count: number; profile_path?: string };
+type LanguageItem = { language: string; count: number };
+type CountryRow = { name: string; count: number };
+
 interface LetterboxdStats {
   total_films: number;
-  metadata_coverage: number;
   average_rating: number;
-  most_common_rating: number;
   days_watched: number;
-  hours_watched: number;
-  favorite_genre: Count;
-  top_genres: Count[];
-  insights: InsightItem[];
+  top_genres: { name: string; count: number }[];
+  favorite_genre: { name: string; count: number };
+  most_watched_director: { name: string; count: number };
+  favorite_decade: { name: string; count: number };
   top_directors: Count[];
-  total_directors: number;
-  most_watched_director: Count;
-  decades: DecadeItem[];
-  favorite_decade: Count;
-  top_countries: Count[];
-  total_countries: number;
-  average_runtime: number;
   top_actors: Count[];
-  movie_crush?: { name: string; profile_path: string; count: number };
+  top_countries: CountryRow[];
+  total_countries: number;
   top_languages: LanguageItem[];
+  decades: { decade: string; count: number }[];
+  average_runtime: number;
+  movie_crush?: { name: string; profile_path: string; count: number };
   analysis_date: string;
   longest_film: { title: string; runtime: number };
   rating_distribution: Record<string, number>;
+  most_common_rating?: number;
   monthly_viewing_habits?: { month: string; count: number }[];
   day_of_week_pattern?: { weekday: number; weekend: number };
   cinematic_persona?: { persona: string; description: string };
@@ -65,20 +63,16 @@ const calcCinephileScore = (s?: LetterboxdStats | null) => {
 };
 
 export default function ResultsPage() {
-  // Debug imports
-  console.log('ShareModal type:', typeof ShareModal);
-  console.log('LanguagesChart type:', typeof LanguagesChart);
-  
   const [stats, setStats] = useState<LetterboxdStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [username, setUsername] = useState<string | null>(null);
   
   // consent
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
 
   // share
-  const shareCardRef = useRef<HTMLDivElement>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [directorImageUrl, setDirectorImageUrl] = useState<string>('');
@@ -96,16 +90,28 @@ export default function ResultsPage() {
 
   useEffect(() => { const onResize = () => setIsMobile(window.innerWidth < 480); onResize(); window.addEventListener('resize', onResize); return () => window.removeEventListener('resize', onResize); }, []);
 
-  useEffect(() => { const saved = localStorage.getItem('letterboxdStats'); if (saved) { try { setStats(JSON.parse(saved)); } catch {} } setLoading(false); }, []);
+  useEffect(() => { 
+    const saved = localStorage.getItem('letterboxdStats'); 
+    if (saved) { 
+      try { 
+        setStats(JSON.parse(saved)); 
+      } catch {} 
+    } 
+    setLoading(false); 
+    
+    // Get username from sessionStorage
+    const storedUsername = sessionStorage.getItem('lb_username');
+    if (storedUsername) {
+      setUsername(storedUsername);
+    }
+  }, []);
 
   useEffect(() => { const id = getSessionId(); setSessionId(id); const t = setTimeout(() => { if (!hasModal()) setShowConsentModal(true); }, 500); return () => clearTimeout(t); }, []);
 
   const handleConsentAccept = () => { setModalShown(); saveConsent('accept'); setShowConsentModal(false); };
   const handleConsentDecline = () => { setModalShown(); saveConsent('decline'); setShowConsentModal(false); };
 
-
-
-  // derived - moved before early returns to maintain hook order
+  // Derived data - maintain hook order
   const decadeData = useMemo(() => {
     const src = stats?.decades ?? [];
     return src
@@ -123,13 +129,108 @@ export default function ResultsPage() {
   }, [stats?.rating_distribution]);
   const ratingMax = useMemo(() => Math.max(0, ...ratingsArr.map(d=>d.count)), [ratingsArr]);
 
-  const rangeDays = useMemo(() =>
-    stats?.data_timeline?.total_days ?? Math.max(1, Math.round((new Date(stats?.data_timeline?.latest_date ?? Date.now()).getTime() - new Date(stats?.data_timeline?.earliest_date ?? Date.now()).getTime()) / 86400000)), [stats?.data_timeline]);
-  const timePct = useMemo(() => `${Math.round(((stats?.days_watched ?? 0) / rangeDays) * 100)}%`, [stats?.days_watched, rangeDays]);
+  // Date range calculation
+  const { actualRangeDays, dateRangeText } = useMemo(() => {
+    // Use data_timeline if available
+    if (stats?.data_timeline?.earliest_date && stats?.data_timeline?.latest_date) {
+      try {
+        const startDate = new Date(stats.data_timeline.earliest_date);
+        const endDate = new Date(stats.data_timeline.latest_date);
+        
+        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+          const daysDiff = Math.max(1, stats.data_timeline.total_days || 1);
+          
+          const startText = startDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          const endText = endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          
+          return {
+            actualRangeDays: daysDiff,
+            dateRangeText: startText === endText ? `Analysed on ${startText}` : `Analysed from ${startText} to ${endText}`
+          };
+        }
+      } catch {
+        // Silent error handling
+      }
+    }
+    
+    // Fallback to monthly habits
+    const monthlyHabits = stats?.monthly_viewing_habits;
+    if (monthlyHabits && monthlyHabits.length > 0) {
+      try {
+        const sortedMonths = [...monthlyHabits].sort((a, b) => a.month.localeCompare(b.month));
+        const firstMonth = sortedMonths[0].month;
+        const lastMonth = sortedMonths[sortedMonths.length - 1].month;
+        
+        // Parse month formats
+        let startDate, endDate;
+        
+        if (firstMonth.includes('-') && firstMonth.length >= 7) {
+          startDate = new Date(firstMonth + (firstMonth.length === 7 ? '-01' : ''));
+          endDate = new Date(lastMonth + (lastMonth.length === 7 ? '-01' : ''));
+        } else if (firstMonth.includes('/')) {
+          const [month, year] = firstMonth.split('/');
+          startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+          const [endMonth, endYear] = lastMonth.split('/');
+          endDate = new Date(parseInt(endYear), parseInt(endMonth) - 1, 1);
+        } else if (/^\d{4}-\d{2}$/.test(firstMonth)) {
+          startDate = new Date(firstMonth + '-01');
+          endDate = new Date(lastMonth + '-01');
+        } else {
+          startDate = new Date(firstMonth);
+          endDate = new Date(lastMonth);
+        }
+        
+        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+          const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+          let daysDiff = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+          
+          if (firstMonth === lastMonth) {
+            daysDiff = 30;
+          }
+          
+          const startText = startDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+          const endText = endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+          
+          return {
+            actualRangeDays: daysDiff,
+            dateRangeText: startText === endText ? `Analysed in ${startText}` : `Analysed from ${startText} to ${endText}`
+          };
+        }
+      } catch {
+        // Silent error handling
+      }
+    }
+    
+    // Default fallback
+    return {
+      actualRangeDays: 365,
+      dateRangeText: 'Analysed over the past year'
+    };
+  }, [stats?.data_timeline, stats?.monthly_viewing_habits]);
+
+  const timePct = useMemo(() => {
+    const daysWatched = stats?.days_watched ?? 0;
+    const safeRangeDays = Math.max(1, actualRangeDays);
+    
+    // Calculate based on waking hours
+    const wakingHoursPerDay = 16;
+    const totalWakingHours = safeRangeDays * wakingHoursPerDay;
+    const hoursWatched = daysWatched * 24;
+    
+    let percentage = Math.round((hoursWatched / totalWakingHours) * 100);
+    
+    // Adjust for short periods
+    if (safeRangeDays <= 30) {
+      const totalAvailableHours = safeRangeDays * 24;
+      percentage = Math.round((hoursWatched / totalAvailableHours) * 100);
+    }
+    
+    return `${Math.min(percentage, 100)}%`;
+  }, [stats?.days_watched, actualRangeDays]);
 
   const cineScore = useMemo(() => Math.max(0, Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats))), [stats]);
 
-  // share director headshot
+  // Load director headshot
   useEffect(() => { (async () => { const nm = stats?.most_watched_director?.name; if (!nm) return; try { const data = await searchPerson(nm, 'director'); if (data.found && data.url) setDirectorImageUrl(data.url); } catch {} })(); }, [stats?.most_watched_director?.name]);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
@@ -145,9 +246,7 @@ export default function ResultsPage() {
     );
   }
   
-
-
-  // share card props
+  // Share card props
   const shareProps = {
     onScreenCrush: {
       name: stats.top_actors?.[0]?.name || 'Unknown Actor',
@@ -186,14 +285,19 @@ export default function ResultsPage() {
             Your <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span> Wrapped
           </h1>
           <p className="text-xl text-gray-300 mb-2">A comprehensive analysis of your cinematic journey.</p>
-          {stats.data_timeline?.earliest_date && stats.data_timeline?.latest_date && (
-            <p className="text-center text-gray-400 text-lg">
-              Analysed from {new Date(stats.data_timeline.earliest_date).toLocaleDateString()} to {new Date(stats.data_timeline.latest_date).toLocaleDateString()}
-            </p>
+          <p className="text-center text-gray-400 text-lg">
+            {dateRangeText}
+          </p>
+          {username && (
+            <div className="mt-3">
+              <span className="inline-block px-3 py-1 bg-slate-800/60 border border-slate-700/60 rounded-full text-sm text-slate-300">
+                @{username}
+              </span>
+            </div>
           )}
         </header>
 
-        {/* Sections */}
+        {/* Hero Stats */}
         <HeroStats
           totalFilms={stats.total_films}
           avgRating={stats.average_rating}
@@ -204,21 +308,29 @@ export default function ResultsPage() {
           favoriteDecade={stats.favorite_decade}
         />
 
+        {/* Crush and Directors */}
         <CrushAndDirectors topDirectors={stats.top_directors ?? []} topActors={stats.top_actors ?? []} />
 
+        {/* Genres */}
         <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
 
+        {/* Languages and Countries */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
-          <LanguagesChart key="languages-chart" data={(stats.top_languages ?? []).slice(0,7)} />
+          <LanguagesLeaderboard key="languages-leaderboard" data={(stats.top_languages ?? []).slice(0,7)} />
           <CountriesList countries={(stats.top_countries ?? []).slice(0, 10)} total={stats.total_countries} />
         </div>
 
+        {/* Film History */}
         <FilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
+
+        {/* Ratings Bar */}
         <RatingsBar data={ratingsArr} max={ratingMax} />
 
-        <QuickFacts avgMinutes={stats.average_runtime} totalCountries={stats.total_countries} mostCommonRating={stats.most_common_rating} />
+        {/* Quick Facts */}
+        <QuickFacts avgMinutes={stats.average_runtime || 0} totalCountries={stats.total_countries || 0} mostCommonRating={stats.most_common_rating || 3.5} />
 
-        <CinemaScale type={stats.sinefil_meter?.type || 'Independent Cinephile'} description={stats.sinefil_meter?.description} score={cineScore} />
+        {/* Cinema Scale */}
+        <CinemaScale type={stats.sinefil_meter?.type || 'Independent Cinephile'} description={stats.sinefil_meter?.description} score={cineScore || 50} />
 
         {/* Share button */}
         <div className="flex justify-center my-8">
@@ -226,21 +338,18 @@ export default function ResultsPage() {
             <div className="w-6 h-6 bg-white rounded" />
             Share Your Wrapped
           </button>
-            </div>
-
-        <footer className="text-center py-12">
-            <p className="text-gray-400">Thank you for exploring your cinematic journey with us!</p>
-        </footer>
+        </div>
       </main>
 
-      {/* Share modal */}
-      <ShareModal 
-        open={showShareModal} 
-        onClose={() => setShowShareModal(false)} 
-        orientation={orientation} 
-        setOrientation={setOrientation} 
-        cardProps={{ ...shareProps, orientation }}
+      <ShareModal
+        open={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        orientation={orientation}
+        setOrientation={setOrientation}
+        cardProps={shareProps}
       />
+      
+      <FeedbackFab sessionId={sessionId} />
     </div>
   );
 }
