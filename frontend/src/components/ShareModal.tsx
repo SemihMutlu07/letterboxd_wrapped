@@ -12,6 +12,7 @@ type Props = {
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
   cardProps: Parameters<typeof ShareCard>[0];
+  onDownloadSuccess?: () => void;
 };
 
 export default function ShareModal({
@@ -20,6 +21,7 @@ export default function ShareModal({
   orientation,
   setOrientation,
   cardProps,
+  onDownloadSuccess,
 }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -62,29 +64,55 @@ export default function ShareModal({
   const handleSavePNG = async () => {
     if (!cardRef.current || isSaving) return;
     setIsSaving(true);
+    
     try {
-      const dataUrl = await toPng(cardRef.current, {
-        width: target.w,
-        height: target.h,
+      // Wait for fonts to be ready
+      if (document.fonts) {
+        await document.fonts.ready;
+      }
+      
+      // Get the export root element
+      const exportRoot = document.getElementById('wrapped-export-root');
+      if (!exportRoot) {
+        throw new Error('Export root element not found');
+      }
+      
+      // Add export mode class to the specific card element, not the document
+      exportRoot.classList.add('export-mode');
+      
+      // Wait a microtask for styles to apply
+      await new Promise(resolve => setTimeout(resolve, 0));
+      
+      const dataUrl = await toPng(exportRoot, {
+        width: orientation === 'horizontal' ? 1200 : 630,
+        height: orientation === 'horizontal' ? 630 : 1200,
         pixelRatio: 2,
         backgroundColor: '#0B1220',
-        // neutralize preview transform
-        style: { transform: 'scale(1)', transformOrigin: 'top left' },
         cacheBust: true,
-        skipFonts: false,
+        skipFonts: false
       });
 
       const a = document.createElement('a');
-      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      a.download = `letterboxd-wrapped-${orientation}-${stamp}.png`;
+      a.download = 'letterboxd-wrapped.png';
       a.href = dataUrl;
       a.click();
 
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1600);
-    } catch {
+      
+      // Trigger feedback modal after successful download
+      if (onDownloadSuccess) {
+        setTimeout(() => onDownloadSuccess(), 3000);
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
       // Silent error handling
     } finally {
+      // Remove export mode class from the specific element
+      const exportRoot = document.getElementById('wrapped-export-root');
+      if (exportRoot) {
+        exportRoot.classList.remove('export-mode');
+      }
       setIsSaving(false);
     }
   };

@@ -6,7 +6,6 @@ export async function POST(request: NextRequest) {
     const { filename } = body;
 
     if (!filename || typeof filename !== 'string') {
-      console.log('[LB] Backend: Invalid filename provided:', filename);
       return NextResponse.json({ username: null });
     }
 
@@ -16,14 +15,12 @@ export async function POST(request: NextRequest) {
 
     if (match && match[1]) {
       const username = match[1].trim();
-      console.log('[LB] Backend: Parsed username from filename:', filename, '→', username);
+  
       return NextResponse.json({ username });
     } else {
-      console.log('[LB] Backend: No username found in filename:', filename);
       return NextResponse.json({ username: null });
     }
   } catch (error) {
-    console.error('[LB] Backend: Error parsing username:', error);
     return NextResponse.json({ username: null });
   }
 }

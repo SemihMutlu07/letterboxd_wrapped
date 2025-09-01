@@ -60,9 +60,7 @@ export function captureEvent(event: string, properties?: Record<string, unknown>
 
     // Check if PostHog is available
     if (!posthog.__loaded) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('PostHog not initialized, skipping event:', event);
-      }
+      // Silent no-op for production
       return;
     }
 

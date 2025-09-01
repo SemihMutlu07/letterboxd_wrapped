@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import ShareModal from '@/components/ShareModal';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
 import CountriesList from '@/containers/results/CountriesList';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
-import FeedbackFab from '@/components/FeedbackFab';
+import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
 
 // Import all the section components
@@ -76,6 +76,10 @@ export default function ResultsPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [directorImageUrl, setDirectorImageUrl] = useState<string>('');
+  
+  // feedback
+  const feedbackRef = useRef<FeedbackFabRef>(null);
+  const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
 
   // session helpers
   const getSessionId = () => {
@@ -106,7 +110,7 @@ export default function ResultsPage() {
     }
     
     // Log the stored username for debugging
-    console.log('[LB] session username:', sessionStorage.getItem('lb_username'));
+
   }, []);
 
   useEffect(() => { const id = getSessionId(); setSessionId(id); const t = setTimeout(() => { if (!hasModal()) setShowConsentModal(true); }, 500); return () => clearTimeout(t); }, []);
@@ -350,9 +354,15 @@ export default function ResultsPage() {
         orientation={orientation}
         setOrientation={setOrientation}
         cardProps={shareProps}
+        onDownloadSuccess={() => {
+          if (!hasTriggeredFeedback) {
+            setHasTriggeredFeedback(true);
+            feedbackRef.current?.open();
+          }
+        }}
       />
       
-      <FeedbackFab sessionId={sessionId} />
+      <FeedbackFab ref={feedbackRef} sessionId={sessionId} />
     </div>
   );
 }
