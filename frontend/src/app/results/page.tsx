@@ -265,13 +265,17 @@ export default function ResultsPage() {
     (async () => {
       const nm = stats?.most_watched_director?.name;
       if (!nm) return;
-      try {
-        const data = await searchPerson(nm, 'director');
-        if (data.found && data.url) {
-          setDirectorImageUrl(data.url);
+      
+      // Only try to load director image if we have a backend API available
+      if (process.env.NEXT_PUBLIC_API_BASE && process.env.NEXT_PUBLIC_API_BASE !== 'http://localhost:8000') {
+        try {
+          const data = await searchPerson(nm, 'director');
+          if (data.found && data.url) {
+            setDirectorImageUrl(data.url);
+          }
+        } catch {
+          // Silent error handling - fallback to no image
         }
-      } catch {
-        // Silent error handling
       }
     })();
   }, [stats?.most_watched_director?.name]);
