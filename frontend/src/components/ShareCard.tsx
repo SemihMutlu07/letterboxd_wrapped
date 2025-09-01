@@ -77,6 +77,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     return (
       <div
         ref={ref}
+        id="wrapped-export-root"
         className={cx(
           "w-[630px] h-[1200px] bg-slate-900 text-white rounded-3xl p-8 grid grid-rows-[auto_1fr_auto] gap-8 font-sans",
           className
@@ -101,6 +102,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
                     fill
                     className="object-cover object-[50%_30%]"
                     priority
+                    crossOrigin="anonymous"
                     onError={() => setCrushBroken(true)}
                   />
                 ) : (
@@ -132,6 +134,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
                     fill
                     className="object-cover object-[50%_30%]"
                     priority
+                    crossOrigin="anonymous"
                     onError={() => setDirectorBroken(true)}
                   />
                 ) : (
@@ -207,6 +210,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
   return (
     <div
       ref={ref}
+      id="wrapped-export-root"
       className={cx(
         "w-[1200px] h-[630px] bg-slate-900 text-white rounded-3xl p-8 grid grid-cols-12 gap-6 font-sans",
         className
@@ -220,7 +224,15 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           <div className="col-span-2 p-6">
             <div className="relative w-full h-full rounded-xl overflow-hidden">
               {crushUrl && !crushBroken ? (
-                <Image src={crushUrl} alt={onScreenCrush.name || "On-screen crush"} fill className="object-cover object-center" priority onError={() => setCrushBroken(true)} />
+                <Image 
+                  src={crushUrl} 
+                  alt={onScreenCrush.name || "On-screen crush"} 
+                  fill 
+                  className="object-cover object-center" 
+                  priority 
+                  crossOrigin="anonymous"
+                  onError={() => setCrushBroken(true)} 
+                />
               ) : (
                 <div className="absolute inset-0 grid place-items-center text-white/70"><Heart className="w-16 h-16" /></div>
               )}
@@ -239,7 +251,15 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           <div className="col-span-2 p-6">
             <div className="relative w-full h-full rounded-xl overflow-hidden">
               {directorUrl && !directorBroken ? (
-                <Image src={directorUrl} alt={favoriteDirector.name || "Favorite director"} fill className="object-cover object-center" priority onError={() => setDirectorBroken(true)} />
+                <Image 
+                  src={directorUrl} 
+                  alt={favoriteDirector.name || "Favorite director"} 
+                  fill 
+                  className="object-cover object-center" 
+                  priority 
+                  crossOrigin="anonymous"
+                  onError={() => setDirectorBroken(true)} 
+                />
               ) : (
                 <div className="absolute inset-0 grid place-items-center text-white/70"><User className="w-16 h-16" /></div>
               )}

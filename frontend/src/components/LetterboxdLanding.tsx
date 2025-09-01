@@ -118,20 +118,17 @@ export default function LetterboxdLanding() {
         const result = await parseLetterboxdUsername(files[i].name);
         if (result.username) {
           detectedUsername = result.username;
-          console.log('[LB] Parsed from backend:', result.username);
+  
           break;
         }
       } catch (error) {
-        console.warn('[LB] Failed to parse username from:', files[i].name, error);
+        // Silent error handling
       }
     }
     
     if (detectedUsername) {
       setDetectedUsername(detectedUsername);
       sessionStorage.setItem('lb_username', detectedUsername);
-      if (process.env.NODE_ENV === 'development') {
-        console.info('Letterboxd username detected:', detectedUsername);
-      }
     }
 
     setIsUploading(true);

@@ -1,38 +1,17 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { getSupabase } from '@/lib/supabaseClient';
-import { initPostHog, captureEvent } from '@/lib/posthog';
-
-type Category = 'bug' | 'idea' | 'general';
-type Privacy = 'anonymous' | 'identified';
 
 interface FeedbackFabProps {
-  sessionId: string; // TEXT kolonu ile uyumlu
+  sessionId: string;
 }
 
-const QUICK_SUGGESTIONS: Record<Category, string[]> = {
-  bug: [
-    "The date analysis seems incorrect",
-    "Actor images aren't loading properly",
-    "The app crashed when I uploaded my file",
-    "Results are taking too long to load"
-  ],
-  idea: [
-    "It would be great to see my watchlist stats",
-    "Could you add support for TV shows?",
-    "I'd love to compare with friends",
-    "More detailed genre breakdowns please"
-  ],
-  general: [
-    "Great work on this tool!",
-    "The UI is really intuitive",
-    "Thanks for making this free",
-    "Keep up the good work"
-  ]
-};
+export interface FeedbackFabRef {
+  open: () => void;
+}
 
 function safeGetSessionStorage(key: string) {
   try {
@@ -43,17 +22,13 @@ function safeGetSessionStorage(key: string) {
   }
 }
 
-export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
+const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId }, ref) => {
   const reduce = useReducedMotion();
 
   // UI state
   const [isOpen, setIsOpen] = useState(false);
-  const [category, setCategory] = useState<Category>('general');
   const [message, setMessage] = useState('');
-  const [privacyMode, setPrivacyMode] = useState<Privacy>('anonymous');
   const [contact, setContact] = useState('');
-
-  const [includeDiagnostics, setIncludeDiagnostics] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -64,8 +39,13 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
   const isOverLimit = message.length > MAX_LENGTH;
   const isEmpty = message.trim().length === 0;
 
-  // Derived username (Letterboxd) – tek kaynaktan, otomatik
+  // Derived username (Letterboxd) – single source, automatic
   const lbUsername = safeGetSessionStorage('lb_username') || '';
+
+  // Imperative handle for programmatic opening
+  useImperativeHandle(ref, () => ({
+    open: () => setIsOpen(true)
+  }));
 
   // Body scroll lock + autofocus
   useEffect(() => {
@@ -76,23 +56,15 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
-  // Kısayollar
+  // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
     const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && handleClose();
-    const onCmdEnter = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmit();
-      }
-    };
     document.addEventListener('keydown', onEsc);
-    document.addEventListener('keydown', onCmdEnter);
     return () => {
       document.removeEventListener('keydown', onEsc);
-      document.removeEventListener('keydown', onCmdEnter);
     };
-  }, [isOpen, isEmpty, isOverLimit, isSubmitting, message, category, privacyMode, contact]);
+  }, [isOpen]);
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -103,29 +75,16 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
 
   const handleOpen = () => {
     setIsOpen(true);
-    initPostHog();
-    if (safeGetSessionStorage('consent_decision') === 'accept') {
-      captureEvent('feedback_opened');
-    }
   };
 
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
     setIsOpen(false);
     setMessage('');
-    setCategory('general');
-    setIncludeDiagnostics(true);
-    setPrivacyMode('anonymous');
     setContact('');
     setIsSubmitting(false);
     setShowSuccess(false);
   }, [isSubmitting]);
-
-  const addSuggestion = (suggestion: string) => {
-    const sep = message && !message.endsWith(' ') ? ' ' : '';
-    const next = (message + sep + suggestion).slice(0, MAX_LENGTH);
-    setMessage(next);
-  };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) handleClose();
@@ -138,37 +97,17 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
     try {
       // Build payload with only allowed fields
       const payload: Record<string, unknown> = {
-        session_id: sessionId,
         message: message.trim(),
-        category, // 'bug' | 'idea' | 'general'
-        user_agent: navigator.userAgent,
-        path: window.location.pathname,
+        contact: contact.trim() || null,
+        display_name: lbUsername || null,
+        source_username: lbUsername || null,
+        session_id: sessionId,
       };
 
-      // Add identified user fields if privacy mode is 'identified'
-      if (privacyMode === 'identified') {
-        payload.display_name = lbUsername || null;
-        payload.contact = contact || null;
-        payload.source_username = lbUsername || null;
-      }
+      const supabase = getSupabase();
+      const { error } = await supabase.from('feedback').insert(payload);
 
-      // Whitelist filter - only allow known fields
-      const allowedFields = [
-        'session_id', 'message', 'category', 'user_agent', 'path',
-        'display_name', 'contact', 'source_username', 'identity'
-      ];
-      
-      const filteredPayload = Object.keys(payload).reduce((acc, key) => {
-        if (allowedFields.includes(key)) {
-          acc[key] = payload[key];
-        }
-        return acc;
-      }, {} as Record<string, unknown>);
-
-          const supabase = getSupabase();
-      const { error } = await supabase.from('feedback').insert(filteredPayload);
-
-    if (error) {
+      if (error) {
         // Enhanced error handling for Supabase errors
         const map: Record<string, string> = {
           '23505': 'You have already submitted feedback with this session. Please wait before submitting again.',
@@ -193,29 +132,20 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
 
       setShowSuccess(true);
 
-      if (safeGetSessionStorage('consent_decision') === 'accept') {
-        try {
-          captureEvent('feedback_submitted', {
-            category,
-            privacy_mode: privacyMode,
-            has_contact: Boolean(contact)
-          });
-        } catch { /* analytics düşse bile form başarılı */ }
-      }
-
       if (!reduce) {
         try {
           confetti({ particleCount: 30, spread: 70, origin: { y: 0.6 } });
-        } catch { /* görsel efekt sorunları yoksayılır */ }
+        } catch { /* ignore visual effect issues */ }
       }
 
       setTimeout(() => handleClose(), 1000);
-    } catch (err: any) {
-      alert(`Feedback submission failed: ${err?.message || 'Unknown error'}`);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      alert(`Feedback submission failed: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
-  }, [isEmpty, isOverLimit, isSubmitting, sessionId, message, category, privacyMode, contact, reduce, handleClose, lbUsername]);
+  }, [isEmpty, isOverLimit, isSubmitting, message, contact, reduce, lbUsername, sessionId]);
 
   return (
     <>
@@ -246,7 +176,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
             />
             <motion.div
               ref={modalRef}
-              className="relative w-full max-w-4xl mx-auto bg-slate-900 rounded-2xl shadow-xl border border-slate-700/60 overflow-hidden"
+              className="relative w-full max-w-md mx-auto bg-slate-900 rounded-2xl shadow-xl border border-slate-700/60 overflow-hidden"
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -255,7 +185,7 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
               {/* Header */}
               <div className="px-6 py-4 border-b border-slate-700/60">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-white">Send Feedback</h2>
+                  <h2 className="text-lg font-semibold text-white">Got a minute for feedback?</h2>
                   <button
                     onClick={handleClose}
                     className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
@@ -264,50 +194,26 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                     <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
-              </button>
-            </div>
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
-              <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                {/* Category */}
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-3">Category</label>
-              <div className="flex gap-2">
-                    {([
-                      { key: 'bug', label: '🐞 Bug', color: 'from-red-500 to-red-600' },
-                      { key: 'idea', label: '💡 Idea', color: 'from-blue-500 to-blue-600' },
-                      { key: 'general', label: '✨ General', color: 'from-purple-500 to-purple-600' }
-                    ] as const).map(({ key, label, color }) => (
-                      <button
-                        key={key}
-                        onClick={() => setCategory(key)}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                          category === key
-                            ? `bg-gradient-to-r ${color} text-white shadow-lg`
-                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                        }`}
-                      >
-                        {label}
-                  </button>
-                ))}
-              </div>
-                </div>
-
+              <div className="px-6 py-4 space-y-4">
                 {/* Message */}
                 <div>
                   <label htmlFor="feedback-message" className="block text-sm font-medium text-slate-300 mb-2">
                     Message
                   </label>
-                             <div className="relative">
-                 <textarea
+                  <div className="relative">
+                    <textarea
                       ref={textareaRef}
                       id="feedback-message"
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       onKeyDown={handleTextareaKeyDown}
-                      placeholder="Tell us what you think... (Enter: send, Shift+Enter: newline)"
-                      className="w-full min-h-[150px] px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
+                      placeholder="Tell us what you think..."
+                      className="w-full min-h-[120px] px-4 py-3 bg-slate-800 border border-slate-600 rounded-xl text-white placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent text-sm"
                       maxLength={MAX_LENGTH}
                     />
                     <div className="absolute bottom-2 right-2 text-xs text-slate-500">
@@ -316,153 +222,59 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
                   </div>
                 </div>
 
-                {/* Quick Suggestions */}
+                {/* Contact */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Quick suggestions</label>
-                  <div className="flex flex-wrap gap-2">
-                    {QUICK_SUGGESTIONS[category].map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => addSuggestion(s)}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded-lg transition-colors"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                 </div>
-               </div>
-
-                {/* Options */}
-                <div className="space-y-5">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                 <input 
-                   type="checkbox" 
-                      checked={includeDiagnostics}
-                      onChange={(e) => setIncludeDiagnostics(e.target.checked)}
-                      className="mt-1 w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 rounded focus:ring-orange-400/60"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm text-slate-300">Attach diagnostics</span>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Browser info, page path, timestamp, viewport (debug için faydalı).
-                      </p>
-                    </div>
+                  <label htmlFor="contact" className="block text-sm font-medium text-slate-300 mb-2">
+                    Optional contact (email etc.)
                   </label>
-
-                  {/* Privacy */}
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-3">Privacy</label>
-                    <div className="space-y-3">
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="privacy"
-                          value="anonymous"
-                          checked={privacyMode === 'anonymous'}
-                          onChange={(e) => setPrivacyMode(e.target.value as Privacy)}
-                          className="w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 focus:ring-orange-400/60"
-                        />
-                        <div>
-                          <span className="text-sm text-slate-300">Send anonymously</span>
-                          <p className="text-xs text-slate-500">No name, no contact.</p>
-                        </div>
-               </label>
-
-                      <label className="flex items-center gap-3 cursor-pointer">
-                 <input 
-                          type="radio"
-                          name="privacy"
-                          value="identified"
-                          checked={privacyMode === 'identified'}
-                          onChange={(e) => setPrivacyMode(e.target.value as Privacy)}
-                          className="w-4 h-4 text-orange-500 bg-slate-800 border-slate-600 focus:ring-orange-400/60"
-                        />
-                        <div className="flex-1">
-                          <span className="text-sm text-slate-300">Share with name</span>
-                          <p className="text-xs text-slate-500">
-                            Uses your parsed Letterboxd username {lbUsername ? `(“${lbUsername}”)` : '(if available)'}.
-                          </p>
-
-                          {/* Identified details */}
-                          {privacyMode === 'identified' && (
-                            <div className="mt-3 space-y-3 pl-7 border-l-2 border-slate-700">
-                              {/* Display Name gizli – otomatik dolu */}
-                              {lbUsername ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-400">Name</span>
-                                  <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-200 text-sm">
-                                    {lbUsername}
-                                  </span>
-                                </div>
-                              ) : (
-                                <p className="text-xs text-slate-500">
-                                  Username not detected from file name; we’ll still accept your feedback.
-                                </p>
-                              )}
-
-                              {/* Contact (optional) */}
-                              <div>
-                                <label htmlFor="contact" className="block text-sm font-medium text-slate-300 mb-2">
-                                  Contact (Optional)
-               </label>
-                                <input
-                                  id="contact"
-                                  type="text"
-                                  value={contact}
-                                  onChange={(e) => setContact(e.target.value)}
-                                  placeholder="Email or @handle"
-                                  className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent"
-                                />
-                              </div>
-                 </div>
-               )}
-                        </div>
-                      </label>
-                    </div>
-                  </div>
+                  <input
+                    id="contact"
+                    type="text"
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    placeholder="Email etc."
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/60 focus:border-transparent text-sm"
+                  />
                 </div>
 
-                {/* Privacy notice */}
-                <div className="text-xs text-slate-500 text-center py-2 border-t border-slate-700/60">
-                  Your feedback helps us create better movie insights. No ads, just better recommendations! 🎬
-                </div>
+
               </div>
 
               {/* Footer */}
               <div className="px-6 py-4 border-t border-slate-700/60 bg-slate-800/50">
                 <div className="flex gap-3">
-                 <button 
+                  <button 
                     onClick={handleClose}
-                   disabled={isSubmitting}
-                    className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-                 >
-                    Cancel
-                 </button>
-                 <button 
-                   onClick={handleSubmit} 
+                    disabled={isSubmitting}
+                    className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
+                  >
+                    Skip
+                  </button>
+                  <button 
+                    onClick={handleSubmit} 
                     disabled={isEmpty || isOverLimit || isSubmitting}
-                    className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                 >
-                   {isSubmitting ? (
-                     <>
+                    className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+                  >
+                    {isSubmitting ? (
+                      <>
                         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Gönderiliyor…
-                     </>
-                   ) : (
+                        Sending...
+                      </>
+                    ) : (
                       'Send Feedback'
-                   )}
-                 </button>
-               </div>
-            </div>
+                    )}
+                  </button>
+                </div>
+              </div>
             </motion.div>
-                 </div>
-       )}
+          </div>
+        )}
       </AnimatePresence>
 
-       {/* Success Toast */}
+      {/* Success Toast */}
       <AnimatePresence>
         {showSuccess && (
           <motion.div
@@ -471,15 +283,19 @@ export default function FeedbackFab({ sessionId }: FeedbackFabProps) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 100 }}
           >
-           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <span>Feedback sent! Thank you.</span>
-           </div>
+              <span className="text-sm">Feedback sent! Thank you.</span>
+            </div>
           </motion.div>
-       )}
+        )}
       </AnimatePresence>
-     </>
-   );
- }
+    </>
+  );
+});
+
+FeedbackFab.displayName = 'FeedbackFab';
+
+export default FeedbackFab;
