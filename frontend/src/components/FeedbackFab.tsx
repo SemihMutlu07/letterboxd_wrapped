@@ -47,6 +47,15 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
     open: () => setIsOpen(true)
   }));
 
+  const handleClose = useCallback(() => {
+    if (isSubmitting) return;
+    setIsOpen(false);
+    setMessage('');
+    setContact('');
+    setIsSubmitting(false);
+    setShowSuccess(false);
+  }, [isSubmitting]);
+
   // Body scroll lock + autofocus
   useEffect(() => {
     if (!isOpen) return;
@@ -64,7 +73,7 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
     return () => {
       document.removeEventListener('keydown', onEsc);
     };
-  }, [isOpen]);
+  }, [isOpen, handleClose]);
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -76,15 +85,6 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
   const handleOpen = () => {
     setIsOpen(true);
   };
-
-  const handleClose = useCallback(() => {
-    if (isSubmitting) return;
-    setIsOpen(false);
-    setMessage('');
-    setContact('');
-    setIsSubmitting(false);
-    setShowSuccess(false);
-  }, [isSubmitting]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) handleClose();
@@ -145,7 +145,7 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
     } finally {
       setIsSubmitting(false);
     }
-  }, [isEmpty, isOverLimit, isSubmitting, message, contact, reduce, lbUsername, sessionId]);
+  }, [isEmpty, isOverLimit, isSubmitting, message, contact, reduce, lbUsername, sessionId, handleClose]);
 
   return (
     <>

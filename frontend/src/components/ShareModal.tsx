@@ -93,7 +93,7 @@ export default function ShareModal({
     if (!cardRef.current || isSaving) return;
     setIsSaving(true);
     
-    let originalSrcs: string[] = [];
+    const originalSrcs: string[] = [];
     
     try {
       // Wait for fonts to be ready
@@ -109,7 +109,6 @@ export default function ShareModal({
       
       // Convert all image URLs in the export root to use proxy
       const images = exportRoot.querySelectorAll('img');
-      const originalSrcs: string[] = [];
       
       images.forEach((img, index) => {
         originalSrcs[index] = img.src;
