@@ -121,7 +121,7 @@ export default function LetterboxdLanding() {
   
           break;
         }
-      } catch (error) {
+      } catch {
         // Silent error handling
       }
     }
