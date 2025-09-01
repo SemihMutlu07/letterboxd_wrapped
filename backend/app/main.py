@@ -1341,6 +1341,32 @@ async def search_tmdb_person(name: str, role: str = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TMDB API error: {str(e)}")
 
+@app.post("/api/parse-username")
+async def parse_username(request: Request):
+    """
+    Parse Letterboxd username from filename.
+    """
+    try:
+        body = await request.json()
+        filename = body.get('filename')
+        
+        if not filename or not isinstance(filename, str):
+            return {"username": None}
+        
+        # Use regex to extract username from filename
+        import re
+        regex = r'^letterboxd-([^-\s]+)-'
+        match = re.match(regex, filename, re.IGNORECASE)
+        
+        if match and match.group(1):
+            username = match.group(1).strip()
+            return {"username": username}
+        else:
+            return {"username": None}
+            
+    except Exception as e:
+        return {"username": None}
+
 @app.get("/")
 async def root():
     return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend"}
