@@ -4,6 +4,32 @@ import { X, Download, Monitor, Smartphone } from 'lucide-react';
 import ShareCard from './ShareCard';
 import { toPng } from 'html-to-image';
 
+// Helper function to ensure share/export URLs use proxy instead of TMDB CDN
+function shareSafeUrl(u: string): string {
+  if (!u) return u;
+  
+  // If already a full URL and it's TMDB CDN, convert to proxy
+  if (u.startsWith('http') && u.includes('://image.tmdb.org')) {
+    const url = new URL(u);
+    const path = url.pathname;
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+    if (API_BASE) {
+      return `${API_BASE.replace(/\/$/, '')}/tmdb-proxy${path}`;
+    }
+  }
+  
+  // If it's a relative proxy URL, make it absolute
+  if (u.startsWith('/tmdb-proxy/')) {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+    if (API_BASE) {
+      return `${API_BASE.replace(/\/$/, '')}${u}`;
+    }
+  }
+  
+  // Otherwise return as-is
+  return u;
+}
+
 type Orientation = 'horizontal' | 'vertical';
 
 type Props = {
@@ -23,6 +49,8 @@ export default function ShareModal({
   cardProps,
   onDownloadSuccess,
 }: Props) {
+  // Debug: log API_BASE for verification
+  console.log('API_BASE', process.env.NEXT_PUBLIC_API_BASE);
   const cardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.6);
@@ -65,6 +93,8 @@ export default function ShareModal({
     if (!cardRef.current || isSaving) return;
     setIsSaving(true);
     
+    let originalSrcs: string[] = [];
+    
     try {
       // Wait for fonts to be ready
       if (document.fonts) {
@@ -76,6 +106,26 @@ export default function ShareModal({
       if (!exportRoot) {
         throw new Error('Export root element not found');
       }
+      
+      // Convert all image URLs in the export root to use proxy
+      const images = exportRoot.querySelectorAll('img');
+      const originalSrcs: string[] = [];
+      
+      images.forEach((img, index) => {
+        originalSrcs[index] = img.src;
+        const safeUrl = shareSafeUrl(img.src);
+        
+        // Canvas export guard: ensure no TMDB CDN URLs
+        console.assert(
+          !safeUrl.includes('://image.tmdb.org'), 
+          'Share uses CDN, must proxy', 
+          safeUrl
+        );
+        
+        // Set crossOrigin before src for CORS
+        img.crossOrigin = 'anonymous';
+        img.src = safeUrl;
+      });
       
       // Add export mode class to the specific card element, not the document
       exportRoot.classList.add('export-mode');
@@ -112,6 +162,14 @@ export default function ShareModal({
       const exportRoot = document.getElementById('wrapped-export-root');
       if (exportRoot) {
         exportRoot.classList.remove('export-mode');
+        
+        // Restore original image sources
+        const images = exportRoot.querySelectorAll('img');
+        images.forEach((img, index) => {
+          if (originalSrcs && originalSrcs[index]) {
+            img.src = originalSrcs[index];
+          }
+        });
       }
       setIsSaving(false);
     }

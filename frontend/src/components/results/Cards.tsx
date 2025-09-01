@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { motion, Variants } from 'framer-motion';
 import { Heart, User } from 'lucide-react';
 import { searchPerson } from '@/lib/api';
+import { getTmdbImageUrl } from '@/lib/analytics';
 
 export const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
@@ -225,7 +226,7 @@ export const ActorCard: React.FC<{
         releaseFn = await acquire();
 
           if ((actor as { profile_path?: string })?.profile_path) {
-    const fallbackUrl = `https://image.tmdb.org/t/p/w300${(actor as { profile_path?: string }).profile_path}`;
+              const fallbackUrl = getTmdbImageUrl((actor as { profile_path?: string }).profile_path);
           imgCache.set(cacheKey, fallbackUrl);
           setImageUrl(fallbackUrl);
           return;

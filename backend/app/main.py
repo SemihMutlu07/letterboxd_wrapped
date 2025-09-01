@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 import asyncio
@@ -1366,6 +1366,47 @@ async def parse_username(request: Request):
             
     except Exception as e:
         return {"username": None}
+
+@app.get("/tmdb-proxy/{path:path}")
+async def tmdb_proxy(path: str):
+    """
+    Proxy TMDB images to avoid CORS issues.
+    """
+    try:
+        tmdb_url = f"https://image.tmdb.org/{path}"
+        async with app.state.aiohttp_session.get(tmdb_url) as response:
+            if response.status != 200:
+                raise HTTPException(status_code=404, detail="Image not found")
+            
+            image_data = await response.read()
+            content_type = response.headers.get('Content-Type', 'image/jpeg')
+            
+            return Response(
+                content=image_data,
+                media_type=content_type,
+                headers={
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Range, Accept',
+                    'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                }
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to proxy image: {str(e)}")
+
+@app.options("/tmdb-proxy/{path:path}")
+async def tmdb_proxy_options(path: str):
+    """Handle OPTIONS requests for CORS preflight."""
+    return Response(
+        status_code=204,
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Range, Accept',
+            'Access-Control-Expose-Headers': 'Content-Length, Content-Range'
+        }
+    )
 
 @app.get("/")
 async def root():

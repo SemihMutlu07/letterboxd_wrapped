@@ -8,6 +8,7 @@ import CountriesList from '@/containers/results/CountriesList';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
+import { getTmdbImageUrl } from '@/lib/analytics';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
@@ -241,7 +242,7 @@ export default function ResultsPage() {
   const shareProps = useMemo(() => ({
     onScreenCrush: {
       name: stats?.top_actors?.[0]?.name || 'Unknown Actor',
-      headshotUrl: stats?.top_actors?.[0]?.profile_path ? `https://image.tmdb.org/t/p/w300${stats.top_actors[0].profile_path}` : '',
+                headshotUrl: getTmdbImageUrl(stats?.top_actors?.[0]?.profile_path) || '',
       count: stats?.top_actors?.[0]?.count || 0,
     },
     favoriteDirector: {
@@ -267,11 +268,15 @@ export default function ResultsPage() {
       if (!nm) return;
       
       // Only try to load director image if we have a backend API available
-      if (process.env.NEXT_PUBLIC_API_BASE && process.env.NEXT_PUBLIC_API_BASE !== 'http://localhost:8000') {
+      if (process.env.NEXT_PUBLIC_API_BASE) {
         try {
           const data = await searchPerson(nm, 'director');
           if (data.found && data.url) {
-            setDirectorImageUrl(data.url);
+            // Use getTmdbImageUrl to handle any URL format consistently
+            const imageUrl = getTmdbImageUrl(data.url);
+            if (imageUrl) {
+              setDirectorImageUrl(imageUrl);
+            }
           }
         } catch {
           // Silent error handling - fallback to no image

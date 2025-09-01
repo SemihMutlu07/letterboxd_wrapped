@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import { Heart, User } from "lucide-react";
+import { getTmdbImageUrl } from "@/lib/analytics";
 
 export type ShareCardProps = {
   onScreenCrush: { name: string; headshotUrl: string; count: number };
@@ -65,7 +66,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
   const normalizeTmdb = (u?: string) => {
     if (!u) return undefined;
     if (u.startsWith("http")) return u;
-    if (u.startsWith("/")) return `https://image.tmdb.org/t/p/w300${u}`;
+    if (u.startsWith("/")) return getTmdbImageUrl(u);
     return u;
   };
 
