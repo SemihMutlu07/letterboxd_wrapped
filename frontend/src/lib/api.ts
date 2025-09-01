@@ -165,7 +165,8 @@ export async function testBackend() {
 // Parse Letterboxd username from filename
 export async function parseLetterboxdUsername(filename: string) {
   try {
-    const r = await fetch('/api/parse-username', {
+    const url = `${API_BASE}/api/parse-username`;
+    const r = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
