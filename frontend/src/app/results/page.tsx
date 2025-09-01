@@ -237,8 +237,44 @@ export default function ResultsPage() {
 
   const cineScore = useMemo(() => Math.max(0, Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats))), [stats]);
 
+  // Share card props - must be before early returns to maintain hook order
+  const shareProps = useMemo(() => ({
+    onScreenCrush: {
+      name: stats?.top_actors?.[0]?.name || 'Unknown Actor',
+      headshotUrl: stats?.top_actors?.[0]?.profile_path ? `https://image.tmdb.org/t/p/w300${stats.top_actors[0].profile_path}` : '',
+      count: stats?.top_actors?.[0]?.count || 0,
+    },
+    favoriteDirector: {
+      name: stats?.most_watched_director?.name || 'Unknown Director',
+      headshotUrl: directorImageUrl,
+      count: stats?.most_watched_director?.count || 0,
+    },
+    watchedFilms: stats?.total_films || 0,
+    spentDays: Math.round(stats?.days_watched || 0),
+    timePercent: Math.round(((stats?.days_watched || 0) / 365) * 100),
+    cinemaScale: cineScore,
+    personaLabel: stats?.sinefil_meter?.type || 'Independent Cinephile',
+    minutesAverage: Math.round(stats?.average_runtime || 0),
+    mostCommonRating: stats?.most_common_rating || 3.5,
+    peakDecade: stats?.favorite_decade?.name || '2020s',
+    peakDecadeCount: stats?.favorite_decade?.count || 0,
+  }), [stats, directorImageUrl, cineScore]);
+
   // Load director headshot
-  useEffect(() => { (async () => { const nm = stats?.most_watched_director?.name; if (!nm) return; try { const data = await searchPerson(nm, 'director'); if (data.found && data.url) setDirectorImageUrl(data.url); } catch {} })(); }, [stats?.most_watched_director?.name]);
+  useEffect(() => {
+    (async () => {
+      const nm = stats?.most_watched_director?.name;
+      if (!nm) return;
+      try {
+        const data = await searchPerson(nm, 'director');
+        if (data.found && data.url) {
+          setDirectorImageUrl(data.url);
+        }
+      } catch {
+        // Silent error handling
+      }
+    })();
+  }, [stats?.most_watched_director?.name]);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
   if (!stats) {
@@ -252,29 +288,6 @@ export default function ResultsPage() {
       </div>
     );
   }
-  
-  // Share card props
-  const shareProps = {
-    onScreenCrush: {
-      name: stats.top_actors?.[0]?.name || 'Unknown Actor',
-      headshotUrl: stats.top_actors?.[0]?.profile_path ? `https://image.tmdb.org/t/p/w300${stats.top_actors[0].profile_path}` : '',
-      count: stats.top_actors?.[0]?.count || 0,
-    },
-    favoriteDirector: {
-      name: stats.most_watched_director?.name || 'Unknown Director',
-      headshotUrl: directorImageUrl,
-      count: stats.most_watched_director?.count || 0,
-    },
-    watchedFilms: stats.total_films || 0,
-    spentDays: Math.round(stats.days_watched || 0),
-    timePercent: Math.round(((stats.days_watched || 0) / 365) * 100),
-    cinemaScale: cineScore,
-    personaLabel: stats.sinefil_meter?.type || 'Independent Cinephile',
-    minutesAverage: Math.round(stats.average_runtime || 0),
-    mostCommonRating: stats.most_common_rating || 3.5,
-    peakDecade: stats.favorite_decade?.name || '2020s',
-    peakDecadeCount: stats.favorite_decade?.count || 0,
-  } as const;
   
   return (
     <div className="font-sans bg-slate-900 text-white overflow-x-hidden relative min-h-screen">

@@ -70,7 +70,10 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
   };
 
   const crushUrl = useMemo(() => normalizeTmdb(onScreenCrush.headshotUrl), [onScreenCrush.headshotUrl]);
-  const directorUrl = useMemo(() => normalizeTmdb(favoriteDirector.headshotUrl), [favoriteDirector.headshotUrl]);
+  const directorUrl = useMemo(() => {
+    const normalized = normalizeTmdb(favoriteDirector.headshotUrl);
+    return normalized;
+  }, [favoriteDirector.headshotUrl]);
 
   /* ===================== VERTICAL (630×1200) ===================== */
   if (isVertical) {
