@@ -1,4 +1,10 @@
 {
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next",
+    "_graveyard"
+  ],
   "compilerOptions": {
     "baseUrl": ".",
     "target": "ES2017",
@@ -35,7 +41,4 @@
     "next-env.d.ts",
     ".next/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
 }
