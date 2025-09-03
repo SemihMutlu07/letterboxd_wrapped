@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 import asyncio
@@ -29,9 +29,15 @@ load_dotenv()
 
 CORS_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "https://movieswrapped.netlify.app",
+    "https://letterboxd-wrapped.netlify.app",
     "https://wrapped-backend.onrender.com"
 ]
+
+# Add all Netlify domains dynamically
+if os.getenv("ALLOW_ALL_NETLIFY", "true").lower() == "true":
+    CORS_ORIGINS.append("https://*.netlify.app")
 
 # --- Application Lifespan (for aiohttp session) ---
 @asynccontextmanager
@@ -446,57 +452,109 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
             }
     update_progress("analyzing", "Runtime analysis complete", 3, 10)
 
-    # === DATE-BASED ANALYSIS ===
-    if not diary_df.empty and 'Watched Date' in diary_df.columns:
-        # Parse the 'Watched Date' column to datetime
-        diary_df['parsed_date'] = pd.to_datetime(diary_df['Watched Date'], errors='coerce')
-        valid_dates = diary_df.dropna(subset=['parsed_date'])
+    # Date analysis
+    if not diary_df.empty:
+        # Find date column
+        date_column = None
+        possible_date_columns = ['Watched Date', 'Date', 'Watch Date', 'Watched', 'Date Watched', 'WatchedDate']
         
-        if not valid_dates.empty:
-            # Monthly Viewing Habits
-            valid_dates['month'] = valid_dates['parsed_date'].dt.strftime('%B')
-            monthly_counts = valid_dates['month'].value_counts()
+        for col in possible_date_columns:
+            if col in diary_df.columns:
+                date_column = col
+                break
+        
+        if date_column:
+            # Parse dates
+            diary_df['parsed_date'] = pd.to_datetime(diary_df[date_column], errors='coerce')
+            valid_dates = diary_df.dropna(subset=['parsed_date'])
+        else:
+            date_column = None
+            valid_dates = pd.DataFrame()
+    else:
+        date_column = None
+        valid_dates = pd.DataFrame()
+    
+    # Get dates from diary.csv or fallback to watched.csv
+    date_data = None
+    date_source = "diary"
+    
+    if date_column and not valid_dates.empty:
+        # Use diary.csv if enough data
+        if len(valid_dates) >= 5:
+            date_data = valid_dates
+        else:
+            date_data = None
+    
+    # Fallback to watched.csv
+    if date_data is None and not watched_df.empty:
+        # Find date column in watched.csv
+        watched_date_column = None
+        for col in ['Date', 'Watched Date', 'Watch Date']:
+            if col in watched_df.columns:
+                watched_date_column = col
+                break
+        
+        if watched_date_column:
+            watched_df['parsed_date'] = pd.to_datetime(watched_df[watched_date_column], errors='coerce')
+            watched_valid_dates = watched_df.dropna(subset=['parsed_date'])
             
-            # Ensure proper month order
-            month_order = ['January', 'February', 'March', 'April', 'May', 'June',
-                          'July', 'August', 'September', 'October', 'November', 'December']
-            monthly_viewing_habits = []
-            for month in month_order:
-                count = monthly_counts.get(month, 0)
-                monthly_viewing_habits.append({'month': month, 'count': int(count)})
-            
-            stats['monthly_viewing_habits'] = monthly_viewing_habits
-            
-            # Weekday/Weekend Analysis
-            valid_dates['day_of_week'] = valid_dates['parsed_date'].dt.dayofweek
-            weekday_count = len(valid_dates[valid_dates['day_of_week'] < 5])  # Monday=0, Friday=4
-            weekend_count = len(valid_dates[valid_dates['day_of_week'] >= 5])  # Saturday=5, Sunday=6
-            
-            stats['day_of_week_pattern'] = {
-                'weekday': weekday_count,
-                'weekend': weekend_count
-            }
-            
-            # Data Timeline Analysis
-            earliest_date = valid_dates['parsed_date'].min()
-            latest_date = valid_dates['parsed_date'].max()
-            total_days = (latest_date - earliest_date).days
-            
-            # Create period description
-            if total_days <= 365:
-                period_description = f"Analyzing your last {total_days} days of cinematic history"
-            elif total_days <= 730:
-                period_description = f"Exploring {total_days} days of your film journey"
-            else:
-                years = total_days // 365
-                period_description = f"Journeying through {years} years of your cinematic legacy"
-            
-            stats['data_timeline'] = {
-                'earliest_date': earliest_date.isoformat(),
-                'latest_date': latest_date.isoformat(),
-                'total_days': total_days,
-                'period_description': period_description
-            }
+            if not watched_valid_dates.empty:
+                date_data = watched_valid_dates
+                date_source = "watched"
+    
+    if date_data is not None:
+        # Monthly habits
+        date_data['year_month'] = date_data['parsed_date'].dt.strftime('%Y-%m')
+        monthly_counts = date_data['year_month'].value_counts().sort_index()
+        
+        monthly_viewing_habits = []
+        for year_month, count in monthly_counts.items():
+            monthly_viewing_habits.append({'month': year_month, 'count': int(count)})
+        
+        stats['monthly_viewing_habits'] = monthly_viewing_habits
+        
+        # Weekday/weekend analysis
+        date_data['day_of_week'] = date_data['parsed_date'].dt.dayofweek
+        weekday_count = len(date_data[date_data['day_of_week'] < 5])  # Mon=0, Fri=4
+        weekend_count = len(date_data[date_data['day_of_week'] >= 5])  # Sat=5, Sun=6
+        
+        stats['day_of_week_pattern'] = {
+            'weekday': weekday_count,
+            'weekend': weekend_count
+        }
+        
+        # Timeline analysis
+        earliest_date = date_data['parsed_date'].min()
+        latest_date = date_data['parsed_date'].max()
+        total_days = (latest_date - earliest_date).days
+        
+        # Handle single-day entries or very short periods
+        if total_days == 0:
+            # If same day, use 1 day as the range
+            total_days = 1
+        elif total_days < 30:
+            # For very short periods, add some buffer
+            total_days = max(total_days, 7)  # Minimum 1 week
+        
+        # Create period description
+        if total_days == 1:
+            period_description = f"Analyzing your cinematic moment on {earliest_date.strftime('%B %d, %Y')}"
+        elif total_days <= 365:
+            period_description = f"Analyzing your last {total_days} days of cinematic history"
+        elif total_days <= 730:
+            period_description = f"Exploring {total_days} days of your film journey"
+        else:
+            years = total_days // 365
+            period_description = f"Journeying through {years} years of your cinematic legacy"
+        
+        stats['data_timeline'] = {
+            'earliest_date': earliest_date.isoformat(),
+            'latest_date': latest_date.isoformat(),
+            'total_days': total_days,
+            'period_description': period_description
+        }
+    else:
+        pass
      
     # === ADVANCED ANALYTICS & CINEMATIC DNA ===
     
@@ -1010,28 +1068,41 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     update_progress("analyzing", "Language analysis complete", 8, 10)
 
     cast_counts = Counter([actor for cast_list in films_enriched['cast'].dropna() for actor in cast_list])
-    stats['top_actors'] = [{'name': name, 'count': count} for name, count in cast_counts.most_common(20)]
+    
+    # Create top_actors with profile paths for the top 3 actors
+    top_actors_with_profiles = []
+    for i, (name, count) in enumerate(cast_counts.most_common(3)):
+        profile_path = None
+        try:
+            # Search for the actor to get their profile image
+            person_search_data = await tmdb_get(session, 'search/person', {'query': name})
+            if person_search_data and person_search_data.get('results'):
+                top_person_details = person_search_data['results'][0]
+                profile_path = top_person_details.get('profile_path')
+        except Exception as e:
+            pass
+        
+        top_actors_with_profiles.append({
+            'name': name,
+            'count': count,
+            'profile_path': profile_path
+        })
+    
+    # Add remaining actors without profile paths
+    remaining_actors = [{'name': name, 'count': count} for name, count in cast_counts.most_common(20)[3:]]
+    stats['top_actors'] = top_actors_with_profiles + remaining_actors
+    
     update_progress("analyzing", "Cast analysis complete", 9, 10)
 
     # === Movie Crush Feature ===
     stats['movie_crush'] = None
-    if cast_counts:
-        top_actor_name, count = cast_counts.most_common(1)[0]
-        
-        # Perform a single API call to find the actor and their image
-        person_search_data = await tmdb_get(session, 'search/person', {'query': top_actor_name})
-        
-        if person_search_data and person_search_data.get('results'):
-            # Assume the first result is the correct person
-            top_person_details = person_search_data['results'][0]
-            profile_path = top_person_details.get('profile_path')
-            
-            if profile_path:
-                stats['movie_crush'] = {
-                    'name': top_actor_name,
-                    'profile_path': profile_path,
-                    'count': count
-                }
+    if top_actors_with_profiles:
+        top_actor = top_actors_with_profiles[0]
+        stats['movie_crush'] = {
+            'name': top_actor['name'],
+            'profile_path': top_actor['profile_path'],
+            'count': top_actor['count']
+        }
 
     # === SPECIAL INSIGHTS (Restored) ===
     insights = []
@@ -1099,6 +1170,11 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     return stats
 
 # --- API Endpoints ---
+@app.get("/")
+async def root():
+    """Health check endpoint"""
+    return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend"}
+
 @app.get("/api/progress")
 async def get_progress():
     """Get current analysis progress"""
@@ -1144,17 +1220,36 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
         else:
             raise HTTPException(status_code=400, detail="Invalid input. Please upload a single ZIP file or multiple CSV files.")
 
-        # Discover CSV files in the directory
+        # Discover CSV files in the directory (enhanced for Mac exports)
         required_files = [
-            'watched.csv', 'diary.csv', 'ratings.csv', 'reviews.csv',
+            'diary.csv', 'ratings.csv', 'watched.csv', 'reviews.csv',
             'watchlist.csv', 'films.csv', 'comments.csv', 'profile.csv'
         ]
-        for item in os.listdir(request_dir):
-            item_lower = item.lower()
-            for req_file in required_files:
-                if req_file.split('.')[0] in item_lower:
-                     csv_files[req_file] = os.path.join(request_dir, item)
-                     break
+        
+        # Recursively search for CSV files (handles nested folders from Mac exports)
+        def find_csv_files(directory):
+            csv_found = {}
+            for root, dirs, files in os.walk(directory):
+                for file in files:
+                    if file.lower().endswith('.csv'):
+                        file_lower = file.lower()
+                        for req_file in required_files:
+                            if req_file.split('.')[0] in file_lower:
+                                csv_found[req_file] = os.path.join(root, file)
+                                break
+            return csv_found
+        
+        csv_files = find_csv_files(request_dir)
+        
+        # If no CSV files found in subdirectories, check root directory
+        if not csv_files:
+            for item in os.listdir(request_dir):
+                if os.path.isfile(os.path.join(request_dir, item)):
+                    item_lower = item.lower()
+                    for req_file in required_files:
+                        if req_file.split('.')[0] in item_lower:
+                             csv_files[req_file] = os.path.join(request_dir, item)
+                             break
         
         if not csv_files:
             raise HTTPException(status_code=400, detail="No valid Letterboxd CSV files found in the upload.")
@@ -1189,12 +1284,7 @@ async def search_tmdb_person(name: str, role: str = None):
             # Get the first result (most relevant)
             person = person_data['results'][0]
             
-            # Debug logging for problematic cases
-            if name.lower() in ['woody allen', 'allen, woody', 'woody allen']:
-                print(f"🔍 Debug: Searching for {name} as {role}")
-                print(f"📋 Found {len(person_data['results'])} results")
-                for i, result in enumerate(person_data['results'][:3]):
-                    print(f"  {i+1}. {result.get('name')} - Dept: {result.get('known_for_department')} - Popularity: {result.get('popularity')}")
+            # Search for person
             
             # If role is specified, try to find a better match
             if role and len(person_data['results']) > 1:
@@ -1226,9 +1316,7 @@ async def search_tmdb_person(name: str, role: str = None):
                         if person != person_data['results'][0]:  # Found a better match
                             break
             
-            # Debug logging for final selection
-            if name.lower() in ['woody allen', 'allen, woody', 'woody allen']:
-                print(f"✅ Selected: {person.get('name')} - Dept: {person.get('known_for_department')} - Profile: {person.get('profile_path')}")
+            # Person selected
             
             profile_path = person.get('profile_path')
             if profile_path:
@@ -1252,6 +1340,73 @@ async def search_tmdb_person(name: str, role: str = None):
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TMDB API error: {str(e)}")
+
+@app.post("/api/parse-username")
+async def parse_username(request: Request):
+    """
+    Parse Letterboxd username from filename.
+    """
+    try:
+        body = await request.json()
+        filename = body.get('filename')
+        
+        if not filename or not isinstance(filename, str):
+            return {"username": None}
+        
+        # Use regex to extract username from filename
+        import re
+        regex = r'^letterboxd-([^-\s]+)-'
+        match = re.match(regex, filename, re.IGNORECASE)
+        
+        if match and match.group(1):
+            username = match.group(1).strip()
+            return {"username": username}
+        else:
+            return {"username": None}
+            
+    except Exception as e:
+        return {"username": None}
+
+@app.get("/tmdb-proxy/{path:path}")
+async def tmdb_proxy(path: str):
+    """
+    Proxy TMDB images to avoid CORS issues.
+    """
+    try:
+        tmdb_url = f"https://image.tmdb.org/{path}"
+        async with app.state.aiohttp_session.get(tmdb_url) as response:
+            if response.status != 200:
+                raise HTTPException(status_code=404, detail="Image not found")
+            
+            image_data = await response.read()
+            content_type = response.headers.get('Content-Type', 'image/jpeg')
+            
+            return Response(
+                content=image_data,
+                media_type=content_type,
+                headers={
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Range, Accept',
+                    'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+                    'Cache-Control': 'public, max-age=31536000, immutable'
+                }
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to proxy image: {str(e)}")
+
+@app.options("/tmdb-proxy/{path:path}")
+async def tmdb_proxy_options(path: str):
+    """Handle OPTIONS requests for CORS preflight."""
+    return Response(
+        status_code=204,
+        headers={
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Range, Accept',
+            'Access-Control-Expose-Headers': 'Content-Length, Content-Range'
+        }
+    )
 
 @app.get("/")
 async def root():

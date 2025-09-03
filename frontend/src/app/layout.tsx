@@ -1,31 +1,25 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import PlausibleProvider from 'next-plausible';
-import WebVitalsTracker from '@/components/WebVitalsTracker';
-import ErrorCaptureInitializer from '@/components/ErrorCaptureInitializer';
-import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
+import type { Metadata } from 'next';
+import './globals.css';
+import PageViewTracker from '@/components/PageViewTracker';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export const metadata: Metadata = {
-  title: "Letterboxd Wrapped",
-  description: "A comprehensive analysis of your cinematic journey.",
+  title: 'Letterboxd Wrapped - Your Year in Film',
+  description: 'Discover your personal film statistics and insights from your Letterboxd data.',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <head>
-        <PlausibleProvider domain="letterboxdwrapped.com" trackOutboundLinks />
-      </head>
-      <body className={inter.className}>
-        {children}
-        <WebVitalsTracker />
-        <ErrorCaptureInitializer />
+      <body className="bg-slate-900 text-white antialiased">
+        <ErrorBoundary>
+          {children}
+          {typeof window !== 'undefined' && <PageViewTracker />}
+        </ErrorBoundary>
       </body>
     </html>
   );
