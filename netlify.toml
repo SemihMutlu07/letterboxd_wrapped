@@ -1,0 +1,38 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "out"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NEXT_PUBLIC_API_BASE = "https://wrapped-backend.onrender.com"
+  # Add your Supabase credentials here (replace with actual values)
+  # NEXT_PUBLIC_SUPABASE_URL = "https://oycocvtrdbocvuqlnatu.supabase.co"
+  # NEXT_PUBLIC_SUPABASE_ANON_KEY = "your_anon_key_here"
+
+# API routes -> Netlify Functions (must come BEFORE SPA redirect)
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200
+
+# --- PostHog first-party proxy ---
+[[redirects]]
+  from = "/ingest/array/:splat"
+  to = "https://us-assets.i.posthog.com/array/:splat"
+  status = 200
+  force = true
+
+# catch-all for decide, flags, e, batch, sse, etc.
+[[redirects]]
+  from = "/ingest/:splat"
+  to = "https://us.i.posthog.com/:splat"
+  status = 200
+  force = true

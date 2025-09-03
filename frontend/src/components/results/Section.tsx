@@ -1,0 +1,61 @@
+'use client';
+
+import { motion } from 'framer-motion';
+import React from 'react';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
+};
+
+export const typography = {
+  sectionTitle: 'text-3xl md:text-[2.5rem] font-bold leading-tight',
+  caption: 'text-sm md:text-base opacity-80',
+};
+
+type SectionProps = {
+  title?: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  variant?: 'default' | 'highlight' | 'subtle';
+  className?: string;
+};
+
+export default function Section({
+  title,
+  subtitle,
+  icon,
+  children,
+  variant = 'default',
+  className = '',
+}: SectionProps) {
+  const variants = {
+    default: 'bg-slate-800/30 backdrop-blur-sm border border-slate-700/50',
+    highlight: 'bg-gradient-to-r from-orange-500/10 to-pink-500/10 border border-orange-500/30',
+    subtle: 'bg-slate-900/50',
+  } as const;
+
+  return (
+    <motion.section
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.2 }}
+      variants={containerVariants}
+      className={`${variants[variant]} rounded-3xl p-6 md:p-8 ${className}`}
+    >
+      {title && (
+        <div className="flex items-center gap-4 mb-6">
+          {icon && <div className="text-3xl">{icon}</div>}
+          <div>
+            <h2 className={typography.sectionTitle}>{title}</h2>
+            {subtitle && <p className={`${typography.caption} mt-1`}>{subtitle}</p>}
+          </div>
+        </div>
+      )}
+      {children}
+    </motion.section>
+  );
+}
+
+

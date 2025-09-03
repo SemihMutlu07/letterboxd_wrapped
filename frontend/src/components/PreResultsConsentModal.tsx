@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useReducedMotion } from 'framer-motion';
+import { initPostHog, captureEvent } from '@/lib/posthog';
+import { getFlagVariant } from '@/lib/posthogFlags';
 
 
 interface PreResultsConsentModalProps {
@@ -13,17 +15,59 @@ interface PreResultsConsentModalProps {
 
 export default function PreResultsConsentModal({ open, onAccept, onDecline }: PreResultsConsentModalProps) {
   const reduce = useReducedMotion();
-  const [variant, setVariant] = useState<'A' | 'B'>('A');
+  const [variant, setVariant] = useState<'control' | 'friendly'>('control');
   const [startTime, setStartTime] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      // Randomly select variant A or B
-      setVariant(Math.random() < 0.5 ? 'A' : 'B');
       setStartTime(performance.now());
     }
   }, [open]);
+
+  // Feature flag A/B testing
+  useEffect(() => {
+    let alive = true;
+    
+    const loadVariant = async () => {
+      try {
+        const flagVariant = await getFlagVariant('consent_modal_variant', 'control');
+        if (!alive) return;
+        
+        setVariant((flagVariant as 'control' | 'friendly') ?? 'control');
+        
+        // Capture view event with error handling
+        try {
+          captureEvent('consent_modal_view', { variant: flagVariant });
+        } catch (analyticsError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to capture consent modal view:', analyticsError);
+          }
+        }
+      } catch (error) {
+        if (!alive) return;
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Feature flag loading failed, using control variant:', error);
+        }
+        
+        setVariant('control');
+        
+        // Still try to capture the view event
+        try {
+          captureEvent('consent_modal_view', { variant: 'control' });
+        } catch (analyticsError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to capture consent modal view (fallback):', analyticsError);
+          }
+        }
+      }
+    };
+
+    loadVariant();
+    
+    return () => { alive = false };
+  }, []);
 
   const handleDecision = async (decision: 'accept' | 'decline') => {
     const msToDecision = Math.round(performance.now() - startTime);
@@ -38,14 +82,43 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
       //   { from: 'results-gate' }
       // );
     } catch (err) {
-      console.error('Error submitting consent:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error submitting consent:', err);
+      }
       // Don't block navigation on error, just log and continue
-    } finally {
-      setIsSubmitting(false);
+    }
+
+    // Handle PostHog consent with error handling
+    if (decision === 'accept') {
+      try {
+        initPostHog();
+      } catch (initError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('PostHog initialization failed:', initError);
+        }
+      }
+      
+      try {
+        captureEvent('consent_decision', {
+          decision,
+          ab_variant: variant,
+          ms_to_decision: msToDecision,
+        });
+      } catch (analyticsError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Failed to capture consent decision:', analyticsError);
+        }
+      }
     }
 
     // Save consent decision to sessionStorage
-    // saveConsentToStorage(decision); // TODO: Re-enable when sessionUtils is ready
+    try {
+      sessionStorage.setItem('consent_decision', decision);
+    } catch (storageError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to save consent to sessionStorage:', storageError);
+      }
+    }
 
     // Call the appropriate callback
     if (decision === 'accept') {
@@ -53,6 +126,8 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
     } else {
       onDecline();
     }
+    
+    setIsSubmitting(false);
   };
 
   if (!open) return null;
@@ -61,17 +136,20 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
       <div className={`relative w-full max-w-lg rounded-2xl border border-slate-700/60 bg-slate-900/95 p-5 sm:p-6 text-white shadow-2xl ${reduce ? '' : 'transition-transform'}`}>
-        <div className="mb-4">
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-            Help us improve your experience
-          </h2>
-          <p className="mt-2 text-sm sm:text-base text-slate-300 leading-relaxed">
-            {variant === 'A' 
-              ? "We'd love to learn from your Letterboxd data to make this tool even better. Your data will be anonymized and used only for improving the analysis."
-              : "Your feedback helps us create better insights. Would you like to contribute to improving this tool with your anonymized data?"
-            }
-          </p>
-        </div>
+                 <div className="mb-4">
+           <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+             {variant === 'friendly' 
+               ? 'Help us make this better'
+               : 'Help us improve your experience'
+             }
+           </h2>
+           <p className="mt-2 text-sm sm:text-base text-slate-300 leading-relaxed">
+             {variant === 'friendly'
+               ? "Share anonymous usage so we can improve."
+               : "We'd love to learn from your Letterboxd data to make this tool even better. Your data will be anonymized and used only for improving the analysis."
+             }
+           </p>
+         </div>
 
         <div className="mt-6 flex flex-col sm:flex-row gap-3">
           <button

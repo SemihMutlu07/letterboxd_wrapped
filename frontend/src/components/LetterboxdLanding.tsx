@@ -7,12 +7,14 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import PreResultsConsentModal from './PreResultsConsentModal';
 import { ensureSessionRow } from '@/lib/sessions';
+import { analyzeFiles, testBackend, parseLetterboxdUsername } from '@/lib/api';
 
 
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detectedUsername, setDetectedUsername] = useState<string | null>(null);
 
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
@@ -42,10 +44,10 @@ export default function LetterboxdLanding() {
       setSessionId(id);
       
       // Ensure session row exists in database
-      try {
+            try {
         await ensureSessionRow();
-      } catch (err) {
-        console.error('Failed to ensure session row:', err);
+      } catch {
+        // Silent error handling
       }
     };
     
@@ -54,18 +56,14 @@ export default function LetterboxdLanding() {
 
   // Test backend connectivity on component mount
   useEffect(() => {
-    const testBackend = async () => {
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${apiUrl}/`); // FastAPI root endpoint
-        if (!response.ok) {
-          throw new Error(`Backend test failed with status: ${response.status}`);
-        }
-      } catch (err) {
-        console.error('Backend connectivity test failed:', err);
+    const testBackendConnectivity = async () => {
+            try {
+        await testBackend();
+      } catch {
+        // Silent error handling
       }
     };
-    testBackend();
+    testBackendConnectivity();
   }, []);
 
   // Poll progress endpoint during upload
@@ -84,14 +82,54 @@ export default function LetterboxdLanding() {
   }, []);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      setError('No files selected. Please choose your Letterboxd export files.');
+      return;
+    }
 
-    // Track file upload
-    // trackEvent('files_uploaded', { // TODO: Re-enable when analytics is ready
-    //   file_count: files.length,
-    //   file_types: Array.from(files).map(f => f.type || 'unknown'),
-    //   total_size: Array.from(files).reduce((sum, f) => sum + f.size, 0)
-    // });
+    // Validate file types and sizes
+    const maxFileSize = 50 * 1024 * 1024; // 50MB
+    const allowedTypes = ['.csv', '.zip', '.CSV', '.ZIP'];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Check file size
+      if (file.size > maxFileSize) {
+        setError(`File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 50MB.`);
+        return;
+      }
+      
+      // Check file type
+      const hasValidExtension = allowedTypes.some(ext => 
+        file.name.toLowerCase().endsWith(ext)
+      );
+      
+      if (!hasValidExtension) {
+        setError(`File "${file.name}" is not a supported format. Please upload .csv or .zip files only.`);
+        return;
+      }
+    }
+
+    // Extract username from CSV files using backend parsing
+    let detectedUsername: string | null = null;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const result = await parseLetterboxdUsername(files[i].name);
+        if (result.username) {
+          detectedUsername = result.username;
+  
+          break;
+        }
+      } catch {
+        // Silent error handling
+      }
+    }
+    
+    if (detectedUsername) {
+      setDetectedUsername(detectedUsername);
+      sessionStorage.setItem('lb_username', detectedUsername);
+    }
 
     setIsUploading(true);
     setError(null);
@@ -99,55 +137,113 @@ export default function LetterboxdLanding() {
     let payloadZip: File;
     const single = files.length === 1 ? files[0] : null;
     const isZip = single && /\.zip$/i.test(single.name);
+    
     if (isZip && single) {
-      payloadZip = single;
+      // Enhanced Mac ZIP handling: extract CSVs from nested folders
+      try {
+        const inZip = await JSZip.loadAsync(single);
+        const outZip = new JSZip();
+        let foundCsv = false;
+        const csvFiles: Array<{name: string, blob: Blob}> = [];
+        
+        // First pass: collect all CSV files
+        const tasks: Promise<void>[] = [];
+        inZip.forEach((path, file) => {
+          if (/\.csv$/i.test(path)) {
+            foundCsv = true;
+            tasks.push(
+              file.async('blob').then((blob) => {
+                // Extract filename from path (handle nested folders)
+                const name = path.split('/').pop() || path;
+                csvFiles.push({ name, blob });
+              })
+            );
+          }
+        });
+        
+        if (foundCsv) {
+          await Promise.all(tasks);
+          
+          // Sort CSV files by priority: diary > ratings > watched > others
+          const priorityOrder = ['diary', 'ratings', 'watched', 'reviews', 'watchlist'];
+          csvFiles.sort((a, b) => {
+            const aName = a.name.toLowerCase();
+            const bName = b.name.toLowerCase();
+            const aPriority = priorityOrder.findIndex(p => aName.includes(p));
+            const bPriority = priorityOrder.findIndex(p => bName.includes(p));
+            if (aPriority === -1 && bPriority === -1) return 0;
+            if (aPriority === -1) return 1;
+            if (bPriority === -1) return -1;
+            return aPriority - bPriority;
+          });
+          
+          // Add files to output ZIP
+          csvFiles.forEach(({ name, blob }) => {
+            outZip.file(name, blob);
+          });
+          
+          const blob = await outZip.generateAsync({ type: 'blob' });
+          payloadZip = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
+        } else {
+          setError('No CSV files found in the ZIP archive. Please ensure your Letterboxd export contains CSV files.');
+          setIsUploading(false);
+          return;
+        }
+      } catch {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('ZIP processing error');
+        }
+        setError('Failed to process ZIP file. The file may be corrupted or password-protected.');
+        setIsUploading(false);
+        return;
+      }
     } else {
-      payloadZip = await zipFiles(files);
+      try {
+        payloadZip = await zipFiles(files);
+      } catch {
+        setError('Failed to prepare files for upload. Please try again.');
+        setIsUploading(false);
+        return;
+      }
     }
 
     const formData = new FormData();
     formData.append('files', payloadZip);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/analyze`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('[Landing] Analysis completed, saving stats to localStorage');
-        console.log('[Landing] Stats keys:', result.stats ? Object.keys(result.stats) : 'no stats');
-        localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
-        console.log('[Landing] Stats saved to localStorage');
-        
-        // Track analysis completion with consent-gated film stats
-        // trackEvent('analysis_started', { // TODO: Re-enable when analytics is ready
-        //   has_stats: !!result.stats,
-        //   stats_keys: result.stats ? Object.keys(result.stats) : []
-        // });
-        
-        // Navigate directly to results page since analysis is complete
-        console.log('[Landing] Navigating to results page');
-        router.push('/results');
-        
-
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Analysis failed');
-      }
-    } catch (err) {
-      console.error('Fetch error details:', err);
-      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-      setError(errorMessage);
-      setIsUploading(false);
+      const result = await analyzeFiles(formData);
+      localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
       
-      // Track error
-      // trackEvent('analysis_error', { // TODO: Re-enable when analytics is ready
-      //   error: errorMessage,
-      //   stage: 'upload'
-      // });
+      // Navigate to results page
+      router.push('/results');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      
+      // Enhanced error messages for Mac users
+      if (/No valid Letterboxd CSV files/i.test(errorMessage)) {
+        setError(
+          'No valid Letterboxd CSV files found. This often happens on Mac when Safari auto-extracts the ZIP. ' +
+          'Try one of these solutions:\n\n' +
+          '1. Use the "Or choose exported folder" option below\n' +
+          '2. Use Chrome/Edge/Firefox instead of Safari\n' +
+          '3. Re-upload the original ZIP file'
+        );
+      } else if (/Network error/i.test(errorMessage)) {
+        setError(
+          'Network connection error. Please check your internet connection and try again.'
+        );
+      } else if (/timeout/i.test(errorMessage)) {
+        setError(
+          'Request timed out. The server may be busy. Please try again in a few moments.'
+        );
+      } else if (/File too large/i.test(errorMessage)) {
+        setError(
+          'The file is too large to process. Please try with a smaller export or contact support.'
+        );
+      } else {
+        setError(`Analysis failed: ${errorMessage}`);
+      }
+      setIsUploading(false);
     }
   }, [zipFiles, router]);
 
@@ -240,6 +336,10 @@ export default function LetterboxdLanding() {
             <p className="mx-auto mt-1 text-slate-300 text-base leading-relaxed">
               Upload your Letterboxd ZIP or drop the exported folder.
             </p>
+            {/* Desktop disclaimer */}
+            <div className="mt-3 mx-auto max-w-xl rounded-lg border border-white/10 bg-slate-800/40 px-3 py-2 text-slate-300 text-xs sm:text-sm">
+              For the smoothest experience, we recommend using a desktop or laptop browser. The Letterboxd mobile app can sometimes block file downloads/exports, which may prevent uploading your data here.
+            </div>
           </header>
 
           {/* Dropzone */}
@@ -267,7 +367,11 @@ export default function LetterboxdLanding() {
                 </div>
                 <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
                 <p className="mt-1 text-sm text-slate-400">.zip, exported folder, or multiple .csv files</p>
-                <p className="mt-1 text-xs text-slate-400">Supports: ratings.csv, diary.csv, watchlist.csv, reviews.csv</p>
+                {detectedUsername && (
+                  <p className="mt-2 text-xs text-orange-400 font-medium">
+                    Detected username: {detectedUsername}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -353,6 +457,15 @@ export default function LetterboxdLanding() {
                         <li>Your data will be prepared and a <strong className="text-orange-400">.zip file</strong> will download.</li>
                         <li>Once downloaded, just drag and drop the file here!</li>
                       </ol>
+                      
+                      <div className="mt-4 p-3 rounded-lg bg-orange-900/30 border border-orange-700/50">
+                        <p className="text-sm font-medium text-orange-300 mb-2">📱 Mac Users:</p>
+                        <ul className="text-xs text-orange-200 space-y-1">
+                          <li>• Safari may auto-extract the ZIP into a folder</li>
+                          <li>• If that happens, use &quot;Or choose exported folder&quot; option above</li>
+                          <li>• Or use Chrome/Edge/Firefox for better ZIP handling</li>
+                        </ul>
+                      </div>
                     </div>
                   </motion.div>
                 )}
