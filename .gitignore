@@ -1,117 +1,59 @@
-# Environment variables
-.env
-.env.local
-.env.production
-.env.staging
+# env
 *.env
+.env
+.env.*
+!.env.example
 
-# Cache and temp directories
+# caches & temp
 **/tmdb_cache/
-**/.secrets
+**/.secrets/
 **/uploads/
 **/temp/
 .cache/
 .tmp/
 
-# Python
+# python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual environments
+.venv/
 venv/
 env/
-ENV/
-.venv/
+build/
+dist/
+*.egg-info/
+wheels/
 
-# Node.js
+# node / js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.eslintcache
 
-# Next.js
+# next.js
 .next/
 out/
-build
+build/
 
-# Deployment
-
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Logs
-logs
+# logs
+logs/
 *.log
+*.lcov
+coverage/
 
-# Data files
+# data & artifacts
 *.csv
 *.zip
 **/letterboxd_data/
 
-# Additional items you might want:
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# Dependency directories
+# tools / package managers
+.npm
 jspm_packages/
 
-# Optional npm cache directory
-.npm
-
-# ESLint cache
-.eslintcache
-
-# Next.js build output
-.next
-
-# Ignore only top-level build libs, but NEVER ignore app source libs
-/lib/
-/**/dist/
-/**/build/
-
-# allow source lib under frontend/src
-!frontend/src/lib/
-!frontend/src/lib/**
-
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
