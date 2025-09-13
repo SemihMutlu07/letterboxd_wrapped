@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { initPostHog, captureEvent } from '@/lib/posthog';
-import { getFlagVariant } from '@/lib/posthogFlags';
+import { getFlagVariant } from '@/lib/posthog';
+import { saveConsentDecisionToDb } from '@/lib/consentFlow';
 
 
 interface PreResultsConsentModalProps {
@@ -31,9 +32,9 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
     
     const loadVariant = async () => {
       try {
-        const flagVariant = await getFlagVariant('consent_modal_variant', 'control');
         if (!alive) return;
         
+        const flagVariant = await getFlagVariant('consent_modal_variant', 'control');
         setVariant((flagVariant as 'control' | 'friendly') ?? 'control');
         
         // Capture view event with error handling
@@ -74,13 +75,7 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
     setIsSubmitting(true);
 
     try {
-      // Save consent decision to Supabase
-      // await saveConsentDecision( // TODO: Re-enable when consent is ready
-      //   decision === 'accept',
-      //   variant,
-      //   msToDecision,
-      //   { from: 'results-gate' }
-      // );
+      await saveConsentDecisionToDb(decision === 'accept');
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error submitting consent:', err);
@@ -88,7 +83,6 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
       // Don't block navigation on error, just log and continue
     }
 
-    // Handle PostHog consent with error handling
     if (decision === 'accept') {
       try {
         initPostHog();

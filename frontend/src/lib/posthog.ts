@@ -14,6 +14,16 @@ export function initPostHog() {
     return;
   }
 
+  // Defer initialization to idle time for better performance
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => initPostHogSync(key));
+  } else {
+    // Fallback for browsers without requestIdleCallback
+    setTimeout(() => initPostHogSync(key), 100);
+  }
+}
+
+function initPostHogSync(key: string) {
   try {
     // Use our first-party proxy path
     const api_host = '/ingest';
