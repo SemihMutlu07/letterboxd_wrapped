@@ -11,7 +11,6 @@ import { searchPerson } from '@/lib/api';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
-import { testSupabaseConnection } from '@/lib/supabaseClient';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
@@ -125,19 +124,6 @@ export default function ResultsPage() {
   const feedbackRef = useRef<FeedbackFabRef>(null);
   const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
   
-  // Supabase test
-  const [supabaseStatus, setSupabaseStatus] = useState<'unknown' | 'testing' | 'connected' | 'failed'>('unknown');
-  
-  const testSupabase = async () => {
-    setSupabaseStatus('testing');
-    try {
-      const isConnected = await testSupabaseConnection();
-      setSupabaseStatus(isConnected ? 'connected' : 'failed');
-    } catch (error) {
-      console.error('Supabase test error:', error);
-      setSupabaseStatus('failed');
-    }
-  };
 
   // session helpers
   const getSessionId = () => {
@@ -451,28 +437,11 @@ export default function ResultsPage() {
           score={cineScore || 50} 
         />
 
-        {/* Share buttons */}
-        <div className="flex flex-col sm:flex-row justify-center items-center gap-4 my-8">
+        {/* Share button */}
+        <div className="flex justify-center my-8">
           <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
             <div className="w-6 h-6 bg-white rounded" />
             Share Your Wrapped
-          </button>
-          <button onClick={testSupabase} disabled={supabaseStatus === 'testing'} className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium text-base transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 ${
-            supabaseStatus === 'connected' ? 'bg-green-600 hover:bg-green-700' :
-            supabaseStatus === 'failed' ? 'bg-red-600 hover:bg-red-700' :
-            supabaseStatus === 'testing' ? 'bg-yellow-600' :
-            'bg-gray-600 hover:bg-gray-700'
-          } text-white`}>
-            <div className={`w-5 h-5 rounded ${
-              supabaseStatus === 'connected' ? 'bg-green-300' :
-              supabaseStatus === 'failed' ? 'bg-red-300' :
-              supabaseStatus === 'testing' ? 'bg-yellow-300 animate-pulse' :
-              'bg-gray-300'
-            }`} />
-            {supabaseStatus === 'testing' ? 'Testing...' : 
-             supabaseStatus === 'connected' ? 'Supabase OK' :
-             supabaseStatus === 'failed' ? 'Supabase Failed' :
-             'Test Supabase'}
           </button>
         </div>
       </main>
