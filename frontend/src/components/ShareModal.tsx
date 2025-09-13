@@ -108,8 +108,7 @@ export default function ShareModal({
   const [showSuccess, setShowSuccess] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
 
-  // Touch handling for swipe-down close
-  const [touchStart, setTouchStart] = useState(0);
+  // Touch handling for pinch zoom
   
   // Zoom and Pan functionality
   const [userScale, setUserScale] = useState(1);
@@ -142,17 +141,24 @@ export default function ShareModal({
     setIsPanning(false);
   };
 
-  // Touch events for mobile
+  // Touch events for mobile - removed swipe-down to close, added pinch zoom
+  const [lastPinchDistance, setLastPinchDistance] = useState(0);
+  
+  const getDistance = (touch1: Touch, touch2: Touch) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       const touch = e.touches[0];
-      setTouchStart(touch.clientY);
       setIsPanning(true);
       setLastPanPoint({ x: touch.clientX, y: touch.clientY });
     } else if (e.touches.length === 2) {
-      // Prevent swipe-down when zooming with pinch
-      setTouchStart(0);
+      // Pinch zoom
       setIsPanning(false);
+      setLastPinchDistance(getDistance(e.touches[0], e.touches[1]));
     }
   };
 
@@ -160,7 +166,7 @@ export default function ShareModal({
     if (e.touches.length === 1 && isPanning) {
       const touch = e.touches[0];
       
-      // Always allow panning when touching the preview area
+      // Panning
       const deltaX = touch.clientX - lastPanPoint.x;
       const deltaY = touch.clientY - lastPanPoint.y;
       setPanOffset(prev => ({
@@ -168,22 +174,20 @@ export default function ShareModal({
         y: prev.y + deltaY
       }));
       setLastPanPoint({ x: touch.clientX, y: touch.clientY });
-      
-      // Only check for swipe-down to close when not zoomed and minimal horizontal movement
-      if (userScale === 1 && touchStart && Math.abs(deltaX) < 30) {
-        const diff = touch.clientY - touchStart;
-        if (diff > 80) {
-          onClose();
-          setTouchStart(0);
-          return;
-        }
+    } else if (e.touches.length === 2) {
+      // Pinch zoom
+      const currentDistance = getDistance(e.touches[0], e.touches[1]);
+      if (lastPinchDistance > 0) {
+        const scaleChange = currentDistance / lastPinchDistance;
+        setUserScale(prev => Math.max(0.5, Math.min(3, prev * scaleChange)));
       }
+      setLastPinchDistance(currentDistance);
     }
   };
 
   const handleTouchEnd = () => {
-    setTouchStart(0);
     setIsPanning(false);
+    setLastPinchDistance(0);
   };
 
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -221,13 +225,26 @@ export default function ShareModal({
   , [orientation]);
 
   
-  // Lock body scroll when open
+  // Lock body scroll when open and prevent modal from closing on scroll
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    
+    // Prevent modal from closing on touch scroll
+    const handleTouchMove = (e: TouchEvent) => {
+      // Only prevent if touch is inside the modal
+      const modal = document.querySelector('[data-modal="share-modal"]');
+      if (modal && modal.contains(e.target as Node)) {
+        e.stopPropagation();
+      }
+    };
+    
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    
     return () => {
       document.body.style.overflow = prev;
+      document.removeEventListener('touchmove', handleTouchMove);
     };
   }, [open]);
 
@@ -359,6 +376,7 @@ export default function ShareModal({
 
       {/* Modal shell */}
       <div 
+        data-modal="share-modal"
         className="relative w-full max-w-6xl h-full bg-gradient-to-br from-slate-900/98 to-slate-800/95 backdrop-blur-2xl mx-auto rounded-2xl md:rounded-3xl shadow-2xl border border-slate-700/50 flex flex-col overflow-hidden"
       >
         {/* Header */}
