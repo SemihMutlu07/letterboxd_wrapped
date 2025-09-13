@@ -50,13 +50,11 @@ export function getSupabase(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+
   try {
     validateSupabaseConfig(url, anon);
   } catch (error) {
-    // Log the error for debugging
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Supabase configuration error:', error);
-    }
+    console.error('❌ Supabase configuration error:', error);
     throw error;
   }
 
@@ -75,37 +73,25 @@ export function getSupabase(): SupabaseClient {
     
     return cachedClient;
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Failed to create Supabase client:', error);
-    }
+    console.error('❌ Failed to create Supabase client:', error);
     throw new Error('Failed to initialize Supabase client. Please check your configuration.');
   }
 }
 
-// Utility function to test Supabase connection
 export async function testSupabaseConnection(): Promise<boolean> {
   try {
     const supabase = getSupabase();
     
-    // Simple query to test connection
-    const { error } = await supabase
+    const { count, error } = await supabase
       .from('feedback')
-      .select('count', { count: 'exact', head: true });
+      .select('*', {head: true, count: 'exact'});
     
     if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Supabase connection test failed:', error);
-      }
       return false;
     }
     
-    return true;
+    return typeof count === "number";
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Supabase connection test error:', error);
-    }
     return false;
   }
 }
-
-

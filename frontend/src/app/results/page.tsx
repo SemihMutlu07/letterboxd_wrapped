@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import ShareModal from '@/components/ShareModal';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
@@ -9,6 +9,9 @@ import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
 import { getTmdbImageUrl } from '@/lib/analytics';
+import { useRafThrottle } from '@/hooks/useRafThrottle';
+import { useLazyMount } from '@/hooks/useIntersectionObserver';
+import { testSupabaseConnection } from '@/lib/supabaseClient';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
@@ -52,15 +55,55 @@ interface LetterboxdStats {
 }
 
 const calcCinephileScore = (s?: LetterboxdStats | null) => {
-  if (!s) return 50;
+  if (!s) return 45;
+  
   const total = s.total_films || 1;
-  const us = s.top_countries?.find(c=>c.name.toLowerCase().includes('united states'))?.count ?? 0;
-  const nonUS = Math.max(0, 1 - us / Math.max(1, total));
-  const pre2000 = (s.decades ?? []).filter(d => /^\d{4}/.test(d.decade) && parseInt(d.decade) < 2000).reduce((a,b)=>a+b.count,0) / total;
-  const langSpread = Math.min(1, ((s.top_languages?.length ?? 0) || 1) / 7);
-  const ratingBias = Math.abs((s.most_common_rating ?? 3.5) - (s.average_rating ?? 3.5)) / 2;
-  const raw = 0.4*nonUS + 0.35*pre2000 + 0.2*langSpread + 0.05*(1 - Math.min(1, ratingBias));
-  return Math.round(raw * 100);
+  const countries = s.top_countries || [];
+  const languages = s.top_languages || [];
+  const decades = s.decades || [];
+  
+  // BASE SCORE: Film volume (40%) - More films = higher base score
+  // This ensures people with more films get higher scores
+  const volumeBase = Math.min(50, Math.log10(Math.max(1, total)) * 20); // 0-50 points for volume
+  
+  // DIVERSITY BONUSES (30%) - International taste
+  const us = countries.find(c => c.name.toLowerCase().includes('united states'))?.count ?? 0;
+  const nonUSRatio = Math.max(0, 1 - us / total);
+  
+  // Bonus countries (prestigious cinema)
+  const prestigeCountries = ['france', 'italy', 'japan', 'south korea', 'iran', 'germany', 'sweden', 'russia'];
+  const prestigeCount = countries.filter(c => 
+    prestigeCountries.some(pc => c.name.toLowerCase().includes(pc))
+  ).reduce((sum, c) => sum + c.count, 0);
+  
+  const geoBonus = (nonUSRatio * 15) + Math.min(15, (prestigeCount / total) * 30);
+  
+  // HISTORICAL DEPTH (20%) - Older films bonus
+  const pre2000Count = decades.filter(d => {
+    const year = parseInt(d.decade.toString().replace('s', ''));
+    return !isNaN(year) && year < 2000;
+  }).reduce((sum, d) => sum + d.count, 0);
+  
+  const pre1980Count = decades.filter(d => {
+    const year = parseInt(d.decade.toString().replace('s', ''));
+    return !isNaN(year) && year < 1980;
+  }).reduce((sum, d) => sum + d.count, 0);
+  
+  const pre1960Count = decades.filter(d => {
+    const year = parseInt(d.decade.toString().replace('s', ''));
+    return !isNaN(year) && year < 1960;
+  }).reduce((sum, d) => sum + d.count, 0);
+  
+  const historyBonus = (pre2000Count / total) * 10 + (pre1980Count / total) * 5 + (pre1960Count / total) * 5;
+  
+  // LANGUAGE DIVERSITY (10%) - Multiple languages
+  const langCount = Math.min(8, languages.length);
+  const langBonus = (langCount / 8) * 10;
+  
+  // Calculate final score
+  const finalScore = Math.min(100, Math.max(5, Math.round(volumeBase + geoBonus + historyBonus + langBonus)));
+  
+  return finalScore;
 };
 
 export default function ResultsPage() {
@@ -81,6 +124,20 @@ export default function ResultsPage() {
   // feedback
   const feedbackRef = useRef<FeedbackFabRef>(null);
   const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
+  
+  // Supabase test
+  const [supabaseStatus, setSupabaseStatus] = useState<'unknown' | 'testing' | 'connected' | 'failed'>('unknown');
+  
+  const testSupabase = async () => {
+    setSupabaseStatus('testing');
+    try {
+      const isConnected = await testSupabaseConnection();
+      setSupabaseStatus(isConnected ? 'connected' : 'failed');
+    } catch (error) {
+      console.error('Supabase test error:', error);
+      setSupabaseStatus('failed');
+    }
+  };
 
   // session helpers
   const getSessionId = () => {
@@ -93,31 +150,53 @@ export default function ResultsPage() {
   const setModalShown = () => typeof window !== 'undefined' && sessionStorage.setItem('consent_modal_shown', 'true');
   const saveConsent = (d: 'accept' | 'decline') => typeof window !== 'undefined' && sessionStorage.setItem('consent_decision', d);
 
-  useEffect(() => { const onResize = () => setIsMobile(window.innerWidth < 480); onResize(); window.addEventListener('resize', onResize); return () => window.removeEventListener('resize', onResize); }, []);
+  // Throttled resize handler
+  const handleResize = useCallback(() => {
+    setIsMobile(window.innerWidth < 480);
+  }, []);
+  
+  const throttledResize = useRafThrottle(handleResize, []);
+  
+  useEffect(() => {
+    throttledResize();
+    window.addEventListener('resize', throttledResize);
+    return () => window.removeEventListener('resize', throttledResize);
+  }, [throttledResize]);
 
   useEffect(() => { 
+    
     const saved = localStorage.getItem('letterboxdStats'); 
     if (saved) { 
       try { 
-        setStats(JSON.parse(saved)); 
-      } catch {} 
-    } 
+        const parsedStats = JSON.parse(saved);
+        setStats(parsedStats); 
+      } catch (error) {
+      } 
+    } else {
+    }
     setLoading(false); 
     
     // Get username from sessionStorage
     const storedUsername = sessionStorage.getItem('lb_username');
     if (storedUsername) {
       setUsername(storedUsername);
+    } else {
     }
-    
-    // Log the stored username for debugging
-
   }, []);
 
   useEffect(() => { const id = getSessionId(); setSessionId(id); const t = setTimeout(() => { if (!hasModal()) setShowConsentModal(true); }, 500); return () => clearTimeout(t); }, []);
 
-  const handleConsentAccept = () => { setModalShown(); saveConsent('accept'); setShowConsentModal(false); };
-  const handleConsentDecline = () => { setModalShown(); saveConsent('decline'); setShowConsentModal(false); };
+  const handleConsentAccept = useCallback(() => { 
+    setModalShown(); 
+    saveConsent('accept'); 
+    setShowConsentModal(false); 
+  }, []);
+  
+  const handleConsentDecline = useCallback(() => { 
+    setModalShown(); 
+    saveConsent('decline'); 
+    setShowConsentModal(false); 
+  }, []);
 
   // Derived data - maintain hook order
   const decadeData = useMemo(() => {
@@ -254,36 +333,38 @@ export default function ResultsPage() {
     spentDays: Math.round(stats?.days_watched || 0),
     timePercent: Math.round(((stats?.days_watched || 0) / 365) * 100),
     cinemaScale: cineScore,
-    personaLabel: stats?.sinefil_meter?.type || 'Independent Cinephile',
+    personaLabel: '', // Unvanlar kaldırıldı
     minutesAverage: Math.round(stats?.average_runtime || 0),
     mostCommonRating: stats?.most_common_rating || 3.5,
     peakDecade: stats?.favorite_decade?.name || '2020s',
     peakDecadeCount: stats?.favorite_decade?.count || 0,
   }), [stats, directorImageUrl, cineScore]);
 
-  // Load director headshot
-  useEffect(() => {
-    (async () => {
-      const nm = stats?.most_watched_director?.name;
-      if (!nm) return;
-      
-      // Only try to load director image if we have a backend API available
-      if (process.env.NEXT_PUBLIC_API_BASE) {
-        try {
-          const data = await searchPerson(nm, 'director');
-          if (data.found && data.url) {
-            // Use getTmdbImageUrl to handle any URL format consistently
-            const imageUrl = getTmdbImageUrl(data.url);
-            if (imageUrl) {
-              setDirectorImageUrl(imageUrl);
-            }
+  // Load director headshot with lazy loading
+  const loadDirectorImage = useCallback(async () => {
+    const nm = stats?.most_watched_director?.name;
+    if (!nm) return;
+    
+    // Only try to load director image if we have a backend API available
+    if (process.env.NEXT_PUBLIC_API_BASE) {
+      try {
+        const data = await searchPerson(nm, 'director');
+        if (data.found && data.url) {
+          // Use getTmdbImageUrl to handle any URL format consistently
+          const imageUrl = getTmdbImageUrl(data.url);
+          if (imageUrl) {
+            setDirectorImageUrl(imageUrl);
           }
-        } catch {
-          // Silent error handling - fallback to no image
         }
+      } catch {
+        // Silent error handling - fallback to no image
       }
-    })();
+    }
   }, [stats?.most_watched_director?.name]);
+
+  useEffect(() => {
+    loadDirectorImage();
+  }, [loadDirectorImage]);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
   if (!stats) {
@@ -343,29 +424,55 @@ export default function ResultsPage() {
         {/* Genres */}
         <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
 
-        {/* Languages and Countries */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
-          <LanguagesLeaderboard key="languages-leaderboard" data={(stats.top_languages ?? []).slice(0,7)} />
-          <CountriesList countries={(stats.top_countries ?? []).slice(0, 10)} total={stats.total_countries} />
-        </div>
+        {/* Languages and Countries - Lazy loaded */}
+        <LazyLanguagesAndCountries 
+          languages={stats.top_languages ?? []} 
+          countries={stats.top_countries ?? []} 
+          totalCountries={stats.total_countries} 
+        />
 
-        {/* Film History */}
-        <FilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
+        {/* Film History - Lazy loaded */}
+        <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
 
-        {/* Ratings Bar */}
-        <RatingsBar data={ratingsArr} max={ratingMax} />
+        {/* Ratings Bar - Lazy loaded */}
+        <LazyRatingsBar data={ratingsArr} max={ratingMax} />
 
-        {/* Quick Facts */}
-        <QuickFacts avgMinutes={stats.average_runtime || 0} totalCountries={stats.total_countries || 0} mostCommonRating={stats.most_common_rating || 3.5} />
+        {/* Quick Facts - Lazy loaded */}
+        <LazyQuickFacts 
+          avgMinutes={stats.average_runtime || 0} 
+          totalCountries={stats.total_countries || 0} 
+          mostCommonRating={stats.most_common_rating || 3.5} 
+        />
 
-        {/* Cinema Scale */}
-        <CinemaScale type={stats.sinefil_meter?.type || 'Independent Cinephile'} description={stats.sinefil_meter?.description} score={cineScore || 50} />
+        {/* Cinema Scale - Lazy loaded */}
+        <LazyCinemaScale 
+          type={stats.sinefil_meter?.type || 'Independent Cinephile'} 
+          description={stats.sinefil_meter?.description} 
+          score={cineScore || 50} 
+        />
 
-        {/* Share button */}
-        <div className="flex justify-center my-8">
+        {/* Share buttons */}
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-4 my-8">
           <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
             <div className="w-6 h-6 bg-white rounded" />
             Share Your Wrapped
+          </button>
+          <button onClick={testSupabase} disabled={supabaseStatus === 'testing'} className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium text-base transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 ${
+            supabaseStatus === 'connected' ? 'bg-green-600 hover:bg-green-700' :
+            supabaseStatus === 'failed' ? 'bg-red-600 hover:bg-red-700' :
+            supabaseStatus === 'testing' ? 'bg-yellow-600' :
+            'bg-gray-600 hover:bg-gray-700'
+          } text-white`}>
+            <div className={`w-5 h-5 rounded ${
+              supabaseStatus === 'connected' ? 'bg-green-300' :
+              supabaseStatus === 'failed' ? 'bg-red-300' :
+              supabaseStatus === 'testing' ? 'bg-yellow-300 animate-pulse' :
+              'bg-gray-300'
+            }`} />
+            {supabaseStatus === 'testing' ? 'Testing...' : 
+             supabaseStatus === 'connected' ? 'Supabase OK' :
+             supabaseStatus === 'failed' ? 'Supabase Failed' :
+             'Test Supabase'}
           </button>
         </div>
       </main>
@@ -385,6 +492,114 @@ export default function ResultsPage() {
       />
       
       <FeedbackFab ref={feedbackRef} sessionId={sessionId} />
+    </div>
+  );
+}
+
+// ===================== LAZY LOADING COMPONENTS =====================
+
+// Lazy wrapper for Languages and Countries
+function LazyLanguagesAndCountries({ 
+  languages, 
+  countries, 
+  totalCountries 
+}: { 
+  languages: any[]; 
+  countries: any[]; 
+  totalCountries: number; 
+}) {
+  const { ref, shouldMount } = useLazyMount(100);
+  
+  return (
+    <div ref={ref} className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+      {shouldMount ? (
+        <>
+          <LanguagesLeaderboard key="languages-leaderboard" data={languages.slice(0,7)} />
+          <CountriesList countries={countries.slice(0, 10)} total={totalCountries} />
+        </>
+      ) : (
+        <div className="col-span-2 h-64 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+// Lazy wrapper for Film History
+function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
+  const { ref, shouldMount } = useLazyMount(150);
+  
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <FilmHistory data={data} max={max} isMobile={isMobile} />
+      ) : (
+        <div className="h-48 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+// Lazy wrapper for Ratings Bar
+function LazyRatingsBar({ data, max }: { data: any[]; max: number }) {
+  const { ref, shouldMount } = useLazyMount(200);
+  
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <RatingsBar data={data} max={max} />
+      ) : (
+        <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+// Lazy wrapper for Quick Facts
+function LazyQuickFacts({ 
+  avgMinutes, 
+  totalCountries, 
+  mostCommonRating 
+}: { 
+  avgMinutes: number; 
+  totalCountries: number; 
+  mostCommonRating: number; 
+}) {
+  const { ref, shouldMount } = useLazyMount(250);
+  
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <QuickFacts 
+          avgMinutes={avgMinutes} 
+          totalCountries={totalCountries} 
+          mostCommonRating={mostCommonRating} 
+        />
+      ) : (
+        <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+// Lazy wrapper for Cinema Scale
+function LazyCinemaScale({ 
+  type, 
+  description, 
+  score 
+}: { 
+  type: string; 
+  description?: string; 
+  score: number; 
+}) {
+  const { ref, shouldMount } = useLazyMount(300);
+  
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <CinemaScale type={type} description={description} score={score} />
+      ) : (
+        <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
     </div>
   );
 }

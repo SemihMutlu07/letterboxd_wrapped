@@ -1,8 +1,59 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Monitor, Smartphone } from 'lucide-react';
+import { X, Download, Monitor, Smartphone, Loader2 } from 'lucide-react';
 import ShareCard from './ShareCard';
-import { toPng } from 'html-to-image';
+import { useRafThrottle } from '@/hooks/useRafThrottle';
+import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
+
+// ---- Share helpers ----
+async function exportToBlob(el: HTMLElement, w: number, h: number, pixelRatio: number, bg: string) {
+  const { toBlob } = await import('html-to-image');
+  if (document.fonts) await document.fonts.ready;
+  return await toBlob(el, { width: w, height: h, pixelRatio, backgroundColor: bg });
+}
+
+async function shareToSystem(blob: Blob) {
+  // Web Share API (files) — SADECE mobil cihazlarda
+  const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  
+  if (!isMobile) {
+    return false; // Desktop'ta share sheet'i atla, direkt indirme yap
+  }
+  
+  const file = new File([blob], 'movies-wrapped.png', { type: 'image/png' });
+  const canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+  if (canShareFiles && navigator.share) {
+    await navigator.share({ files: [file], title: 'Movies Wrapped', text: 'My share card' });
+    return true;
+  }
+  return false;
+}
+
+async function saveWithFilePicker(blob: Blob) {
+  // Desktop Chromium – daha iyi "kaydet" deneyimi
+  // @ts-expect-error - File System Access API not in TypeScript types yet
+  if (window.showSaveFilePicker) {
+    // @ts-expect-error - File System Access API not in TypeScript types yet
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'movies-wrapped.png',
+      types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  }
+  return false;
+}
+
+function downloadFallback(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'movies-wrapped.png';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1200);
+}
 
 // Helper function to ensure share/export URLs use proxy instead of TMDB CDN
 function shareSafeUrl(u: string): string {
@@ -49,17 +100,127 @@ export default function ShareModal({
   cardProps,
   onDownloadSuccess,
 }: Props) {
-  // Debug: log API_BASE for verification
-  console.log('API_BASE', process.env.NEXT_PUBLIC_API_BASE);
+  // const dialogRef = useRef<HTMLDivElement>(null); // Unused for now
   const cardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.6);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
-  // Vertical is coming soon; lock export dimensions to horizontal
-  const target = useMemo(() => ({ w: 1200, h: 630 }), []);
+  // Touch handling for swipe-down close
+  const [touchStart, setTouchStart] = useState(0);
+  
+  // Zoom and Pan functionality
+  const [userScale, setUserScale] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
 
+  // Mouse events for desktop panning
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 0) { // Left mouse button
+      setIsPanning(true);
+      setLastPanPoint({ x: e.clientX, y: e.clientY });
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      const deltaX = e.clientX - lastPanPoint.x;
+      const deltaY = e.clientY - lastPanPoint.y;
+      setPanOffset(prev => ({
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }));
+      setLastPanPoint({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
+  // Touch events for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      setTouchStart(touch.clientY);
+      setIsPanning(true);
+      setLastPanPoint({ x: touch.clientX, y: touch.clientY });
+    } else if (e.touches.length === 2) {
+      // Prevent swipe-down when zooming with pinch
+      setTouchStart(0);
+      setIsPanning(false);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && isPanning) {
+      const touch = e.touches[0];
+      
+      // Always allow panning when touching the preview area
+      const deltaX = touch.clientX - lastPanPoint.x;
+      const deltaY = touch.clientY - lastPanPoint.y;
+      setPanOffset(prev => ({
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }));
+      setLastPanPoint({ x: touch.clientX, y: touch.clientY });
+      
+      // Only check for swipe-down to close when not zoomed and minimal horizontal movement
+      if (userScale === 1 && touchStart && Math.abs(deltaX) < 30) {
+        const diff = touch.clientY - touchStart;
+        if (diff > 80) {
+          onClose();
+          setTouchStart(0);
+          return;
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setTouchStart(0);
+    setIsPanning(false);
+  };
+
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    setUserScale(prev => Math.max(0.5, Math.min(3, prev * delta)));
+  }, []);
+
+  // Add wheel event listener with proper options
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
+  const resetZoom = () => {
+    setUserScale(1);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
+
+  // Performance hooks
+  const adaptivePixelRatio = useAdaptivePixelRatio();
+  // const isLowEndDevice = useIsLowEndDevice(); // Unused for now
+
+  // Dynamic export dimensions based on orientation
+  const target = useMemo(() => 
+    orientation === 'horizontal' 
+      ? { w: 1200, h: 630 } 
+      : { w: 630, h: 1200 }
+  , [orientation]);
+
+  
   // Lock body scroll when open
   useEffect(() => {
     if (!open) return;
@@ -70,201 +231,289 @@ export default function ShareModal({
     };
   }, [open]);
 
-  // Auto scale to fit viewport
+  // Auto scale to fit viewport with RAF throttling
   const recomputeScale = useCallback(() => {
     const vp = viewportRef.current;
     if (!vp) return;
-    const padding = 32; // internal safe padding
+    
+    const isMobile = window.innerWidth < 768;
+    const padding = isMobile ? 16 : 32;
+    
+    // Get actual viewport dimensions
     const availW = vp.clientWidth - padding * 2;
     const availH = vp.clientHeight - padding * 2;
-    const s = Math.min(availW / target.w, availH / target.h, 1);
-    setScale(Math.max(0.3, s));
-  }, [target.w, target.h]);
+    
+    // Calculate scale based on available space
+    let s = Math.min(availW / target.w, availH / target.h, 1);
+    
+    // Set minimum scales with mobile optimization
+    let minScale;
+    if (orientation === 'vertical') {
+      minScale = isMobile ? 0.36 : 0.30;
+    } else {
+      // Horizontal mode: ensure it fits well on mobile landscape
+      minScale = isMobile ? 0.25 : 0.30;
+      
+      // For horizontal on mobile, prioritize fitting width
+      if (isMobile && availW / target.w < 0.4) {
+        s = Math.max(0.25, availW / target.w);
+      }
+    }
+    
+    setScale(Math.max(minScale, s));
+  }, [target.w, target.h, orientation]);
+
+  const throttledRecomputeScale = useRafThrottle(recomputeScale, [target.w, target.h]);
 
   useEffect(() => {
-    recomputeScale();
-    const ro = new ResizeObserver(recomputeScale);
+    throttledRecomputeScale();
+    
+    // Create ResizeObserver with RAF throttling
+    const rafRef = { current: null as number | null };
+    const pendingEntriesRef = { current: [] as ResizeObserverEntry[] };
+    
+    const batchedCallback = (entries: ResizeObserverEntry[]) => {
+      pendingEntriesRef.current.push(...entries);
+      
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          if (pendingEntriesRef.current.length > 0) {
+            throttledRecomputeScale();
+            pendingEntriesRef.current = [];
+          }
+          rafRef.current = null;
+        });
+      }
+    };
+    
+    const ro = new ResizeObserver(batchedCallback);
     const el = viewportRef.current;
     if (el) ro.observe(el);
     return () => ro.disconnect();
-  }, [recomputeScale, orientation]);
+  }, [throttledRecomputeScale, orientation]);
 
   const handleSavePNG = async () => {
     if (!cardRef.current || isSaving) return;
     setIsSaving(true);
-    
+    setExportProgress(0);
+
     const originalSrcs: string[] = [];
-    
+
     try {
-      // Wait for fonts to be ready
-      if (document.fonts) {
-        await document.fonts.ready;
-      }
-      
-      // Get the export root element
+      setExportProgress(10);
+
+      // 1) Export root
       const exportRoot = document.getElementById('wrapped-export-root');
-      if (!exportRoot) {
-        throw new Error('Export root element not found');
-      }
-      
-      // Convert all image URLs in the export root to use proxy
+      if (!exportRoot) throw new Error('Export root element not found');
+
+      // 2) Görselleri proxy'ye çevir (TMDB CORS guard) – SENDEKİ KALSIN
+      setExportProgress(35);
       const images = exportRoot.querySelectorAll('img');
-      
-      images.forEach((img, index) => {
-        originalSrcs[index] = img.src;
+      images.forEach((img, i) => {
+        originalSrcs[i] = img.src;
         const safeUrl = shareSafeUrl(img.src);
-        
-        // Canvas export guard: ensure no TMDB CDN URLs
-        console.assert(
-          !safeUrl.includes('://image.tmdb.org'), 
-          'Share uses CDN, must proxy', 
-          safeUrl
-        );
-        
-        // Set crossOrigin before src for CORS
         img.crossOrigin = 'anonymous';
         img.src = safeUrl;
       });
-      
-      // Add export mode class to the specific card element, not the document
-      exportRoot.classList.add('export-mode');
-      
-      // Wait a microtask for styles to apply
-      await new Promise(resolve => setTimeout(resolve, 0));
-      
-      const dataUrl = await toPng(exportRoot, {
-        width: orientation === 'horizontal' ? 1200 : 630,
-        height: orientation === 'horizontal' ? 630 : 1200,
-        pixelRatio: 2,
-        backgroundColor: '#0B1220',
-        cacheBust: true,
-        skipFonts: false
-      });
 
-      const a = document.createElement('a');
-      a.download = 'letterboxd-wrapped.png';
-      a.href = dataUrl;
-      a.click();
+      // 3) PNG blob üret
+      setExportProgress(60);
+      const blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, '#0B1220');
+      if (!blob) throw new Error('Failed to export image');
 
+      // 4) MOBIL: sistem paylaşım (galeriye kaydetmek için standart yol)
+      setExportProgress(80);
+      const shared = await shareToSystem(blob);
+
+      // 5) Destek yoksa — desktop: file picker; en son: normal download
+      if (!shared) {
+        const saved = await saveWithFilePicker(blob);
+        if (!saved) downloadFallback(blob);
+      }
+
+      // 6) UI feedback
+      setExportProgress(100);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1600);
-      
-      // Trigger feedback modal after successful download
-      if (onDownloadSuccess) {
-        setTimeout(() => onDownloadSuccess(), 3000);
-      }
-    } catch (error) {
-      console.error('Export failed:', error);
-      // Silent error handling
+      onDownloadSuccess?.();
+    } catch (err) {
+      console.error('Export failed:', err);
     } finally {
-      // Remove export mode class from the specific element
+      // img src'lerini geri al
       const exportRoot = document.getElementById('wrapped-export-root');
       if (exportRoot) {
-        exportRoot.classList.remove('export-mode');
-        
-        // Restore original image sources
-        const images = exportRoot.querySelectorAll('img');
-        images.forEach((img, index) => {
-          if (originalSrcs && originalSrcs[index]) {
-            img.src = originalSrcs[index];
-          }
-        });
+        const imgs = exportRoot.querySelectorAll('img');
+        imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
       }
       setIsSaving(false);
+      setExportProgress(0);
     }
   };
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 p-4 md:p-8">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
 
       {/* Modal shell */}
-      <div className="relative w-[95vw] max-w-6xl h-[92vh] bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 flex flex-col overflow-hidden">
+      <div 
+        className="relative w-full max-w-6xl h-full bg-gradient-to-br from-slate-900/98 to-slate-800/95 backdrop-blur-2xl mx-auto rounded-2xl md:rounded-3xl shadow-2xl border border-slate-700/50 flex flex-col overflow-hidden"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <div className="min-w-0">
-            <h2 className="text-xl font-bold text-white truncate">Share Your Wrapped</h2>
-            <p className="text-sm text-slate-400 mt-0.5">Choose format and download</p>
-          </div>
-
-          {/* Format toggle (Vertical coming soon) */}
-          <div className="flex items-center gap-2 bg-slate-800/70 border border-white/10 rounded-lg p-1">
+        <div className="relative px-6 md:px-8 py-6 md:py-8 border-b border-slate-700/30">
+          {/* Background glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5" />
+          
+          <div className="relative flex items-center justify-between">
+            <div className="space-y-1">
+              <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                Share Your Wrapped
+              </h2>
+              <p className="text-slate-400 text-sm md:text-base">Export your cinematic journey as a beautiful image</p>
+            </div>
+            
             <button
-              onClick={() => setOrientation('horizontal')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium transition ${
-                orientation === 'horizontal'
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-white/10'
-              }`}
+              onClick={onClose}
+              className="p-3 hover:bg-slate-700/50 rounded-xl transition-all duration-200 text-slate-400 hover:text-white group"
+              aria-label="Close"
             >
-              <Monitor size={16} />
-              Horizontal <span className="opacity-70">(1200×630)</span>
+              <X size={22} className="group-hover:rotate-90 transition-transform duration-200" />
             </button>
-            <span className="flex items-center gap-2 px-3.5 py-2 rounded-md text-sm text-slate-400">
-              <Smartphone size={16} /> Vertical <span className="opacity-60">(Coming soon)</span>
-            </span>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-slate-300 hover:text-white"
-            aria-label="Close"
-          >
-            <X size={20} />
-          </button>
+          {/* Format toggle - centered below */}
+          <div className="flex justify-center mt-6">
+            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-2xl p-2">
+              <button
+                onClick={() => setOrientation('horizontal')}
+                className={`flex items-center gap-3 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  orientation === 'horizontal'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/25 scale-105'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Monitor size={18} />
+                <div className="text-left">
+                  <div className="text-sm font-semibold">Horizontal</div>
+                  <div className="text-xs opacity-70">1200×630px</div>
+                </div>
+              </button>
+              <button
+                onClick={() => setOrientation('vertical')}
+                className={`flex items-center gap-3 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  orientation === 'vertical'
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-600/25 scale-105'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Smartphone size={18} />
+                <div className="text-left">
+                  <div className="text-sm font-semibold">Vertical</div>
+                  <div className="text-xs opacity-70">630×1200px</div>
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Preview viewport */}
-        <div ref={viewportRef} className="flex-1 min-h-0 p-6 flex items-center justify-center overflow-hidden">
+        <div 
+          ref={viewportRef} 
+          className={`flex-1 min-h-0 px-4 md:p-6 flex items-center justify-center overflow-hidden select-none ${
+            isPanning ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ touchAction: 'none' }}
+        >
           <div
-            className="relative"
+            className={`relative flex-shrink-0 transition-transform duration-200 ${orientation === 'horizontal' ? 'max-w-full' : ''}`}
             style={{
               width: target.w * scale,
               height: target.h * scale,
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
             }}
           >
             <div
               ref={cardRef}
-              className="origin-top-left"
+              className="origin-top-left bg-slate-900 rounded-xl overflow-hidden"
               style={{
                 width: target.w,
                 height: target.h,
-                transform: `scale(${scale})`,
+                transform: `scale(${scale * userScale})`,
                 transformOrigin: 'top left',
                 filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.4))',
+                position: 'relative',
+                zIndex: 1,
               }}
             >
-              <ShareCard {...cardProps} orientation={'horizontal'} />
+              <ShareCard {...cardProps} orientation={orientation} />
             </div>
+            
+            {/* Zoom controls */}
+            {userScale !== 1 && (
+              <button
+                onClick={resetZoom}
+                className="absolute -top-12 right-0 px-3 py-1 bg-slate-800/90 hover:bg-slate-700/90 text-white text-sm rounded-lg transition-colors"
+              >
+                Reset Zoom
+              </button>
+            )}
+          </div>
+          
+          {/* Zoom hint */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-slate-400 text-xs bg-slate-900/80 px-3 py-1 rounded-full">
+            {typeof window !== 'undefined' && window.innerWidth < 768 
+              ? 'Pinch to zoom • Touch & drag to move' 
+              : 'Scroll to zoom • Click & drag to move'
+            }
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/10 bg-slate-800/30">
-          <div className="flex items-center justify-between gap-4">
-            <div className="text-xs text-slate-500">
-              PNG • 2× quality • {target.w}×{target.h}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {showSuccess && (
-                <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  Downloaded!
-                </div>
+        <div className="relative px-6 md:px-8 py-6 border-t border-slate-700/30 bg-gradient-to-r from-slate-800/40 to-slate-900/40 backdrop-blur-sm">
+          {/* Subtle glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/3 to-purple-500/3" />
+          
+          <div className="relative flex items-center justify-center gap-4">
+            {showSuccess && (
+              <div className="flex items-center gap-3 text-green-400 font-medium bg-green-400/10 px-4 py-2 rounded-xl border border-green-400/20">
+                <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse shadow-lg shadow-green-400/50" />
+                <span>Successfully downloaded!</span>
+              </div>
+            )}
+            
+            {isSaving && exportProgress > 0 && (
+              <div className="flex items-center gap-3 text-blue-400 font-medium">
+                <Loader2 size={20} className="animate-spin" />
+                <span>Generating... {exportProgress}%</span>
+              </div>
+            )}
+            
+            <button
+              onClick={handleSavePNG}
+              disabled={isSaving}
+              className="group flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600 via-blue-700 to-purple-700 hover:from-blue-700 hover:via-purple-700 hover:to-purple-800 disabled:from-slate-600 disabled:to-slate-700 text-white rounded-2xl font-bold transition-all duration-300 shadow-2xl hover:shadow-blue-500/25 disabled:cursor-not-allowed disabled:opacity-75 transform hover:scale-105 active:scale-95 min-w-[200px] border border-blue-500/20"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 size={22} className="animate-spin" />
+                  <span>Generating Image...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={22} className="group-hover:translate-y-0.5 transition-transform duration-200" />
+                  <span>Download PNG</span>
+                </>
               )}
-              <button
-                onClick={handleSavePNG}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-semibold transition shadow-lg disabled:cursor-not-allowed"
-              >
-                <Download size={18} />
-                {isSaving ? 'Generating…' : 'Download PNG'}
-              </button>
-            </div>
+            </button>
           </div>
         </div>
       </div>

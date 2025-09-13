@@ -47,7 +47,8 @@ export const StatCard: React.FC<{
   label: string;
   color?: string;
   size?: 'normal' | 'large';
-}> = ({ value, label, color = 'text-white', size = 'normal' }) => (
+}> = React.memo(function StatCard({ value, label, color = 'text-white', size = 'normal' }) {
+  return (
   <motion.div
     variants={itemVariants}
     className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-4 md:p-6 hover:scale-[1.02] hover:bg-slate-800/80 hover:border-slate-600/60 transition-all duration-200 shadow-lg h-full min-h-[120px] md:min-h-[140px] grid place-content-center text-center"
@@ -67,7 +68,8 @@ export const StatCard: React.FC<{
       </div>
     </div>
   </motion.div>
-);
+  );
+});
 
 export type CountItem = { name: string; count: number; profile_path?: string };
 
@@ -79,7 +81,7 @@ const splitName = (full: string) => {
   return { first: parts.join(' '), last };
 };
 
-export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = ({ director, rank }) => {
+export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = React.memo(function DirectorCard({ director, rank }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -183,14 +185,14 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = ({ 
       </div>
     </motion.div>
   );
-};
+});
 
 export const ActorCard: React.FC<{
   actor: CountItem;
   rank: number;
   variant?: 'main' | 'small';
   topCount?: number;
-}> = ({ actor, rank, variant = 'small', topCount }) => {
+}> = React.memo(function ActorCard({ actor, rank, variant = 'small', topCount }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -303,6 +305,6 @@ export const ActorCard: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 

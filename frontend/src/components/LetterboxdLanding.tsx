@@ -5,54 +5,62 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import PreResultsConsentModal from './PreResultsConsentModal';
-import { ensureSessionRow } from '@/lib/sessions';
 import { analyzeFiles, testBackend, parseLetterboxdUsername } from '@/lib/api';
+import { startAnalysis, finishAnalysis } from '@/lib/supabase/analysis_runs';
+import { upsertUserSession } from '@/lib/supabase/sessions';
+import { ensureSessionId, getUsername, setUsername, setConsent, getConsent } from '@/lib/session-id';
 
 
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [detectedUsername, setDetectedUsername] = useState<string | null>(null);
+  const [, setDetectedUsername] = useState<string | null>(null);
 
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
-  const [showConsentModal, setShowConsentModal] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('');
   const router = useRouter();
 
-  // Simple inline implementations for essential functions
-  const getSessionId = () => {
-    if (typeof window === 'undefined') return '00000000-0000-4000-8000-000000000000';
-    let id = sessionStorage.getItem('session_id');
-    if (!id) {
-      id = (crypto?.randomUUID?.() ?? `session_${Date.now()}`);
-      sessionStorage.setItem('session_id', id);
-    }
-    return id;
-  };
-
-  const markConsentModalAsShown = () => {
-    if (typeof window === 'undefined') return;
-    sessionStorage.setItem('consent_modal_shown', 'true');
-  };
-
-  // Initialize session ID and ensure session row exists on component mount
+  // Track initial session on page load
   useEffect(() => {
-    const initSession = async () => {
-      const id = getSessionId();
-      setSessionId(id);
-      
-      // Ensure session row exists in database
-            try {
-        await ensureSessionRow();
-      } catch {
-        // Silent error handling
+    const trackInitialSession = async () => {
+      try {
+        // Get or create session ID
+        let sessionId = sessionStorage.getItem('session_id');
+        if (!sessionId) {
+          sessionId = crypto?.randomUUID?.() ?? `session_${Date.now()}`;
+          sessionStorage.setItem('session_id', sessionId);
+        }
+
+        // Get device info
+        const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+        const os = /windows/i.test(ua) ? "Windows" :
+                  /mac os x|macintosh/i.test(ua) ? "macOS" : 
+                  /iphone|ios|ipad/i.test(ua) ? "iOS" :
+                  /android/i.test(ua) ? "Android" :
+                  /linux/i.test(ua) ? "Linux" : "Unknown";
+        
+        const device_type = /iphone|ipod|android.*mobile/i.test(ua) ? "mobile" :
+                           /ipad|tablet|android(?!.*mobile)/i.test(ua) ? "tablet" : "desktop";
+
+        // Save initial session (without username yet) - TEMPORARILY DISABLED due to RLS
+        // await upsertUserSession({
+        //   session_id: sessionId,
+        //   username: 'anonymous', // Will be updated when username is detected
+        //   consent: 'decline', // Default until consent is given
+        //   film_count: null,
+        //   favorite_genre: null,
+        // });
+
+      } catch (error) {
       }
     };
-    
-    initSession();
+
+    trackInitialSession();
   }, []);
+
+
+
+
 
   // Test backend connectivity on component mount
   useEffect(() => {
@@ -128,7 +136,20 @@ export default function LetterboxdLanding() {
     
     if (detectedUsername) {
       setDetectedUsername(detectedUsername);
-      sessionStorage.setItem('lb_username', detectedUsername);
+      setUsername(detectedUsername);
+      
+      // Update session with detected username
+      try {
+        const sessionId = ensureSessionId();
+        await upsertUserSession({
+          session_id: sessionId,
+          username: detectedUsername,
+          consent: getConsent() || 'decline',
+          film_count: null,
+          favorite_genre: null,
+        });
+      } catch (error) {
+      }
     }
 
     setIsUploading(true);
@@ -190,9 +211,6 @@ export default function LetterboxdLanding() {
           return;
         }
       } catch {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('ZIP processing error');
-        }
         setError('Failed to process ZIP file. The file may be corrupted or password-protected.');
         setIsUploading(false);
         return;
@@ -210,14 +228,75 @@ export default function LetterboxdLanding() {
     const formData = new FormData();
     formData.append('files', payloadZip);
 
+    const sessionId = ensureSessionId();
+    const username = getUsername();
+    let analysisRun: { id: string } | null = null;
+
     try {
+      // Start analysis tracking
+      if (username) {
+        try {
+          const runId = crypto?.randomUUID?.();
+          analysisRun = await startAnalysis({
+            id: runId,
+            session_id: sessionId,
+            username: username,
+          });
+        } catch (analyticsError) {
+        }
+      }
+
       const result = await analyzeFiles(formData);
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+
+      // Finish analysis tracking
+      if (analysisRun && detectedUsername) {
+        try {
+          await finishAnalysis({
+            id: analysisRun.id,
+            ok: true,
+            summary: {
+              total_films: result.stats.total_films,
+              analysis_date: result.stats.analysis_date,
+            }
+          });
+
+          // Update user session with film count and genre
+          await upsertUserSession({
+            session_id: sessionId,
+            username: detectedUsername,
+            consent: sessionStorage.getItem('consent_decision') === 'accept' ? 'accept' : 'decline',
+            film_count: result.stats.total_films || null,
+            favorite_genre: result.stats.favorite_genre?.name || null,
+          });
+        } catch (analyticsError) {
+          if (process.env.NODE_ENV === 'development') {
+          }
+        }
+      }
       
-      // Navigate to results page
-      router.push('/results');
+      // Keep loading screen visible until results page mounts
+      
+      // Small delay to ensure localStorage is written
+      setTimeout(() => {
+        window.location.href = '/results';
+      }, 100);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      
+      // Track failed analysis
+      if (analysisRun && detectedUsername) {
+        try {
+          await finishAnalysis({
+            id: analysisRun.id,
+            ok: false,
+            error_message: errorMessage,
+          });
+        } catch (analyticsError) {
+          if (process.env.NODE_ENV === 'development') {
+          }
+        }
+      }
       
       // Enhanced error messages for Mac users
       if (/No valid Letterboxd CSV files/i.test(errorMessage)) {
@@ -245,21 +324,8 @@ export default function LetterboxdLanding() {
       }
       setIsUploading(false);
     }
-  }, [zipFiles, router]);
+  }, [zipFiles]);
 
-  const handleConsentAccept = () => {
-    markConsentModalAsShown();
-    setShowConsentModal(false);
-    // trackEvent('consent_given', { decision: 'accept' }); // TODO: Re-enable when analytics is ready
-    router.push('/results');
-  };
-
-  const handleConsentDecline = () => {
-    markConsentModalAsShown();
-    setShowConsentModal(false);
-    // trackEvent('consent_given', { decision: 'decline' }); // TODO: Re-enable when analytics is ready
-    router.push('/results');
-  };
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -330,15 +396,14 @@ export default function LetterboxdLanding() {
           {/* Hero header */}
           <header className="text-center">
             <h1 className="font-black tracking-tight leading-tight text-[clamp(28px,6vw,44px)]">
-              <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span>
-              <span> Wrapped</span>
+              <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Movies Wrapped</span>
             </h1>
             <p className="mx-auto mt-1 text-slate-300 text-base leading-relaxed">
-              Upload your Letterboxd ZIP or drop the exported folder.
+              Upload your Letterboxd ZIP, meaning your exported data from Letterboxd.
             </p>
             {/* Desktop disclaimer */}
-            <div className="mt-3 mx-auto max-w-xl rounded-lg border border-white/10 bg-slate-800/40 px-3 py-2 text-slate-300 text-xs sm:text-sm">
-              For the smoothest experience, we recommend using a desktop or laptop browser. The Letterboxd mobile app can sometimes block file downloads/exports, which may prevent uploading your data here.
+            <div className="mt-4 mx-auto max-w-xl rounded-lg border border-white/30 bg-slate-800/40 px-3 py-2 text-slate-400 text-xs sm:text-sm">
+              For the smoothest experience, I recommend using a desktop or laptop browser. The Letterboxd mobile app can sometimes block file downloads/exports :D, which may prevent uploading your data here.
             </div>
           </header>
 
@@ -366,12 +431,8 @@ export default function LetterboxdLanding() {
                   <Upload className="w-7 h-7 text-slate-300" />
                 </div>
                 <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
-                <p className="mt-1 text-sm text-slate-400">.zip, exported folder, or multiple .csv files</p>
-                {detectedUsername && (
-                  <p className="mt-2 text-xs text-orange-400 font-medium">
-                    Detected username: {detectedUsername}
-                  </p>
-                )}
+                <p className="mt-1 text-md text-slate-400">.zip, exported folder.</p>
+
               </div>
             </div>
 
@@ -501,13 +562,6 @@ export default function LetterboxdLanding() {
         </div>
       </div>
 
-      {/* Pre-results Consent Modal */}
-      <PreResultsConsentModal
-        open={showConsentModal}
-        onAccept={handleConsentAccept}
-        onDecline={handleConsentDecline}
-        sessionId={sessionId}
-      />
     </div>
   );
 }
