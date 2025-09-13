@@ -25,38 +25,47 @@ export function FilmHistory({
   const primary = '#f97316';
   return (
     <Section title="Film History" subtitle="Your journey through cinema decades">
-      <div className="w-full h-64 md:h-80 lg:h-96">
+      <div className="w-full h-56 md:h-72 lg:h-80 px-2 md:px-0">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 12, right: isMobile ? 12 : 30, left: isMobile ? 10 : 20, bottom: isMobile ? 48 : 60 }}>
+          <LineChart 
+            data={data} 
+            margin={{ 
+              top: 16, 
+              right: isMobile ? 8 : 24, 
+              left: isMobile ? 4 : 16, 
+              bottom: isMobile ? 32 : 48 
+            }}
+          >
             <XAxis
               dataKey="decade"
               stroke="#64748b"
-              tick={{ fill: '#94a3b8', fontSize: isMobile ? 10 : 12 }}
-              angle={isMobile ? -30 : 0}
+              tick={{ fill: '#94a3b8', fontSize: isMobile ? 9 : 11 }}
+              angle={isMobile ? -25 : 0}
               textAnchor={isMobile ? 'end' : 'middle'}
-              height={isMobile ? 60 : 40}
+              height={isMobile ? 40 : 32}
               tickLine={{ stroke: '#475569' }}
-              interval={isMobile ? 1 : 'preserveStartEnd'}
+              interval={isMobile ? 0 : 'preserveStartEnd'}
               axisLine={{ stroke: '#475569' }}
-              tickMargin={isMobile ? 2 : 6}
+              tickMargin={isMobile ? 1 : 4}
             />
             <YAxis
               stroke="#64748b"
-              tick={{ fill: '#94a3b8', fontSize: isMobile ? 10 : 11 }}
+              tick={{ fill: '#94a3b8', fontSize: isMobile ? 9 : 10 }}
               tickLine={{ stroke: '#475569' }}
               axisLine={{ stroke: '#475569' }}
-              domain={[0, Math.ceil(max * 1.2)]}
+              domain={[0, Math.ceil(max * 1.1)]}
               allowDecimals={false}
-              tickCount={isMobile ? 4 : 6}
-              tickMargin={isMobile ? 2 : 6}
+              tickCount={isMobile ? 4 : 5}
+              tickMargin={isMobile ? 1 : 4}
+              width={isMobile ? 32 : 40}
             />
             <Tooltip
               cursor={{ stroke: primary, strokeWidth: 2, strokeDasharray: '5 5', strokeOpacity: 0.7 }}
               content={({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string | number }) =>
                 active && payload?.length ? (
-                  <div className="bg-slate-900/95 backdrop-blur-sm p-3 rounded-lg border border-orange-500/40 text-white shadow-2xl">
-                    <p className="font-bold text-lg mb-1">{String(label)}</p>
-                    <p className="text-orange-400 font-semibold">{`${payload[0].value} films`}</p>
+                  <div className="bg-slate-900/95 backdrop-blur-sm p-2 md:p-3 rounded-lg border border-orange-500/40 text-white shadow-2xl">
+                    <p className="font-bold text-sm md:text-lg mb-1">{String(label)}</p>
+                    <p className="text-orange-400 font-semibold text-xs md:text-sm">{`${payload[0].value} films`}</p>
                   </div>
                 ) : null
               }
@@ -65,9 +74,9 @@ export function FilmHistory({
               type="monotone"
               dataKey="count"
               stroke={primary}
-              strokeWidth={3}
-              dot={{ fill: primary, strokeWidth: 2, stroke: '#0f172a', r: 4 }}
-              activeDot={{ r: 8, stroke: primary, strokeWidth: 2, fill: '#0f172a' }}
+              strokeWidth={isMobile ? 2.5 : 3}
+              dot={{ fill: primary, strokeWidth: 2, stroke: '#0f172a', r: isMobile ? 3 : 4 }}
+              activeDot={{ r: isMobile ? 6 : 8, stroke: primary, strokeWidth: 2, fill: '#0f172a' }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -84,19 +93,39 @@ export function RatingsBar({
   max: number;
 }) {
   const rating = '#eab308';
+  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
+  
   return (
     <Section title="Rating Patterns" subtitle="How you rate films">
-      <div className="w-full h-48 md:h-64 lg:h-80">
-        <ResponsiveContainer>
-          <BarChart data={data}>
-            <XAxis dataKey="label" stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+      <div className="w-full h-44 md:h-56 lg:h-64 px-2 md:px-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart 
+            data={data} 
+            margin={{ 
+              top: 12, 
+              right: isMobile ? 8 : 20, 
+              left: isMobile ? 4 : 12, 
+              bottom: isMobile ? 16 : 24 
+            }}
+          >
+            <XAxis 
+              dataKey="label" 
+              stroke="#9ca3af" 
+              tick={{ fill: '#9ca3af', fontSize: isMobile ? 9 : 11 }}
+              tickLine={{ stroke: '#64748b' }}
+              axisLine={{ stroke: '#64748b' }}
+              tickMargin={isMobile ? 2 : 4}
+            />
             <YAxis
               stroke="#9ca3af"
-              tick={{ fill: '#9ca3af' }}
-              domain={[0, Math.ceil(max * 1.2)]}
+              tick={{ fill: '#9ca3af', fontSize: isMobile ? 9 : 10 }}
+              domain={[0, Math.ceil(max * 1.1)]}
               allowDecimals={false}
-              tickCount={5}
-              tickMargin={6}
+              tickCount={isMobile ? 4 : 5}
+              tickMargin={isMobile ? 2 : 4}
+              width={isMobile ? 28 : 36}
+              tickLine={{ stroke: '#64748b' }}
+              axisLine={{ stroke: '#64748b' }}
             />
             <Tooltip
               contentStyle={{
@@ -105,9 +134,16 @@ export function RatingsBar({
                 borderRadius: '0.75rem',
                 color: '#ffffff',
                 boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                fontSize: isMobile ? '12px' : '14px',
+                padding: isMobile ? '8px' : '12px',
               }}
             />
-            <Bar dataKey="count" fill={rating} radius={[4, 4, 0, 0]} />
+            <Bar 
+              dataKey="count" 
+              fill={rating} 
+              radius={[isMobile ? 2 : 4, isMobile ? 2 : 4, 0, 0]} 
+              maxBarSize={isMobile ? 32 : 48}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>

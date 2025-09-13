@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { getSupabase } from '@/lib/supabaseClient';
+import { insertFeedback } from '@/lib/supabase/feedback';
 
 interface FeedbackFabProps {
   sessionId: string;
@@ -95,47 +95,42 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
     setIsSubmitting(true);
 
     try {
-      // Build payload with only allowed fields
-      const payload: Record<string, unknown> = {
-        message: message.trim(),
-        contact: contact.trim() || null,
-        display_name: lbUsername || null,
-        source_username: lbUsername || null,
+      const ua = typeof navigator !== "undefined" ? navigator.userAgent: "";
+      
+      const os =
+        /windows/i.test(ua) ? "Windows" :
+        /mac os x|macintosh/i.test(ua) ? "macOS" : 
+        /iphone|ios|ipad/i.test(ua) ? "iOS" :
+        /android/i.test(ua) ? "Android" :
+        /linux/i.test(ua) ? "Linux" : "Unknown";
+        
+      const device_type =
+      /iphone|ipod|android.*mobile/i.test(ua) ? "mobile" :
+      /ipad|tablet|android(?!.*mobile)/i.test(ua) ? "tablet" : "desktop";
+
+      if (!lbUsername) {
+        alert("We couldn't detect your letterboxd username. Please re-run the analysis first.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const payload = {
         session_id: sessionId,
+        username: lbUsername,
+        contact: contact.trim() || null,
+        message: message.trim() || null,
+        os,
+        device_type: device_type as 'mobile' | 'desktop' | 'tablet' | 'unknown',
       };
 
-      const supabase = getSupabase();
-      const { error } = await supabase.from('feedback').insert(payload);
-
-      if (error) {
-        // Enhanced error handling for Supabase errors
-        const map: Record<string, string> = {
-          '23505': 'You have already submitted feedback with this session. Please wait before submitting again.',
-          '23502': 'Missing required information. Please fill in all required fields.',
-          '23514': 'Invalid data provided. Please check your input and try again.',
-          '42P01': 'Database configuration error. Please contact support.',
-          '42501': 'Permission denied. Please contact support.',
-          '401': 'Authentication failed. Please check your Supabase configuration.',
-          '403': 'Access denied. Please check your database permissions.'
-        };
-        
-        // Handle 401/403 specifically
-        if (error.code === '401' || error.code === '403') {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Supabase auth error:', error);
-          }
-          throw new Error('Database authentication failed. Please check your configuration.');
-        }
-        
-        throw new Error(map[error.code as string] || `Database error: ${error.message}`);
-      }
+      await insertFeedback(payload);
 
       setShowSuccess(true);
 
       if (!reduce) {
         try {
           confetti({ particleCount: 30, spread: 70, origin: { y: 0.6 } });
-        } catch { /* ignore visual effect issues */ }
+        } catch {}
       }
 
       setTimeout(() => handleClose(), 1000);
