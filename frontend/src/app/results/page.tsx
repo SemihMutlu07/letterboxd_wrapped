@@ -8,7 +8,7 @@ import CountriesList from '@/containers/results/CountriesList';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import { getTmdbImageUrl, trackEvent, trackConsentedEvent } from '@/lib/analytics';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
 
@@ -150,12 +150,20 @@ export default function ResultsPage() {
   }, [throttledResize]);
 
   useEffect(() => { 
-    
     const saved = localStorage.getItem('letterboxdStats'); 
     if (saved) { 
       try { 
         const parsedStats = JSON.parse(saved);
         setStats(parsedStats); 
+        // Track that results were successfully loaded
+        trackEvent('results_viewed', {
+          total_films: parsedStats.total_films,
+          average_rating: parsedStats.average_rating,
+        });
+        trackConsentedEvent('results_viewed_detailed', {
+          total_countries: parsedStats.total_countries,
+          average_runtime: parsedStats.average_runtime,
+        });
       } catch (error) {
       } 
     } else {
@@ -439,7 +447,13 @@ export default function ResultsPage() {
 
         {/* Share button */}
         <div className="flex justify-center my-8">
-          <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+          <button
+            onClick={() => {
+              setShowShareModal(true);
+              trackEvent('share_modal_opened');
+            }}
+            className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+          >
             <div className="w-6 h-6 bg-white rounded" />
             Share Your Wrapped
           </button>
@@ -453,6 +467,7 @@ export default function ResultsPage() {
         setOrientation={setOrientation}
         cardProps={shareProps}
         onDownloadSuccess={() => {
+          trackEvent('share_download_success');
           if (!hasTriggeredFeedback) {
             setHasTriggeredFeedback(true);
             feedbackRef.current?.open();
