@@ -1498,4 +1498,5 @@ async def submit_report(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    # Use import string when reload=True; passing the app object exits immediately.
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

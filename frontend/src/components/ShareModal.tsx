@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Monitor, Smartphone, Loader2 } from 'lucide-react';
+import { X, Download, Monitor, Smartphone, Loader2, Plus, Minus, Scan } from 'lucide-react';
 import ShareCard from './ShareCard';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
@@ -115,9 +115,11 @@ export default function ShareModal({
   const [isPanning, setIsPanning] = useState(false);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
+  const canPan = userScale > 1.02;
 
   // Mouse events for desktop panning
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (!canPan) return;
     if (e.button === 0) { // Left mouse button
       setIsPanning(true);
       setLastPanPoint({ x: e.clientX, y: e.clientY });
@@ -151,7 +153,7 @@ export default function ShareModal({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && canPan) {
       const touch = e.touches[0];
       setIsPanning(true);
       setLastPanPoint({ x: touch.clientX, y: touch.clientY });
@@ -166,14 +168,16 @@ export default function ShareModal({
     if (e.touches.length === 1 && isPanning) {
       const touch = e.touches[0];
       
-      // Panning
-      const deltaX = touch.clientX - lastPanPoint.x;
-      const deltaY = touch.clientY - lastPanPoint.y;
-      setPanOffset(prev => ({
-        x: prev.x + deltaX,
-        y: prev.y + deltaY
-      }));
-      setLastPanPoint({ x: touch.clientX, y: touch.clientY });
+      if (canPan) {
+        // Panning
+        const deltaX = touch.clientX - lastPanPoint.x;
+        const deltaY = touch.clientY - lastPanPoint.y;
+        setPanOffset(prev => ({
+          x: prev.x + deltaX,
+          y: prev.y + deltaY
+        }));
+        setLastPanPoint({ x: touch.clientX, y: touch.clientY });
+      }
     } else if (e.touches.length === 2) {
       // Pinch zoom
       const currentDistance = getDistance(e.touches[0], e.touches[1]);
@@ -268,12 +272,12 @@ export default function ShareModal({
     if (orientation === 'vertical') {
       minScale = isMobile ? 0.36 : 0.30;
     } else {
-      // Horizontal mode: ensure it fits well on mobile landscape
-      minScale = isMobile ? 0.25 : 0.30;
+      // Horizontal mode: prioritize readability
+      minScale = isMobile ? 0.30 : 0.34;
       
       // For horizontal on mobile, prioritize fitting width
       if (isMobile && availW / target.w < 0.4) {
-        s = Math.max(0.25, availW / target.w);
+        s = Math.max(0.30, availW / target.w);
       }
     }
     
@@ -308,6 +312,21 @@ export default function ShareModal({
     if (el) ro.observe(el);
     return () => ro.disconnect();
   }, [throttledRecomputeScale, orientation]);
+
+  useEffect(() => {
+    // Keep orientation switch predictable and easy to navigate.
+    setUserScale(1);
+    setPanOffset({ x: 0, y: 0 });
+    setIsPanning(false);
+  }, [orientation]);
+
+  const zoomIn = useCallback(() => {
+    setUserScale((prev) => Math.min(3, prev + 0.15));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setUserScale((prev) => Math.max(0.5, prev - 0.15));
+  }, []);
 
   const handleSavePNG = async () => {
     if (!cardRef.current || isSaving) return;
@@ -440,7 +459,7 @@ export default function ShareModal({
         <div 
           ref={viewportRef} 
           className={`flex-1 min-h-0 px-4 md:p-6 flex items-center justify-center overflow-hidden select-none ${
-            isPanning ? 'cursor-grabbing' : 'cursor-grab'
+            isPanning ? 'cursor-grabbing' : (canPan ? 'cursor-grab' : 'cursor-default')
           }`}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -449,8 +468,35 @@ export default function ShareModal({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          style={{ touchAction: 'none' }}
+          style={{ touchAction: canPan ? 'none' : 'pinch-zoom' }}
         >
+          <div className="absolute top-3 right-3 z-20 flex items-center gap-2 rounded-xl border border-slate-600/50 bg-slate-900/70 p-2 backdrop-blur">
+            <button
+              onClick={zoomOut}
+              className="rounded-lg p-2 text-slate-200 hover:bg-slate-700/70 transition-colors"
+              aria-label="Zoom out"
+            >
+              <Minus size={16} />
+            </button>
+            <div className="min-w-[64px] text-center text-xs font-semibold text-slate-200">
+              {Math.round(userScale * 100)}%
+            </div>
+            <button
+              onClick={zoomIn}
+              className="rounded-lg p-2 text-slate-200 hover:bg-slate-700/70 transition-colors"
+              aria-label="Zoom in"
+            >
+              <Plus size={16} />
+            </button>
+            <button
+              onClick={resetZoom}
+              className="rounded-lg p-2 text-slate-200 hover:bg-slate-700/70 transition-colors"
+              aria-label="Reset zoom"
+            >
+              <Scan size={16} />
+            </button>
+          </div>
+
           <div
             className={`relative flex-shrink-0 transition-transform duration-200 ${orientation === 'horizontal' ? 'max-w-full' : ''}`}
             style={{
@@ -475,22 +521,13 @@ export default function ShareModal({
               <ShareCard {...cardProps} orientation={orientation} />
             </div>
             
-            {/* Zoom controls */}
-            {userScale !== 1 && (
-              <button
-                onClick={resetZoom}
-                className="absolute -top-12 right-0 px-3 py-1 bg-slate-800/90 hover:bg-slate-700/90 text-white text-sm rounded-lg transition-colors"
-              >
-                Reset Zoom
-              </button>
-            )}
           </div>
           
           {/* Zoom hint */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-slate-400 text-xs bg-slate-900/80 px-3 py-1 rounded-full">
             {typeof window !== 'undefined' && window.innerWidth < 768 
-              ? 'Pinch to zoom • Touch & drag to move' 
-              : 'Scroll to zoom • Click & drag to move'
+              ? (canPan ? 'Pinch to zoom • Drag to navigate' : 'Pinch to zoom for detail')
+              : (canPan ? 'Scroll to zoom • Drag to navigate' : 'Scroll or buttons to zoom')
             }
           </div>
         </div>

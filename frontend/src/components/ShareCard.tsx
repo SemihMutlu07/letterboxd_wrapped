@@ -31,7 +31,7 @@ const Kicker: React.FC<React.PropsWithChildren<{ className?: string }>> = ({
   className,
   children,
 }) => (
-  <div className={cx("uppercase tracking-[.18em] opacity-80 font-semibold text-base", className)}>
+  <div className={cx("uppercase tracking-[.16em] opacity-80 font-semibold text-[11px]", className)}>
     {children}
   </div>
 );
@@ -105,7 +105,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
         )}
         style={{
           fontFamily:
-            "system-ui, -apple-system, Inter, Segoe UI, Roboto, sans-serif",
+            "Avenir Next, Manrope, Segoe UI, system-ui, sans-serif",
         }}
       >
         {/* Header */}
@@ -353,20 +353,20 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
       )}
       style={{
         fontFamily:
-          "system-ui, -apple-system, Inter, Segoe UI, Roboto, sans-serif",
+          "Avenir Next, Manrope, Segoe UI, system-ui, sans-serif",
       }}
     >
       {/* LEFT column */}
-      <div className="col-span-12 md:col-span-6 grid grid-rows-2 gap-6 auto-rows-fr">
+      <div className="col-span-7 grid grid-rows-2 gap-5 auto-rows-fr">
         {/* Crush */}
         <div
           className={cx(
             tileBase,
             TONES.pink,
-            "grid grid-cols-5 items-stretch min-h-[240px] md:min-h-[280px]"
+            "grid grid-cols-[180px_1fr] items-stretch min-h-[0]"
           )}
         >
-          <div className="col-span-2 p-6">
+          <div className="p-4">
             <div className="relative w-full h-full rounded-xl overflow-hidden">
               {crushUrl && !crushBroken ? (
                 <Image
@@ -387,12 +387,12 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
             </div>
           </div>
 
-          <div className="col-span-3 p-8 flex flex-col justify-center">
-            <Kicker>On-Screen Crush</Kicker>
-            <div className="mt-2 text-[26px] font-extrabold leading-tight line-clamp-1">
+          <div className="p-5 pr-6 flex flex-col justify-center">
+            <Kicker className="text-pink-100/90">On-Screen Crush</Kicker>
+            <div className="mt-1 text-[34px] font-extrabold leading-tight line-clamp-1">
               {onScreenCrush.name || "Unknown"}
             </div>
-            <div className="mt-2 text-[24px] leading-snug">
+            <div className="mt-1 text-[21px] leading-snug">
               You spent <span className="font-extrabold tabular-nums">{onScreenCrush.count}</span> movies together
             </div>
           </div>
@@ -403,10 +403,10 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           className={cx(
             tileBase,
             TONES.cyan,
-            "grid grid-cols-5 items-stretch min-h-[240px] md:min-h-[280px]"
+            "grid grid-cols-[180px_1fr] items-stretch min-h-[0]"
           )}
         >
-          <div className="col-span-2 p-6">
+          <div className="p-4">
             <div className="relative w-full h-full rounded-xl overflow-hidden">
               {directorUrl && !directorBroken ? (
                 <Image
@@ -427,12 +427,12 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
             </div>
           </div>
 
-          <div className="col-span-3 p-8 flex flex-col justify-center">
-            <Kicker>Favorite Director</Kicker>
-            <div className="mt-2 text-[26px] font-extrabold leading-tight line-clamp-1 text-white">
+          <div className="p-5 pr-6 flex flex-col justify-center">
+            <Kicker className="text-cyan-100/90">Favorite Director</Kicker>
+            <div className="mt-1 text-[34px] font-extrabold leading-tight line-clamp-1 text-white">
               {favoriteDirector.name || "Unknown"}
             </div>
-            <div className="mt-2 text-[24px] leading-snug">
+            <div className="mt-1 text-[21px] leading-snug">
               You watched <span className="font-extrabold tabular-nums">{favoriteDirector.count}</span> movies
             </div>
           </div>
@@ -440,63 +440,63 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
       </div>
 
       {/* RIGHT column */}
-      <div className="col-span-12 md:col-span-6 grid grid-rows-3 gap-6 auto-rows-fr">
+      <div className="col-span-5 grid grid-rows-3 gap-5 auto-rows-fr">
         {/* Row 1 */}
-        <div className="grid grid-cols-2 gap-6 auto-rows-fr">
-          <div className={cx(tileBase, TONES.indigo, "grid place-content-center text-center p-6")}>
+        <div className="grid grid-cols-2 gap-5 auto-rows-fr">
+          <div className={cx(tileBase, TONES.indigo, "grid place-content-center text-center p-4")}>
             <Kicker>YOU WATCHED</Kicker>
-            <div className="mt-1 text-[46px] font-black tabular-nums">
+            <div className="mt-1 text-[54px] font-black tabular-nums leading-none">
               {watchedFilms.toLocaleString()}
             </div>
-            <div className="mt-0.5 text-lg opacity-85 uppercase tracking-wider">Films</div>
+            <div className="mt-1 text-sm opacity-85 uppercase tracking-[.12em]">Films</div>
           </div>
-          <div className={cx(tileBase, TONES.pink, "grid place-content-center text-center p-6")}>
+          <div className={cx(tileBase, TONES.pink, "grid place-content-center text-center p-4")}>
             <Kicker>YOU SPENT</Kicker>
-            <div className="mt-1 text-[46px] font-black tabular-nums">
+            <div className="mt-1 text-[54px] font-black tabular-nums leading-none">
               {spentDays.toLocaleString()}
             </div>
-            <div className="mt-0.5 text-lg opacity-90 uppercase tracking-wider">Days</div>
+            <div className="mt-1 text-sm opacity-90 uppercase tracking-[.12em]">Days</div>
           </div>
         </div>
 
         {/* Row 2 */}
-        <div className="grid grid-cols-3 gap-6 auto-rows-fr">
-          <div className={cx(tileBase, TONES.yellow, "grid place-content-center text-center p-4")}>
+        <div className="grid grid-cols-3 gap-5 auto-rows-fr">
+          <div className={cx(tileBase, TONES.yellow, "grid place-content-center text-center p-3")}>
             <Kicker>MOST COMMON RATING</Kicker>
-            <div className="mt-2 text-[34px] font-extrabold tabular-nums text-yellow-400 leading-none">
+            <div className="mt-1 text-[28px] font-extrabold tabular-nums text-yellow-400 leading-none">
               {mostCommonRating}★
             </div>
           </div>
-          <div className={cx(tileBase, TONES.cyan, "grid place-content-center text-center p-4")}>
+          <div className={cx(tileBase, TONES.cyan, "grid place-content-center text-center p-3")}>
             <Kicker>YOUR CINEMA SCALE</Kicker>
-            <div className="mt-1 text-[30px] font-extrabold tabular-nums text-cyan-400 whitespace-nowrap leading-none">
+            <div className="mt-1 text-[26px] font-extrabold tabular-nums text-cyan-400 whitespace-nowrap leading-none">
               {cinemaScale.toFixed(1)}/100
             </div>
           </div>
-          <div className={cx(tileBase, TONES.indigo, "grid place-content-center text-center p-4")}>
+          <div className={cx(tileBase, TONES.indigo, "grid place-content-center text-center p-3")}>
             <Kicker>MINUTES AVERAGE</Kicker>
-            <div className="mt-1 text-[38px] font-extrabold tabular-nums text-blue-300 leading-none">
+            <div className="mt-1 text-[32px] font-extrabold tabular-nums text-blue-300 leading-none">
               {minutesAverage}
             </div>
           </div>
         </div>
 
         {/* Row 3 */}
-        <div className="grid grid-cols-2 gap-6 auto-rows-fr">
-          <div className={cx(tileBase, TONES.orange, "grid place-content-center text-center p-6")}>
-            <div className="text-[36px] font-extrabold tabular-nums text-orange-500 leading-none">
+        <div className="grid grid-cols-2 gap-5 auto-rows-fr">
+          <div className={cx(tileBase, TONES.orange, "grid place-content-center text-center p-4")}>
+            <div className="text-[48px] font-extrabold tabular-nums text-orange-500 leading-none">
               {timePercent}%
             </div>
-            <div className="mt-1 text-base opacity-80 tracking-wider">
-              OF YOUR TIME SPENT WATCHING FILMS
+            <div className="mt-1 text-[11px] opacity-80 tracking-[.15em]">
+              TIME SPENT WATCHING FILMS
             </div>
           </div>
-          <div className={cx(tileBase, TONES.purple, "grid place-content-center text-center p-6")}>
-            <div className="text-[46px] font-black leading-none text-purple-300">
+          <div className={cx(tileBase, TONES.purple, "grid place-content-center text-center p-4")}>
+            <div className="text-[52px] font-black leading-none text-purple-300">
               {peakDecade}
             </div>
-            <div className="mt-2 text-base opacity-90">
-              {peakDecadeCount.toLocaleString()} FILMS • YOUR PEAK DECADE
+            <div className="mt-1 text-[11px] opacity-90 tracking-[.12em]">
+              {peakDecadeCount.toLocaleString()} FILMS IN YOUR PEAK DECADE
             </div>
           </div>
         </div>

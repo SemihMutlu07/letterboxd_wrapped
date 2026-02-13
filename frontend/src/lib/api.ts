@@ -1,5 +1,5 @@
 // API base configuration
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000';
+export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '');
 
 // Build absolute URLs with query parameters
 export function buildUrl(path: string, params: Record<string, string> = {}) {
@@ -12,8 +12,8 @@ export function buildUrl(path: string, params: Record<string, string> = {}) {
 function handleApiError(error: unknown, context: string): Error {
   if (error instanceof Error) {
     // Network errors
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      return new Error(`Network error: Unable to connect to ${context}. Please check your internet connection.`);
+    if (error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
+      return new Error(`Network error: Unable to connect to ${context}. The server may still be starting or your internet connection may be down.`);
     }
     
     // HTTP errors
@@ -116,49 +116,58 @@ export async function analyzeFiles(formData: FormData) {
   }
 }
 
-// Test backend connectivity
-export async function testBackend() {
+// Test backend connectivity with retry for concurrent startup
+export async function testBackend(retries = 5, delayMs = 2000) {
   const url = `${API_BASE}/`;
-  
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
-    const r = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (!r.ok) {
-      throw new Error(`test ${r.status}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[api] backend health URL:', url);
+  }
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const r = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!r.ok) {
+        throw new Error(`test ${r.status}`);
+      }
+
+      const data = await r.json();
+
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response from backend health check');
+      }
+
+      return data;
+    } catch (error) {
+      const isLastAttempt = attempt === retries;
+
+      if (!isLastAttempt) {
+        // Wait before retrying — backend may still be booting
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Backend connection timeout. The server may still be starting up.');
+      }
+
+      const enhancedError = handleApiError(error, 'the backend');
+
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Backend connectivity test failed after retries:', enhancedError);
+      }
+
+      throw enhancedError;
     }
-    
-    const data = await r.json();
-    
-    // Validate response structure
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid response from backend health check');
-    }
-    
-    return data;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Backend connection timeout. The service may be slow to respond.');
-    }
-    
-    const enhancedError = handleApiError(error, 'backend connectivity');
-    
-    // Log for debugging in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Backend connectivity test failed:', enhancedError);
-    }
-    
-    throw enhancedError;
   }
 }
 
