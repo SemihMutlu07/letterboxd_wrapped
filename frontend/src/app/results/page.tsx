@@ -310,6 +310,18 @@ export default function ResultsPage() {
   }, [stats?.days_watched, actualRangeDays]);
 
   const cineScore = useMemo(() => Math.max(0, Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats))), [stats]);
+  const quickMetrics = useMemo(() => {
+    const safeRange = Math.max(1, actualRangeDays);
+    const filmsPerWeek = ((stats?.total_films ?? 0) / safeRange) * 7;
+    const languageCount = stats?.top_languages?.length ?? 0;
+    const decadeSpan = (stats?.decades ?? []).filter((d) => d.count > 0).length;
+
+    return {
+      filmsPerWeek,
+      languageCount,
+      decadeSpan,
+    };
+  }, [stats?.total_films, stats?.top_languages, stats?.decades, actualRangeDays]);
 
   // Share card props - must be before early returns to maintain hook order
   const shareProps = useMemo(() => ({
@@ -385,7 +397,7 @@ export default function ResultsPage() {
       <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
                 {/* Header */}
         <header className="text-center py-4 md:py-10">
-          <h1 className="text-[clamp(32px,6vw,72px)] font-black text-white mb-4 leading-[0.95] tracking-tighter">
+          <h1 className="text-[clamp(32px,6vw,72px)] font-black text-white mb-4 leading-[0.95] tracking-tighter [font-family:var(--font-display)]">
             Your <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span> Wrapped
           </h1>
           <p className="text-xl text-gray-300 mb-2">A comprehensive analysis of your cinematic journey.</p>
@@ -436,6 +448,9 @@ export default function ResultsPage() {
           avgMinutes={stats.average_runtime || 0} 
           totalCountries={stats.total_countries || 0} 
           mostCommonRating={stats.most_common_rating || 3.5} 
+          filmsPerWeek={quickMetrics.filmsPerWeek}
+          languageCount={quickMetrics.languageCount}
+          decadeSpan={quickMetrics.decadeSpan}
         />
 
         {/* Cinema Scale - Lazy loaded */}
@@ -542,11 +557,17 @@ function LazyRatingsBar({ data, max }: { data: any[]; max: number }) {
 function LazyQuickFacts({ 
   avgMinutes, 
   totalCountries, 
-  mostCommonRating 
+  mostCommonRating,
+  filmsPerWeek,
+  languageCount,
+  decadeSpan,
 }: { 
   avgMinutes: number; 
   totalCountries: number; 
   mostCommonRating: number; 
+  filmsPerWeek: number;
+  languageCount: number;
+  decadeSpan: number;
 }) {
   const { ref, shouldMount } = useLazyMount(250);
   
@@ -557,6 +578,9 @@ function LazyQuickFacts({
           avgMinutes={avgMinutes} 
           totalCountries={totalCountries} 
           mostCommonRating={mostCommonRating} 
+          filmsPerWeek={filmsPerWeek}
+          languageCount={languageCount}
+          decadeSpan={decadeSpan}
         />
       ) : (
         <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />

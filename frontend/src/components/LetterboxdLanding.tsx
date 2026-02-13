@@ -3,13 +3,13 @@
 import JSZip from 'jszip';
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { analyzeFiles, testBackend, parseLetterboxdUsername } from '@/lib/api';
+import { analyzeFiles, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
-import { ensureSessionId, getUsername, setUsername, setConsent, getConsent } from '@/lib/session-id';
+import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
 import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
+import { parseLetterboxdUsername } from '@/lib/filename';
 
 
 
@@ -19,7 +19,19 @@ export default function LetterboxdLanding() {
   const [, setDetectedUsername] = useState<string | null>(null);
 
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
-  const router = useRouter();
+
+  const openFilePicker = useCallback(() => {
+    (document.getElementById('file-input-desktop') ?? document.getElementById('file-input-mobile'))?.click();
+  }, []);
+
+  const openFolderPicker = useCallback(() => {
+    const dirInput = document.getElementById('dir-input') as HTMLInputElement | null;
+    if (dirInput && 'webkitdirectory' in dirInput) {
+      dirInput.click();
+      return;
+    }
+    openFilePicker();
+  }, [openFilePicker]);
 
   // Track initial session on page load
   useEffect(() => {
@@ -126,18 +138,13 @@ export default function LetterboxdLanding() {
       }
     }
 
-    // Extract username from CSV files using backend parsing
+    // Extract username from CSV files using local parsing (faster than a network roundtrip)
     let detectedUsername: string | null = null;
     for (let i = 0; i < files.length; i++) {
-      try {
-        const result = await parseLetterboxdUsername(files[i].name);
-        if (result.username) {
-          detectedUsername = result.username;
-  
-          break;
-        }
-      } catch {
-        // Silent error handling
+      const parsed = parseLetterboxdUsername(files[i].name);
+      if (parsed) {
+        detectedUsername = parsed;
+        break;
       }
     }
     
@@ -163,71 +170,22 @@ export default function LetterboxdLanding() {
     trackEvent('upload_started', { fileCount: files.length });
     setError(null);
 
-    let payloadZip: File;
+    let uploadFiles: File[] = [];
     const single = files.length === 1 ? files[0] : null;
     const isZip = single && /\.zip$/i.test(single.name);
     
     if (isZip && single) {
-      // Enhanced Mac ZIP handling: extract CSVs from nested folders
-      try {
-        const inZip = await JSZip.loadAsync(single);
-        const outZip = new JSZip();
-        let foundCsv = false;
-        const csvFiles: Array<{name: string, blob: Blob}> = [];
-        
-        // First pass: collect all CSV files
-        const tasks: Promise<void>[] = [];
-        inZip.forEach((path, file) => {
-          if (/\.csv$/i.test(path)) {
-            foundCsv = true;
-            tasks.push(
-              file.async('blob').then((blob) => {
-                // Extract filename from path (handle nested folders)
-                const name = path.split('/').pop() || path;
-                csvFiles.push({ name, blob });
-              })
-            );
-          }
-        });
-        
-        if (foundCsv) {
-          await Promise.all(tasks);
-          
-          // Sort CSV files by priority: diary > ratings > watched > others
-          const priorityOrder = ['diary', 'ratings', 'watched', 'reviews', 'watchlist'];
-          csvFiles.sort((a, b) => {
-            const aName = a.name.toLowerCase();
-            const bName = b.name.toLowerCase();
-            const aPriority = priorityOrder.findIndex(p => aName.includes(p));
-            const bPriority = priorityOrder.findIndex(p => bName.includes(p));
-            if (aPriority === -1 && bPriority === -1) return 0;
-            if (aPriority === -1) return 1;
-            if (bPriority === -1) return -1;
-            return aPriority - bPriority;
-          });
-          
-          // Add files to output ZIP
-          csvFiles.forEach(({ name, blob }) => {
-            outZip.file(name, blob);
-          });
-          
-          const blob = await outZip.generateAsync({ type: 'blob' });
-          payloadZip = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
-        } else {
-          setError('No CSV files found in the ZIP archive. Please ensure your Letterboxd export contains CSV files.');
-          setIsUploading(false);
-          trackEvent('upload_error', { reason: 'no_csv_in_zip' });
-          return;
-        }
-      } catch {
-        setError('Failed to process ZIP file. The file may be corrupted or password-protected.');
-        setIsUploading(false);
-        trackEvent('upload_error', { reason: 'zip_processing_failed' });
-        return;
-      }
+      // Hotfix: upload ZIP directly to avoid expensive client-side unzip+rezip.
+      uploadFiles = [single];
+    } else if (files.length === 1) {
+      uploadFiles = [files[0]];
+    } else if (Array.from(files).every((f) => /\.csv$/i.test(f.name))) {
+      // Multi-CSV folders can be sent as-is for better responsiveness.
+      uploadFiles = Array.from(files);
     } else {
       try {
-        payloadZip = await zipFiles(files);
+        const payloadZip = await zipFiles(files);
+        uploadFiles = [payloadZip];
       } catch {
         setError('Failed to prepare files for upload. Please try again.');
         setIsUploading(false);
@@ -237,7 +195,9 @@ export default function LetterboxdLanding() {
     }
 
     const formData = new FormData();
-    formData.append('files', payloadZip);
+    uploadFiles.forEach((file) => {
+      formData.append('files', file);
+    });
 
     const sessionId = ensureSessionId();
     const username = getUsername();
@@ -361,36 +321,9 @@ export default function LetterboxdLanding() {
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    const items = e.dataTransfer.items;
-    if (items && items.length > 0) {
-        // Handle folder drop (macOS Finder) or multiple files
-        const entry = (items[0] as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry })?.webkitGetAsEntry?.();
-        if (entry?.isDirectory) {
-          const zip = new JSZip();
-          const addRecursively = async (ent: FileSystemEntry, prefix: string) => {
-            if (ent.isFile) {
-              const f: File = await new Promise((resolve) => (ent as FileSystemFileEntry).file(resolve));
-              zip.file(`${prefix}${ent.name}`, f);
-            } else if (ent.isDirectory) {
-              const reader = (ent as FileSystemDirectoryEntry).createReader();
-              const readAll = async () => {
-                const batch: FileSystemEntry[] = await new Promise((r) => reader.readEntries(r));
-                if (!batch || batch.length === 0) return;
-                for (const child of batch) await addRecursively(child, `${prefix}${ent.name}/`);
-                await readAll();
-              };
-              await readAll();
-            }
-          };
-          await addRecursively(entry, '');
-          const blob = await zip.generateAsync({ type: 'blob' });
-          const zipped = new File([blob], 'letterboxd-export.zip', { type: 'application/zip' });
-          const dt = new DataTransfer();
-          dt.items.add(zipped);
-          handleFiles(dt.files);
-        } else {
-          handleFiles(e.dataTransfer.files);
-        }
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFiles(files);
     }
   }, [handleFiles]);
 
@@ -402,14 +335,32 @@ export default function LetterboxdLanding() {
 
   if (isUploading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-2xl text-center">
-          <h1 className="text-4xl font-bold mb-4">Analyzing Your Films</h1>
-          <p className="text-xl text-gray-400 mb-8">Creating your comprehensive movie wrapped...</p>
-          
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-400 mx-auto mb-8"></div>
-          
-          <p className="text-gray-300">Please wait while we process your data...</p>
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-xl text-center rounded-3xl border border-slate-700/70 bg-slate-800/55 p-8 md:p-10 backdrop-blur-sm">
+          <div className="mx-auto mb-6 h-14 w-14 rounded-2xl bg-orange-500/15 border border-orange-400/35 flex items-center justify-center">
+            <Film className="h-7 w-7 text-orange-300 animate-pulse" />
+          </div>
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">Analyzing Your Films</h1>
+          <p className="text-slate-300 mb-7">Preparing files, running analysis, and building your results.</p>
+
+          <div className="space-y-3 mb-6">
+            <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
+              <div className="h-full w-2/3 bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400 animate-[pulse_1.6s_ease-in-out_infinite]" />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
+                <div className="h-full w-full bg-cyan-400/70 animate-[pulse_1.2s_ease-in-out_infinite]" />
+              </div>
+              <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
+                <div className="h-full w-full bg-pink-400/70 animate-[pulse_1.6s_ease-in-out_infinite]" />
+              </div>
+              <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
+                <div className="h-full w-full bg-violet-400/70 animate-[pulse_2s_ease-in-out_infinite]" />
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm text-slate-400">Large ZIP files can take a little longer. We&apos;ll redirect automatically.</p>
         </div>
       </div>
     );
@@ -446,12 +397,12 @@ export default function LetterboxdLanding() {
               className="hidden sm:flex rounded-3xl border-2 border-dashed border-slate-600/60 bg-slate-800/40 p-6 md:p-8 min-h-[220px] sm:min-h-[260px] items-center justify-center text-center cursor-pointer transition-colors shadow-none hover:shadow-lg hover:border-orange-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 max-w-3xl mx-auto"
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              onClick={() => document.getElementById('file-input')?.click()}
+              onClick={openFolderPicker}
               role="button"
               tabIndex={0}
             >
               <input
-                id="file-input"
+                id="file-input-desktop"
                 type="file"
                 multiple
                 accept=".zip,.csv,.CSV"
@@ -462,8 +413,8 @@ export default function LetterboxdLanding() {
                 <div className="mb-4 h-14 w-14 rounded-2xl bg-slate-700/60 ring-1 ring-white/10 flex items-center justify-center transition-colors">
                   <Upload className="w-7 h-7 text-slate-300" />
                 </div>
-                <p className="text-lg sm:text-xl font-semibold">Drop your export here</p>
-                <p className="mt-1 text-md text-slate-400">.zip, exported folder.</p>
+                <p className="text-lg sm:text-xl font-semibold">Select a folder, or drag & drop a folder/zip.</p>
+                <p className="mt-1 text-md text-slate-400">Supports exported folder, .zip, and .csv.</p>
 
               </div>
             </div>
@@ -471,14 +422,14 @@ export default function LetterboxdLanding() {
             {/* Mobile upload CTA */}
             <div className="sm:hidden">
               <button
-                onClick={() => document.getElementById('file-input')?.click()}
+                onClick={openFolderPicker}
                 className="w-full max-w-md mx-auto min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 flex items-center justify-center gap-3"
               >
                 <Upload className="w-5 h-5" />
-                Export your folder
+                Select a folder
               </button>
               <input
-                id="file-input"
+                id="file-input-mobile"
                 type="file"
                 multiple
                 accept=".zip,.csv,.CSV"
@@ -487,25 +438,26 @@ export default function LetterboxdLanding() {
               />
             </div>
 
-            {/* Optional folder picker for users whose export was auto-unzipped */}
-            <div className="mt-3 hidden sm:flex justify-center">
+            {/* Fallback file picker for direct ZIP/CSV selection */}
+            <div className="mt-3 flex justify-center">
               <button
-                onClick={() => document.getElementById('dir-input')?.click()}
+                onClick={openFilePicker}
                 className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50"
               >
-                Or choose exported folder
+                Or choose ZIP/CSV files
               </button>
-              <input
-                id="dir-input"
-                type="file"
-                // @ts-expect-error non-standard but supported in Chromium/WebKit
-                webkitdirectory=""
-                directory=""
-                multiple
-                onChange={handleFileInput}
-                className="hidden"
-              />
             </div>
+            <input
+              id="dir-input"
+              type="file"
+              // @ts-expect-error non-standard but supported in Chromium/WebKit
+              webkitdirectory=""
+              directory=""
+              multiple
+              accept=".zip,.csv,.CSV"
+              onChange={handleFileInput}
+              className="hidden"
+            />
           </section>
 
           {error && (
