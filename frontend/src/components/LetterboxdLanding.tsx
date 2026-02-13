@@ -9,6 +9,7 @@ import { analyzeFiles, testBackend, parseLetterboxdUsername } from '@/lib/api';
 import { startAnalysis, finishAnalysis } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, setConsent, getConsent } from '@/lib/session-id';
+import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
 
 
 
@@ -67,8 +68,10 @@ export default function LetterboxdLanding() {
     const testBackendConnectivity = async () => {
             try {
         await testBackend();
+        trackEvent('backend_health_check_ok');
       } catch {
         // Silent error handling
+        trackEvent('backend_health_check_failed');
       }
     };
     testBackendConnectivity();
@@ -92,6 +95,7 @@ export default function LetterboxdLanding() {
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) {
       setError('No files selected. Please choose your Letterboxd export files.');
+      trackEvent('upload_error', { reason: 'no_files_selected' });
       return;
     }
 
@@ -104,7 +108,9 @@ export default function LetterboxdLanding() {
       
       // Check file size
       if (file.size > maxFileSize) {
-        setError(`File "${file.name}" is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 50MB.`);
+        const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+        setError(`File "${file.name}" is too large (${sizeMb}MB). Maximum size is 50MB.`);
+        trackEvent('upload_error', { reason: 'file_too_large', fileName: file.name, sizeMb });
         return;
       }
       
@@ -115,6 +121,7 @@ export default function LetterboxdLanding() {
       
       if (!hasValidExtension) {
         setError(`File "${file.name}" is not a supported format. Please upload .csv or .zip files only.`);
+        trackEvent('upload_error', { reason: 'invalid_extension', fileName: file.name });
         return;
       }
     }
@@ -153,6 +160,7 @@ export default function LetterboxdLanding() {
     }
 
     setIsUploading(true);
+    trackEvent('upload_started', { fileCount: files.length });
     setError(null);
 
     let payloadZip: File;
@@ -208,11 +216,13 @@ export default function LetterboxdLanding() {
         } else {
           setError('No CSV files found in the ZIP archive. Please ensure your Letterboxd export contains CSV files.');
           setIsUploading(false);
+          trackEvent('upload_error', { reason: 'no_csv_in_zip' });
           return;
         }
       } catch {
         setError('Failed to process ZIP file. The file may be corrupted or password-protected.');
         setIsUploading(false);
+        trackEvent('upload_error', { reason: 'zip_processing_failed' });
         return;
       }
     } else {
@@ -221,6 +231,7 @@ export default function LetterboxdLanding() {
       } catch {
         setError('Failed to prepare files for upload. Please try again.');
         setIsUploading(false);
+        trackEvent('upload_error', { reason: 'zip_pack_failed' });
         return;
       }
     }
@@ -246,8 +257,26 @@ export default function LetterboxdLanding() {
         }
       }
 
+      const startedAt = performance.now();
+      trackEvent('analysis_started', { hasZip: !!isZip, fileCount: files.length });
+
       const result = await analyzeFiles(formData);
+      const durationMs = performance.now() - startedAt;
+
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+
+      // High-level, consented stats for PostHog
+      trackConsentedEvent('analysis_completed', {
+        total_films: result.stats.total_films,
+        average_rating: result.stats.average_rating,
+        days_watched: result.stats.days_watched,
+        duration_ms: Math.round(durationMs),
+      });
+      trackFilmStats({
+        total_films: result.stats.total_films,
+        total_countries: result.stats.total_countries,
+        average_rating: result.stats.average_rating,
+      });
 
       // Finish analysis tracking
       if (analysisRun && detectedUsername) {
@@ -298,6 +327,9 @@ export default function LetterboxdLanding() {
         }
       }
       
+      // Track failed analysis (PostHog)
+      trackEvent('analysis_failed', { message: errorMessage });
+
       // Enhanced error messages for Mac users
       if (/No valid Letterboxd CSV files/i.test(errorMessage)) {
         setError(

@@ -1,3 +1,6 @@
+import { captureEvent } from '@/lib/posthog';
+import { hasConsent } from '@/lib/sessionUtils';
+
 type Props = Record<string, unknown>;
 
 /**
@@ -32,12 +35,47 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function trackEvent(_name: string, _props?: Props): void {}
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function trackConsentedEvent(_name: string, _props?: Props): void {}
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function trackFilmStats(_stats: unknown): void {}
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function trackAnalyticsEvent(_name: string, _props?: Props): void {}
+/**
+ * Always-allowed, high-level events (page hits, feature usage, errors).
+ * Still respect PostHog init + consent gate inside captureEvent.
+ */
+export function trackEvent(name: string, props?: Props): void {
+  try {
+    captureEvent(name, props);
+  } catch {
+    // Never break UX for analytics
+  }
+}
+
+/**
+ * Events that should only fire when the user has explicitly accepted analytics.
+ */
+export function trackConsentedEvent(name: string, props?: Props): void {
+  try {
+    if (!hasConsent()) return;
+    captureEvent(name, props);
+  } catch {
+    // Silent failure
+  }
+}
+
+/**
+ * Aggregated film stats – safe, high-level metrics only.
+ */
+export function trackFilmStats(stats: unknown): void {
+  try {
+    if (!hasConsent()) return;
+    // Expect an already-aggregated object (no raw titles/user PII)
+    captureEvent('film_stats', stats as Props);
+  } catch {
+    // Silent failure
+  }
+}
+
+/**
+ * Convenience wrapper for other consented analytics events.
+ */
+export function trackAnalyticsEvent(name: string, props?: Props): void {
+  trackConsentedEvent(name, props);
+}
 

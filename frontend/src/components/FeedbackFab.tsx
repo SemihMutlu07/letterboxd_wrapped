@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperat
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { insertFeedback } from '@/lib/supabase/feedback';
+import { trackEvent } from '@/lib/analytics';
 
 interface FeedbackFabProps {
   sessionId: string;
@@ -84,6 +85,7 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
 
   const handleOpen = () => {
     setIsOpen(true);
+    trackEvent('feedback_opened');
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -111,6 +113,7 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
       if (!lbUsername) {
         alert("We couldn't detect your letterboxd username. Please re-run the analysis first.");
         setIsSubmitting(false);
+        trackEvent('feedback_submit_blocked', { reason: 'missing_username' });
         return;
       }
 
@@ -124,6 +127,12 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
       };
 
       await insertFeedback(payload);
+      trackEvent('feedback_submitted', {
+        has_contact: !!payload.contact,
+        has_message: !!payload.message,
+        os,
+        device_type,
+      });
 
       setShowSuccess(true);
 
@@ -137,6 +146,7 @@ const FeedbackFab = forwardRef<FeedbackFabRef, FeedbackFabProps>(({ sessionId },
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       alert(`Feedback submission failed: ${errorMessage}`);
+      trackEvent('feedback_submit_failed', { error: errorMessage });
     } finally {
       setIsSubmitting(false);
     }

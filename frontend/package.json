@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev:frontend": "next dev --turbopack",
+    "dev:backend": "cd ../backend && (python3 -c \"import fastapi\" >/dev/null 2>&1 || python3 -m pip install -r requirements.txt) && python3 app/main.py",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
@@ -33,6 +35,7 @@
     "eslint-config-next": "15.4.2",
     "tailwindcss": "^4",
     "ts-prune": "^0.10.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "concurrently": "^8.2.2"
   }
 }
