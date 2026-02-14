@@ -5,7 +5,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, Film, Star, Clock, Globe, HelpCircle, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeFiles, testBackend } from '@/lib/api';
-import { startAnalysis, finishAnalysis } from '@/lib/supabase/analysis_runs';
+import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
 import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
@@ -138,19 +138,36 @@ export default function LetterboxdLanding() {
       }
     }
 
-    // Extract username from CSV files using local parsing (faster than a network roundtrip)
+    // Extract username from uploaded names/paths using local parsing.
     let detectedUsername: string | null = null;
     for (let i = 0; i < files.length; i++) {
-      const parsed = parseLetterboxdUsername(files[i].name);
-      if (parsed) {
-        detectedUsername = parsed;
-        break;
+      const file = files[i] as File & { webkitRelativePath?: string };
+      const relativePath = file.webkitRelativePath || '';
+      const pathParts = relativePath ? relativePath.split('/').filter(Boolean) : [];
+
+      const candidates = [
+        file.name,
+        relativePath,
+        pathParts[0] || '',
+      ];
+
+      for (const candidate of candidates) {
+        const parsed = parseLetterboxdUsername(candidate);
+        if (parsed) {
+          detectedUsername = parsed;
+          break;
+        }
       }
+
+      if (detectedUsername) break;
     }
     
     if (detectedUsername) {
       setDetectedUsername(detectedUsername);
       setUsername(detectedUsername);
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[upload] persisted username', { username: detectedUsername });
+      }
       
       // Update session with detected username
       try {
@@ -223,6 +240,10 @@ export default function LetterboxdLanding() {
       const result = await analyzeFiles(formData);
       const durationMs = performance.now() - startedAt;
 
+      if (detectedUsername) {
+        setUsername(detectedUsername);
+      }
+
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
 
       // High-level, consented stats for PostHog
@@ -244,10 +265,7 @@ export default function LetterboxdLanding() {
           await finishAnalysis({
             id: analysisRun.id,
             ok: true,
-            summary: {
-              total_films: result.stats.total_films,
-              analysis_date: result.stats.analysis_date,
-            }
+            summary: buildSummaryForPersistence(result.stats as Record<string, unknown>),
           });
 
           // Update user session with film count and genre

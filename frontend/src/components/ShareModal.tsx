@@ -1,41 +1,80 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { X, Download, Monitor, Smartphone, Loader2, Plus, Minus, Scan } from 'lucide-react';
+import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
 
 // ---- Share helpers ----
+const EXPORT_FILE_NAME = 'movies-wrapped.png';
+const IOS_RE = /iPhone|iPad|iPod/i;
+const ANDROID_RE = /Android/i;
+
+function getPlatformInfo() {
+  const ua = navigator.userAgent;
+  const isIOS = IOS_RE.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = ANDROID_RE.test(ua);
+  const isMobile = isIOS || isAndroid || /Mobile/i.test(ua);
+  return { isIOS, isAndroid, isMobile };
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 async function exportToBlob(el: HTMLElement, w: number, h: number, pixelRatio: number, bg: string) {
-  const { toBlob } = await import('html-to-image');
   if (document.fonts) await document.fonts.ready;
-  return await toBlob(el, { width: w, height: h, pixelRatio, backgroundColor: bg });
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  return await toBlob(el, {
+    width: w,
+    height: h,
+    pixelRatio,
+    backgroundColor: bg,
+    cacheBust: true,
+  });
 }
 
 async function shareToSystem(blob: Blob) {
-  // Web Share API (files) — SADECE mobil cihazlarda
-  const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  
-  if (!isMobile) {
-    return false; // Desktop'ta share sheet'i atla, direkt indirme yap
-  }
-  
-  const file = new File([blob], 'movies-wrapped.png', { type: 'image/png' });
+  const { isMobile } = getPlatformInfo();
+  if (!isMobile || !navigator.share) return false;
+
+  const file = new File([blob], EXPORT_FILE_NAME, { type: 'image/png' });
   const canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
-  if (canShareFiles && navigator.share) {
-    await navigator.share({ files: [file], title: 'Movies Wrapped', text: 'My share card' });
-    return true;
+
+  try {
+    if (canShareFiles) {
+      await navigator.share({ files: [file], title: 'Movies Wrapped' });
+      return true;
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return true;
+    }
+    throw error;
   }
+
   return false;
 }
 
 async function saveWithFilePicker(blob: Blob) {
-  // Desktop Chromium – daha iyi "kaydet" deneyimi
-  // @ts-expect-error - File System Access API not in TypeScript types yet
-  if (window.showSaveFilePicker) {
-    // @ts-expect-error - File System Access API not in TypeScript types yet
-    const handle = await window.showSaveFilePicker({
-      suggestedName: 'movies-wrapped.png',
+  const { isMobile } = getPlatformInfo();
+  if (isMobile || !window.isSecureContext) return false;
+
+  type FilePickerHandle = {
+    createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
+  };
+  type WindowWithFilePicker = Window & {
+    showSaveFilePicker?: (opts: {
+      suggestedName: string;
+      types: Array<{ description: string; accept: Record<string, string[]> }>;
+    }) => Promise<FilePickerHandle>;
+  };
+
+  const typedWindow = window as WindowWithFilePicker;
+  if (typedWindow.showSaveFilePicker) {
+    const handle = await typedWindow.showSaveFilePicker({
+      suggestedName: EXPORT_FILE_NAME,
       types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
     });
     const writable = await handle.createWritable();
@@ -48,10 +87,22 @@ async function saveWithFilePicker(blob: Blob) {
 
 function downloadFallback(blob: Blob) {
   const url = URL.createObjectURL(blob);
+  const { isIOS } = getPlatformInfo();
+
+  if (isIOS) {
+    // iOS Safari's default save path is via Share Sheet from the opened image.
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    return;
+  }
+
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'movies-wrapped.png';
+  a.download = EXPORT_FILE_NAME;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1200);
 }
 
@@ -114,28 +165,43 @@ export default function ShareModal({
   const [userScale, setUserScale] = useState(1);
   const [isPanning, setIsPanning] = useState(false);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
+  const lastPanPointRef = useRef({ x: 0, y: 0 });
+  const pendingPanDeltaRef = useRef({ x: 0, y: 0 });
+  const panRafRef = useRef<number | null>(null);
+  const wheelDeltaRef = useRef(0);
+  const wheelRafRef = useRef<number | null>(null);
   const canPan = userScale > 1.02;
+
+  const flushPanDelta = useCallback(() => {
+    panRafRef.current = null;
+    const { x, y } = pendingPanDeltaRef.current;
+    if (x === 0 && y === 0) return;
+    pendingPanDeltaRef.current = { x: 0, y: 0 };
+    setPanOffset(prev => ({ x: prev.x + x, y: prev.y + y }));
+  }, []);
 
   // Mouse events for desktop panning
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canPan) return;
     if (e.button === 0) { // Left mouse button
       setIsPanning(true);
-      setLastPanPoint({ x: e.clientX, y: e.clientY });
+      lastPanPointRef.current = { x: e.clientX, y: e.clientY };
       e.preventDefault();
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
-      const deltaX = e.clientX - lastPanPoint.x;
-      const deltaY = e.clientY - lastPanPoint.y;
-      setPanOffset(prev => ({
-        x: prev.x + deltaX,
-        y: prev.y + deltaY
-      }));
-      setLastPanPoint({ x: e.clientX, y: e.clientY });
+      const deltaX = e.clientX - lastPanPointRef.current.x;
+      const deltaY = e.clientY - lastPanPointRef.current.y;
+      lastPanPointRef.current = { x: e.clientX, y: e.clientY };
+      pendingPanDeltaRef.current = {
+        x: pendingPanDeltaRef.current.x + deltaX,
+        y: pendingPanDeltaRef.current.y + deltaY
+      };
+      if (panRafRef.current === null) {
+        panRafRef.current = requestAnimationFrame(flushPanDelta);
+      }
     }
   };
 
@@ -146,7 +212,7 @@ export default function ShareModal({
   // Touch events for mobile - removed swipe-down to close, added pinch zoom
   const [lastPinchDistance, setLastPinchDistance] = useState(0);
   
-  const getDistance = (touch1: Touch, touch2: Touch) => {
+  const getDistance = (touch1: { clientX: number; clientY: number }, touch2: { clientX: number; clientY: number }) => {
     const dx = touch1.clientX - touch2.clientX;
     const dy = touch1.clientY - touch2.clientY;
     return Math.sqrt(dx * dx + dy * dy);
@@ -156,7 +222,7 @@ export default function ShareModal({
     if (e.touches.length === 1 && canPan) {
       const touch = e.touches[0];
       setIsPanning(true);
-      setLastPanPoint({ x: touch.clientX, y: touch.clientY });
+      lastPanPointRef.current = { x: touch.clientX, y: touch.clientY };
     } else if (e.touches.length === 2) {
       // Pinch zoom
       setIsPanning(false);
@@ -169,16 +235,21 @@ export default function ShareModal({
       const touch = e.touches[0];
       
       if (canPan) {
+        e.preventDefault();
         // Panning
-        const deltaX = touch.clientX - lastPanPoint.x;
-        const deltaY = touch.clientY - lastPanPoint.y;
-        setPanOffset(prev => ({
-          x: prev.x + deltaX,
-          y: prev.y + deltaY
-        }));
-        setLastPanPoint({ x: touch.clientX, y: touch.clientY });
+        const deltaX = touch.clientX - lastPanPointRef.current.x;
+        const deltaY = touch.clientY - lastPanPointRef.current.y;
+        lastPanPointRef.current = { x: touch.clientX, y: touch.clientY };
+        pendingPanDeltaRef.current = {
+          x: pendingPanDeltaRef.current.x + deltaX,
+          y: pendingPanDeltaRef.current.y + deltaY
+        };
+        if (panRafRef.current === null) {
+          panRafRef.current = requestAnimationFrame(flushPanDelta);
+        }
       }
     } else if (e.touches.length === 2) {
+      e.preventDefault();
       // Pinch zoom
       const currentDistance = getDistance(e.touches[0], e.touches[1]);
       if (lastPinchDistance > 0) {
@@ -196,8 +267,16 @@ export default function ShareModal({
 
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setUserScale(prev => Math.max(0.5, Math.min(3, prev * delta)));
+    wheelDeltaRef.current += e.deltaY;
+    if (wheelRafRef.current !== null) return;
+
+    wheelRafRef.current = requestAnimationFrame(() => {
+      const delta = wheelDeltaRef.current;
+      wheelDeltaRef.current = 0;
+      wheelRafRef.current = null;
+      const scaleFactor = Math.exp(-delta * 0.0015);
+      setUserScale(prev => Math.max(0.5, Math.min(3, prev * scaleFactor)));
+    });
   }, []);
 
   // Add wheel event listener with proper options
@@ -208,6 +287,8 @@ export default function ShareModal({
     viewport.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       viewport.removeEventListener('wheel', handleWheel);
+      if (wheelRafRef.current !== null) cancelAnimationFrame(wheelRafRef.current);
+      if (panRafRef.current !== null) cancelAnimationFrame(panRafRef.current);
     };
   }, [handleWheel]);
 
@@ -354,7 +435,11 @@ export default function ShareModal({
 
       // 3) PNG blob üret
       setExportProgress(60);
-      const blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, '#0B1220');
+      let blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, '#0B1220');
+      if (!blob) {
+        await delay(80);
+        blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, '#0B1220');
+      }
       if (!blob) throw new Error('Failed to export image');
 
       // 4) MOBIL: sistem paylaşım (galeriye kaydetmek için standart yol)
@@ -458,7 +543,7 @@ export default function ShareModal({
         {/* Preview viewport */}
         <div 
           ref={viewportRef} 
-          className={`flex-1 min-h-0 px-4 md:p-6 flex items-center justify-center overflow-hidden select-none ${
+          className={`relative flex-1 min-h-0 px-4 md:p-6 flex items-center justify-center overflow-hidden select-none ${
             isPanning ? 'cursor-grabbing' : (canPan ? 'cursor-grab' : 'cursor-default')
           }`}
           onMouseDown={handleMouseDown}
@@ -498,7 +583,7 @@ export default function ShareModal({
           </div>
 
           <div
-            className={`relative flex-shrink-0 transition-transform duration-200 ${orientation === 'horizontal' ? 'max-w-full' : ''}`}
+            className={`relative flex-shrink-0 will-change-transform transition-transform ${isPanning ? 'duration-0' : 'duration-150'} ${orientation === 'horizontal' ? 'max-w-full' : ''}`}
             style={{
               width: target.w * scale,
               height: target.h * scale,

@@ -1,8 +1,21 @@
 import type { Metadata } from 'next';
+import { Manrope, Syne } from 'next/font/google';
 import './globals.css';
 import PageViewTracker from '@/components/PageViewTracker';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 // import { Link } from 'lucide-react'; // Unused for now
+
+const syne = Syne({
+  subsets: ['latin'],
+  weight: ['500', '700', '800'],
+  variable: '--font-syne',
+});
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-manrope',
+});
 
 export const metadata: Metadata = {
   title: 'Movies Wrapped - Your Year in Film',
@@ -30,7 +43,7 @@ export default function RootLayout({
           media="(prefers-color-scheme: light)"
       />  
       </head>  
-        <body className="bg-slate-900 text-white antialiased">
+        <body className={`${manrope.variable} ${syne.variable} bg-slate-900 text-white antialiased`}>
           <ErrorBoundary>
             {children}
             {typeof window !== 'undefined' && <PageViewTracker />}
