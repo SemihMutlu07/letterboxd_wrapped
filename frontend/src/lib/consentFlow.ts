@@ -1,12 +1,16 @@
 "use client";
 import { upsertUserSession, type Consent} from '@/lib/supabase/sessions';
-import { ensureSessionId, getUsername, setConsent } from '@/lib/session-id';
+import { ensureSessionId, getUsernameWithSource, setConsent } from '@/lib/session-id';
 
 export async function saveConsentDecisionToDb(accepted: boolean) {
     try {
         const sessionId = ensureSessionId();
-        const username = getUsername();
+        const { username, source } = getUsernameWithSource();
         const consent: Consent = accepted ? "accept" : "decline";
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.debug('[consentFlow] session read', { session_id: sessionId, username, read_from: source });
+        }
         
         // Save consent to sessionStorage
         setConsent(consent);

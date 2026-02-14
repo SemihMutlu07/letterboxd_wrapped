@@ -9,8 +9,18 @@ export function ensureSessionId(): string {
 }
 
 export function getUsername(): string {
-  if (typeof window === 'undefined') return '';
-  return sessionStorage.getItem('username') || sessionStorage.getItem('lb_username') || '';
+  return getUsernameWithSource().username;
+}
+
+export function getUsernameWithSource(): { username: string; source: 'username' | 'lb_username' | 'none' } {
+  if (typeof window === 'undefined') return { username: '', source: 'none' };
+  const username = sessionStorage.getItem('username');
+  if (username) return { username, source: 'username' };
+
+  const legacyUsername = sessionStorage.getItem('lb_username');
+  if (legacyUsername) return { username: legacyUsername, source: 'lb_username' };
+
+  return { username: '', source: 'none' };
 }
 
 export function setUsername(u: string) { 

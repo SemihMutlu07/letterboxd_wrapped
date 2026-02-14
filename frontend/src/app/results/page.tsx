@@ -9,6 +9,7 @@ import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
 import { getTmdbImageUrl, trackEvent, trackConsentedEvent } from '@/lib/analytics';
+import { getUsername } from '@/lib/session-id';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
 
@@ -170,8 +171,8 @@ export default function ResultsPage() {
     }
     setLoading(false); 
     
-    // Get username from sessionStorage
-    const storedUsername = sessionStorage.getItem('lb_username');
+    // Get username from shared session helper
+    const storedUsername = getUsername();
     if (storedUsername) {
       setUsername(storedUsername);
     } else {
