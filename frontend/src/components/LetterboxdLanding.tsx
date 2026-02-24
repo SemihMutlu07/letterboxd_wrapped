@@ -13,7 +13,7 @@ import { parseLetterboxdUsername } from '@/lib/filename';
 import { normalizeError, type NormalizedError } from '@/lib/errors';
 import ErrorBanner from '@/components/ErrorBanner';
 
-
+const APP_VERSION = '1.0.0';
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
@@ -400,6 +400,9 @@ export default function LetterboxdLanding() {
             <p className="mx-auto mt-3 text-slate-500 text-xs sm:text-sm">
               For the smoothest experience, use a desktop browser.
               The Letterboxd mobile app may block ZIP downloads.
+            </p>
+            <p className="mx-auto mt-2 text-slate-600 text-[11px] sm:text-xs">
+              Version {APP_VERSION}
             </p>
           </header>
 
