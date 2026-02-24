@@ -31,19 +31,14 @@ export function setUsername(u: string) {
   }
 }
 
-export function setConsent(c: 'accept'|'decline') { 
+export function setConsent(c: 'accept'|'decline') {
   if (typeof window !== 'undefined') {
-    sessionStorage.setItem('consent', c);
-    // Keep old keys for backward compatibility
-    sessionStorage.setItem('consentDecision', c);
     sessionStorage.setItem('consent_decision', c);
   }
 }
 
 export function getConsent(): 'accept'|'decline'|'' {
   if (typeof window === 'undefined') return '';
-  const v = sessionStorage.getItem('consent') || 
-            sessionStorage.getItem('consentDecision') || 
-            sessionStorage.getItem('consent_decision') || '';
+  const v = sessionStorage.getItem('consent_decision') || '';
   return v === 'accept' || v === 'decline' ? v : '';
 }

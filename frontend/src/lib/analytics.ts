@@ -1,5 +1,7 @@
-import { captureEvent } from '@/lib/posthog';
-import { hasConsent } from '@/lib/sessionUtils';
+import { captureEvent, hasAnalyticsConsent } from '@/lib/posthog';
+
+// Re-export for convenience
+export { hasAnalyticsConsent };
 
 type Props = Record<string, unknown>;
 
@@ -8,7 +10,7 @@ type Props = Record<string, unknown>;
  */
 export function getTmdbImageUrl(path: string | null | undefined, size: string = 'w300'): string | null {
   if (!path) return null;
-  
+
   // If already a full URL and it's TMDB CDN, convert to proxy
   if (path.startsWith('http') && path.includes('://image.tmdb.org')) {
     const url = new URL(path);
@@ -18,14 +20,14 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
       return `${API_BASE}/tmdb-proxy/${cleanPath}`;
     }
   }
-  
+
   // If already a full URL (non-TMDB), return as-is
   if (path.startsWith('http')) return path;
-  
+
   // Clean the path: remove leading slashes and duplicate t/p/<size>/ parts
   let cleanPath = path.replace(/^\/+/, ''); // Remove leading slashes
   cleanPath = cleanPath.replace(/^t\/p\/[^\/]+\//, ''); // Remove t/p/<size>/ prefix if exists
-  
+
   // Always use proxy if API_BASE is available, otherwise direct TMDB CDN
   if (process.env.NEXT_PUBLIC_API_BASE) {
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, ''); // Remove trailing slash
@@ -37,7 +39,7 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
 
 /**
  * Always-allowed, high-level events (page hits, feature usage, errors).
- * Still respect PostHog init + consent gate inside captureEvent.
+ * Still respects PostHog init + consent gate inside captureEvent.
  */
 export function trackEvent(name: string, props?: Props): void {
   try {
@@ -52,7 +54,7 @@ export function trackEvent(name: string, props?: Props): void {
  */
 export function trackConsentedEvent(name: string, props?: Props): void {
   try {
-    if (!hasConsent()) return;
+    if (!hasAnalyticsConsent()) return;
     captureEvent(name, props);
   } catch {
     // Silent failure
@@ -64,7 +66,7 @@ export function trackConsentedEvent(name: string, props?: Props): void {
  */
 export function trackFilmStats(stats: unknown): void {
   try {
-    if (!hasConsent()) return;
+    if (!hasAnalyticsConsent()) return;
     // Expect an already-aggregated object (no raw titles/user PII)
     captureEvent('film_stats', stats as Props);
   } catch {
@@ -78,4 +80,3 @@ export function trackFilmStats(stats: unknown): void {
 export function trackAnalyticsEvent(name: string, props?: Props): void {
   trackConsentedEvent(name, props);
 }
-

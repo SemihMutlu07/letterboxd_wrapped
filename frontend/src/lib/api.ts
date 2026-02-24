@@ -96,16 +96,28 @@ export async function analyzeFiles(formData: FormData) {
     });
     
     if (!r.ok) {
-      throw new Error(`analyze ${r.status}`);
+      let detail = '';
+      try {
+        const body = await r.json();
+        // detail can be a string or an object { error_code, message }
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (body.detail && typeof body.detail === 'object') {
+          detail = body.detail.message || body.detail.error_code || '';
+        }
+      } catch {
+        // body wasn't JSON — fall through to status code
+      }
+      throw new Error(detail || `analyze ${r.status}`);
     }
-    
+
     const data = await r.json();
-    
+
     // Validate response structure
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid response from analysis service');
     }
-    
+
     if (data.status === 'error') {
       throw new Error(data.detail || 'Analysis failed');
     }

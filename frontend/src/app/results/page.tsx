@@ -49,61 +49,102 @@ interface LetterboxdStats {
   day_of_week_pattern?: { weekday: number; weekend: number };
   cinematic_persona?: { persona: string; description: string };
   director_deep_analysis?: { director_name: string; average_rating_given: number; total_films: number; relationship: string };
-  sinefil_meter?: { type: string; score: number; description: string };
+  sinefil_meter?: {
+    type: string;
+    score: number;
+    description: string;
+    breakdown?: {
+      geography: number;
+      temporal: number;
+      languages: number;
+      volume: number;
+      genres: number;
+      directors: number;
+    };
+    model_version?: string;
+  };
   signature_combo?: { director: string; actor: string; count: number };
   data_timeline?: { earliest_date?: string; latest_date?: string; total_days?: number; period_description?: string };
 }
 
+/**
+ * Client-side fallback when backend sinefil_meter is missing.
+ * Mirrors the cine_v2 model with the data available in LetterboxdStats.
+ * Shannon entropy computed from the top-N counts the backend provides.
+ */
 const calcCinephileScore = (s?: LetterboxdStats | null) => {
   if (!s) return 45;
-  
+
+  const log2 = Math.log2;
+
+  const entropy = (counts: number[]): number => {
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (total === 0) return 0;
+    return -counts.filter(c => c > 0).reduce((h, c) => {
+      const p = c / total;
+      return h + p * log2(p);
+    }, 0);
+  };
+
+  const normEntropy = (counts: number[]): number => {
+    const n = counts.filter(c => c > 0).length;
+    if (n <= 1) return 0;
+    const maxH = log2(n);
+    return maxH > 0 ? entropy(counts) / maxH : 0;
+  };
+
+  const topShare = (counts: number[], n = 1) => {
+    const total = counts.reduce((a, b) => a + b, 0);
+    if (total === 0) return 0;
+    return counts.sort((a, b) => b - a).slice(0, n).reduce((a, b) => a + b, 0) / total;
+  };
+
+  const countries = (s.top_countries || []).map(c => c.count);
+  const decades = (s.decades || []).filter(d => d.decade !== 'Unknown').map(d => d.count);
+  const languages = (s.top_languages || []).map(l => l.count);
+  const genres = (s.top_genres || []).map(g => g.count);
+  const directors = (s.top_directors || []).map(d => d.count);
   const total = s.total_films || 1;
-  const countries = s.top_countries || [];
-  const languages = s.top_languages || [];
-  const decades = s.decades || [];
-  
-  // BASE SCORE: Film volume (40%) - More films = higher base score
-  // This ensures people with more films get higher scores
-  const volumeBase = Math.min(50, Math.log10(Math.max(1, total)) * 20); // 0-50 points for volume
-  
-  // DIVERSITY BONUSES (30%) - International taste
-  const us = countries.find(c => c.name.toLowerCase().includes('united states'))?.count ?? 0;
-  const nonUSRatio = Math.max(0, 1 - us / total);
-  
-  // Bonus countries (prestigious cinema)
-  const prestigeCountries = ['france', 'italy', 'japan', 'south korea', 'iran', 'germany', 'sweden', 'russia'];
-  const prestigeCount = countries.filter(c => 
-    prestigeCountries.some(pc => c.name.toLowerCase().includes(pc))
-  ).reduce((sum, c) => sum + c.count, 0);
-  
-  const geoBonus = (nonUSRatio * 15) + Math.min(15, (prestigeCount / total) * 30);
-  
-  // HISTORICAL DEPTH (20%) - Older films bonus
-  const pre2000Count = decades.filter(d => {
-    const year = parseInt(d.decade.toString().replace('s', ''));
-    return !isNaN(year) && year < 2000;
-  }).reduce((sum, d) => sum + d.count, 0);
-  
-  const pre1980Count = decades.filter(d => {
-    const year = parseInt(d.decade.toString().replace('s', ''));
-    return !isNaN(year) && year < 1980;
-  }).reduce((sum, d) => sum + d.count, 0);
-  
-  const pre1960Count = decades.filter(d => {
-    const year = parseInt(d.decade.toString().replace('s', ''));
-    return !isNaN(year) && year < 1960;
-  }).reduce((sum, d) => sum + d.count, 0);
-  
-  const historyBonus = (pre2000Count / total) * 10 + (pre1980Count / total) * 5 + (pre1960Count / total) * 5;
-  
-  // LANGUAGE DIVERSITY (10%) - Multiple languages
-  const langCount = Math.min(8, languages.length);
-  const langBonus = (langCount / 8) * 10;
-  
-  // Calculate final score
-  const finalScore = Math.min(100, Math.max(5, Math.round(volumeBase + geoBonus + historyBonus + langBonus)));
-  
-  return finalScore;
+
+  // Geography (0-25)
+  const geoNorm = normEntropy(countries);
+  const geoDom = topShare([...countries]) > 0.80 ? 0.6 : 1.0;
+  const geo = Math.min(25, Math.round(geoNorm * geoDom * 25));
+
+  // Temporal (0-20): decade entropy (12) + age bonus (8)
+  const decNorm = normEntropy(decades);
+  const decPts = Math.min(12, Math.round(decNorm * 12));
+  // Rough median-year estimate from decade midpoints
+  const decadeEntries = (s.decades || []).filter(d => d.decade !== 'Unknown');
+  let agePts = 0;
+  if (decadeEntries.length > 0) {
+    const totalD = decadeEntries.reduce((a, d) => a + d.count, 0);
+    const weightedYear = decadeEntries.reduce((a, d) => {
+      const y = parseInt(String(d.decade).replace('s', ''));
+      return a + (isNaN(y) ? 0 : (y + 5) * d.count);
+    }, 0) / (totalD || 1);
+    const yearsBack = Math.max(0, 2026 - weightedYear);
+    agePts = Math.min(8, Math.round((yearsBack / 40) * 8));
+  }
+  const temporal = Math.min(20, decPts + agePts);
+
+  // Languages (0-15)
+  const langNorm = normEntropy(languages);
+  const langDom = topShare([...languages]) > 0.85 ? 0.5 : 1.0;
+  const lang = Math.min(15, Math.round(langNorm * langDom * 15));
+
+  // Volume (0-15)
+  const vol = Math.min(15, Math.round(Math.log10(Math.max(1, total)) * 6));
+
+  // Genres (0-15)
+  const genreNorm = normEntropy(genres);
+  const genre = Math.min(15, Math.round(genreNorm * 15));
+
+  // Directors (0-10)
+  const top3Dir = topShare([...directors], 3);
+  const dir = Math.min(10, Math.round((1 - top3Dir) * 12));
+
+  return Math.max(0, Math.min(100, geo + temporal + lang + vol + genre + dir));
 };
 
 export default function ResultsPage() {
@@ -455,14 +496,15 @@ export default function ResultsPage() {
         />
 
         {/* Cinema Scale - Lazy loaded */}
-        <LazyCinemaScale 
-          type={stats.sinefil_meter?.type || 'Independent Cinephile'} 
-          description={stats.sinefil_meter?.description} 
-          score={cineScore || 50} 
+        <LazyCinemaScale
+          type={stats.sinefil_meter?.type || 'Independent Cinephile'}
+          description={stats.sinefil_meter?.description}
+          score={cineScore || 50}
+          breakdown={stats.sinefil_meter?.breakdown}
         />
 
         {/* Share button */}
-        <div className="flex justify-center my-8">
+        <div className="flex flex-col items-center my-8 gap-3">
           <button
             onClick={() => {
               setShowShareModal(true);
@@ -473,6 +515,7 @@ export default function ResultsPage() {
             <div className="w-6 h-6 bg-white rounded" />
             Share Your Wrapped
           </button>
+          <p className="text-xs text-slate-500 text-center">Your raw files are never stored. With consent, only anonymous viewing stats are kept to improve the product.</p>
         </div>
       </main>
 
@@ -591,21 +634,30 @@ function LazyQuickFacts({
 }
 
 // Lazy wrapper for Cinema Scale
-function LazyCinemaScale({ 
-  type, 
-  description, 
-  score 
-}: { 
-  type: string; 
-  description?: string; 
-  score: number; 
+function LazyCinemaScale({
+  type,
+  description,
+  score,
+  breakdown,
+}: {
+  type: string;
+  description?: string;
+  score: number;
+  breakdown?: {
+    geography: number;
+    temporal: number;
+    languages: number;
+    volume: number;
+    genres: number;
+    directors: number;
+  };
 }) {
   const { ref, shouldMount } = useLazyMount(300);
-  
+
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <CinemaScale type={type} description={description} score={score} />
+        <CinemaScale type={type} description={description} score={score} breakdown={breakdown} />
       ) : (
         <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}

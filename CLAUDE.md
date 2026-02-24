@@ -92,6 +92,14 @@ When asked to implement a change:
 4) Update any related types/helpers/tests if applicable.
 5) If the change touches analytics or DB: ensure consent gating and no secret leakage.
 
+## Cinema Scale scoring (model_version: cine_v2)
+The `sinefil_meter` score uses Shannon entropy across 6 axes (geography, temporal,
+languages, volume, genres, directors) computed in `backend/app/analysis_utils.py:compute_cinema_scale`.
+TMDB popularity is **not** part of the score — it was removed because popularity decays
+over time and inflated nearly every user to 80+. Popularity is still available as a
+separate `stats.popularity_info` field for Mainstream-vs-Niche display but must never
+feed back into the cinema scale number.
+
 ## Backend refactor note (do later)
 There is a planned TODO to refactor the backend into modular packages (split the FastAPI file).
 Do NOT do it unless explicitly asked.

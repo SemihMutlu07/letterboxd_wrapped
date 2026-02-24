@@ -1,10 +1,10 @@
 export function hasConsent(): boolean {
   if (typeof window === 'undefined') return false;
-  return sessionStorage.getItem('consentDecision') === 'accept';
+  return sessionStorage.getItem('consent_decision') === 'accept';
 }
 export function saveConsentDecision(d: 'accept' | 'decline'): void {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem('consentDecision', d);
+  sessionStorage.setItem('consent_decision', d);
 }
 
 // Additional functions needed by components

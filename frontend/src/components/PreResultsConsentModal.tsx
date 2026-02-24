@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useReducedMotion } from 'framer-motion';
-import { initPostHog, captureEvent } from '@/lib/posthog';
-import { getFlagVariant } from '@/lib/posthog';
+import { initPostHog, captureEvent, flushQueue, clearQueue, getFlagVariant } from '@/lib/posthog';
 import { saveConsentDecisionToDb } from '@/lib/consentFlow';
 
 
@@ -26,101 +25,49 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
     }
   }, [open]);
 
-  // Feature flag A/B testing
+  // Feature flag — resolves instantly with fallback since PostHog isn't loaded yet
   useEffect(() => {
     let alive = true;
-    
-    const loadVariant = async () => {
-      try {
-        if (!alive) return;
-        
-        const flagVariant = await getFlagVariant('consent_modal_variant', 'control');
-        setVariant((flagVariant as 'control' | 'friendly') ?? 'control');
-        
-        // Capture view event with error handling
-        try {
-          captureEvent('consent_modal_view', { variant: flagVariant });
-        } catch (analyticsError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('Failed to capture consent modal view:', analyticsError);
-          }
-        }
-      } catch (error) {
-        if (!alive) return;
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('Feature flag loading failed, using control variant:', error);
-        }
-        
-        setVariant('control');
-        
-        // Still try to capture the view event
-        try {
-          captureEvent('consent_modal_view', { variant: 'control' });
-        } catch (analyticsError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('Failed to capture consent modal view (fallback):', analyticsError);
-          }
-        }
-      }
-    };
-
-    loadVariant();
-    
-    return () => { alive = false };
+    getFlagVariant('consent_modal_variant', 'control').then((v) => {
+      if (alive) setVariant((v as 'control' | 'friendly') ?? 'control');
+    });
+    return () => { alive = false; };
   }, []);
 
   const handleDecision = async (decision: 'accept' | 'decline') => {
     const msToDecision = Math.round(performance.now() - startTime);
     setIsSubmitting(true);
 
+    // 1. Persist consent (sessionStorage + Supabase)
     try {
       await saveConsentDecisionToDb(decision === 'accept');
     } catch (err) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error submitting consent:', err);
       }
-      // Don't block navigation on error, just log and continue
     }
 
     if (decision === 'accept') {
-      try {
-        initPostHog();
-      } catch (initError) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('PostHog initialization failed:', initError);
-        }
-      }
-      
-      try {
-        captureEvent('consent_decision', {
-          decision,
-          ab_variant: variant,
-          ms_to_decision: msToDecision,
-        });
-      } catch (analyticsError) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('Failed to capture consent decision:', analyticsError);
-        }
-      }
-    }
+      // 2. Init PostHog (sync — SDK already bundled via npm)
+      initPostHog();
 
-    // Save consent decision to sessionStorage
-    try {
-      sessionStorage.setItem('consent_decision', decision);
-    } catch (storageError) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('Failed to save consent to sessionStorage:', storageError);
-      }
-    }
+      // 3. Send consent_decision as the FIRST event
+      captureEvent('consent_decision', {
+        decision,
+        ab_variant: variant,
+        ms_to_decision: msToDecision,
+      });
 
-    // Call the appropriate callback
-    if (decision === 'accept') {
+      // 4. Flush pre-consent queue (upload_started, analyze_completed, etc.)
+      flushQueue();
+
       onAccept();
     } else {
+      // Declined — discard queued events, never init PostHog
+      clearQueue();
       onDecline();
     }
-    
+
     setIsSubmitting(false);
   };
 
@@ -132,7 +79,7 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
       <div className={`relative w-full max-w-lg rounded-2xl border border-slate-700/60 bg-slate-900/95 p-5 sm:p-6 text-white shadow-2xl ${reduce ? '' : 'transition-transform'}`}>
                  <div className="mb-4">
            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-             {variant === 'friendly' 
+             {variant === 'friendly'
                ? 'Help us make this better'
                : 'Help us improve your experience'
              }
@@ -145,20 +92,20 @@ export default function PreResultsConsentModal({ open, onAccept, onDecline }: Pr
            </p>
          </div>
 
-        <div className="mt-6 flex flex-col sm:flex-row gap-3">
-          <button
-            className="flex-1 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => handleDecision('accept')}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Processing...' : 'Yes, help improve'}
-          </button>
+        <div className="mt-6 flex flex-col-reverse sm:flex-row gap-3">
           <button
             className="flex-1 min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 px-4 py-2 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => handleDecision('decline')}
             disabled={isSubmitting}
           >
             {isSubmitting ? 'Processing...' : 'No, just continue'}
+          </button>
+          <button
+            className="flex-1 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-600 px-4 py-2 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => handleDecision('accept')}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Processing...' : 'Yes, help improve'}
           </button>
         </div>
       </div>
