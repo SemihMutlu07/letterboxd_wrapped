@@ -5,6 +5,7 @@ import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
+import { trackEvent } from '@/lib/analytics';
 
 // ---- Share helpers ----
 const EXPORT_FILE_NAME = 'movies-wrapped.png';
@@ -444,18 +445,26 @@ export default function ShareModal({
 
       // 4) MOBIL: sistem paylaşım (galeriye kaydetmek için standart yol)
       setExportProgress(80);
+      let method: 'system_share' | 'file_picker' | 'download' = 'download';
       const shared = await shareToSystem(blob);
 
       // 5) Destek yoksa — desktop: file picker; en son: normal download
-      if (!shared) {
+      if (shared) {
+        method = 'system_share';
+      } else {
         const saved = await saveWithFilePicker(blob);
-        if (!saved) downloadFallback(blob);
+        if (saved) {
+          method = 'file_picker';
+        } else {
+          downloadFallback(blob);
+        }
       }
 
-      // 6) UI feedback
+      // 6) UI feedback + analytics
       setExportProgress(100);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1600);
+      trackEvent('share_exported', { variant: orientation, method });
       onDownloadSuccess?.();
     } catch (err) {
       console.error('Export failed:', err);

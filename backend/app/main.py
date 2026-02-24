@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from analysis_utils import compute_cinema_scale
 import asyncio
 import aiohttp
 import aiofiles
@@ -650,30 +651,15 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
                 'count': top_actor[1]
             }
     
-    # Popularity Scale (Cinema Enthusiast Meter)
+    # Popularity info (kept as a separate field — NOT used for cinema scale score)
     if not films_enriched.empty and 'popularity' in films_enriched.columns:
         popularity_scores = films_enriched['popularity'].dropna()
         if not popularity_scores.empty:
-            avg_popularity = popularity_scores.mean()
-            
-            # Invert the score so higher numbers = more independent cinephile
-            cinephile_score = 100 - min(avg_popularity, 100)
-            
-            # Use the inverted score for categories (higher = more cinephile)
-            if cinephile_score >= 80:
-                cinema_type = "Independent Cinephile"
-                description = "You love discovering obscure and independent films!"
-            elif cinephile_score >= 50:
-                cinema_type = "Balanced Cinephile"
-                description = "You enjoy both popular and niche films equally!"
-            else:
-                cinema_type = "Popular Explorer"
-                description = "You follow mainstream and popular films religiously!"
-            
-            stats['sinefil_meter'] = {
-                'type': cinema_type,
-                'score': round(cinephile_score, 1),
-                'description': description
+            avg_popularity = float(popularity_scores.mean())
+            stats['popularity_info'] = {
+                'average': round(avg_popularity, 1),
+                'mainstream_pct': round(float((popularity_scores > 20).mean() * 100), 1),
+                'niche_pct': round(float((popularity_scores < 5).mean() * 100), 1),
             }
     
     # Fun Statistics
@@ -1067,6 +1053,35 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     stats['top_languages'] = [{'language': lang, 'count': count} for lang, count in language_counts.most_common(10)]
     update_progress("analyzing", "Language analysis complete", 8, 10)
 
+    # === Cinema Scale v2 (entropy-based diversity score) ===
+    median_release_year = None
+    if 'release_date' in films_enriched.columns:
+        release_years = films_enriched['release_date'].dropna().apply(
+            lambda d: int(str(d)[:4]) if d and len(str(d)) >= 4 else None
+        ).dropna()
+        if not release_years.empty:
+            median_release_year = int(release_years.median())
+
+    # Debug: log old vs new score (only in dev)
+    _old_pop_score = None
+    if stats.get('popularity_info'):
+        _old_pop_score = round(100 - min(stats['popularity_info']['average'], 100), 1)
+
+    stats['sinefil_meter'] = compute_cinema_scale(
+        country_counts=country_counts,
+        decade_counts=decade_counts,
+        language_counts=language_counts,
+        genre_counts=genre_counts,
+        director_counts=director_counts,
+        total_films=len(films_enriched),
+        median_release_year=median_release_year,
+    )
+
+    if os.getenv('DEBUG_CINEMA_SCALE'):
+        print(f"🎬 Cinema Scale debug: old_popularity_score={_old_pop_score}, "
+              f"new_v2_score={stats['sinefil_meter']['score']}, "
+              f"breakdown={stats['sinefil_meter']['breakdown']}")
+
     cast_counts = Counter([actor for cast_list in films_enriched['cast'].dropna() for actor in cast_list])
     
     # Create top_actors with profile paths for the top 3 actors
@@ -1186,7 +1201,7 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
     Analyze Letterboxd data from either a single ZIP file or multiple CSV files.
     """
     if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
+        raise HTTPException(status_code=400, detail={"error_code": "no_files", "message": "No files uploaded."})
 
     upload_dir = Path("uploads")
     upload_dir.mkdir(exist_ok=True)
@@ -1218,7 +1233,7 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
                     buffer.write(upload_file.file.read())
                 update_progress("processing", f"Saved {safe_filename}", i + 1, len(files))
         else:
-            raise HTTPException(status_code=400, detail="Invalid input. Please upload a single ZIP file or multiple CSV files.")
+            raise HTTPException(status_code=400, detail={"error_code": "invalid_input", "message": "Invalid input. Please upload a single ZIP file or multiple CSV files."})
 
         # Discover CSV files in the directory (enhanced for Mac exports)
         required_files = [
@@ -1252,7 +1267,7 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
                              break
         
         if not csv_files:
-            raise HTTPException(status_code=400, detail="No valid Letterboxd CSV files found in the upload.")
+            raise HTTPException(status_code=400, detail={"error_code": "missing_required_files", "message": "No valid Letterboxd CSV files found in the upload."})
 
         stats = await process_comprehensive_letterboxd_data(app.state.aiohttp_session, csv_files)
         
@@ -1260,7 +1275,7 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
         return {"status": "success", "stats": stats}
 
     except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid ZIP archive.")
+        raise HTTPException(status_code=400, detail={"error_code": "corrupt_zip", "message": "Uploaded file is not a valid ZIP archive."})
     except Exception as e:
         error_msg = f"Analysis failed: {str(e)}"
         update_progress("error", error_msg, 0, 1)

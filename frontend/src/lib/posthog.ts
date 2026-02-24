@@ -3,140 +3,203 @@ import posthog from 'posthog-js';
 
 let isInitialized = false;
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+// ── Event queue (persisted to sessionStorage so it survives full-page nav) ──
+
+const QUEUE_KEY = 'ph_event_queue';
+
+interface QueuedEvent {
+  event: string;
+  properties?: Record<string, unknown>;
+  queued_at: number;
+}
+
+function loadQueue(): QueuedEvent[] {
+  try {
+    const raw = sessionStorage.getItem(QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveQueue(queue: QueuedEvent[]) {
+  try {
+    sessionStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  } catch {
+    // quota exceeded — drop silently
+  }
+}
+
+function enqueue(event: string, properties?: Record<string, unknown>) {
+  const queue = loadQueue();
+  queue.push({ event, properties, queued_at: Date.now() });
+  saveQueue(queue);
+  if (isDev) {
+    console.debug(`[posthog] queued "${event}" (queue size: ${queue.length})`);
+  }
+}
+
+/**
+ * Flush all queued events through PostHog.
+ * Call AFTER initPostHog() and after capturing consent_decision.
+ */
+export function flushQueue() {
+  if (!posthog.__loaded) return;
+
+  const queue = loadQueue();
+  if (queue.length === 0) return;
+
+  // Clear storage first so a crash mid-flush doesn't re-send
+  sessionStorage.removeItem(QUEUE_KEY);
+
+  if (isDev) {
+    console.debug(`[posthog] flushing ${queue.length} queued events`);
+  }
+
+  for (const item of queue) {
+    if (isDev) {
+      console.debug(`[posthog]   ↳ ${item.event}`, item.properties ?? {});
+    }
+    posthog.capture(item.event, { ...item.properties, queued_at: item.queued_at });
+  }
+}
+
+/**
+ * Discard all queued events (user declined consent).
+ */
+export function clearQueue() {
+  const queue = loadQueue();
+  sessionStorage.removeItem(QUEUE_KEY);
+  if (isDev) {
+    console.debug(`[posthog] cleared ${queue.length} queued events (declined)`);
+  }
+}
+
+// ── Consent helper ──
+
+export function hasAnalyticsConsent(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    sessionStorage.getItem('consent_decision') === 'accept' && posthog.__loaded === true
+  );
+}
+
+// ── Init (call only on consent accept) ──
+
 export function initPostHog() {
   if (typeof window === 'undefined' || posthog.__loaded || isInitialized) return;
 
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  if (!key) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('PostHog key not found. Analytics will be disabled.');
+  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+
+  if (!key || !host) {
+    if (isDev) {
+      console.warn('[posthog] key or host missing — analytics disabled.', { key: !!key, host: !!host });
     }
     return;
   }
 
-  // Defer initialization to idle time for better performance
-  if ('requestIdleCallback' in window) {
-    requestIdleCallback(() => initPostHogSync(key));
-  } else {
-    // Fallback for browsers without requestIdleCallback
-    setTimeout(() => initPostHogSync(key), 100);
-  }
+  // Init synchronously — no defer, consent was just given
+  initPostHogSync(key, host);
 }
 
-function initPostHogSync(key: string) {
+function initPostHogSync(key: string, host: string) {
   try {
-    // Use our first-party proxy path
-    const api_host = '/ingest';
+    const existingDistinctId =
+      typeof window !== 'undefined' ? localStorage.getItem('ph_distinct_id') : null;
 
-    // Check for existing distinct ID in localStorage
-    const existingDistinctId = typeof window !== 'undefined' ? localStorage.getItem('ph_distinct_id') : null;
-    
     const bootstrapConfig: { isIdentifiedID: boolean; distinctID?: string } = {
-      isIdentifiedID: false
+      isIdentifiedID: false,
     };
-    
+
     if (existingDistinctId) {
       bootstrapConfig.distinctID = existingDistinctId;
     }
 
     posthog.init(key, {
-      api_host,
-      capture_pageview: false,   // we'll send pageviews manually after consent
-      autocapture: false,        // keep noise down
+      api_host: host,
+      capture_pageview: false,
+      autocapture: false,
       loaded: () => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('PostHog initialized successfully');
+        if (isDev) {
+          console.log('[posthog] initialized', { host });
         }
       },
-      bootstrap: bootstrapConfig
+      bootstrap: bootstrapConfig,
     });
-    
+
     isInitialized = true;
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Failed to initialize PostHog:', error);
+    if (isDev) {
+      console.error('[posthog] init failed:', error);
     }
-    // Don't throw - analytics failure shouldn't break the app
   }
 }
+
+// ── Capture (queues if consent undecided, sends if accepted, no-ops if declined) ──
 
 export function captureEvent(event: string, properties?: Record<string, unknown>) {
   try {
-    // Check if user has given consent
     if (typeof window === 'undefined') return;
-    
-    const consentDecision = sessionStorage.getItem('consent_decision');
-    if (consentDecision !== 'accept') return;
 
-    // Check if PostHog is available
-    if (!posthog.__loaded) {
-      // Silent no-op for production
+    const consent = sessionStorage.getItem('consent_decision');
+
+    // Declined → drop
+    if (consent === 'decline') return;
+
+    // Accepted + loaded → send immediately
+    if (consent === 'accept' && posthog.__loaded) {
+      if (isDev) {
+        console.debug(`[posthog] ${event}`, properties ?? {});
+      }
+      posthog.capture(event, properties);
       return;
     }
 
-    posthog.capture(event, properties);
+    // No decision yet, or accepted-but-still-loading → queue
+    enqueue(event, properties);
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Failed to capture PostHog event:', event, error);
+    if (isDev) {
+      console.error('[posthog] capture failed:', event, error);
     }
-    // Don't throw - analytics failure shouldn't break the app
   }
 }
+
+// ── Feature flags (graceful fallback when PostHog not loaded) ──
 
 export const onFeatureFlagsReady = (cb: () => void) => {
   try {
     if (posthog.__loaded) {
       posthog.onFeatureFlags(cb);
     } else {
-      // If PostHog isn't loaded yet, wait a bit and try again
-      setTimeout(() => onFeatureFlagsReady(cb), 100);
+      // PostHog not loaded yet — call back immediately with fallback
+      cb();
     }
   } catch (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('PostHog feature flags not ready:', error);
+    if (isDev) {
+      console.warn('[posthog] feature flags not ready:', error);
     }
-    // Call callback anyway to prevent UI blocking
     cb();
   }
-}
+};
 
 export const getFlagVariant = (key: string, fallback = 'control'): Promise<string> =>
   new Promise((resolve) => {
     try {
-      // 1) instant read (if already loaded)
       if (posthog.__loaded) {
         const v = posthog.getFeatureFlag?.(key) as string | undefined;
         if (v) return resolve(v);
       }
 
-      // 2) wait for flags
-      let settled = false;
-      const done = (val: string) => { 
-        if (!settled) { 
-          settled = true; 
-          resolve(val || fallback); 
-        } 
-      };
-
-      onFeatureFlagsReady(() => {
-        try {
-          const flagValue = posthog.getFeatureFlag?.(key) as string;
-          done(flagValue || fallback);
-        } catch (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('Error getting feature flag:', key, error);
-          }
-          done(fallback);
-        }
-      });
-
-      // 3) timeout fallback
-      setTimeout(() => done(fallback), 800);
+      // PostHog not loaded → resolve with fallback immediately
+      // (no retry loop — PostHog only loads after consent)
+      resolve(fallback);
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Feature flag error:', error);
+      if (isDev) {
+        console.error('[posthog] flag error:', error);
       }
       resolve(fallback);
     }
   });
-
