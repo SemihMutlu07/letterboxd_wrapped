@@ -1,7 +1,7 @@
 'use client';
 
 import JSZip from 'jszip';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Upload, Film, Star, Clock, Globe, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeFiles, testBackend } from '@/lib/api';
@@ -22,8 +22,20 @@ export default function LetterboxdLanding() {
 
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
 
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  // webkitdirectory is non-standard — set it imperatively to avoid TS errors
+  useEffect(() => {
+    folderInputRef.current?.setAttribute('webkitdirectory', '');
+  }, []);
+
   const openFilePicker = useCallback(() => {
     document.getElementById('file-input')?.click();
+  }, []);
+
+  const openFolderPicker = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // don't also trigger the ZIP file picker
+    folderInputRef.current?.click();
   }, []);
 
   // Track initial session on page load
@@ -424,12 +436,29 @@ export default function LetterboxdLanding() {
                 onChange={handleFileInput}
                 className="hidden"
               />
+              {/* Folder picker — webkitdirectory set via ref in useEffect */}
+              <input
+                ref={folderInputRef}
+                type="file"
+                multiple
+                onChange={handleFileInput}
+                className="hidden"
+              />
               <div className="flex flex-col items-center">
                 <div className="mb-5 h-14 w-14 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center transition-colors group-hover:bg-orange-500/20">
                   <Upload className="w-7 h-7 text-orange-300" />
                 </div>
                 <p className="text-xl sm:text-2xl font-bold tracking-tight">Begin Your Cinema Reveal</p>
                 <p className="mt-2 text-sm text-slate-400">Drag your Letterboxd export (.zip) or click to upload</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  or{' '}
+                  <button
+                    onClick={openFolderPicker}
+                    className="underline underline-offset-2 hover:text-slate-300 transition-colors"
+                  >
+                    choose an exported folder
+                  </button>
+                </p>
               </div>
             </div>
           </section>
