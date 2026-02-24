@@ -101,6 +101,9 @@ export function initPostHog() {
     return;
   }
 
+  // DEBUG (temporary): verify correct host + key prefix at runtime
+  console.log(`[posthog] init → host=${host} key=${key.slice(0, 6)}…`);
+
   // Init synchronously — no defer, consent was just given
   initPostHogSync(key, host);
 }
