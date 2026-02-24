@@ -98,7 +98,7 @@ export default function LetterboxdLanding() {
   // Polling removed - analysis is now synchronous
 
   // Package arbitrary selection (zip, csvs, or folder) into a single .zip for backend compatibility
-  const zipFiles = useCallback(async (files: FileList): Promise<File> => {
+  const zipFiles = useCallback(async (files: FileList | File[]): Promise<File> => {
     const zip = new JSZip();
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
@@ -120,13 +120,21 @@ export default function LetterboxdLanding() {
       return;
     }
 
+    // Detect folder upload: webkitRelativePath is only set by webkitdirectory inputs
+    const isFolderUpload = Array.from(files).some(
+      (f) => !!(f as File & { webkitRelativePath?: string }).webkitRelativePath
+    );
+
     // Validate file types and sizes
     const maxFileSize = 50 * 1024 * 1024; // 50MB
-    const allowedTypes = ['.csv', '.zip', '.CSV', '.ZIP'];
-    
+    const allowedTypes = ['.csv', '.zip'];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      
+
+      // Folder uploads may contain system files (.DS_Store, etc.) — skip them silently
+      if (isFolderUpload && !/\.csv$/i.test(file.name)) continue;
+
       // Check file size
       if (file.size > maxFileSize) {
         const sizeMb = (file.size / 1024 / 1024).toFixed(1);
@@ -208,14 +216,44 @@ export default function LetterboxdLanding() {
     let uploadFiles: File[] = [];
     const single = files.length === 1 ? files[0] : null;
     const isZip = single && /\.zip$/i.test(single.name);
-    
+
     if (isZip && single) {
-      // Hotfix: upload ZIP directly to avoid expensive client-side unzip+rezip.
+      // Single ZIP — send directly, no re-packing needed.
       uploadFiles = [single];
+    } else if (isFolderUpload) {
+      // Folder selected via webkitdirectory: filter to CSV files only (skips system
+      // files) and ZIP with relative paths so the backend receives the full directory
+      // structure. Without this, files like likes/reviews.csv and root reviews.csv
+      // would collide when saved flat and the wrong content would be analysed.
+      const csvFiles = Array.from(files).filter((f) => /\.csv$/i.test(f.name));
+      if (csvFiles.length === 0) {
+        setError({
+          title: 'No CSV files found',
+          message: 'The selected folder contains no Letterboxd CSV files.',
+          action: 'Make sure you selected the extracted Letterboxd export folder.',
+          reason: 'no_csv_files',
+        });
+        setIsUploading(false);
+        trackEvent('upload_failed', { reason: 'no_csv_in_folder', step: 'preparation' });
+        return;
+      }
+      try {
+        const payloadZip = await zipFiles(csvFiles);
+        uploadFiles = [payloadZip];
+      } catch {
+        setError({
+          title: 'Failed to prepare folder',
+          message: 'Could not package the selected folder for upload.',
+          action: 'Please try again or upload the original .zip file instead.',
+          reason: 'unknown_error',
+        });
+        setIsUploading(false);
+        trackEvent('upload_failed', { reason: 'zip_pack_failed', step: 'preparation' });
+        return;
+      }
     } else if (files.length === 1) {
       uploadFiles = [files[0]];
     } else if (Array.from(files).every((f) => /\.csv$/i.test(f.name))) {
-      // Multi-CSV folders can be sent as-is for better responsiveness.
       uploadFiles = Array.from(files);
     } else {
       try {
