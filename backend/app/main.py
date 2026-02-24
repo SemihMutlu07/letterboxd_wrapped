@@ -28,17 +28,21 @@ warnings.filterwarnings('ignore')
 load_dotenv()
 
 
-CORS_ORIGINS = [
+# Explicit production + local origins. Never use "*" — that would break
+# allow_credentials and is too broad.
+_BASE_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
     "https://movieswrapped.netlify.app",
     "https://letterboxd-wrapped.netlify.app",
-    "https://wrapped-backend.onrender.com"
 ]
 
-# Add all Netlify domains dynamically
-if os.getenv("ALLOW_ALL_NETLIFY", "true").lower() == "true":
-    CORS_ORIGINS.append("https://*.netlify.app")
+# Additional origins (e.g. deploy previews) via env var — comma-separated URLs.
+# Example: FRONTEND_ORIGINS="https://deploy-preview-42--movieswrapped.netlify.app"
+_extra_raw = os.getenv("FRONTEND_ORIGINS", "")
+_extra_origins = [o.strip() for o in _extra_raw.split(",") if o.strip()]
+
+CORS_ORIGINS = _BASE_ORIGINS + _extra_origins
 
 # --- Application Lifespan (for aiohttp session) ---
 @asynccontextmanager
@@ -1189,6 +1193,11 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
 async def root():
     """Health check endpoint"""
     return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend"}
+
+@app.get("/health")
+async def health_check():
+    """Render / uptime-monitor health check"""
+    return {"status": "ok"}
 
 @app.get("/api/progress")
 async def get_progress():
