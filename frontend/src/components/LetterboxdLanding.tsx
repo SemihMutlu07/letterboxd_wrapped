@@ -102,7 +102,7 @@ export default function LetterboxdLanding() {
       setError({
         title: 'No files selected',
         message: 'Please choose your Letterboxd export files.',
-        reason: 'invalid_file_type',
+        reason: 'no_files_selected',
       });
       trackEvent('upload_failed', { reason: 'no_files_selected', step: 'validation' });
       return;
@@ -230,6 +230,8 @@ export default function LetterboxdLanding() {
     const sessionId = ensureSessionId();
     const username = getUsername();
     let analysisRun: { id: string } | null = null;
+    // Hoisted so duration_ms is available in both success and failure paths.
+    let startedAt = 0;
 
     try {
       // Start analysis tracking
@@ -245,7 +247,7 @@ export default function LetterboxdLanding() {
         }
       }
 
-      const startedAt = performance.now();
+      startedAt = performance.now();
       trackEvent('analysis_started', { hasZip: !!isZip, fileCount: files.length });
 
       const result = await analyzeFiles(formData);
@@ -315,7 +317,13 @@ export default function LetterboxdLanding() {
         }
       }
 
-      trackEvent('analyze_completed', { ok: false, reason: normalized.reason });
+      // Schema mirrors the success payload: { ok, duration_ms, total_films }
+      trackEvent('analyze_completed', {
+        ok: false,
+        reason: normalized.reason,
+        duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0,
+        total_films: null,
+      });
 
       setError(normalized);
       setIsUploading(false);
