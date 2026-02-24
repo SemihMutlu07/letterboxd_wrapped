@@ -1250,7 +1250,10 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
             'watchlist.csv', 'films.csv', 'comments.csv', 'profile.csv'
         ]
         
-        # Recursively search for CSV files (handles nested folders from Mac exports)
+        # Recursively search for CSV files (handles nested folders from Mac exports).
+        # os.walk is top-down so root-level files are visited first; once a required
+        # file is matched we never overwrite it — this prevents likes/reviews.csv
+        # from clobbering the root reviews.csv.
         def find_csv_files(directory):
             csv_found = {}
             for root, dirs, files in os.walk(directory):
@@ -1258,7 +1261,7 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
                     if file.lower().endswith('.csv'):
                         file_lower = file.lower()
                         for req_file in required_files:
-                            if req_file.split('.')[0] in file_lower:
+                            if req_file not in csv_found and req_file.split('.')[0] in file_lower:
                                 csv_found[req_file] = os.path.join(root, file)
                                 break
             return csv_found
