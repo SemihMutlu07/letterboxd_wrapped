@@ -1,0 +1,10 @@
+[build]
+  base    = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # NEXT_PUBLIC_* variables are intentionally bundled into client-side JS by
+  # Next.js at build time — they are not secrets. Netlify's scanner doesn't
+  # know this, so we explicitly omit them from secret detection.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_POSTHOG_KEY"
