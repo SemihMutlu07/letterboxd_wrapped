@@ -183,6 +183,44 @@ export async function testBackend(retries = 5, delayMs = 2000) {
   }
 }
 
+// Scrape a Letterboxd profile by username
+export async function scrapeProfile(username: string) {
+  const url = `${API_BASE}/api/scrape-profile`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+
+    if (!r.ok) {
+      let detail = '';
+      try {
+        const body = await r.json();
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (body.detail && typeof body.detail === 'object') {
+          detail = body.detail.message || body.detail.error_code || '';
+        }
+      } catch {
+        // body wasn't JSON
+      }
+      throw new Error(detail || `scrape ${r.status}`);
+    }
+
+    const data = await r.json();
+
+    if (!data || data.status === 'error') {
+      throw new Error(data?.detail || 'Scraping failed');
+    }
+
+    return data;
+  } catch (error) {
+    throw handleApiError(error, 'profile scraping');
+  }
+}
+
 // Parse Letterboxd username from filename
 export async function parseLetterboxdUsername(filename: string) {
   try {

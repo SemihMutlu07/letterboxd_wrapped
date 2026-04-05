@@ -1,5 +1,6 @@
 # backend/app/main.py
 import os
+import re
 import json
 import zipfile
 from typing import List, Dict, Any, Optional
@@ -1700,6 +1701,85 @@ async def search_tmdb_person(name: str, role: str = None):
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TMDB API error: {str(e)}")
+
+@app.post("/api/scrape-profile")
+async def scrape_profile_endpoint(request: Request):
+    """
+    Scrape a public Letterboxd profile and run analysis.
+    Body: { "username": "dave" }
+    Returns the same stats object as /api/analyze.
+    """
+    from app.scraper import scrape_diary, diary_to_csv_dicts, check_profile_exists
+
+    try:
+        body = await request.json()
+        username = (body.get("username") or "").strip().lower()
+        if not username or not re.match(r'^[a-z0-9_]+$', username):
+            raise HTTPException(status_code=400, detail={
+                "error_code": "invalid_username",
+                "message": "Please enter a valid Letterboxd username.",
+            })
+
+        update_progress("scraping", f"Checking profile @{username}...", 0, 1)
+
+        if not await check_profile_exists(username):
+            raise HTTPException(status_code=404, detail={
+                "error_code": "user_not_found",
+                "message": f"Letterboxd user '{username}' not found.",
+            })
+
+        update_progress("scraping", f"Scraping @{username}'s diary...", 0, 1)
+        films = await scrape_diary(username, max_pages=60)
+
+        if not films:
+            raise HTTPException(status_code=400, detail={
+                "error_code": "no_films",
+                "message": f"No films found in @{username}'s diary.",
+            })
+
+        update_progress("scraping", f"Found {len(films)} films, preparing data...", 1, 1)
+        csv_dicts = diary_to_csv_dicts(films)
+
+        # Write temporary CSV files for the pipeline
+        request_dir = Path("uploads") / str(uuid.uuid4())
+        request_dir.mkdir(parents=True, exist_ok=True)
+        csv_files = {}
+
+        try:
+            # watched.csv
+            watched_path = request_dir / "watched.csv"
+            watched_df = pd.DataFrame(csv_dicts["watched"])
+            watched_df.to_csv(watched_path, index=False)
+            csv_files["watched.csv"] = str(watched_path)
+
+            # ratings.csv
+            if csv_dicts["ratings"]:
+                ratings_path = request_dir / "ratings.csv"
+                ratings_df = pd.DataFrame(csv_dicts["ratings"])
+                ratings_df.to_csv(ratings_path, index=False)
+                csv_files["ratings.csv"] = str(ratings_path)
+
+            stats = await process_comprehensive_letterboxd_data(
+                app.state.aiohttp_session, csv_files
+            )
+            stats = _sanitize_for_json(stats)
+            stats["scraped_username"] = username
+            stats["scraped_film_count"] = len(films)
+
+            update_progress("complete", "Analysis complete!", 1, 1)
+            return {"status": "success", "stats": stats}
+
+        finally:
+            import shutil
+            shutil.rmtree(request_dir, ignore_errors=True)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Scraping failed: {str(e)}"
+        update_progress("error", error_msg, 0, 1)
+        raise HTTPException(status_code=500, detail=error_msg)
+
 
 @app.post("/api/parse-username")
 async def parse_username(request: Request):
