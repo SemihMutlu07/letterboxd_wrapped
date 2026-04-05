@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Upload, Film, Star, Clock, Globe, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { analyzeFiles, testBackend } from '@/lib/api';
+import { analyzeFiles, scrapeProfile, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -21,6 +21,9 @@ export default function LetterboxdLanding() {
   const [, setDetectedUsername] = useState<string | null>(null);
 
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [isScraping, setIsScraping] = useState(false);
+  const [inputMode, setInputMode] = useState<'upload' | 'username'>('upload');
 
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -383,6 +386,43 @@ export default function LetterboxdLanding() {
   }, [zipFiles]);
 
 
+  const handleScrape = useCallback(async () => {
+    const username = usernameInput.trim().toLowerCase();
+    if (!username) {
+      setError({
+        title: 'No username',
+        message: 'Please enter your Letterboxd username.',
+        reason: 'no_username',
+      });
+      return;
+    }
+
+    setIsScraping(true);
+    setError(null);
+    trackEvent('scrape_started', { username });
+
+    try {
+      const result = await scrapeProfile(username);
+
+      setUsername(username);
+      localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+
+      trackConsentedEvent('scrape_completed', {
+        total_films: result.stats.total_films,
+        ok: true,
+      });
+
+      setTimeout(() => {
+        window.location.href = '/results';
+      }, 100);
+    } catch (err) {
+      const normalized = normalizeError(err);
+      trackEvent('scrape_failed', { reason: normalized.reason });
+      setError(normalized);
+      setIsScraping(false);
+    }
+  }, [usernameInput]);
+
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     const files = e.dataTransfer.files;
@@ -397,7 +437,7 @@ export default function LetterboxdLanding() {
 
 
 
-  if (isUploading) {
+  if (isUploading || isScraping) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-xl text-center rounded-3xl border border-slate-700/70 bg-slate-800/55 p-8 md:p-10 backdrop-blur-sm">
@@ -458,47 +498,111 @@ export default function LetterboxdLanding() {
             </p>
           </header>
 
-          {/* Upload area */}
-          <section aria-label="Upload your Letterboxd data">
-            <div
-              className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-6 md:p-8 transition-all duration-300 hover:border-orange-400/30 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.12)] max-w-3xl mx-auto cursor-pointer"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={openFilePicker}
+          {/* Mode toggle */}
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={() => setInputMode('username')}
+              className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all ${
+                inputMode === 'username'
+                  ? 'bg-orange-500/20 text-orange-300 border border-orange-400/40'
+                  : 'text-slate-400 border border-slate-700/50 hover:text-slate-300'
+              }`}
             >
-              <input
-                id="file-input"
-                type="file"
-                multiple
-                accept=".zip,.csv,.CSV"
-                onChange={handleFileInput}
-                className="hidden"
-              />
-              {/* Folder picker — webkitdirectory set via ref in useEffect */}
-              <input
-                ref={folderInputRef}
-                type="file"
-                multiple
-                onChange={handleFileInput}
-                className="hidden"
-              />
+              <Globe className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+              Enter Username
+            </button>
+            <button
+              onClick={() => setInputMode('upload')}
+              className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all ${
+                inputMode === 'upload'
+                  ? 'bg-orange-500/20 text-orange-300 border border-orange-400/40'
+                  : 'text-slate-400 border border-slate-700/50 hover:text-slate-300'
+              }`}
+            >
+              <Upload className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+              Upload Export
+            </button>
+          </div>
 
-              {/* Drop hint */}
-              <div className="flex flex-col items-center py-4">
-                <div className="mb-4 h-12 w-12 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center">
-                  <Upload className="w-6 h-6 text-orange-300" />
+          {/* Username input */}
+          {inputMode === 'username' && (
+            <section aria-label="Enter your Letterboxd username">
+              <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-6 md:p-8 max-w-3xl mx-auto">
+                <div className="flex flex-col items-center py-2">
+                  <div className="mb-4 h-12 w-12 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center">
+                    <Globe className="w-6 h-6 text-orange-300" />
+                  </div>
+                  <p className="text-xl sm:text-2xl font-bold tracking-tight">Enter Your Username</p>
+                  <p className="mt-1.5 text-sm text-slate-400">We&apos;ll scan your public Letterboxd profile</p>
+                  <div className="mt-5 flex w-full max-w-sm gap-2">
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">@</span>
+                      <input
+                        type="text"
+                        value={usernameInput}
+                        onChange={(e) => setUsernameInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleScrape()}
+                        placeholder="your_username"
+                        className="w-full pl-8 pr-3 py-3 rounded-xl bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-orange-400/50 focus:ring-1 focus:ring-orange-400/30"
+                      />
+                    </div>
+                    <button
+                      onClick={handleScrape}
+                      disabled={!usernameInput.trim()}
+                      className="px-5 py-3 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold text-sm transition-colors"
+                    >
+                      Analyze
+                    </button>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">Works with any public Letterboxd profile</p>
                 </div>
-                <p className="text-xl sm:text-2xl font-bold tracking-tight">Begin Your Cinema Reveal</p>
-                <p className="mt-1.5 text-sm text-slate-400">Drop a file here, or click to pick a ZIP</p>
-                <button
-                  onClick={(e) => { e.stopPropagation(); openFolderPicker(); }}
-                  className="mt-3 text-xs text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
-                >
-                  or select an extracted folder
-                </button>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
+
+          {/* Upload area */}
+          {inputMode === 'upload' && (
+            <section aria-label="Upload your Letterboxd data">
+              <div
+                className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-6 md:p-8 transition-all duration-300 hover:border-orange-400/30 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.12)] max-w-3xl mx-auto cursor-pointer"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+                onClick={openFilePicker}
+              >
+                <input
+                  id="file-input"
+                  type="file"
+                  multiple
+                  accept=".zip,.csv,.CSV,.utc"
+                  onChange={handleFileInput}
+                  className="hidden"
+                />
+                {/* Folder picker — webkitdirectory set via ref in useEffect */}
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileInput}
+                  className="hidden"
+                />
+
+                {/* Drop hint */}
+                <div className="flex flex-col items-center py-4">
+                  <div className="mb-4 h-12 w-12 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center">
+                    <Upload className="w-6 h-6 text-orange-300" />
+                  </div>
+                  <p className="text-xl sm:text-2xl font-bold tracking-tight">Upload Your Export</p>
+                  <p className="mt-1.5 text-sm text-slate-400">Drop a file here, or click to pick a ZIP</p>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openFolderPicker(); }}
+                    className="mt-3 text-xs text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
+                  >
+                    or select an extracted folder
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
 
           {error && (
             <ErrorBanner

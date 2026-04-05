@@ -1,5 +1,6 @@
 export type ErrorReason =
   | 'no_files_selected'
+  | 'no_csv_files'
   | 'invalid_file_type'
   | 'file_too_large'
   | 'corrupt_zip'
@@ -7,6 +8,9 @@ export type ErrorReason =
   | 'backend_unreachable'
   | 'tmdb_timeout'
   | 'tmdb_rate_limited'
+  | 'no_username'
+  | 'user_not_found'
+  | 'scrape_failed'
   | 'unknown_error';
 
 export interface NormalizedError {

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import ShareModal from '@/components/ShareModal';
+import { getDefaultShareVariant } from '@/components/share/registry';
+import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
 import CountriesList from '@/containers/results/CountriesList';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
@@ -12,6 +14,7 @@ import { getTmdbImageUrl, trackEvent, trackConsentedEvent } from '@/lib/analytic
 import { getUsername } from '@/lib/session-id';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
+import ExperimentalScreen from '@/containers/results/experimental/ExperimentalScreen';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
@@ -152,7 +155,8 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
-  
+  const [mode, setMode] = useState<'stable' | 'test'>('stable');
+
   // consent
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [sessionId, setSessionId] = useState<string>('');
@@ -366,10 +370,10 @@ export default function ResultsPage() {
   }, [stats?.total_films, stats?.top_languages, stats?.decades, actualRangeDays]);
 
   // Share card props - must be before early returns to maintain hook order
-  const shareProps = useMemo(() => ({
+  const shareCardData = useMemo<ShareCardData>(() => ({
     onScreenCrush: {
       name: stats?.top_actors?.[0]?.name || 'Unknown Actor',
-                headshotUrl: getTmdbImageUrl(stats?.top_actors?.[0]?.profile_path) || '',
+      headshotUrl: getTmdbImageUrl(stats?.top_actors?.[0]?.profile_path) || '',
       count: stats?.top_actors?.[0]?.count || 0,
     },
     favoriteDirector: {
@@ -379,14 +383,24 @@ export default function ResultsPage() {
     },
     watchedFilms: stats?.total_films || 0,
     spentDays: Math.round(stats?.days_watched || 0),
-    timePercent: Math.round(((stats?.days_watched || 0) / 365) * 100),
+    timePercent: Number.parseInt(timePct, 10) || 0,
     cinemaScale: cineScore,
-    personaLabel: '', // Unvanlar kaldırıldı
+    personaLabel: stats?.cinematic_persona?.persona || '',
     minutesAverage: Math.round(stats?.average_runtime || 0),
     mostCommonRating: stats?.most_common_rating || 3.5,
     peakDecade: stats?.favorite_decade?.name || '2020s',
     peakDecadeCount: stats?.favorite_decade?.count || 0,
-  }), [stats, directorImageUrl, cineScore]);
+    topActors: (stats?.top_actors || []).slice(0, 5).map((a) => ({
+      name: a.name,
+      headshotUrl: getTmdbImageUrl(a.profile_path) || '',
+      count: a.count,
+    })),
+    topDirectors: (stats?.top_directors || []).slice(0, 5).map((d) => ({
+      name: d.name,
+      headshotUrl: getTmdbImageUrl(d.profile_path) || '',
+      count: d.count,
+    })),
+  }), [stats, directorImageUrl, cineScore, timePct]);
 
   // Load director headshot with lazy loading
   const loadDirectorImage = useCallback(async () => {
@@ -413,6 +427,28 @@ export default function ResultsPage() {
   useEffect(() => {
     loadDirectorImage();
   }, [loadDirectorImage]);
+
+  // Read ?mode=test from URL on mount (works with static export — no Suspense needed)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'test') {
+      setMode('test');
+    }
+  }, []);
+
+  const handleModeSwitch = useCallback((newMode: 'stable' | 'test') => {
+    setMode(newMode);
+    const url = new URL(window.location.href);
+    if (newMode === 'stable') {
+      url.searchParams.delete('mode');
+    } else {
+      url.searchParams.set('mode', newMode);
+    }
+    window.history.replaceState({}, '', url.toString());
+    if (newMode === 'test') {
+      trackEvent('results_test_opened');
+    }
+  }, []);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
   if (!stats) {
@@ -453,8 +489,39 @@ export default function ResultsPage() {
               </span>
             </div>
           )}
+
+          {/* Mode switcher */}
+          <div className="flex justify-center mt-5">
+            <div className="inline-flex items-center gap-1 p-1 bg-slate-800/60 border border-slate-700/40 rounded-full text-sm">
+              <button
+                onClick={() => handleModeSwitch('stable')}
+                className={`px-4 py-1.5 rounded-full font-medium transition-colors ${
+                  mode === 'stable'
+                    ? 'bg-slate-700 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Stable
+              </button>
+              <button
+                onClick={() => handleModeSwitch('test')}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full font-medium transition-colors ${
+                  mode === 'test'
+                    ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${mode === 'test' ? 'bg-orange-400' : 'bg-slate-500'}`} />
+                Test Screen
+              </button>
+            </div>
+          </div>
         </header>
 
+        {mode === 'test' ? (
+          <ExperimentalScreen stats={stats} />
+        ) : (
+          <>
         {/* Hero Stats */}
         <HeroStats
           totalFilms={stats.total_films}
@@ -473,10 +540,10 @@ export default function ResultsPage() {
         <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
 
         {/* Languages and Countries - Lazy loaded */}
-        <LazyLanguagesAndCountries 
-          languages={stats.top_languages ?? []} 
-          countries={stats.top_countries ?? []} 
-          totalCountries={stats.total_countries} 
+        <LazyLanguagesAndCountries
+          languages={stats.top_languages ?? []}
+          countries={stats.top_countries ?? []}
+          totalCountries={stats.total_countries}
         />
 
         {/* Film History - Lazy loaded */}
@@ -486,10 +553,10 @@ export default function ResultsPage() {
         <LazyRatingsBar data={ratingsArr} max={ratingMax} />
 
         {/* Quick Facts - Lazy loaded */}
-        <LazyQuickFacts 
-          avgMinutes={stats.average_runtime || 0} 
-          totalCountries={stats.total_countries || 0} 
-          mostCommonRating={stats.most_common_rating || 3.5} 
+        <LazyQuickFacts
+          avgMinutes={stats.average_runtime || 0}
+          totalCountries={stats.total_countries || 0}
+          mostCommonRating={stats.most_common_rating || 3.5}
           filmsPerWeek={quickMetrics.filmsPerWeek}
           languageCount={quickMetrics.languageCount}
           decadeSpan={quickMetrics.decadeSpan}
@@ -502,6 +569,8 @@ export default function ResultsPage() {
           score={cineScore || 50}
           breakdown={stats.sinefil_meter?.breakdown}
         />
+          </>
+        )}
 
         {/* Share button */}
         <div className="flex flex-col items-center my-8 gap-3">
@@ -524,7 +593,9 @@ export default function ResultsPage() {
         onClose={() => setShowShareModal(false)}
         orientation={orientation}
         setOrientation={setOrientation}
-        cardProps={shareProps}
+        cardData={shareCardData}
+        initialVariant={getDefaultShareVariant()}
+        allowVariantTesting={mode === 'test'}
         onDownloadSuccess={() => {
           trackEvent('share_download_success');
           if (!hasTriggeredFeedback) {
