@@ -100,6 +100,19 @@ def update_progress(stage: str, message: str, progress: int = 0, total: int = 0)
     })
     print(f"📊 {stage}: {message} ({progress}/{total})")
 
+# --- JSON sanitizer: replace nan/inf with None before serialization ---
+def _sanitize_for_json(obj):
+    """Recursively replace float nan/inf values with None so json.dumps never raises."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float):
+        import math
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+    return obj
+
 # --- Simple Rate Limiter (memory) ---
 RATE_LIMIT_WINDOW_SECONDS = 600  # 10 minutes
 RATE_LIMIT_MAX_REQUESTS = 3
@@ -154,22 +167,125 @@ async def tmdb_get(session: aiohttp.ClientSession, endpoint: str, params: dict =
         print(f"Error fetching {url}: {e}")
         return None
 
+def _normalize_tmdb_title(value: Optional[str]) -> str:
+    """Normalize a title string for conservative case-insensitive comparisons."""
+    return str(value or "").strip().casefold()
+
+def _extract_release_year(release_date: Optional[str]) -> Optional[int]:
+    """Extract a four-digit year from TMDb release_date."""
+    if not release_date:
+        return None
+    try:
+        return int(str(release_date)[:4])
+    except (TypeError, ValueError):
+        return None
+
+def _score_tmdb_search_result(result: Dict[str, Any], title: str, year: Optional[int]) -> tuple:
+    """Score a TMDb movie search result so we do not blindly take the first item."""
+    normalized_query_title = _normalize_tmdb_title(title)
+    candidate_title = _normalize_tmdb_title(result.get('title'))
+    candidate_original_title = _normalize_tmdb_title(result.get('original_title'))
+    release_year = _extract_release_year(result.get('release_date'))
+
+    exact_title_match = candidate_title == normalized_query_title or candidate_original_title == normalized_query_title
+    year_difference = 9999
+    exact_year_match = False
+    if year and not pd.isna(year):
+        expected_year = int(year)
+        if release_year is not None:
+            year_difference = abs(release_year - expected_year)
+            exact_year_match = release_year == expected_year
+    else:
+        year_difference = 0
+
+    # Higher-value tuple members win when max() is used.
+    # Exact title+year match gets massive priority to avoid wrong-film posters.
+    return (
+        2 if (exact_title_match and exact_year_match) else (1 if exact_title_match else 0),
+        1 if exact_year_match else 0,
+        -year_difference,
+        float(result.get('vote_count') or 0),
+        float(result.get('popularity') or 0.0),
+    )
+
+def _select_best_poster_path(images: Optional[Dict[str, Any]], details: Dict[str, Any]) -> str:
+    """
+    Return the primary poster from details.poster_path (TMDB's curated choice).
+    Only fall back to /images when the primary poster is missing.
+    """
+    # Prefer TMDB's curated primary poster — this is the canonical one shown on tmdb.org
+    primary = details.get('poster_path', '') or ''
+    if primary:
+        return primary
+
+    # Fallback: pick best from /images (for rare cases where primary is missing)
+    # Prioritize English/null language posters to avoid foreign-language alternatives
+    posters = images.get('posters', []) if images else []
+    if posters:
+        sorted_posters = sorted(
+            posters,
+            key=lambda poster: (
+                int(bool(poster.get('iso_639_1') in ('en', None, ''))),
+                int(poster.get('vote_count') or 0),
+                float(poster.get('vote_average') or 0.0),
+                int(bool(poster.get('iso_3166_1') == 'US')),
+                float(poster.get('width') or 0),
+            ),
+            reverse=True,
+        )
+        best = sorted_posters[0].get('file_path') or ''
+        if best:
+            return best
+
+    print(f"TMDB poster missing for movie ID {details.get('id')}")
+    return ''
+
 async def resolve_tmdb_id(session: aiohttp.ClientSession, title: str, year: Optional[int] = None) -> Optional[int]:
     """Asynchronously find TMDb ID for a film."""
-    query_params = {'query': title, 'include_adult': 'false'}
+    query_params = {'query': title, 'include_adult': 'false', 'language': 'en-US'}
     if year and not pd.isna(year):
         query_params['year'] = int(year)
 
     try:
         data = await tmdb_get(session, 'search/movie', query_params)
         results = data.get('results', []) if data else []
-        
+
         if not results and year:
             # Try without year if no results
-            data = await tmdb_get(session, 'search/movie', {'query': title, 'include_adult': 'false'})
+            data = await tmdb_get(session, 'search/movie', {'query': title, 'include_adult': 'false', 'language': 'en-US'})
             results = data.get('results', []) if data else []
-        
-        return results[0]['id'] if results else None
+
+        if not results:
+            return None
+
+        best_result = max(results, key=lambda result: _score_tmdb_search_result(result, title, year))
+        best_title = best_result.get('title', '')
+        best_release_year = _extract_release_year(best_result.get('release_date'))
+        used_fallback_match = not (
+            _normalize_tmdb_title(best_title) == _normalize_tmdb_title(title)
+            and (
+                year is None
+                or pd.isna(year)
+                or best_release_year == int(year)
+            )
+        )
+        if used_fallback_match:
+            # Reject fallback matches where year differs by 3+ years — likely wrong film
+            if year and not pd.isna(year) and best_release_year is not None:
+                if abs(best_release_year - int(year)) >= 3:
+                    print(
+                        "TMDB fallback REJECTED (year gap too large): "
+                        f"query='{title}' year={int(year)} "
+                        f"-> match='{best_title}' year={best_release_year}"
+                    )
+                    return None
+            print(
+                "TMDB fallback match used: "
+                f"query='{title}' year={None if year is None or pd.isna(year) else int(year)} "
+                f"-> match='{best_title}' year={best_release_year} id={best_result.get('id')}"
+            )
+
+        return best_result.get('id')
     except Exception:
         return None
 
@@ -180,26 +296,42 @@ async def fetch_comprehensive_film_details(session: aiohttp.ClientSession, tmdb_
 
     try:
         # Concurrently fetch details, credits, and keywords for a single film
+        # language=en-US ensures we get the primary English poster, not locale variants
         tasks = {
-            "details": tmdb_get(session, f'movie/{int(tmdb_id)}'),
+            "details": tmdb_get(session, f'movie/{int(tmdb_id)}', {'language': 'en-US'}),
             "credits": tmdb_get(session, f'movie/{int(tmdb_id)}/credits'),
-            "keywords": tmdb_get(session, f'movie/{int(tmdb_id)}/keywords')
+            "keywords": tmdb_get(session, f'movie/{int(tmdb_id)}/keywords'),
+            "images": tmdb_get(session, f'movie/{int(tmdb_id)}/images')
         }
         results = await asyncio.gather(*tasks.values())
-        details, credits, keywords = results
+        details, credits, keywords, images = results
         
         if not details:
             return {}
 
         # The rest of this function is fast, synchronous data processing
-        directors = [c['name'] for c in credits.get('crew', []) if c['job'] == 'Director'] if credits else []
+        director_crew = [c for c in credits.get('crew', []) if c['job'] == 'Director'] if credits else []
+        directors = [c['name'] for c in director_crew]
+        directors_full = [{'name': c['name'], 'person_id': c['id'], 'profile_path': c.get('profile_path')} for c in director_crew]
         writers = [c['name'] for c in credits.get('crew', []) if c['job'] in ['Writer', 'Screenplay', 'Story']] if credits else []
-        cast = [c['name'] for c in credits.get('cast', [])[:10]] if credits else []
+        cast_crew = credits.get('cast', [])[:10] if credits else []
+        cast = [c['name'] for c in cast_crew]
+        cast_full = [{'name': c['name'], 'person_id': c['id'], 'profile_path': c.get('profile_path')} for c in cast_crew]
         genres = [g['name'] for g in details.get('genres', [])]
         
-        # Enhanced: Store both name lists (for backward compatibility) AND full objects
-        countries = [c['name'] for c in details.get('production_countries', [])]
+        # Use origin_country (primary origin) when available — avoids counting
+        # co-production countries (e.g. 1917 showing as Spanish film).
+        # Fallback to production_countries if origin_country is absent.
+        origin_countries = details.get('origin_country', [])  # list of ISO-2 codes e.g. ['GB', 'US']
         production_countries = details.get('production_countries', [])  # Full objects with iso_3166_1, name
+        if origin_countries:
+            # Map ISO-2 codes to full country objects from production_countries
+            origin_set = set(origin_countries)
+            countries_filtered = [c for c in production_countries if c.get('iso_3166_1') in origin_set]
+            countries = [c['name'] for c in countries_filtered] if countries_filtered else [c['name'] for c in production_countries[:1]]
+        else:
+            # No origin_country: use only the first (primary) production country
+            countries = [production_countries[0]['name']] if production_countries else []
         
         companies = [c['name'] for c in details.get('production_companies', [])]
         
@@ -234,15 +366,17 @@ async def fetch_comprehensive_film_details(session: aiohttp.ClientSession, tmdb_
             'decade': decade,
             'tagline': details.get('tagline', ''), 
             'overview': details.get('overview', ''),
-            'director': directors[0] if directors else None, 
-            'directors': directors, 
-            'writers': writers, 
+            'director': directors[0] if directors else None,
+            'directors': directors,
+            'directors_full': directors_full,
+            'writers': writers,
             'cast': cast,
+            'cast_full': cast_full,
             'genres': genres, 
             
-            # Enhanced: Both backward-compatible and full object versions
-            'countries': countries,  # Backward compatibility - list of country names
-            'production_countries': production_countries,  # Full objects for advanced analysis
+            'countries': countries,  # Primary origin countries (filtered by origin_country)
+            'production_countries': production_countries,  # All production countries for advanced analysis
+            'origin_country': origin_countries,  # ISO-2 origin country codes from TMDB
             
             'companies': companies, 
             
@@ -252,7 +386,7 @@ async def fetch_comprehensive_film_details(session: aiohttp.ClientSession, tmdb_
             
             'adult': details.get('adult', False), 
             'status': details.get('status', ''),
-            'poster_path': details.get('poster_path', ''), 
+            'poster_path': _select_best_poster_path(images, details),
             'backdrop_path': details.get('backdrop_path', '')
         }
     except Exception as e:
@@ -304,6 +438,26 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     metadata_results = await asyncio.gather(*fetch_tasks)
     metadata_df = pd.DataFrame([m for m in metadata_results if m])
     update_progress("tmdb_metadata", "Metadata collection complete", len(unique_tmdb_ids), len(unique_tmdb_ids))
+
+    # Build person profile maps from credits data (no search/person guessing).
+    # First occurrence of each name wins — guarantees stable, film-verified portraits.
+    director_profile_map: dict = {}  # name → {person_id, profile_path}
+    cast_profile_map: dict = {}      # name → {person_id, profile_path}
+    for m in metadata_results:
+        if not m:
+            continue
+        for d in m.get('directors_full', []):
+            if d.get('name') and d['name'] not in director_profile_map:
+                director_profile_map[d['name']] = {
+                    'person_id': d.get('person_id'),
+                    'profile_path': d.get('profile_path'),
+                }
+        for a in m.get('cast_full', []):
+            if a.get('name') and a['name'] not in cast_profile_map:
+                cast_profile_map[a['name']] = {
+                    'person_id': a.get('person_id'),
+                    'profile_path': a.get('profile_path'),
+                }
     
     # --- Final Data Merging and Analysis (Synchronous Pandas) ---
     films_enriched = pd.merge(unique_films, metadata_df, on='tmdb_id', how='left', suffixes=('_csv', '_tmdb'))
@@ -1021,7 +1175,15 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
     
     # === DETAILED ANALYSIS (Restored from original) ===
     director_counts = Counter(films_enriched['director'].dropna())
-    stats['top_directors'] = [{'name': name, 'count': count} for name, count in director_counts.most_common(20)]
+    stats['top_directors'] = [
+        {
+            'name': name,
+            'count': count,
+            'profile_path': director_profile_map.get(name, {}).get('profile_path'),
+            'person_id': director_profile_map.get(name, {}).get('person_id'),
+        }
+        for name, count in director_counts.most_common(20)
+    ]
     stats['total_directors'] = len(director_counts)
     if director_counts:
         name, count = director_counts.most_common(1)[0]
@@ -1087,39 +1249,209 @@ async def process_comprehensive_letterboxd_data(session: aiohttp.ClientSession, 
               f"breakdown={stats['sinefil_meter']['breakdown']}")
 
     cast_counts = Counter([actor for cast_list in films_enriched['cast'].dropna() for actor in cast_list])
-    
-    # Create top_actors with profile paths for the top 3 actors
-    top_actors_with_profiles = []
-    for i, (name, count) in enumerate(cast_counts.most_common(3)):
-        profile_path = None
-        try:
-            # Search for the actor to get their profile image
-            person_search_data = await tmdb_get(session, 'search/person', {'query': name})
-            if person_search_data and person_search_data.get('results'):
-                top_person_details = person_search_data['results'][0]
-                profile_path = top_person_details.get('profile_path')
-        except Exception as e:
-            pass
-        
-        top_actors_with_profiles.append({
+
+    # Build top_actors from credits-derived profile map (no search/person guessing).
+    stats['top_actors'] = [
+        {
             'name': name,
             'count': count,
-            'profile_path': profile_path
-        })
-    
-    # Add remaining actors without profile paths
-    remaining_actors = [{'name': name, 'count': count} for name, count in cast_counts.most_common(20)[3:]]
-    stats['top_actors'] = top_actors_with_profiles + remaining_actors
+            'profile_path': cast_profile_map.get(name, {}).get('profile_path'),
+            'person_id': cast_profile_map.get(name, {}).get('person_id'),
+        }
+        for name, count in cast_counts.most_common(20)
+    ]
     
     update_progress("analyzing", "Cast analysis complete", 9, 10)
 
+    # === EXPERIMENTAL SECTIONS DATA ============================================
+    # Emits optional enriched fields consumed by the frontend Test Screen sections.
+    # All computations are gated on ratings data being present.
+    if 'rating' in films_df.columns and films_df['rating'].notna().any():
+        # Build a merged DataFrame: enriched film metadata + user ratings
+        films_with_ratings = pd.merge(
+            films_enriched[['title', 'year', 'director', 'cast', 'countries', 'poster_path']],
+            films_df[['title', 'year', 'rating']].dropna(subset=['rating']),
+            on=['title', 'year'],
+            how='inner'
+        )
+
+        # ── directors_with_ratings (minSampleSize >= 3) ────────────────────────
+        if not films_with_ratings.empty and 'director' in films_with_ratings.columns:
+            dir_rated = (
+                films_with_ratings.dropna(subset=['director'])
+                .groupby('director')['rating']
+                .agg(avg_rating='mean', rated_count='count')
+                .reset_index()
+                .rename(columns={'director': 'name'})
+            )
+            dir_rated = dir_rated[dir_rated['rated_count'] >= 3]
+            dir_rated['avg_rating'] = dir_rated['avg_rating'].round(2)
+            # Merge in total watch count
+            dir_counts_df = pd.DataFrame(
+                [{'name': n, 'count': c} for n, c in director_counts.items()]
+            )
+            dir_with_ratings = pd.merge(dir_counts_df, dir_rated, on='name', how='inner')
+            stats['directors_with_ratings'] = [
+                {
+                    'name': row['name'],
+                    'count': int(row['count']),
+                    'avg_rating': float(row['avg_rating']),
+                    'rated_count': int(row['rated_count']),
+                    'profile_path': director_profile_map.get(row['name'], {}).get('profile_path'),
+                }
+                for _, row in dir_with_ratings.iterrows()
+            ]
+
+        # ── actors_with_ratings (minSampleSize >= 3) ───────────────────────────
+        if not films_with_ratings.empty and 'cast' in films_with_ratings.columns:
+            actor_film_ratings = []
+            for _, row in films_with_ratings.iterrows():
+                cast_list = row.get('cast')
+                if isinstance(cast_list, list):
+                    for actor in cast_list:
+                        actor_film_ratings.append({'actor': actor, 'rating': row['rating']})
+            if actor_film_ratings:
+                actor_ratings_df = pd.DataFrame(actor_film_ratings)
+                actor_rated = (
+                    actor_ratings_df
+                    .groupby('actor')['rating']
+                    .agg(avg_rating='mean', rated_count='count')
+                    .reset_index()
+                    .rename(columns={'actor': 'name'})
+                )
+                actor_rated = actor_rated[actor_rated['rated_count'] >= 3]
+                actor_rated['avg_rating'] = actor_rated['avg_rating'].round(2)
+                # Merge total watch counts from cast_counts
+                cast_counts_df = pd.DataFrame(
+                    [{'name': n, 'count': c} for n, c in cast_counts.items()]
+                )
+                actors_with_ratings = pd.merge(cast_counts_df, actor_rated, on='name', how='inner')
+                stats['actors_with_ratings'] = [
+                    {
+                        'name': row['name'],
+                        'count': int(row['count']),
+                        'avg_rating': float(row['avg_rating']),
+                        'rated_count': int(row['rated_count']),
+                        'profile_path': cast_profile_map.get(row['name'], {}).get('profile_path'),
+                    }
+                    for _, row in actors_with_ratings.iterrows()
+                ]
+
+        # ── countries_with_ratings (minSampleSize >= 5) ────────────────────────
+        if not films_with_ratings.empty and 'countries' in films_with_ratings.columns:
+            country_film_ratings = []
+            for _, row in films_with_ratings.iterrows():
+                country_list = row.get('countries')
+                if isinstance(country_list, list):
+                    for country in country_list:
+                        country_film_ratings.append({'country': country, 'rating': row['rating']})
+            if country_film_ratings:
+                country_ratings_df = pd.DataFrame(country_film_ratings)
+                country_rated = (
+                    country_ratings_df
+                    .groupby('country')['rating']
+                    .agg(avg_rating='mean', rated_count='count')
+                    .reset_index()
+                    .rename(columns={'country': 'name'})
+                )
+                country_rated = country_rated[country_rated['rated_count'] >= 5]
+                country_rated['avg_rating'] = country_rated['avg_rating'].round(2)
+                # Merge total watch counts from country_counts
+                country_counts_df = pd.DataFrame(
+                    [{'name': n, 'count': c} for n, c in country_counts.items()]
+                )
+                countries_with_ratings = pd.merge(
+                    country_counts_df, country_rated, on='name', how='inner'
+                )
+                stats['countries_with_ratings'] = [
+                    {
+                        'name': row['name'],
+                        'count': int(row['count']),
+                        'avg_rating': float(row['avg_rating']),
+                        'rated_count': int(row['rated_count']),
+                    }
+                    for _, row in countries_with_ratings.iterrows()
+                ]
+
+        # ── rated_films list (for rating-deviation section) ────────────────────
+        if not films_with_ratings.empty:
+            rated_films_rows = films_with_ratings[['title', 'year', 'rating', 'poster_path']].copy()
+            rated_films_rows = rated_films_rows.dropna(subset=['rating'])
+            rated_films_rows['rating'] = rated_films_rows['rating'].astype(float)
+            rated_films_rows['year'] = rated_films_rows['year'].where(
+                pd.notna(rated_films_rows['year']), None
+            )
+            rated_films_rows['poster_path'] = rated_films_rows['poster_path'].where(
+                rated_films_rows['poster_path'].notna() & (rated_films_rows['poster_path'] != ''),
+                None,
+            )
+            stats['rated_films'] = rated_films_rows.to_dict('records')
+    # ── countries_iso_data — ISO-2 keyed, uses origin_country filtering ─────────
+    # Uses origin_country when available to avoid co-production overcounting.
+    # Falls back to first production_country if origin_country is absent.
+    iso_country_data: dict = {}
+    has_origin = 'origin_country' in films_enriched.columns
+    for _, row in films_enriched.iterrows():
+        prod_countries = row.get('production_countries')
+        origin_codes = row.get('origin_country') if has_origin else None
+        if not isinstance(prod_countries, list) or not prod_countries:
+            continue
+        if isinstance(origin_codes, list) and origin_codes:
+            origin_set = set(origin_codes)
+            filtered = [c for c in prod_countries if isinstance(c, dict) and c.get('iso_3166_1') in origin_set]
+            use_countries = filtered if filtered else prod_countries[:1]
+        else:
+            use_countries = prod_countries[:1]
+        for country in use_countries:
+            if isinstance(country, dict):
+                iso2 = country.get('iso_3166_1', '').strip()
+                name = country.get('name', '').strip()
+                if iso2:
+                    if iso2 not in iso_country_data:
+                        iso_country_data[iso2] = {'iso2': iso2, 'name': name, 'count': 0}
+                    iso_country_data[iso2]['count'] += 1
+    # Enrich with avg_rating from countries_with_ratings (name-keyed)
+    if stats.get('countries_with_ratings'):
+        name_to_rating = {
+            c['name']: {'avg_rating': c['avg_rating'], 'rated_count': c['rated_count']}
+            for c in stats['countries_with_ratings']
+        }
+        for entry in iso_country_data.values():
+            if entry['name'] in name_to_rating:
+                entry.update(name_to_rating[entry['name']])
+    stats['countries_iso_data'] = sorted(
+        iso_country_data.values(), key=lambda x: x['count'], reverse=True
+    )
+    # ── /EXPERIMENTAL SECTIONS DATA ============================================
+
+    # ── all_films: full film list for frontend-side re-aggregation (exclude/filter) ──
+    _af_cols = ['title', 'year', 'director', 'cast', 'genres', 'countries',
+                'language', 'runtime', 'poster_path', 'decade']
+    _af_present = [c for c in _af_cols if c in films_enriched.columns]
+    all_films_df = films_enriched[_af_present].copy()
+    # Merge user rating from films_df (left join — not every film has a rating)
+    if 'rating' in films_df.columns:
+        rating_src = films_df[['title', 'year', 'rating']].drop_duplicates(subset=['title', 'year'])
+        all_films_df = pd.merge(all_films_df, rating_src, on=['title', 'year'], how='left')
+    # Sanitize for JSON
+    for col in ['year', 'runtime']:
+        if col in all_films_df.columns:
+            all_films_df[col] = all_films_df[col].where(pd.notna(all_films_df[col]), None)
+    if 'rating' in all_films_df.columns:
+        all_films_df['rating'] = all_films_df['rating'].where(pd.notna(all_films_df['rating']), None)
+    if 'poster_path' in all_films_df.columns:
+        all_films_df['poster_path'] = all_films_df['poster_path'].where(
+            all_films_df['poster_path'].notna() & (all_films_df['poster_path'] != ''), None
+        )
+    stats['all_films'] = all_films_df.to_dict('records')
+
     # === Movie Crush Feature ===
     stats['movie_crush'] = None
-    if top_actors_with_profiles:
-        top_actor = top_actors_with_profiles[0]
+    if stats.get('top_actors'):
+        top_actor = stats['top_actors'][0]
         stats['movie_crush'] = {
             'name': top_actor['name'],
-            'profile_path': top_actor['profile_path'],
+            'profile_path': top_actor.get('profile_path'),
             'count': top_actor['count']
         }
 
@@ -1282,7 +1614,8 @@ async def analyze_comprehensive_data_endpoint(files: List[UploadFile] = File(...
             raise HTTPException(status_code=400, detail={"error_code": "missing_required_files", "message": "No valid Letterboxd CSV files found in the upload."})
 
         stats = await process_comprehensive_letterboxd_data(app.state.aiohttp_session, csv_files)
-        
+        stats = _sanitize_for_json(stats)
+
         update_progress("complete", "Analysis complete! Returning stats.", 1, 1)
         return {"status": "success", "stats": stats}
 
