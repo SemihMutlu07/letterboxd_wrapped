@@ -33,8 +33,7 @@ export default function LetterboxdLanding() {
     document.getElementById('file-input')?.click();
   }, []);
 
-  const openFolderPicker = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation(); // don't also trigger the ZIP file picker
+  const openFolderPicker = useCallback(() => {
     folderInputRef.current?.click();
   }, []);
 
@@ -127,13 +126,16 @@ export default function LetterboxdLanding() {
 
     // Validate file types and sizes
     const maxFileSize = 50 * 1024 * 1024; // 50MB
-    const allowedTypes = ['.csv', '.zip'];
+    const allowedTypes = ['.csv', '.zip', '.utc'];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      // Folder uploads may contain system files (.DS_Store, etc.) — skip them silently
+      // Folder uploads may contain system files (.DS_Store, etc.) — skip non-CSV silently
       if (isFolderUpload && !/\.csv$/i.test(file.name)) continue;
+
+      // Multi-file selection (not folder): skip non-CSV/ZIP/UTC silently
+      if (!isFolderUpload && files.length > 1 && !allowedTypes.some(ext => file.name.toLowerCase().endsWith(ext))) continue;
 
       // Check file size
       if (file.size > maxFileSize) {
@@ -156,7 +158,7 @@ export default function LetterboxdLanding() {
       if (!hasValidExtension) {
         setError({
           title: 'Unsupported file',
-          message: `"${file.name}" is not a supported format. Please upload .csv or .zip files only.`,
+          message: `"${file.name}" is not a supported format. Please upload .csv, .zip, or .utc files.`,
           reason: 'invalid_file_type',
         });
         trackEvent('upload_failed', { reason: 'invalid_extension', step: 'validation' });
@@ -456,15 +458,13 @@ export default function LetterboxdLanding() {
             </p>
           </header>
 
-          {/* Upload area — single cinematic dropzone */}
+          {/* Upload area */}
           <section aria-label="Upload your Letterboxd data">
             <div
-              className="group rounded-2xl border border-slate-700/50 bg-slate-800/50 p-8 md:p-10 min-h-[220px] sm:min-h-[260px] flex items-center justify-center text-center cursor-pointer transition-all duration-300 hover:border-orange-400/40 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 max-w-3xl mx-auto"
+              className="rounded-2xl border border-slate-700/50 bg-slate-800/50 p-6 md:p-8 transition-all duration-300 hover:border-orange-400/30 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.12)] max-w-3xl mx-auto cursor-pointer"
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               onClick={openFilePicker}
-              role="button"
-              tabIndex={0}
             >
               <input
                 id="file-input"
@@ -482,21 +482,20 @@ export default function LetterboxdLanding() {
                 onChange={handleFileInput}
                 className="hidden"
               />
-              <div className="flex flex-col items-center">
-                <div className="mb-5 h-14 w-14 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center transition-colors group-hover:bg-orange-500/20">
-                  <Upload className="w-7 h-7 text-orange-300" />
+
+              {/* Drop hint */}
+              <div className="flex flex-col items-center py-4">
+                <div className="mb-4 h-12 w-12 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-orange-300" />
                 </div>
                 <p className="text-xl sm:text-2xl font-bold tracking-tight">Begin Your Cinema Reveal</p>
-                <p className="mt-2 text-sm text-slate-400">Drag your Letterboxd export (.zip) or click to upload</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  or{' '}
-                  <button
-                    onClick={openFolderPicker}
-                    className="underline underline-offset-2 hover:text-slate-300 transition-colors"
-                  >
-                    choose an exported folder
-                  </button>
-                </p>
+                <p className="mt-1.5 text-sm text-slate-400">Drop a file here, or click to pick a ZIP</p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); openFolderPicker(); }}
+                  className="mt-3 text-xs text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
+                >
+                  or select an extracted folder
+                </button>
               </div>
             </div>
           </section>
