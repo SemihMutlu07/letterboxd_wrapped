@@ -5,6 +5,10 @@ python-multipart
 Jinja2
 zipstream-ng
 pydantic-settings
+# dev/test
+pytest
+pytest-asyncio
+httpx
 aiofiles==24.1.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.12.14
