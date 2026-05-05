@@ -1,8 +1,9 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Monitor, Smartphone, Loader2, Plus, Minus, Scan } from 'lucide-react';
+import { X, Download, Loader2, Plus, Minus, Scan } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
+import OrientationToggle from '@/components/share/OrientationToggle';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
 import { trackEvent } from '@/lib/analytics';
@@ -515,38 +516,7 @@ export default function ShareModal({
           </div>
 
           {/* Format toggle - centered below */}
-          <div className="flex justify-center mt-6">
-            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-2xl p-2">
-              <button
-                onClick={() => setOrientation('horizontal')}
-                className={`flex items-center gap-3 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  orientation === 'horizontal'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/25 scale-105'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Monitor size={18} />
-                <div className="text-left">
-                  <div className="text-sm font-semibold">Horizontal</div>
-                  <div className="text-xs opacity-70">1200×630px</div>
-                </div>
-              </button>
-              <button
-                onClick={() => setOrientation('vertical')}
-                className={`flex items-center gap-3 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  orientation === 'vertical'
-                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-600/25 scale-105'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Smartphone size={18} />
-                <div className="text-left">
-                  <div className="text-sm font-semibold">Vertical</div>
-                  <div className="text-xs opacity-70">630×1200px</div>
-                </div>
-              </button>
-            </div>
-          </div>
+          <OrientationToggle orientation={orientation} onChange={setOrientation} />
         </div>
 
         {/* Preview viewport */}
