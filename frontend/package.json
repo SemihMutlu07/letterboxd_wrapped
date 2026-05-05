@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev:frontend": "next dev --turbopack",
-    "dev:backend": "cd ../backend && (python3 -c \"import fastapi, uvicorn, aiohttp, aiofiles, dotenv\" >/dev/null 2>&1 || python3 -m pip install fastapi uvicorn aiohttp aiofiles python-dotenv python-multipart) && python3 app/main.py",
+    "dev:backend": "cd ../backend && (python3 -c \"import fastapi, uvicorn, aiohttp, aiofiles, dotenv, pydantic_settings\" >/dev/null 2>&1 || python3 -m pip install -r requirements.txt) && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "build": "next build",
     "start": "next start",
