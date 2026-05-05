@@ -1,5 +1,6 @@
 export type ErrorReason =
   | 'no_files_selected'
+  | 'no_csv_files'
   | 'invalid_file_type'
   | 'file_too_large'
   | 'corrupt_zip'
