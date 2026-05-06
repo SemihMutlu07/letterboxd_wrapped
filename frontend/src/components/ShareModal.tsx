@@ -1,13 +1,12 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Monitor, Smartphone, Loader2, Plus, Minus, Scan, FlaskConical } from 'lucide-react';
+import { X, Download, Loader2, Plus, Minus, Scan } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
-import { shareVariantOptions } from './share/registry';
+import OrientationToggle from '@/components/share/OrientationToggle';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
 import { trackEvent } from '@/lib/analytics';
-import type { ShareCardData, ShareVariant } from './share/types';
 
 // ---- Share helpers ----
 const EXPORT_FILE_NAME = 'movies-wrapped.png';
@@ -142,9 +141,7 @@ type Props = {
   onClose: () => void;
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
-  cardData: ShareCardData;
-  initialVariant?: ShareVariant;
-  allowVariantTesting?: boolean;
+  cardProps: Parameters<typeof ShareCard>[0];
   onDownloadSuccess?: () => void;
 };
 
@@ -153,33 +150,16 @@ export default function ShareModal({
   onClose,
   orientation,
   setOrientation,
-  cardData,
-  initialVariant = 'default',
-  allowVariantTesting = false,
+  cardProps,
   onDownloadSuccess,
 }: Props) {
   // const dialogRef = useRef<HTMLDivElement>(null); // Unused for now
-  const exportRootRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.6);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const [variant, setVariant] = useState<ShareVariant>(initialVariant);
-  const [crushOverride, setCrushOverride] = useState<number | null>(null);
-  const [directorOverride, setDirectorOverride] = useState<number | null>(null);
-
-  // Apply swap overrides to card data
-  const effectiveCardData = useMemo<ShareCardData>(() => {
-    const d = { ...cardData };
-    if (crushOverride !== null && cardData.topActors?.[crushOverride]) {
-      d.onScreenCrush = cardData.topActors[crushOverride];
-    }
-    if (directorOverride !== null && cardData.topDirectors?.[directorOverride]) {
-      d.favoriteDirector = cardData.topDirectors[directorOverride];
-    }
-    return d;
-  }, [cardData, crushOverride, directorOverride]);
 
   // Touch handling for pinch zoom
   
@@ -431,12 +411,8 @@ export default function ShareModal({
     setUserScale((prev) => Math.max(0.5, prev - 0.15));
   }, []);
 
-  useEffect(() => {
-    setVariant(initialVariant);
-  }, [initialVariant, open]);
-
   const handleSavePNG = async () => {
-    if (!exportRootRef.current || isSaving) return;
+    if (!cardRef.current || isSaving) return;
     setIsSaving(true);
     setExportProgress(0);
 
@@ -446,7 +422,7 @@ export default function ShareModal({
       setExportProgress(10);
 
       // 1) Export root
-      const exportRoot = exportRootRef.current;
+      const exportRoot = document.getElementById('wrapped-export-root');
       if (!exportRoot) throw new Error('Export root element not found');
 
       // 2) Görselleri proxy'ye çevir (TMDB CORS guard) – SENDEKİ KALSIN
@@ -495,7 +471,7 @@ export default function ShareModal({
       console.error('Export failed:', err);
     } finally {
       // img src'lerini geri al
-      const exportRoot = exportRootRef.current;
+      const exportRoot = document.getElementById('wrapped-export-root');
       if (exportRoot) {
         const imgs = exportRoot.querySelectorAll('img');
         imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
@@ -520,7 +496,7 @@ export default function ShareModal({
         {/* Header */}
         <div className="relative px-6 md:px-8 py-6 md:py-8 border-b border-slate-700/30">
           {/* Background glow */}
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5" />
           
           <div className="relative flex items-center justify-between">
             <div className="space-y-1">
@@ -540,131 +516,7 @@ export default function ShareModal({
           </div>
 
           {/* Format toggle - centered below */}
-          <div className="flex justify-center mt-6">
-            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm border border-slate-600/40 rounded-2xl p-2">
-              <button
-                onClick={() => setOrientation('horizontal')}
-                className={`flex items-center gap-3 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  orientation === 'horizontal'
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/25 scale-105'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Monitor size={18} />
-                <div className="text-left">
-                  <div className="text-sm font-semibold">Horizontal</div>
-                  <div className="text-xs opacity-70">1200×630px</div>
-                </div>
-              </button>
-              <button
-                onClick={() => setOrientation('vertical')}
-                className={`flex items-center gap-3 px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
-                  orientation === 'vertical'
-                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white shadow-lg shadow-purple-600/25 scale-105'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Smartphone size={18} />
-                <div className="text-left">
-                  <div className="text-sm font-semibold">Vertical</div>
-                  <div className="text-xs opacity-70">630×1200px</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {allowVariantTesting ? (
-            <div className="flex justify-center mt-4">
-              <div className="flex max-w-4xl flex-col items-center gap-3 rounded-2xl border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">
-                <div className="flex items-center gap-2">
-                  <FlaskConical size={16} className="text-orange-300" />
-                  <span className="font-medium">Card Variant</span>
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {shareVariantOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setVariant(option.value)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        variant === option.value
-                          ? 'border-orange-300 bg-orange-300 text-slate-950'
-                          : 'border-slate-600 bg-slate-900 text-slate-200 hover:border-orange-400 hover:text-white'
-                      }`}
-                      aria-pressed={variant === option.value}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                <label className="inline-flex items-center gap-3 text-sm text-orange-100">
-                  <span className="font-medium">Dropdown</span>
-                  <select
-                    value={variant}
-                    onChange={(e) => setVariant(e.target.value as ShareVariant)}
-                    className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white outline-none"
-                    aria-label="Share card variant"
-                  >
-                    {shareVariantOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Swap Actor / Director */}
-          {(cardData.topActors?.length ?? 0) > 1 || (cardData.topDirectors?.length ?? 0) > 1 ? (
-            <div className="flex justify-center mt-3">
-              <div className="flex flex-wrap justify-center gap-4 rounded-xl border border-slate-700/50 bg-slate-800/60 px-4 py-2.5 text-xs">
-                {(cardData.topActors?.length ?? 0) > 1 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 font-medium">Actor:</span>
-                    <div className="flex gap-1">
-                      {cardData.topActors!.map((a, i) => (
-                        <button
-                          key={a.name}
-                          onClick={() => setCrushOverride(i === 0 && crushOverride === null ? null : i)}
-                          className={`px-2 py-1 rounded-md font-medium transition-colors truncate max-w-[100px] ${
-                            (crushOverride === null && i === 0) || crushOverride === i
-                              ? 'bg-pink-500/25 text-pink-300 border border-pink-500/40'
-                              : 'text-slate-400 hover:text-white border border-transparent'
-                          }`}
-                          title={`${a.name} (${a.count} films)`}
-                        >
-                          {a.name.split(' ').pop()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {(cardData.topDirectors?.length ?? 0) > 1 && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 font-medium">Director:</span>
-                    <div className="flex gap-1">
-                      {cardData.topDirectors!.map((d, i) => (
-                        <button
-                          key={d.name}
-                          onClick={() => setDirectorOverride(i === 0 && directorOverride === null ? null : i)}
-                          className={`px-2 py-1 rounded-md font-medium transition-colors truncate max-w-[100px] ${
-                            (directorOverride === null && i === 0) || directorOverride === i
-                              ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/40'
-                              : 'text-slate-400 hover:text-white border border-transparent'
-                          }`}
-                          title={`${d.name} (${d.count} films)`}
-                        >
-                          {d.name.split(' ').pop()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
+          <OrientationToggle orientation={orientation} onChange={setOrientation} />
         </div>
 
         {/* Preview viewport */}
@@ -718,6 +570,7 @@ export default function ShareModal({
             }}
           >
             <div
+              ref={cardRef}
               className="origin-top-left bg-slate-900 rounded-xl overflow-hidden"
               style={{
                 width: target.w,
@@ -729,12 +582,7 @@ export default function ShareModal({
                 zIndex: 1,
               }}
             >
-              <ShareCard
-                ref={exportRootRef}
-                data={effectiveCardData}
-                orientation={orientation}
-                variant={variant}
-              />
+              <ShareCard {...cardProps} orientation={orientation} />
             </div>
             
           </div>
@@ -751,7 +599,7 @@ export default function ShareModal({
         {/* Footer */}
         <div className="relative px-6 md:px-8 py-6 border-t border-slate-700/30 bg-gradient-to-r from-slate-800/40 to-slate-900/40 backdrop-blur-sm">
           {/* Subtle glow */}
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/3 to-purple-500/3 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/3 to-purple-500/3" />
           
           <div className="relative flex items-center justify-center gap-4">
             {showSuccess && (

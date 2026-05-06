@@ -1,0 +1,154 @@
+"""
+Backend integration tests.
+
+Run from backend/ directory:
+    pytest
+"""
+import io
+import zipfile
+import pytest
+from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, patch
+
+
+# ---- fixtures ----------------------------------------------------------------
+
+@pytest.fixture
+def minimal_watched_csv() -> bytes:
+    return b"Name,Year,Letterboxd URI\nInception,2010,https://letterboxd.com/film/inception/\n"
+
+
+@pytest.fixture
+def zip_with_watched(minimal_watched_csv: bytes) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("watched.csv", minimal_watched_csv)
+    return buf.getvalue()
+
+
+@pytest.fixture
+async def client():
+    """ASGI test client — lifespan is bypassed; aiohttp session is mocked."""
+    with patch.dict("os.environ", {"TMDB_API_KEY": "test-key"}):
+        from app.main import create_app  # noqa: PLC0415
+        import aiohttp
+
+        app = create_app()
+
+        # Inject a real aiohttp session so route handlers can reference it
+        # without triggering the full lifespan startup.
+        session = aiohttp.ClientSession()
+        app.state.aiohttp_session = session
+
+        transport = ASGITransport(app=app)
+        try:
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                yield ac
+        finally:
+            await session.close()
+
+
+# ---- health ------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_root(client: AsyncClient):
+    r = await client.get("/")
+    assert r.status_code == 200
+    assert "message" in r.json()
+
+
+@pytest.mark.asyncio
+async def test_health(client: AsyncClient):
+    r = await client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+# ---- analyze (happy path — background task) ---------------------------------
+
+@pytest.mark.asyncio
+async def test_analyze_returns_202_task_id(client: AsyncClient, zip_with_watched: bytes):
+    """POST /api/analyze should accept a ZIP and return 202 + task_id."""
+    files = {"files": ("export.zip", zip_with_watched, "application/zip")}
+    r = await client.post("/api/analyze", files=files)
+    assert r.status_code == 202
+    body = r.json()
+    assert "task_id" in body
+    assert body["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_analyze_missing_files(client: AsyncClient):
+    """POST /api/analyze with no files should return 422."""
+    r = await client.post("/api/analyze")
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_analyze_corrupt_zip(client: AsyncClient):
+    """POST /api/analyze with a corrupt ZIP should return 400."""
+    files = {"files": ("bad.zip", b"not a zip", "application/zip")}
+    r = await client.post("/api/analyze", files=files)
+    assert r.status_code == 400
+
+
+# ---- progress polling --------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_progress_unknown_task(client: AsyncClient):
+    """GET /api/progress/{task_id} for a non-existent task returns 404."""
+    r = await client.get("/api/progress/nonexistent-task-id")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_progress_legacy(client: AsyncClient):
+    """GET /api/progress (legacy endpoint) should always return 200."""
+    r = await client.get("/api/progress")
+    assert r.status_code == 200
+    body = r.json()
+    assert "stage" in body
+
+
+@pytest.mark.asyncio
+async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes):
+    """Submit a job, then poll its task_id — should reach a terminal state."""
+    import asyncio
+    from app.services.analysis import process_comprehensive_letterboxd_data
+
+    # Stub out the actual analysis so the test doesn't hit TMDB
+    async def fake_analysis(*args, **kwargs):
+        return {"total_films": 1, "mock": True}
+
+    with patch(
+        "app.routes.analyze.process_comprehensive_letterboxd_data",
+        side_effect=fake_analysis,
+    ):
+        files = {"files": ("export.zip", zip_with_watched, "application/zip")}
+        r = await client.post("/api/analyze", files=files)
+        assert r.status_code == 202
+        task_id = r.json()["task_id"]
+
+        # Give the background task a moment to run
+        await asyncio.sleep(0.2)
+
+        poll = await client.get(f"/api/progress/{task_id}")
+        assert poll.status_code == 200
+        body = poll.json()
+        assert body["status"] in ("pending", "running", "done", "failed")
+
+
+# ---- parse-username ----------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_parse_username_known_pattern(client: AsyncClient):
+    r = await client.post("/api/parse-username", json={"filename": "letterboxd-johndoe-2024-01-01.zip"})
+    assert r.status_code == 200
+    assert r.json()["username"] == "johndoe"
+
+
+@pytest.mark.asyncio
+async def test_parse_username_no_match(client: AsyncClient):
+    r = await client.post("/api/parse-username", json={"filename": "random_file.csv"})
+    assert r.status_code == 200
+    assert r.json()["username"] is None
