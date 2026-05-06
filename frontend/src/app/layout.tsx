@@ -33,13 +33,13 @@ export default function RootLayout({
       <link
           rel="icon"
           type="image/svg+xml"
-          href="assets\Web Header - Dark.svg"
+          href="/assets/Web Header - Dark.svg"
           media="(prefers-color-scheme: dark)"
         />
       <link
           rel="icon"
           type="image/svg+xml"
-          href="assets\favicon-16x16-Light.svg"
+          href="/assets/favicon-16x16-Light.svg"
           media="(prefers-color-scheme: light)"
       />  
       </head>  
