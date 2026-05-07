@@ -738,6 +738,168 @@ async def process_comprehensive_letterboxd_data(
     stats["top_actors"] = top_actors_with_profiles + remaining_actors
     _progress("analyzing", "Cast analysis complete", 9, 10)
 
+    # === TEST LAB DATASETS ===
+    # These fields power the optional results Test Lab sections. They are derived
+    # from already-enriched rows so the stable wrapped view remains unchanged.
+    analysis_df = pd.merge(
+        films_enriched,
+        films_df[["title", "year", "rating"]] if "rating" in films_df.columns else films_df[["title", "year"]],
+        on=["title", "year"],
+        how="left",
+    )
+
+    def _clean_year(value: Any) -> Optional[int]:
+        try:
+            if pd.isna(value):
+                return None
+            return int(value)
+        except Exception:
+            return None
+
+    def _clean_rating(value: Any) -> Optional[float]:
+        try:
+            if pd.isna(value):
+                return None
+            return float(value)
+        except Exception:
+            return None
+
+    def _rated_entity_rows(
+        entity_column: str,
+        count_source: Counter,
+        min_rated: int = 3,
+    ) -> list[dict]:
+        rows: list[dict] = []
+        if entity_column not in analysis_df.columns or "rating" not in analysis_df.columns:
+            return rows
+        for name, count in count_source.items():
+            rated = analysis_df[
+                (analysis_df[entity_column] == name) & analysis_df["rating"].notna()
+            ]["rating"]
+            if len(rated) >= min_rated:
+                rows.append({
+                    "name": name,
+                    "count": int(count),
+                    "avg_rating": round(float(rated.mean()), 2),
+                    "rated_count": int(len(rated)),
+                })
+        return sorted(rows, key=lambda row: (row["avg_rating"], row["rated_count"]), reverse=True)
+
+    if "rating" in analysis_df.columns:
+        rated_rows = analysis_df[analysis_df["rating"].notna()]
+        stats["rated_films"] = [
+            {
+                "title": str(row.get("title") or ""),
+                "year": _clean_year(row.get("year")),
+                "rating": float(row.get("rating")),
+                "poster_path": row.get("poster_path") or "",
+            }
+            for _, row in rated_rows.sort_values("rating", ascending=False).iterrows()
+        ]
+    else:
+        rated_rows = pd.DataFrame()
+        stats["rated_films"] = []
+
+    stats["all_films"] = [
+        {
+            "title": str(row.get("title") or ""),
+            "year": _clean_year(row.get("year")),
+            "director": row.get("director") if pd.notna(row.get("director")) else None,
+            "genres": row.get("genres") if isinstance(row.get("genres"), list) else [],
+            "countries": row.get("countries") if isinstance(row.get("countries"), list) else [],
+            "language": row.get("language") if pd.notna(row.get("language")) else None,
+            "runtime": _clean_year(row.get("runtime")),
+            "poster_path": row.get("poster_path") or "",
+            "decade": row.get("decade") if pd.notna(row.get("decade")) else None,
+            "rating": _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None,
+        }
+        for _, row in analysis_df.iterrows()
+    ]
+
+    stats["directors_with_ratings"] = _rated_entity_rows("director", director_counts, min_rated=3)
+
+    actor_rated: dict[str, list[float]] = {}
+    if "cast" in analysis_df.columns and "rating" in analysis_df.columns:
+        for _, row in analysis_df.iterrows():
+            rating = _clean_rating(row.get("rating"))
+            cast = row.get("cast")
+            if rating is None or not isinstance(cast, list):
+                continue
+            for actor in cast:
+                actor_rated.setdefault(actor, []).append(rating)
+
+    actor_profile_map = {a["name"]: a.get("profile_path") for a in top_actors_with_profiles}
+    stats["actors_with_ratings"] = sorted(
+        [
+            {
+                "name": actor,
+                "count": int(cast_counts.get(actor, 0)),
+                "avg_rating": round(float(sum(ratings) / len(ratings)), 2),
+                "rated_count": len(ratings),
+                "profile_path": actor_profile_map.get(actor),
+            }
+            for actor, ratings in actor_rated.items()
+            if len(ratings) >= 3
+        ],
+        key=lambda row: (row["avg_rating"], row["rated_count"]),
+        reverse=True,
+    )
+
+    country_iso_counts: Counter = Counter()
+    country_iso_names: dict[str, str] = {}
+    country_iso_ratings: dict[str, list[float]] = {}
+    country_name_ratings: dict[str, list[float]] = {}
+
+    if "production_countries" in analysis_df.columns:
+        for _, row in analysis_df.iterrows():
+            rating = _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None
+            production_countries = row.get("production_countries")
+            if not isinstance(production_countries, list):
+                continue
+            for country in production_countries:
+                if not isinstance(country, dict):
+                    continue
+                iso2 = country.get("iso_3166_1")
+                name = country.get("name")
+                if name:
+                    country_name_ratings.setdefault(name, [])
+                    if rating is not None:
+                        country_name_ratings[name].append(rating)
+                if not iso2 or not name:
+                    continue
+                country_iso_counts[iso2] += 1
+                country_iso_names[iso2] = name
+                if rating is not None:
+                    country_iso_ratings.setdefault(iso2, []).append(rating)
+
+    stats["countries_iso_data"] = []
+    for iso2, count in country_iso_counts.most_common():
+        ratings = country_iso_ratings.get(iso2, [])
+        item = {
+            "iso2": iso2,
+            "name": country_iso_names.get(iso2, iso2),
+            "count": int(count),
+        }
+        if len(ratings) >= 5:
+            item["avg_rating"] = round(float(sum(ratings) / len(ratings)), 2)
+            item["rated_count"] = len(ratings)
+        stats["countries_iso_data"].append(item)
+
+    stats["countries_with_ratings"] = sorted(
+        [
+            {
+                "name": name,
+                "count": int(country_counts.get(name, 0)),
+                "avg_rating": round(float(sum(ratings) / len(ratings)), 2),
+                "rated_count": len(ratings),
+            }
+            for name, ratings in country_name_ratings.items()
+            if len(ratings) >= 5
+        ],
+        key=lambda row: (row["avg_rating"], row["rated_count"]),
+        reverse=True,
+    )
+
     # === MOVIE CRUSH ===
     stats["movie_crush"] = None
     if top_actors_with_profiles:

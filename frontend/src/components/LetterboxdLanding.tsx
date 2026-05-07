@@ -2,8 +2,8 @@
 
 import JSZip from 'jszip';
 import React, { useState, useCallback, useEffect } from 'react';
-import { Film, Star, Clock, Globe } from 'lucide-react';
-import { analyzeFiles, testBackend } from '@/lib/api';
+import { Film, Star, Clock, Globe, Upload } from 'lucide-react';
+import { analyzeFiles, scrapeProfile, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -19,6 +19,9 @@ const APP_VERSION = '1.0.0';
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
+  const [isScraping, setIsScraping] = useState(false);
+  const [inputMode, setInputMode] = useState<'upload' | 'username'>('upload');
+  const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
   const [, setDetectedUsername] = useState<string | null>(null);
 
@@ -64,7 +67,7 @@ export default function LetterboxdLanding() {
     return new File([content], 'letterboxd-export.zip', { type: 'application/zip' });
   }, []);
 
-  const handleFiles = useCallback(async (files: FileList | null) => {
+  const handleFiles = useCallback(async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) {
       setError({ title: 'No files selected', message: 'Please choose your Letterboxd export files.', reason: 'no_files_selected' });
       trackEvent('upload_failed', { reason: 'no_files_selected', step: 'validation' });
@@ -100,8 +103,7 @@ export default function LetterboxdLanding() {
       const relativePath = file.webkitRelativePath || '';
       const pathParts = relativePath ? relativePath.split('/').filter(Boolean) : [];
       for (const candidate of [file.name, relativePath, pathParts[0] || '']) {
-        const { parseLetterboxdUsername: parseLocal } = await import('@/lib/filename');
-        const parsed = parseLocal(candidate);
+        const parsed = parseLetterboxdUsername(candidate);
         if (parsed) { detectedUsername = parsed; break; }
       }
       if (detectedUsername) break;
@@ -209,7 +211,43 @@ export default function LetterboxdLanding() {
     }
   }, [zipFiles]);
 
+  const handleScrape = useCallback(async () => {
+    const username = usernameInput.trim().replace(/^@/, '').toLowerCase();
+    if (!username) {
+      setError({ title: 'No username', message: 'Please enter your Letterboxd username.', reason: 'no_username' });
+      return;
+    }
+
+    setIsScraping(true);
+    setError(null);
+    trackEvent('scrape_started', { username });
+
+    try {
+      const result = await scrapeProfile(username);
+      setUsername(username);
+      localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+
+      trackConsentedEvent('scrape_completed', { total_films: result.stats.total_films, ok: true });
+
+      setTimeout(() => { window.location.href = '/results'; }, 100);
+    } catch (err) {
+      const normalized = normalizeError(err);
+      trackEvent('scrape_failed', { reason: normalized.reason });
+      setError(normalized);
+      setIsScraping(false);
+    }
+  }, [usernameInput]);
+
   if (isUploading) return <LoadingScreen />;
+  if (isScraping) {
+    return (
+      <LoadingScreen
+        title="Scanning Your Profile"
+        message="Reading your public Letterboxd diary and building your movie profile."
+        detail="Profile scans depend on Letterboxd response speed and can take longer than ZIP uploads."
+      />
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-slate-900 text-white">
@@ -231,7 +269,76 @@ export default function LetterboxdLanding() {
             <p className="mx-auto mt-2 text-slate-600 text-[11px] sm:text-xs">Version {APP_VERSION}</p>
           </header>
 
-          <UploadZone onFiles={handleFiles} />
+          <div className="flex justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setInputMode('upload');
+                setError(null);
+              }}
+              className={`inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+                inputMode === 'upload'
+                  ? 'border-orange-400/40 bg-orange-500/20 text-orange-200'
+                  : 'border-slate-700/60 bg-slate-900/30 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Upload className="h-4 w-4" />
+              Upload Export
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setInputMode('username');
+                setError(null);
+              }}
+              className={`inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold transition ${
+                inputMode === 'username'
+                  ? 'border-orange-400/40 bg-orange-500/20 text-orange-200'
+                  : 'border-slate-700/60 bg-slate-900/30 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Globe className="h-4 w-4" />
+              Enter Username
+            </button>
+          </div>
+
+          {inputMode === 'upload' ? (
+            <UploadZone onFiles={handleFiles} />
+          ) : (
+            <section aria-label="Enter your Letterboxd username">
+              <div className="mx-auto max-w-3xl rounded-2xl border border-slate-700/50 bg-slate-800/50 p-8 text-center">
+                <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-orange-400/25 bg-orange-500/10">
+                  <Globe className="h-7 w-7 text-orange-300" />
+                </div>
+                <p className="text-xl font-bold tracking-tight sm:text-2xl">Analyze By Username</p>
+                <p className="mt-2 text-sm text-slate-400">Use this if you want a quick scan from a public Letterboxd profile.</p>
+                <div className="mx-auto mt-6 flex max-w-md flex-col gap-3 sm:flex-row">
+                  <label className="relative flex-1">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-500">@</span>
+                    <input
+                      type="text"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void handleScrape();
+                      }}
+                      placeholder="your_username"
+                      className="w-full rounded-xl border border-slate-600/70 bg-slate-900/70 py-3 pl-8 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-orange-400/60 focus:outline-none focus:ring-2 focus:ring-orange-400/20"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleScrape()}
+                    disabled={!usernameInput.trim()}
+                    className="rounded-xl bg-orange-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-orange-300 disabled:bg-slate-700 disabled:text-slate-500"
+                  >
+                    Analyze
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">Public profile scans are less complete than official exports, but useful for fast tests.</p>
+              </div>
+            </section>
+          )}
 
           {error && <ErrorBanner error={error} onDismiss={() => setError(null)} onRetry={() => setError(null)} />}
 

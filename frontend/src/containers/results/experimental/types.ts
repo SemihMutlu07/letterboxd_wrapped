@@ -1,0 +1,93 @@
+/**
+ * Shared stats shape passed to every experimental metric component.
+ * Intentionally a permissive superset so the registry doesn't need to import
+ * from the page-level LetterboxdStats type.
+ */
+export interface StatsData {
+  total_films: number;
+  average_rating: number;
+  days_watched: number;
+  average_runtime: number;
+  top_genres: { name: string; count: number }[];
+  top_directors: { name: string; count: number; profile_path?: string; person_id?: number }[];
+  top_actors: { name: string; count: number; profile_path?: string; person_id?: number }[];
+  top_countries: { name: string; count: number }[];
+  top_languages: { language: string; count: number }[];
+  decades: { decade: string; count: number }[];
+  rating_distribution: Record<string, number>;
+  most_common_rating?: number;
+  day_of_week_pattern?: { weekday: number; weekend: number };
+  monthly_viewing_habits?: { month: string; count: number }[];
+  favorite_decade?: { name: string; count: number };
+  sinefil_meter?: {
+    score: number;
+    type: string;
+    breakdown?: {
+      geography: number;
+      temporal: number;
+      languages: number;
+      volume: number;
+      genres: number;
+      directors: number;
+    };
+  };
+
+  // ── Extended fields emitted by backend for experimental sections ────────────
+  /** Per-director avg rating; only directors with rated_count >= 3 included. */
+  directors_with_ratings?: {
+    name: string;
+    count: number;
+    avg_rating: number;
+    rated_count: number;
+    profile_path?: string;
+  }[];
+  /** Per-actor avg rating; only actors with rated_count >= 3 included. */
+  actors_with_ratings?: {
+    name: string;
+    count: number;
+    avg_rating: number;
+    rated_count: number;
+    profile_path?: string;
+  }[];
+  /** Per-country avg rating; only countries with rated_count >= 5 included. */
+  countries_with_ratings?: {
+    name: string;
+    count: number;
+    avg_rating: number;
+    rated_count: number;
+  }[];
+  /** Individual rated film records for rating-deviation section. */
+  rated_films?: {
+    title: string;
+    year?: number;
+    rating: number;
+    poster_path?: string;
+  }[];
+  /** Total number of rated films in the upload. */
+  total_rated_films?: number;
+  /**
+   * ISO-2 keyed country data emitted from production_countries TMDB field.
+   * More reliable than top_countries (which uses name strings only).
+   * avg_rating / rated_count present only when ratings data available + minSample >= 5.
+   */
+  countries_iso_data?: {
+    iso2: string;
+    name: string;
+    count: number;
+    avg_rating?: number;
+    rated_count?: number;
+  }[];
+  /** Full film list for frontend-side re-aggregation (e.g. country→films lookup). */
+  all_films?: {
+    title: string;
+    year?: number;
+    director?: string;
+    genres?: string[];
+    countries?: string[];
+    language?: string;
+    runtime?: number;
+    poster_path?: string;
+    decade?: string;
+    rating?: number;
+  }[];
+}

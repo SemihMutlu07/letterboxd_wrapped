@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from datetime import datetime
@@ -15,6 +16,24 @@ MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 _RATE_LIMIT_WINDOW = 600  # 10 minutes
 _RATE_LIMIT_MAX = 3
 _rate_limiter: dict[str, list[float]] = {}
+
+
+def _parse_letterboxd_username(filename: str) -> Optional[str]:
+    base = filename.replace("\\", "/").split("/")[-1].strip().lower()
+
+    with_timestamp = re.match(
+        r"^letterboxd-(.+?)-\d{4}(?:-\d{2}){0,4}(?:-utc)?(?:\.(?:csv|zip))?$",
+        base,
+        re.IGNORECASE,
+    )
+    if with_timestamp and with_timestamp.group(1):
+        return with_timestamp.group(1).strip()
+
+    simple = re.match(r"^letterboxd-(.+?)(?:\.(?:csv|zip))?$", base, re.IGNORECASE)
+    if simple and simple.group(1):
+        return simple.group(1).strip()
+
+    return None
 
 
 def _client_key(request: Request) -> str:
@@ -44,11 +63,7 @@ async def parse_username(request: Request):
         if not filename or not isinstance(filename, str):
             return {"username": None}
 
-        import re
-        match = re.match(r"^letterboxd-([^-\s]+)-", filename, re.IGNORECASE)
-        if match and match.group(1):
-            return {"username": match.group(1).strip()}
-        return {"username": None}
+        return {"username": _parse_letterboxd_username(filename)}
     except Exception:
         return {"username": None}
 

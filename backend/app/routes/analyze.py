@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import shutil
 import uuid
 import zipfile
@@ -13,6 +14,13 @@ from fastapi.responses import JSONResponse
 
 from app import task_manager
 from app.services.analysis import process_comprehensive_letterboxd_data
+from app.services.scraper import (
+    check_profile_exists,
+    diary_to_csv_dicts,
+    merge_scraped_films,
+    scrape_diary,
+    scrape_films_grid,
+)
 
 router = APIRouter()
 
@@ -100,6 +108,63 @@ async def analyze_data(request: Request, files: List[UploadFile] = File(...)):
     asyncio.create_task(_run_analysis(task_id, session, csv_files, request_dir))
 
     return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending"})
+
+
+@router.post("/api/scrape-profile")
+async def scrape_profile(request: Request):
+    """
+    Scrape a public Letterboxd profile and run the same analysis pipeline.
+    This is best-effort and depends on Letterboxd's public HTML remaining accessible.
+    """
+    body = await request.json()
+    username = str(body.get("username") or "").strip().lower()
+    if not username or not re.match(r"^[a-z0-9_]+$", username):
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "invalid_username", "message": "Please enter a valid Letterboxd username."},
+        )
+
+    if not await check_profile_exists(username):
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "user_not_found", "message": f"Letterboxd user '{username}' not found."},
+        )
+
+    diary_films = await scrape_diary(username, max_pages=60)
+    grid_films = await scrape_films_grid(username, max_pages=60)
+    films = merge_scraped_films(diary_films, grid_films)
+
+    if not films:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "no_films", "message": f"No public films found for @{username}."},
+        )
+
+    request_dir = Path("uploads") / str(uuid.uuid4())
+    request_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        csv_dicts = diary_to_csv_dicts(films)
+        watched_path = request_dir / "watched.csv"
+        ratings_path = request_dir / "ratings.csv"
+
+        import pandas as pd
+
+        pd.DataFrame(csv_dicts["watched"]).to_csv(watched_path, index=False)
+        csv_files = {"watched.csv": str(watched_path)}
+
+        if csv_dicts["ratings"]:
+            pd.DataFrame(csv_dicts["ratings"]).to_csv(ratings_path, index=False)
+            csv_files["ratings.csv"] = str(ratings_path)
+
+        stats = await process_comprehensive_letterboxd_data(request.app.state.aiohttp_session, csv_files)
+        stats["scraped_username"] = username
+        stats["scraped_film_count"] = len(films)
+        stats["scraped_diary_count"] = len(diary_films)
+        stats["scraped_grid_only_count"] = len(films) - len(diary_films)
+        return {"status": "success", "stats": stats}
+    finally:
+        shutil.rmtree(request_dir, ignore_errors=True)
 
 
 @router.get("/api/progress/{task_id}")

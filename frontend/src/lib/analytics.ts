@@ -11,14 +11,13 @@ type Props = Record<string, unknown>;
 export function getTmdbImageUrl(path: string | null | undefined, size: string = 'w300'): string | null {
   if (!path) return null;
 
+  const proxiedPath = (cleanPath: string) => `/tmdb-proxy/${cleanPath.replace(/^\/+/, '')}`;
+
   // If already a full URL and it's TMDB CDN, convert to proxy
   if (path.startsWith('http') && path.includes('://image.tmdb.org')) {
     const url = new URL(path);
     const cleanPath = url.pathname.replace(/^\/+/, '');
-    if (process.env.NEXT_PUBLIC_API_BASE) {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, '');
-      return `${API_BASE}/tmdb-proxy/${cleanPath}`;
-    }
+    return proxiedPath(cleanPath);
   }
 
   // If already a full URL (non-TMDB), return as-is
@@ -28,13 +27,15 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
   let cleanPath = path.replace(/^\/+/, ''); // Remove leading slashes
   cleanPath = cleanPath.replace(/^t\/p\/[^\/]+\//, ''); // Remove t/p/<size>/ prefix if exists
 
-  // Always use proxy if API_BASE is available, otherwise direct TMDB CDN
-  if (process.env.NEXT_PUBLIC_API_BASE) {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE.replace(/\/$/, ''); // Remove trailing slash
-    return `${API_BASE}/tmdb-proxy/t/p/${size}/${cleanPath}`;
-  } else {
-    return `https://image.tmdb.org/t/p/${size}/${cleanPath}`;
-  }
+  return proxiedPath(`t/p/${size}/${cleanPath}`);
+}
+
+export function getPosterUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
+  return getTmdbImageUrl(path, quality === 'share' ? 'original' : 'w780');
+}
+
+export function getProfileUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
+  return getTmdbImageUrl(path, quality === 'share' ? 'w500' : 'w342');
 }
 
 /**

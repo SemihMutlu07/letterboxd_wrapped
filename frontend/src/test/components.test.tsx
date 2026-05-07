@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // ---- OrientationToggle -------------------------------------------------------
@@ -48,7 +48,7 @@ describe('UploadZone', () => {
   it('renders upload prompt text', () => {
     render(<UploadZone onFiles={() => {}} />);
     expect(screen.getByText(/Begin Your Cinema Reveal/i)).toBeInTheDocument();
-    expect(screen.getByText(/Drag your Letterboxd export/i)).toBeInTheDocument();
+    expect(screen.getByText(/Drag a ZIP, CSV files/i)).toBeInTheDocument();
   });
 
   it('has an accessible region label', () => {
@@ -56,17 +56,16 @@ describe('UploadZone', () => {
     expect(screen.getByRole('region', { name: /upload your letterboxd data/i })).toBeInTheDocument();
   });
 
-  it('calls onFiles with dropped files', () => {
+  it('calls onFiles with dropped files', async () => {
     const onFiles = vi.fn();
     render(<UploadZone onFiles={onFiles} />);
-    const region = screen.getByRole('region', { name: /upload your letterboxd data/i });
-    const dropZone = region.querySelector('[role="button"]') as HTMLElement;
+    const dropZone = screen.getByTestId('upload-drop-zone');
 
     const file = new File(['content'], 'export.zip', { type: 'application/zip' });
     const dataTransfer = { files: [file] as unknown as FileList };
 
     fireEvent.drop(dropZone, { dataTransfer });
-    expect(onFiles).toHaveBeenCalledWith(dataTransfer.files);
+    await waitFor(() => expect(onFiles).toHaveBeenCalledWith(dataTransfer.files));
   });
 
   it('has a hidden file input that accepts zip and csv', () => {

@@ -9,7 +9,7 @@ export interface LetterboxdStats {
 }
 
 // API base configuration
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '');
+export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8001').replace(/\/$/, '');
 
 // Build absolute URLs with query parameters
 export function buildUrl(path: string, params: Record<string, string> = {}) {

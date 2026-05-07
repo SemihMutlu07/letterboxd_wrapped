@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import ShareModal from '@/components/ShareModal';
-import { getDefaultShareVariant } from '@/components/share/registry';
 import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
 import CountriesList from '@/containers/results/CountriesList';
@@ -428,12 +427,9 @@ export default function ResultsPage() {
     loadDirectorImage();
   }, [loadDirectorImage]);
 
-  // Read ?mode=test from URL on mount (works with static export — no Suspense needed)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'test') {
-      setMode('test');
-    }
+    if (params.get('mode') === 'test') setMode('test');
   }, []);
 
   const handleModeSwitch = useCallback((newMode: 'stable' | 'test') => {
@@ -443,11 +439,9 @@ export default function ResultsPage() {
       url.searchParams.delete('mode');
     } else {
       url.searchParams.set('mode', newMode);
+      trackEvent('results_test_lab_opened');
     }
     window.history.replaceState({}, '', url.toString());
-    if (newMode === 'test') {
-      trackEvent('results_test_opened');
-    }
   }, []);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
@@ -490,7 +484,6 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {/* Mode switcher */}
           <div className="flex justify-center mt-5">
             <div className="inline-flex items-center gap-1 p-1 bg-slate-800/60 border border-slate-700/40 rounded-full text-sm">
               <button
@@ -512,7 +505,7 @@ export default function ResultsPage() {
                 }`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${mode === 'test' ? 'bg-orange-400' : 'bg-slate-500'}`} />
-                Test Screen
+                Test Lab
               </button>
             </div>
           </div>
@@ -593,9 +586,7 @@ export default function ResultsPage() {
         onClose={() => setShowShareModal(false)}
         orientation={orientation}
         setOrientation={setOrientation}
-        cardData={shareCardData}
-        initialVariant={getDefaultShareVariant()}
-        allowVariantTesting={mode === 'test'}
+        cardProps={shareCardData}
         onDownloadSuccess={() => {
           trackEvent('share_download_success');
           if (!hasTriggeredFeedback) {
