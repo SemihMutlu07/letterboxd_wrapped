@@ -69,8 +69,16 @@ async def test_health(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_analyze_returns_202_task_id(client: AsyncClient, zip_with_watched: bytes):
     """POST /api/analyze should accept a ZIP and return 202 + task_id."""
-    files = {"files": ("export.zip", zip_with_watched, "application/zip")}
-    r = await client.post("/api/analyze", files=files)
+    async def fake_run_analysis(*args, **kwargs):
+        return None
+
+    with patch(
+        "app.routes.analyze._run_analysis",
+        side_effect=fake_run_analysis,
+    ):
+        files = {"files": ("export.zip", zip_with_watched, "application/zip")}
+        r = await client.post("/api/analyze", files=files)
+
     assert r.status_code == 202
     body = r.json()
     assert "task_id" in body
@@ -114,15 +122,15 @@ async def test_progress_legacy(client: AsyncClient):
 async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes):
     """Submit a job, then poll its task_id — should reach a terminal state."""
     import asyncio
-    from app.services.analysis import process_comprehensive_letterboxd_data
 
-    # Stub out the actual analysis so the test doesn't hit TMDB
-    async def fake_analysis(*args, **kwargs):
-        return {"total_films": 1, "mock": True}
+    async def fake_run_analysis(task_id, session, csv_files, request_dir):
+        from app import task_manager
+
+        task_manager.set_task_done(task_id, {"status": "success", "stats": {"total_films": 1, "mock": True}})
 
     with patch(
-        "app.routes.analyze.process_comprehensive_letterboxd_data",
-        side_effect=fake_analysis,
+        "app.routes.analyze._run_analysis",
+        side_effect=fake_run_analysis,
     ):
         files = {"files": ("export.zip", zip_with_watched, "application/zip")}
         r = await client.post("/api/analyze", files=files)
@@ -143,6 +151,13 @@ async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes
 @pytest.mark.asyncio
 async def test_parse_username_known_pattern(client: AsyncClient):
     r = await client.post("/api/parse-username", json={"filename": "letterboxd-johndoe-2024-01-01.zip"})
+    assert r.status_code == 200
+    assert r.json()["username"] == "johndoe"
+
+
+@pytest.mark.asyncio
+async def test_parse_username_simple_export_name(client: AsyncClient):
+    r = await client.post("/api/parse-username", json={"filename": "letterboxd-johndoe.zip"})
     assert r.status_code == 200
     assert r.json()["username"] == "johndoe"
 

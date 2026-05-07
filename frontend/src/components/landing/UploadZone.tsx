@@ -1,40 +1,215 @@
 'use client';
-import React, { useRef, useCallback } from 'react';
-import { Upload } from 'lucide-react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { FolderOpen, Upload } from 'lucide-react';
 
 type Props = {
-  onFiles: (files: FileList | null) => void;
+  onFiles: (files: FileList | File[] | null) => void;
 };
+
+type FileWithRelativePath = File & { webkitRelativePath?: string };
+type FileSystemFileHandleLike = {
+  kind: 'file';
+  name: string;
+  getFile: () => Promise<File>;
+};
+type FileSystemDirectoryHandleLike = {
+  kind: 'directory';
+  name: string;
+  values: () => AsyncIterable<FileSystemFileHandleLike | FileSystemDirectoryHandleLike>;
+};
+type WindowWithDirectoryPicker = Window & {
+  showDirectoryPicker?: () => Promise<FileSystemDirectoryHandleLike>;
+};
+type FileSystemEntryLike = {
+  isFile: boolean;
+  isDirectory: boolean;
+  name: string;
+};
+type FileSystemFileEntryLike = FileSystemEntryLike & {
+  file: (success: (file: File) => void, error?: (error: DOMException) => void) => void;
+};
+type FileSystemDirectoryEntryLike = FileSystemEntryLike & {
+  createReader: () => {
+    readEntries: (
+      success: (entries: FileSystemEntryLike[]) => void,
+      error?: (error: DOMException) => void,
+    ) => void;
+  };
+};
+type DataTransferItemWithEntry = DataTransferItem & {
+  webkitGetAsEntry?: () => FileSystemEntryLike | null;
+};
+
+function withRelativePath(file: File, relativePath: string): FileWithRelativePath {
+  try {
+    Object.defineProperty(file, 'webkitRelativePath', {
+      value: relativePath,
+      configurable: true,
+    });
+  } catch {
+    // Some browser File objects are not extensible. The file still uploads.
+  }
+  return file as FileWithRelativePath;
+}
+
+async function collectDirectoryFiles(
+  directory: FileSystemDirectoryHandleLike,
+  prefix = '',
+): Promise<File[]> {
+  const files: File[] = [];
+  for await (const handle of directory.values()) {
+    const relativePath = `${prefix}${handle.name}`;
+    if (handle.kind === 'file') {
+      const file = await handle.getFile();
+      if (/\.csv$/i.test(file.name)) files.push(withRelativePath(file, relativePath));
+    } else {
+      files.push(...await collectDirectoryFiles(handle, `${relativePath}/`));
+    }
+  }
+  return files;
+}
+
+function readFileEntry(entry: FileSystemFileEntryLike, path: string): Promise<File> {
+  return new Promise((resolve, reject) => {
+    entry.file(
+      (file) => resolve(withRelativePath(file, `${path}${file.name}`)),
+      reject,
+    );
+  });
+}
+
+function readDirectoryEntries(entry: FileSystemDirectoryEntryLike): Promise<FileSystemEntryLike[]> {
+  const reader = entry.createReader();
+  const entries: FileSystemEntryLike[] = [];
+
+  return new Promise((resolve, reject) => {
+    const readBatch = () => {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(entries);
+          return;
+        }
+        entries.push(...batch);
+        readBatch();
+      }, reject);
+    };
+    readBatch();
+  });
+}
+
+async function collectDroppedEntryFiles(entry: FileSystemEntryLike, path = ''): Promise<File[]> {
+  if (entry.isFile) {
+    const file = await readFileEntry(entry as FileSystemFileEntryLike, path);
+    return /\.csv$/i.test(file.name) || /\.zip$/i.test(file.name) ? [file] : [];
+  }
+
+  if (!entry.isDirectory) return [];
+
+  const directory = entry as FileSystemDirectoryEntryLike;
+  const children = await readDirectoryEntries(directory);
+  const files = await Promise.all(
+    children.map((child) => collectDroppedEntryFiles(child, `${path}${entry.name}/`)),
+  );
+  return files.flat();
+}
 
 export default function UploadZone({ onFiles }: Props) {
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const dragDepthRef = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    const preventFileNavigation = (event: DragEvent) => {
+      if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('dragover', preventFileNavigation);
+    window.addEventListener('drop', preventFileNavigation);
+    return () => {
+      window.removeEventListener('dragover', preventFileNavigation);
+      window.removeEventListener('drop', preventFileNavigation);
+    };
+  }, []);
 
   const openFilePicker = useCallback(() => {
     document.getElementById('upload-zone-input')?.click();
   }, []);
 
-  const openFolderPicker = useCallback((e: React.MouseEvent) => {
+  const openFolderPicker = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
+    const picker = (window as WindowWithDirectoryPicker).showDirectoryPicker;
+    if (picker) {
+      try {
+        const directory = await picker.call(window);
+        onFiles(await collectDirectoryFiles(directory));
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      }
+    }
     folderInputRef.current?.click();
+  }, [onFiles]);
+
+  const collectDroppedFiles = useCallback(async (dataTransfer: DataTransfer) => {
+    const items = Array.from(dataTransfer.items ?? []) as DataTransferItemWithEntry[];
+    const entries = items
+      .map((item) => item.webkitGetAsEntry?.() as FileSystemEntryLike | null | undefined)
+      .filter((entry): entry is FileSystemEntryLike => !!entry);
+
+    if (entries.length > 0) {
+      const files = (await Promise.all(entries.map((entry) => collectDroppedEntryFiles(entry)))).flat();
+      if (files.length > 0) return files;
+    }
+
+    return dataTransfer.files?.length ? dataTransfer.files : null;
   }, []);
 
   const handleDrop = useCallback(
-    (e: React.DragEvent) => {
+    async (e: React.DragEvent) => {
       e.preventDefault();
-      if (e.dataTransfer.files?.length > 0) onFiles(e.dataTransfer.files);
+      e.stopPropagation();
+      dragDepthRef.current = 0;
+      setIsDragging(false);
+      onFiles(await collectDroppedFiles(e.dataTransfer));
     },
-    [onFiles],
+    [collectDroppedFiles, onFiles],
   );
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDragging(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
 
   return (
     <section aria-label="Upload your Letterboxd data">
       <div
-        className="group rounded-2xl border border-slate-700/50 bg-slate-800/50 p-8 md:p-10 min-h-[220px] sm:min-h-[260px] flex items-center justify-center text-center cursor-pointer transition-all duration-300 hover:border-orange-400/40 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 max-w-3xl mx-auto"
-        onDragOver={(e) => e.preventDefault()}
+        data-testid="upload-drop-zone"
+        className={`group flex min-h-[220px] items-center justify-center rounded-2xl border p-8 text-center transition-all duration-300 sm:min-h-[260px] md:p-10 max-w-3xl mx-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 ${
+          isDragging
+            ? 'border-orange-300 bg-orange-400/10 shadow-[0_0_60px_-16px_rgba(251,146,60,0.45)]'
+            : 'border-slate-700/50 bg-slate-800/50 hover:border-orange-400/40 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.15)]'
+        }`}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onClick={openFilePicker}
-        role="button"
-        tabIndex={0}
       >
         <input
           id="upload-zone-input"
@@ -59,16 +234,28 @@ export default function UploadZone({ onFiles }: Props) {
             <Upload className="w-7 h-7 text-orange-300" />
           </div>
           <p className="text-xl sm:text-2xl font-bold tracking-tight">Begin Your Cinema Reveal</p>
-          <p className="mt-2 text-sm text-slate-400">Drag your Letterboxd export (.zip) or click to upload</p>
-          <p className="mt-1 text-xs text-slate-500">
-            or{' '}
-            <button
-              onClick={openFolderPicker}
-              className="underline underline-offset-2 hover:text-slate-300 transition-colors"
-            >
-              choose an exported folder
-            </button>
+          <p className="mt-2 text-sm text-slate-400">
+            {isDragging ? 'Drop to upload your export.' : 'Drag a ZIP, CSV files, or an extracted export folder here.'}
           </p>
+          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={openFilePicker}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
+            >
+              <Upload className="h-4 w-4" />
+              Choose ZIP or CSV
+            </button>
+            <button
+              type="button"
+              onClick={openFolderPicker}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:border-orange-300/70 hover:text-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
+            >
+              <FolderOpen className="h-4 w-4" />
+              Choose Export Folder
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">Use the folder button if your browser blocks folder drag-and-drop.</p>
         </div>
       </div>
     </section>
