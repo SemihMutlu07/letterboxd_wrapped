@@ -47,6 +47,8 @@ coverage/
 *.csv
 *.zip
 **/letterboxd_data/
+**/runs/
+NOTES.md
 
 # tools / package managers
 .npm
@@ -59,4 +61,3 @@ jspm_packages/
 Thumbs.db
 
 .vercel/
-.netlify/

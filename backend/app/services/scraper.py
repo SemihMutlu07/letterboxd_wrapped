@@ -89,6 +89,81 @@ def _sync_check_profile(username: str) -> bool:
         return False
 
 
+def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
+    """Parse film grid items (li.griditem) into film dicts.
+
+    Grid has title + year (in data-item-name) + rating, but no watch_date.
+    """
+    films = []
+    for li in soup.select("li.griditem"):
+        poster = li.select_one('div[data-component-class="LazyPoster"]')
+        if not poster:
+            continue
+
+        item_name = poster.get("data-item-name", "")
+        slug = poster.get("data-item-slug", "")
+
+        m = re.match(r"^(.+) \((\d{4})\)$", item_name)
+        if m:
+            title, year = m.group(1), m.group(2)
+        else:
+            title, year = item_name, ""
+
+        rating = _parse_rating(li.select_one("span.rating"))
+
+        if title:
+            films.append({
+                "title": title,
+                "year": year,
+                "rating": rating,
+                "watch_date": "",
+                "slug": slug,
+            })
+    return films
+
+
+def _sync_scrape_films_grid(username: str, max_pages: int) -> list[dict]:
+    """Synchronous full-watched grid scraper.
+
+    Hits /{user}/films/page/N/ which lists every film the user has marked
+    watched (superset of diary entries — covers films with no logged date).
+    """
+    import time
+
+    s = requests.Session()
+    s.headers.update(HEADERS)
+
+    try:
+        s.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
+    except requests.RequestException:
+        pass
+    time.sleep(0.3)
+
+    all_films: list[dict] = []
+
+    for page in range(1, max_pages + 1):
+        url = f"{BASE_URL}/{username}/films/page/{page}/"
+        r = s.get(url, timeout=10)
+
+        if r.status_code == 404:
+            if page == 1:
+                raise ValueError(f"User '{username}' not found")
+            break
+        if r.status_code != 200:
+            break
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        films = _parse_grid_items(soup)
+
+        if not films:
+            break
+
+        all_films.extend(films)
+        time.sleep(PAGE_DELAY)
+
+    return all_films
+
+
 def _sync_scrape_diary(username: str, max_pages: int) -> list[dict]:
     """Synchronous diary scraper with session cookies."""
     import time
@@ -97,9 +172,10 @@ def _sync_scrape_diary(username: str, max_pages: int) -> list[dict]:
     s.headers.update(HEADERS)
 
     # Warm up session with homepage cookies
-    r = s.get(BASE_URL, timeout=10)
-    if r.status_code != 200:
-        raise ValueError("Could not reach Letterboxd")
+    try:
+        s.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
+    except requests.RequestException:
+        pass
     time.sleep(0.3)
 
     all_films: list[dict] = []
@@ -144,6 +220,28 @@ async def scrape_diary(username: str, max_pages: int = MAX_PAGES) -> list[dict]:
     return await loop.run_in_executor(
         None, partial(_sync_scrape_diary, username, max_pages)
     )
+
+
+async def scrape_films_grid(username: str, max_pages: int = MAX_PAGES) -> list[dict]:
+    """Scrape the full watched-films grid (superset of diary)."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_scrape_films_grid, username, max_pages)
+    )
+
+
+def merge_scraped_films(diary: list[dict], grid: list[dict]) -> list[dict]:
+    """Merge diary + grid films, preferring diary entries (they have watch_date).
+
+    Dedup by (lowercased title, year). Returns diary entries first, then any
+    grid-only films (films marked watched but never logged with a date).
+    """
+    def key(f: dict) -> tuple[str, str]:
+        return (f.get("title", "").strip().lower(), f.get("year", ""))
+
+    seen = {key(f) for f in diary}
+    extras = [f for f in grid if key(f) not in seen]
+    return list(diary) + extras
 
 
 def diary_to_csv_dicts(films: list[dict]) -> dict[str, list[dict]]:
