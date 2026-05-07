@@ -1,5 +1,5 @@
 'use client';
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Upload } from 'lucide-react';
 
 type Props = {
@@ -8,10 +8,6 @@ type Props = {
 
 export default function UploadZone({ onFiles }: Props) {
   const folderInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    folderInputRef.current?.setAttribute('webkitdirectory', '');
-  }, []);
 
   const openFilePicker = useCallback(() => {
     document.getElementById('upload-zone-input')?.click();
@@ -49,7 +45,10 @@ export default function UploadZone({ onFiles }: Props) {
           className="hidden"
         />
         <input
-          ref={folderInputRef}
+          ref={(el) => {
+            (folderInputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+            if (el) (el as HTMLInputElement & { webkitdirectory: boolean }).webkitdirectory = true;
+          }}
           type="file"
           multiple
           onChange={(e) => onFiles(e.target.files)}

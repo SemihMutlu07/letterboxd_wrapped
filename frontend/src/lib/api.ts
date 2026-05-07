@@ -127,7 +127,7 @@ export async function analyzeFiles(formData: FormData): Promise<{ status: string
 }
 
 // Test backend connectivity with retry for concurrent startup
-export async function testBackend(retries = 5, delayMs = 2000) {
+export async function testBackend(retries = 2, delayMs = 1000) {
   const url = `${API_BASE}/`;
   if (process.env.NODE_ENV === 'development') {
     console.log('[api] backend health URL:', url);
