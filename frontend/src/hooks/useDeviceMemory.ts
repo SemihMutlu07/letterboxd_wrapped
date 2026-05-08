@@ -32,25 +32,4 @@ export function useAdaptivePixelRatio(): number {
   return 1.6;
 }
 
-/**
- * Hook to detect if device is low-end for performance optimizations
- */
-export function useIsLowEndDevice(): boolean {
-  const memory = useDeviceMemory();
-  const [isLowEnd, setIsLowEnd] = useState(false);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Check multiple indicators
-      const hasLowMemory = memory <= 4;
-      const hasSlowConnection = 'connection' in navigator && 
-        (navigator as any).connection?.effectiveType === 'slow-2g';
-      const hasLowCores = 'hardwareConcurrency' in navigator && 
-        navigator.hardwareConcurrency <= 2;
-      
-      setIsLowEnd(hasLowMemory || hasSlowConnection || hasLowCores);
-    }
-  }, [memory]);
-
-  return isLowEnd;
-}

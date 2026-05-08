@@ -91,7 +91,7 @@ export async function testSupabaseConnection(): Promise<boolean> {
     }
     
     return typeof count === "number";
-  } catch (error) {
+  } catch {
     return false;
   }
 }

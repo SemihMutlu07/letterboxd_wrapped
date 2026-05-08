@@ -163,6 +163,23 @@ async def test_parse_username_simple_export_name(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("filename", "username"),
+    [
+        ("letterboxd-johndoe-utc.zip", "johndoe"),
+        ("letterboxd-johndoe-2024.zip", "johndoe"),
+        ("Letterboxd_johndoe_Export_2024.zip", "johndoe"),
+        ("./path/letterboxd-johndoe.zip", "johndoe"),
+        ("letterboxd-john-doe.zip", None),
+    ],
+)
+async def test_parse_username_edge_cases(client: AsyncClient, filename: str, username: str | None):
+    r = await client.post("/api/parse-username", json={"filename": filename})
+    assert r.status_code == 200
+    assert r.json()["username"] == username
+
+
+@pytest.mark.asyncio
 async def test_parse_username_no_match(client: AsyncClient):
     r = await client.post("/api/parse-username", json={"filename": "random_file.csv"})
     assert r.status_code == 200
@@ -247,3 +264,91 @@ async def test_watchlist_compare_scrape_failure(client: AsyncClient):
 
     assert r.status_code == 502
     assert r.json()["detail"]["error_code"] == "watchlist_scrape_failed"
+
+
+@pytest.mark.asyncio
+async def test_recommend_from_compare_highest_rated(client: AsyncClient):
+    async def fake_scrape_watchlist(username, max_pages=40):
+        return [
+            {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
+            {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"},
+        ]
+
+    async def fake_enrich(session, films, limit=30):
+        return [
+            {**film, "vote_average": 7.0 if film["title"] == "Aftersun" else 8.3, "poster_path": "/p.jpg"}
+            for film in films
+        ]
+
+    with (
+        patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist),
+        patch("app.routes.watchlist.enrich_films", side_effect=fake_enrich),
+    ):
+        r = await client.post(
+            "/api/recommend-from-compare",
+            json={"usernames": ["alice", "bob"], "strategy": "highest_rated"},
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["recommendation"]["title"] == "Heat"
+    assert body["recommendation"]["reason"] == "Both of you have it on your watchlist."
+
+
+@pytest.mark.asyncio
+async def test_recommend_from_compare_no_overlap(client: AsyncClient):
+    async def fake_scrape_watchlist(username, max_pages=40):
+        if username == "alice":
+            return [{"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"}]
+        return [{"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"}]
+
+    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+        r = await client.post("/api/recommend-from-compare", json={"usernames": ["alice", "bob"]})
+
+    assert r.status_code == 404
+    assert r.json()["detail"]["error_code"] == "no_common_watchlist"
+
+
+@pytest.mark.asyncio
+async def test_date_night_success(client: AsyncClient):
+    async def fake_scrape_profile_sources(username, max_pages=25):
+        return (
+            [{"title": "Before Sunrise", "year": "1995", "rating": 4.5, "watch_date": "2024-01-01"}],
+            [{"title": "Heat", "year": "1995", "rating": 4.0, "watch_date": ""}],
+        )
+
+    async def fake_enrich(session, films, limit=80):
+        return [
+            {
+                **film,
+                "genres": ["Romance", "Drama"],
+                "directors": ["Richard Linklater"],
+                "decade": "1990s",
+            }
+            for film in films
+        ]
+
+    async def fake_discover(session, mutual_profile, watched_keys):
+        from app.models.recommend import FilmRecommendation
+
+        return [
+            FilmRecommendation(
+                title="Past Lives",
+                year="2023",
+                reason="Matched because you both lean toward Romance",
+                poster_path="/past.jpg",
+            )
+        ]
+
+    with (
+        patch("app.routes.recommend.scrape_profile_sources", side_effect=fake_scrape_profile_sources),
+        patch("app.routes.recommend.enrich_films", side_effect=fake_enrich),
+        patch("app.routes.recommend.discover_date_night_recommendations", side_effect=fake_discover),
+    ):
+        r = await client.post("/api/date-night", json={"usernames": ["alice", "bob"]})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["mutual_profile"]["top_genres"] == ["Romance", "Drama"]
+    assert body["mutual_profile"]["era_overlap"] == "1990s"
+    assert body["recommendations"][0]["title"] == "Past Lives"

@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.task_manager import cleanup_loop
-from app.routes import analyze, feedback, tmdb, watchlist
+from app.routes import analyze, feedback, recommend, tmdb, watchlist
 
 logger = logging.getLogger("letterboxd_wrapped")
 
@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(tmdb.router)
     app.include_router(feedback.router)
     app.include_router(watchlist.router)
+    app.include_router(recommend.router)
 
     @app.get("/")
     async def root():

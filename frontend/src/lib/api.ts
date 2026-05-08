@@ -30,18 +30,37 @@ export interface WatchlistCompareResult {
   second_only: WatchlistFilm[];
 }
 
+export type RecommendationStrategy = 'random' | 'highest_rated' | 'newest';
+
+export interface FilmRecommendation {
+  title: string;
+  year: string;
+  reason: string;
+  poster_path: string;
+  slug?: string;
+  vote_average?: number | null;
+  release_date?: string;
+}
+
+export interface RecommendFromCompareResult {
+  recommendation: FilmRecommendation;
+  alternatives: FilmRecommendation[];
+}
+
+export interface DateNightResult {
+  mutual_profile: {
+    top_genres: string[];
+    top_directors: string[];
+    era_overlap: string;
+  };
+  recommendations: FilmRecommendation[];
+}
+
 // API base configuration
 export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '');
 
-// Build absolute URLs with query parameters
-export function buildUrl(path: string, params: Record<string, string> = {}) {
-  const u = new URL(path.startsWith('/') ? path : `/${path}`, window.location.origin);
-  Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
-  return u.toString();
-}
-
 // Enhanced error handling utility
-function handleApiError(error: unknown, context: string): Error {
+export function handleApiError(error: unknown, context: string): Error {
   if (error instanceof Error) {
     if (error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
       return new Error(`Network error: Unable to connect to ${context}. The server may still be starting or your internet connection may be down.`);
@@ -255,6 +274,77 @@ export async function compareWatchlists(
     return data as WatchlistCompareResult;
   } catch (error) {
     throw handleApiError(error, 'watchlist comparison');
+  }
+}
+
+// Recommend one movie from two users' shared watchlist overlap
+export async function recommendFromCompare(
+  firstUsername: string,
+  secondUsername: string,
+  strategy: RecommendationStrategy = 'random',
+): Promise<RecommendFromCompareResult> {
+  const url = `${API_BASE}/api/recommend-from-compare`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernames: [firstUsername, secondUsername], strategy }),
+    });
+
+    if (!r.ok) {
+      let detail = '';
+      try {
+        const body = await r.json();
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (body.detail && typeof body.detail === 'object') {
+          detail = body.detail.message || body.detail.error_code || '';
+        }
+      } catch {
+        // body wasn't JSON
+      }
+      throw new Error(detail || `watchlist recommendation ${r.status}`);
+    }
+
+    return await r.json() as RecommendFromCompareResult;
+  } catch (error) {
+    throw handleApiError(error, 'watchlist recommendation');
+  }
+}
+
+// Build a mutual profile and recommend unwatched films for two users
+export async function dateNight(
+  firstUsername: string,
+  secondUsername: string,
+): Promise<DateNightResult> {
+  const url = `${API_BASE}/api/date-night`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernames: [firstUsername, secondUsername] }),
+    });
+
+    if (!r.ok) {
+      let detail = '';
+      try {
+        const body = await r.json();
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (body.detail && typeof body.detail === 'object') {
+          detail = body.detail.message || body.detail.error_code || '';
+        }
+      } catch {
+        // body wasn't JSON
+      }
+      throw new Error(detail || `date night ${r.status}`);
+    }
+
+    return await r.json() as DateNightResult;
+  } catch (error) {
+    throw handleApiError(error, 'date night recommendations');
   }
 }
 

@@ -98,10 +98,9 @@ function CastGridInner({ stats }: { stats: StatsData }) {
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
     >
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-        {shown.map((a, i) => (
+        {shown.map((a) => (
           <PersonCard
             key={a.name}
-            rank={i + 1}
             name={a.name}
             profilePath={a.profile_path}
             primaryStat={

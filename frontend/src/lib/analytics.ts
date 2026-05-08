@@ -80,9 +80,4 @@ export function trackFilmStats(stats: unknown): void {
   }
 }
 
-/**
- * Convenience wrapper for other consented analytics events.
- */
-export function trackAnalyticsEvent(name: string, props?: Props): void {
-  trackConsentedEvent(name, props);
-}
+

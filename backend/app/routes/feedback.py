@@ -20,18 +20,37 @@ _rate_limiter: dict[str, list[float]] = {}
 
 def _parse_letterboxd_username(filename: str) -> Optional[str]:
     base = filename.replace("\\", "/").split("/")[-1].strip().lower()
+    stem = re.sub(r"\.(?:csv|zip)$", "", base, flags=re.IGNORECASE)
 
-    with_timestamp = re.match(
-        r"^letterboxd-(.+?)-\d{4}(?:-\d{2}){0,4}(?:-utc)?(?:\.(?:csv|zip))?$",
-        base,
-        re.IGNORECASE,
-    )
-    if with_timestamp and with_timestamp.group(1):
-        return with_timestamp.group(1).strip()
+    def valid(username: str | None) -> Optional[str]:
+        candidate = (username or "").strip().lower()
+        return candidate if re.fullmatch(r"[a-z0-9_]+", candidate) else None
 
-    simple = re.match(r"^letterboxd-(.+?)(?:\.(?:csv|zip))?$", base, re.IGNORECASE)
-    if simple and simple.group(1):
-        return simple.group(1).strip()
+    patterns = [
+        # letterboxd-USER-YYYY-MM-DD-HH-MM-utc
+        r"^letterboxd-(?P<username>[a-z0-9_]+)-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-utc$",
+        # letterboxd-USER-YYYY-MM-DD
+        r"^letterboxd-(?P<username>[a-z0-9_]+)-\d{4}-\d{2}-\d{2}$",
+        # letterboxd-USER-YYYY
+        r"^letterboxd-(?P<username>[a-z0-9_]+)-\d{4}$",
+        # letterboxd-USER-utc
+        r"^letterboxd-(?P<username>[a-z0-9_]+)-utc$",
+        # Letterboxd_USER_Export_2024
+        r"^letterboxd_(?P<username>[a-z0-9_]+)_export(?:_\d{4})?$",
+        # letterboxd-USER
+        r"^letterboxd-(?P<username>[a-z0-9_]+)$",
+    ]
+
+    for pattern in patterns:
+        match = re.match(pattern, stem, re.IGNORECASE)
+        parsed = valid(match.group("username") if match else None)
+        if parsed:
+            return parsed
+
+    # Folder uploads often pass the export directory name instead of a file.
+    folder_export = re.match(r"^letterboxd_(?P<username>[a-z0-9_]+)_export(?:_\d{4})?$", stem, re.IGNORECASE)
+    if folder_export:
+        return valid(folder_export.group("username"))
 
     return None
 
