@@ -4,6 +4,8 @@ import { X, Download, Loader2, Plus, Minus, Scan } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
 import OrientationToggle from '@/components/share/OrientationToggle';
+import CrushDirectorSwap from '@/components/share/CrushDirectorSwap';
+import type { ShareCardData } from '@/components/share/types';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
 import { trackEvent } from '@/lib/analytics';
@@ -141,7 +143,7 @@ type Props = {
   onClose: () => void;
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
-  cardProps: Parameters<typeof ShareCard>[0];
+  cardProps: ShareCardData;
   onDownloadSuccess?: () => void;
 };
 
@@ -160,6 +162,21 @@ export default function ShareModal({
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
+  const [crushOverride, setCrushOverride] = useState<number | null>(null);
+  const [directorOverride, setDirectorOverride] = useState<number | null>(null);
+
+  // Apply swap overrides — when an index is set and the corresponding top
+  // entry exists, replace the card's crush/director with that selection.
+  const effectiveCardProps = useMemo<ShareCardData>(() => {
+    const next = { ...cardProps };
+    if (crushOverride !== null && cardProps.topActors?.[crushOverride]) {
+      next.onScreenCrush = cardProps.topActors[crushOverride];
+    }
+    if (directorOverride !== null && cardProps.topDirectors?.[directorOverride]) {
+      next.favoriteDirector = cardProps.topDirectors[directorOverride];
+    }
+    return next;
+  }, [cardProps, crushOverride, directorOverride]);
 
   // Touch handling for pinch zoom
   
@@ -517,6 +534,16 @@ export default function ShareModal({
 
           {/* Format toggle - centered below */}
           <OrientationToggle orientation={orientation} onChange={setOrientation} />
+
+          {/* Override the on-screen crush / favorite director shown on the card */}
+          <CrushDirectorSwap
+            topActors={cardProps.topActors}
+            topDirectors={cardProps.topDirectors}
+            crushIndex={crushOverride}
+            directorIndex={directorOverride}
+            onCrushChange={setCrushOverride}
+            onDirectorChange={setDirectorOverride}
+          />
         </div>
 
         {/* Preview viewport */}
@@ -582,7 +609,7 @@ export default function ShareModal({
                 zIndex: 1,
               }}
             >
-              <ShareCard {...cardProps} orientation={orientation} />
+              <ShareCard {...effectiveCardProps} orientation={orientation} />
             </div>
             
           </div>

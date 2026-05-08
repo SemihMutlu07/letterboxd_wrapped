@@ -96,6 +96,12 @@ export default function LetterboxdLanding() {
       }
     }
 
+    // Show loading immediately so the user knows the drop registered.
+    // Anything async (Supabase upsert, network calls) happens after this.
+    setIsUploading(true);
+    setError(null);
+    trackEvent('upload_started', { fileCount: files.length });
+
     // Detect username
     let detectedUsername: string | null = null;
     for (let i = 0; i < files.length; i++) {
@@ -112,14 +118,9 @@ export default function LetterboxdLanding() {
     if (detectedUsername) {
       setDetectedUsername(detectedUsername);
       setUsername(detectedUsername);
-      try {
-        await upsertUserSession({ session_id: ensureSessionId(), username: detectedUsername, consent: getConsent() || 'decline', film_count: null, favorite_genre: null });
-      } catch { /* silent */ }
+      // Fire-and-forget — Supabase analytics shouldn't block the upload UI.
+      upsertUserSession({ session_id: ensureSessionId(), username: detectedUsername, consent: getConsent() || 'decline', film_count: null, favorite_genre: null }).catch(() => {});
     }
-
-    setIsUploading(true);
-    trackEvent('upload_started', { fileCount: files.length });
-    setError(null);
 
     let uploadFiles: File[] = [];
     const single = files.length === 1 ? files[0] : null;

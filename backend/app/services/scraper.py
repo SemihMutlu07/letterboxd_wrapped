@@ -12,6 +12,7 @@ import re
 import asyncio
 from typing import Optional
 from functools import partial
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -122,85 +123,160 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
     return films
 
 
-def _sync_scrape_films_grid(username: str, max_pages: int) -> list[dict]:
+def _new_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update(HEADERS)
+    return s
+
+
+def _warm_session(session: requests.Session) -> None:
+    try:
+        session.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
+    except requests.RequestException:
+        pass
+    time.sleep(0.3)
+
+
+def _sync_scrape_films_grid(
+    username: str,
+    max_pages: int,
+    session: Optional[requests.Session] = None,
+) -> list[dict]:
     """Synchronous full-watched grid scraper.
 
     Hits /{user}/films/page/N/ which lists every film the user has marked
     watched (superset of diary entries — covers films with no logged date).
     """
-    import time
-
-    s = requests.Session()
-    s.headers.update(HEADERS)
-
-    try:
-        s.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
-    except requests.RequestException:
-        pass
-    time.sleep(0.3)
+    owns_session = session is None
+    s = session or _new_session()
+    if owns_session:
+        _warm_session(s)
 
     all_films: list[dict] = []
 
-    for page in range(1, max_pages + 1):
-        url = f"{BASE_URL}/{username}/films/page/{page}/"
-        r = s.get(url, timeout=10)
+    try:
+        for page in range(1, max_pages + 1):
+            url = f"{BASE_URL}/{username}/films/page/{page}/"
+            r = s.get(url, timeout=10)
 
-        if r.status_code == 404:
-            if page == 1:
-                raise ValueError(f"User '{username}' not found")
-            break
-        if r.status_code != 200:
-            break
+            if r.status_code == 404:
+                if page == 1:
+                    raise ValueError(f"User '{username}' not found")
+                break
+            if r.status_code != 200:
+                break
 
-        soup = BeautifulSoup(r.text, "html.parser")
-        films = _parse_grid_items(soup)
+            soup = BeautifulSoup(r.text, "html.parser")
+            films = _parse_grid_items(soup)
 
-        if not films:
-            break
+            if not films:
+                break
 
-        all_films.extend(films)
-        time.sleep(PAGE_DELAY)
+            all_films.extend(films)
+            time.sleep(PAGE_DELAY)
+    finally:
+        if owns_session:
+            s.close()
 
     return all_films
 
 
-def _sync_scrape_diary(username: str, max_pages: int) -> list[dict]:
+def _sync_scrape_watchlist(
+    username: str,
+    max_pages: int,
+    session: Optional[requests.Session] = None,
+) -> list[dict]:
+    """Synchronous public watchlist scraper.
+
+    Hits /{user}/watchlist/page/N/ and parses the same Letterboxd grid items
+    used by watched-films pages.
+    """
+    owns_session = session is None
+    s = session or _new_session()
+    if owns_session:
+        _warm_session(s)
+
+    all_films: list[dict] = []
+
+    try:
+        for page in range(1, max_pages + 1):
+            url = f"{BASE_URL}/{username}/watchlist/page/{page}/"
+            r = s.get(url, timeout=10)
+
+            if r.status_code == 404:
+                if page == 1:
+                    raise ValueError(f"User '{username}' not found")
+                break
+            if r.status_code != 200:
+                break
+
+            soup = BeautifulSoup(r.text, "html.parser")
+            films = _parse_grid_items(soup)
+
+            if not films:
+                break
+
+            all_films.extend(films)
+            time.sleep(PAGE_DELAY)
+    finally:
+        if owns_session:
+            s.close()
+
+    return all_films
+
+
+def _sync_scrape_diary(
+    username: str,
+    max_pages: int,
+    session: Optional[requests.Session] = None,
+) -> list[dict]:
     """Synchronous diary scraper with session cookies."""
-    import time
-
-    s = requests.Session()
-    s.headers.update(HEADERS)
-
-    # Warm up session with homepage cookies
-    try:
-        s.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
-    except requests.RequestException:
-        pass
-    time.sleep(0.3)
+    owns_session = session is None
+    s = session or _new_session()
+    if owns_session:
+        _warm_session(s)
 
     all_films: list[dict] = []
 
-    for page in range(1, max_pages + 1):
-        url = f"{BASE_URL}/{username}/films/diary/page/{page}/"
-        r = s.get(url, timeout=10)
+    try:
+        for page in range(1, max_pages + 1):
+            url = f"{BASE_URL}/{username}/films/diary/page/{page}/"
+            r = s.get(url, timeout=10)
 
-        if r.status_code == 404:
-            if page == 1:
-                raise ValueError(f"User '{username}' not found")
-            break
-        if r.status_code != 200:
-            break
+            if r.status_code == 404:
+                if page == 1:
+                    raise ValueError(f"User '{username}' not found")
+                break
+            if r.status_code != 200:
+                break
 
-        soup = BeautifulSoup(r.text, "html.parser")
-        films = _parse_diary_rows(soup)
+            soup = BeautifulSoup(r.text, "html.parser")
+            films = _parse_diary_rows(soup)
 
-        if not films:
-            break
+            if not films:
+                break
 
-        all_films.extend(films)
-        time.sleep(PAGE_DELAY)
+            all_films.extend(films)
+            time.sleep(PAGE_DELAY)
+    finally:
+        if owns_session:
+            s.close()
 
     return all_films
+
+
+def _sync_scrape_profile_sources(username: str, max_pages: int) -> tuple[list[dict], list[dict]]:
+    """Scrape diary and grid in one warmed requests session.
+
+    Sharing cookies across both page families keeps the public-profile scan
+    closer to a single browser visit and avoids losing diary dates after one
+    source has already established Letterboxd session state.
+    """
+    with _new_session() as session:
+        _warm_session(session)
+        diary = _sync_scrape_diary(username, max_pages, session=session)
+        grid = _sync_scrape_films_grid(username, max_pages, session=session)
+        return diary, grid
 
 
 async def check_profile_exists(username: str) -> bool:
@@ -227,6 +303,22 @@ async def scrape_films_grid(username: str, max_pages: int = MAX_PAGES) -> list[d
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None, partial(_sync_scrape_films_grid, username, max_pages)
+    )
+
+
+async def scrape_watchlist(username: str, max_pages: int = MAX_PAGES) -> list[dict]:
+    """Scrape a user's public watchlist."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_scrape_watchlist, username, max_pages)
+    )
+
+
+async def scrape_profile_sources(username: str, max_pages: int = MAX_PAGES) -> tuple[list[dict], list[dict]]:
+    """Scrape diary and grid with a shared requests session."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None, partial(_sync_scrape_profile_sources, username, max_pages)
     )
 
 

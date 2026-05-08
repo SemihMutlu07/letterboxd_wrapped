@@ -22,8 +22,7 @@ from app.services.scraper import (
     check_profile_exists,
     diary_to_csv_dicts,
     merge_scraped_films,
-    scrape_diary,
-    scrape_films_grid,
+    scrape_profile_sources,
 )
 
 logger = logging.getLogger("letterboxd_wrapped.analyze")
@@ -186,8 +185,7 @@ async def scrape_profile(request: Request):
         )
 
     try:
-        diary_films = await scrape_diary(username, max_pages=60)
-        grid_films = await scrape_films_grid(username, max_pages=60)
+        diary_films, grid_films = await scrape_profile_sources(username, max_pages=60)
     except Exception as exc:
         logger.warning("Scraping failed for %s: %s", username, exc)
         raise HTTPException(
