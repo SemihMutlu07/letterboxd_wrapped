@@ -8,8 +8,30 @@ export interface LetterboxdStats {
   [key: string]: unknown;
 }
 
+export interface WatchlistFilm {
+  title: string;
+  year: string;
+  slug: string;
+}
+
+export interface WatchlistCompareResult {
+  status: 'success';
+  users: [string, string];
+  counts: {
+    first_total: number;
+    second_total: number;
+    common: number;
+    first_only: number;
+    second_only: number;
+  };
+  match_score: number;
+  common: WatchlistFilm[];
+  first_only: WatchlistFilm[];
+  second_only: WatchlistFilm[];
+}
+
 // API base configuration
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8001').replace(/\/$/, '');
+export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000').replace(/\/$/, '');
 
 // Build absolute URLs with query parameters
 export function buildUrl(path: string, params: Record<string, string> = {}) {
@@ -192,6 +214,47 @@ export async function scrapeProfile(username: string) {
     return data;
   } catch (error) {
     throw handleApiError(error, 'profile scraping');
+  }
+}
+
+// Compare two public Letterboxd watchlists by username
+export async function compareWatchlists(
+  firstUsername: string,
+  secondUsername: string,
+): Promise<WatchlistCompareResult> {
+  const url = `${API_BASE}/api/watchlist-compare`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernames: [firstUsername, secondUsername] }),
+    });
+
+    if (!r.ok) {
+      let detail = '';
+      try {
+        const body = await r.json();
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (body.detail && typeof body.detail === 'object') {
+          detail = body.detail.message || body.detail.error_code || '';
+        }
+      } catch {
+        // body wasn't JSON
+      }
+      throw new Error(detail || `watchlist compare ${r.status}`);
+    }
+
+    const data = await r.json();
+
+    if (!data || data.status === 'error') {
+      throw new Error(data?.detail || 'Watchlist comparison failed');
+    }
+
+    return data as WatchlistCompareResult;
+  } catch (error) {
+    throw handleApiError(error, 'watchlist comparison');
   }
 }
 

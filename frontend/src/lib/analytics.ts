@@ -1,4 +1,5 @@
 import { captureEvent, hasAnalyticsConsent } from '@/lib/posthog';
+import { API_BASE } from '@/lib/api';
 
 // Re-export for convenience
 export { hasAnalyticsConsent };
@@ -11,7 +12,11 @@ type Props = Record<string, unknown>;
 export function getTmdbImageUrl(path: string | null | undefined, size: string = 'w300'): string | null {
   if (!path) return null;
 
-  const proxiedPath = (cleanPath: string) => `/tmdb-proxy/${cleanPath.replace(/^\/+/, '')}`;
+  const proxiedPath = (cleanPath: string) => {
+    const base = typeof window !== 'undefined' ? (API_BASE || '') : '';
+    const path = `/tmdb-proxy/${cleanPath.replace(/^\/+/, '')}`;
+    return base ? `${base}${path}` : path;
+  };
 
   // If already a full URL and it's TMDB CDN, convert to proxy
   if (path.startsWith('http') && path.includes('://image.tmdb.org')) {

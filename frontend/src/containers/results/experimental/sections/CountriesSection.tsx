@@ -51,36 +51,43 @@ const PAGE_SIZE = 10;
 
 /** Inline SVG pattern for the film-strip perforation look. */
 function FilmStripBar({ widthPct }: { widthPct: number }) {
-  const patternId = 'film-perf';
   return (
-    <div className="relative h-5 rounded bg-[#0a0a0a] border border-white/[0.06] overflow-hidden">
+    <div className="relative h-6 rounded-md bg-[#0a0a0a] border border-white/[0.08] overflow-hidden group/bar">
       {/* Perforation holes — top row */}
-      <div className="absolute top-0 left-0 right-0 h-[5px] flex items-center gap-[6px] px-1 z-10">
-        {Array.from({ length: 28 }).map((_, i) => (
+      <div className="absolute top-1 left-0 right-0 h-[3px] flex items-center justify-around px-1 z-10 opacity-40">
+        {Array.from({ length: 12 }).map((_, i) => (
           <span
             key={`t${i}`}
-            className="w-[3px] h-[3px] rounded-[0.5px] bg-[#1a1a1a] shrink-0"
+            className="w-[5px] h-[3px] rounded-[0.5px] bg-white/20 shrink-0"
           />
         ))}
       </div>
+      
       {/* Perforation holes — bottom row */}
-      <div className="absolute bottom-0 left-0 right-0 h-[5px] flex items-center gap-[6px] px-1 z-10">
-        {Array.from({ length: 28 }).map((_, i) => (
+      <div className="absolute bottom-1 left-0 right-0 h-[3px] flex items-center justify-around px-1 z-10 opacity-40">
+        {Array.from({ length: 12 }).map((_, i) => (
           <span
             key={`b${i}`}
-            className="w-[3px] h-[3px] rounded-[0.5px] bg-[#1a1a1a] shrink-0"
+            className="w-[5px] h-[3px] rounded-[0.5px] bg-white/20 shrink-0"
           />
         ))}
       </div>
+
+      {/* Track Background */}
+      <div className="absolute inset-0 bg-white/[0.02]" />
+
       {/* Fill gradient */}
       <div
-        className="absolute inset-y-0 left-0 transition-all duration-700 ease-out"
+        className="absolute inset-y-0 left-0 transition-all duration-1000 ease-in-out"
         style={{
           width: `${widthPct}%`,
-          background: 'linear-gradient(90deg, #00c030, #00e676, #00c030)',
-          boxShadow: widthPct > 0 ? '0 0 12px rgba(0,192,48,0.3)' : undefined,
+          background: 'linear-gradient(90deg, #00c030 0%, #00e676 50%, #00c030 100%)',
+          boxShadow: widthPct > 0 ? '0 0 15px rgba(0,192,48,0.25)' : undefined,
         }}
-      />
+      >
+        {/* Shine effect */}
+        <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent opacity-50" />
+      </div>
     </div>
   );
 }

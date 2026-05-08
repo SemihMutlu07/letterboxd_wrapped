@@ -8,7 +8,7 @@ import io
 import zipfile
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 
 # ---- fixtures ----------------------------------------------------------------
@@ -167,3 +167,83 @@ async def test_parse_username_no_match(client: AsyncClient):
     r = await client.post("/api/parse-username", json={"filename": "random_file.csv"})
     assert r.status_code == 200
     assert r.json()["username"] is None
+
+
+# ---- watchlist compare -------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _reset_watchlist_rate_limiter():
+    from app.routes import watchlist  # noqa: PLC0415
+
+    watchlist._rate_limiter.clear()
+    yield
+    watchlist._rate_limiter.clear()
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_success(client: AsyncClient):
+    async def fake_scrape_watchlist(username, max_pages=40):
+        if username == "alice":
+            return [
+                {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
+                {"title": "Inception", "year": "2010", "slug": "/film/inception/"},
+            ]
+        return [
+            {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
+            {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"},
+        ]
+
+    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+        r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "success"
+    assert body["users"] == ["alice", "bob"]
+    assert body["counts"] == {
+        "first_total": 2,
+        "second_total": 2,
+        "common": 1,
+        "first_only": 1,
+        "second_only": 1,
+    }
+    assert body["match_score"] == 50.0
+    assert body["common"] == [{"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"}]
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_rejects_same_username(client: AsyncClient):
+    r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "@alice"]})
+    assert r.status_code == 400
+    assert r.json()["detail"]["error_code"] == "same_username"
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_rejects_invalid_username(client: AsyncClient):
+    r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bad name"]})
+    assert r.status_code == 400
+    assert r.json()["detail"]["error_code"] == "invalid_username"
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_user_not_found(client: AsyncClient):
+    async def fake_scrape_watchlist(username, max_pages=40):
+        raise ValueError(f"User '{username}' not found")
+
+    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+        r = await client.post("/api/watchlist-compare", json={"usernames": ["ghost", "bob"]})
+
+    assert r.status_code == 404
+    assert r.json()["detail"]["error_code"] == "user_not_found"
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_scrape_failure(client: AsyncClient):
+    async def fake_scrape_watchlist(username, max_pages=40):
+        raise RuntimeError("network down")
+
+    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+        r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
+
+    assert r.status_code == 502
+    assert r.json()["detail"]["error_code"] == "watchlist_scrape_failed"

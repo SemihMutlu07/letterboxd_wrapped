@@ -3,7 +3,7 @@ import { Manrope, Syne } from 'next/font/google';
 import './globals.css';
 import PageViewTracker from '@/components/PageViewTracker';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-// import { Link } from 'lucide-react'; // Unused for now
+import { Suspense } from 'react';
 
 const syne = Syne({
   subsets: ['latin'],
@@ -46,7 +46,9 @@ export default function RootLayout({
         <body className={`${manrope.variable} ${syne.variable} bg-slate-900 text-white antialiased`}>
           <ErrorBoundary>
             {children}
-            {typeof window !== 'undefined' && <PageViewTracker />}
+            <Suspense fallback={null}>
+              <PageViewTracker />
+            </Suspense>
           </ErrorBoundary>
         </body>
     </html>

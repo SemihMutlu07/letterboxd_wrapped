@@ -22,6 +22,7 @@ export interface StatsData {
   sinefil_meter?: {
     score: number;
     type: string;
+    description?: string;
     breakdown?: {
       geography: number;
       temporal: number;
@@ -30,6 +31,30 @@ export interface StatsData {
       genres: number;
       directors: number;
     };
+    model_version?: string;
+  };
+  total_countries?: number;
+  data_timeline?: {
+    earliest_date?: string;
+    latest_date?: string;
+    total_days?: number;
+    period_description?: string;
+  };
+  cinematic_persona?: {
+    persona: string;
+    description: string;
+  };
+  favorite_genre?: {
+    name: string;
+    count: number;
+  };
+  most_watched_director?: {
+    name: string;
+    count: number;
+  };
+  longest_film?: {
+    title: string;
+    runtime: number;
   };
 
   // ── Extended fields emitted by backend for experimental sections ────────────

@@ -5,7 +5,13 @@ import Link from 'next/link';
 import ShareModal from '@/components/ShareModal';
 import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
-import CountriesList from '@/containers/results/CountriesList';
+import WorldMapSection from '@/containers/results/experimental/sections/world-map/WorldMapSection';
+import CountriesSection from '@/containers/results/experimental/sections/CountriesSection';
+import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
+import CastGrid from '@/containers/results/experimental/sections/CastGrid';
+import DirectorsGrid from '@/containers/results/experimental/sections/DirectorsGrid';
+import type { StatsData } from '@/containers/results/experimental/types';
+
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
@@ -13,68 +19,22 @@ import { getTmdbImageUrl, trackEvent, trackConsentedEvent } from '@/lib/analytic
 import { getUsername } from '@/lib/session-id';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
-import ExperimentalScreen from '@/containers/results/experimental/ExperimentalScreen';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
-import CrushAndDirectors from '@/containers/results/CrushAndDirectors';
 import Genres from '@/containers/results/Genres';
 import { FilmHistory, RatingsBar } from '@/containers/results/FilmAndRatings';
 import QuickFacts from '@/containers/results/QuickFacts';
 import CinemaScale from '@/containers/results/CinemaScale';
 
-type Count = { name: string; count: number; profile_path?: string };
-type LanguageItem = { language: string; count: number };
-type CountryRow = { name: string; count: number };
-
-interface LetterboxdStats {
-  total_films: number;
-  average_rating: number;
-  days_watched: number;
-  top_genres: { name: string; count: number }[];
-  favorite_genre: { name: string; count: number };
-  most_watched_director: { name: string; count: number };
-  favorite_decade: { name: string; count: number };
-  top_directors: Count[];
-  top_actors: Count[];
-  top_countries: CountryRow[];
-  total_countries: number;
-  top_languages: LanguageItem[];
-  decades: { decade: string; count: number }[];
-  average_runtime: number;
-  movie_crush?: { name: string; profile_path: string; count: number };
-  analysis_date: string;
-  longest_film: { title: string; runtime: number };
-  rating_distribution: Record<string, number>;
-  most_common_rating?: number;
-  monthly_viewing_habits?: { month: string; count: number }[];
-  day_of_week_pattern?: { weekday: number; weekend: number };
-  cinematic_persona?: { persona: string; description: string };
-  director_deep_analysis?: { director_name: string; average_rating_given: number; total_films: number; relationship: string };
-  sinefil_meter?: {
-    type: string;
-    score: number;
-    description: string;
-    breakdown?: {
-      geography: number;
-      temporal: number;
-      languages: number;
-      volume: number;
-      genres: number;
-      directors: number;
-    };
-    model_version?: string;
-  };
-  signature_combo?: { director: string; actor: string; count: number };
-  data_timeline?: { earliest_date?: string; latest_date?: string; total_days?: number; period_description?: string };
-}
+// Note: StatsData is imported from @/containers/results/experimental/types
 
 /**
  * Client-side fallback when backend sinefil_meter is missing.
  * Mirrors the cine_v2 model with the data available in LetterboxdStats.
  * Shannon entropy computed from the top-N counts the backend provides.
  */
-const calcCinephileScore = (s?: LetterboxdStats | null) => {
+const calcCinephileScore = (s?: StatsData | null) => {
   if (!s) return 45;
 
   const log2 = Math.log2;
@@ -150,11 +110,10 @@ const calcCinephileScore = (s?: LetterboxdStats | null) => {
 };
 
 export default function ResultsPage() {
-  const [stats, setStats] = useState<LetterboxdStats | null>(null);
+  const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
-  const [mode, setMode] = useState<'stable' | 'test'>('stable');
 
   // consent
   const [showConsentModal, setShowConsentModal] = useState(false);
@@ -428,21 +387,14 @@ export default function ResultsPage() {
   }, [loadDirectorImage]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('mode') === 'test') setMode('test');
-  }, []);
-
-  const handleModeSwitch = useCallback((newMode: 'stable' | 'test') => {
-    setMode(newMode);
-    const url = new URL(window.location.href);
-    if (newMode === 'stable') {
-      url.searchParams.delete('mode');
-    } else {
-      url.searchParams.set('mode', newMode);
-      trackEvent('results_test_lab_opened');
+    // Analytics for results viewed
+    if (stats) {
+      trackEvent('results_viewed_unified', {
+        total_films: stats.total_films,
+        cine_score: cineScore
+      });
     }
-    window.history.replaceState({}, '', url.toString());
-  }, []);
+  }, [stats, cineScore]);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
   if (!stats) {
@@ -483,61 +435,41 @@ export default function ResultsPage() {
               </span>
             </div>
           )}
-
-          <div className="flex justify-center mt-5">
-            <div className="inline-flex items-center gap-1 p-1 bg-slate-800/60 border border-slate-700/40 rounded-full text-sm">
-              <button
-                onClick={() => handleModeSwitch('stable')}
-                className={`px-4 py-1.5 rounded-full font-medium transition-colors ${
-                  mode === 'stable'
-                    ? 'bg-slate-700 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Stable
-              </button>
-              <button
-                onClick={() => handleModeSwitch('test')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full font-medium transition-colors ${
-                  mode === 'test'
-                    ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${mode === 'test' ? 'bg-orange-400' : 'bg-slate-500'}`} />
-                Test Lab
-              </button>
-            </div>
-          </div>
         </header>
 
-        {mode === 'test' ? (
-          <ExperimentalScreen stats={stats} />
-        ) : (
-          <>
         {/* Hero Stats */}
         <HeroStats
           totalFilms={stats.total_films}
           avgRating={stats.average_rating}
           days={stats.days_watched}
-          topGenre={stats.favorite_genre.name}
+          topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
           timePct={timePct}
-          favoriteDirector={stats.most_watched_director}
-          favoriteDecade={stats.favorite_decade}
+          favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
+          favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
         />
 
-        {/* Crush and Directors */}
-        <CrushAndDirectors topDirectors={stats.top_directors ?? []} topActors={stats.top_actors ?? []} />
+        {/* 1. World Map - Broadest view */}
+        <div className="mt-8">
+          <WorldMapSection stats={stats} />
+        </div>
 
-        {/* Genres */}
+        {/* 2. Directors & Cast - People analysis */}
+        <div className="grid grid-cols-1 gap-6">
+          <DirectorsGrid stats={stats} />
+          <CastGrid stats={stats} />
+        </div>
+
+        {/* 3. Rating Outliers - Personal opinions */}
+        <RatingDeviation stats={stats} />
+
+        {/* 4. Countries Detail */}
+        <CountriesSection stats={stats} />
+
+        {/* 5. Genres & Other stats */}
         <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
 
-        {/* Languages and Countries - Lazy loaded */}
-        <LazyLanguagesAndCountries
-          languages={stats.top_languages ?? []}
-          countries={stats.top_countries ?? []}
-          totalCountries={stats.total_countries}
-        />
+        {/* Languages - Lazy loaded */}
+        <LazyLanguages data={stats.top_languages ?? []} />
 
         {/* Film History - Lazy loaded */}
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
@@ -562,8 +494,6 @@ export default function ResultsPage() {
           score={cineScore || 50}
           breakdown={stats.sinefil_meter?.breakdown}
         />
-          </>
-        )}
 
         {/* Share button */}
         <div className="flex flex-col items-center my-8 gap-3">
@@ -603,27 +533,20 @@ export default function ResultsPage() {
 
 // ===================== LAZY LOADING COMPONENTS =====================
 
-// Lazy wrapper for Languages and Countries
-function LazyLanguagesAndCountries({ 
-  languages, 
-  countries, 
-  totalCountries 
+// Lazy wrapper for Languages
+function LazyLanguages({ 
+  data 
 }: { 
-  languages: any[]; 
-  countries: any[]; 
-  totalCountries: number; 
+  data: any[]; 
 }) {
   const { ref, shouldMount } = useLazyMount(100);
   
   return (
-    <div ref={ref} className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+    <div ref={ref}>
       {shouldMount ? (
-        <>
-          <LanguagesLeaderboard key="languages-leaderboard" data={languages.slice(0,7)} />
-          <CountriesList countries={countries.slice(0, 10)} total={totalCountries} />
-        </>
+        <LanguagesLeaderboard data={data.slice(0,7)} />
       ) : (
-        <div className="col-span-2 h-64 bg-slate-800/30 rounded-2xl animate-pulse" />
+        <div className="h-64 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}
     </div>
   );

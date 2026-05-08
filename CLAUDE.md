@@ -1,25 +1,32 @@
 # Movies Wrapped (Letterboxd Wrapped)
 
 ## What this repo does
-Analyze a user's Letterboxd export (CSV/ZIP) and generate a "wrapped"-style film stats summary.
-Frontend is a static Next.js export; backend is FastAPI that processes uploads and enriches with TMDB.
+Analyze a user's Letterboxd data and generate a "wrapped"-style film stats summary.
+Two input paths: (a) CSV/ZIP export upload, (b) public-profile scrape by username.
+Frontend is a static Next.js export; backend is FastAPI that processes uploads/scrapes and enriches with TMDB.
 
 ## Tech stack
 - Frontend: Next.js 15 (App Router), React 19, TypeScript, TailwindCSS, Recharts, Framer Motion
 - Backend: Python, FastAPI, Uvicorn, pandas/numpy, aiohttp/aiofiles
+- Scraper: BeautifulSoup4 + lxml + requests (used by `app/services/scraper.py`)
 - Database: Supabase (client-side insert/upsert for `user_sessions`, `feedback`, `analysis_runs`)
 - Analytics: PostHog (consent-gated), in-app helper modules
-- Deployment: Frontend on Netlify static export (`output: 'export'`), backend currently local-only
+- Deployment: Frontend on Netlify static export (`output: 'export'`); backend has `backend/Dockerfile` for Render but is **not yet deployed** — currently local-only
 
 ## Repo structure
 - `frontend/src/app`: Next.js pages + route handlers (`page.tsx`, `results/page.tsx`, `api/*/route.ts`)
 - `frontend/src/components`: UI components (landing, share modal, feedback, error boundary, etc.)
-- `frontend/src/containers/results`: Results screen sections
+- `frontend/src/containers/results`: Results screen sections (incl. `experimental/` for Test Lab)
 - `frontend/src/lib`: API calls, analytics, session handling, Supabase client, utils
 - `frontend/src/hooks`: Custom hooks (performance/visibility)
-- `backend/app/main.py`: FastAPI app, endpoints, analysis pipeline
-- `backend/app/analysis_utils.py`: Safe numerical helpers
-- `backend/requirements.txt`: Backend dependencies
+- `backend/app/main.py`: FastAPI app factory, lifespan, CORS, router includes, `/` + `/health`
+- `backend/app/config.py`: Pydantic settings (env loading, CORS origins)
+- `backend/app/task_manager.py`: In-memory async task state (used by `/api/analyze` polling)
+- `backend/app/analysis_utils.py`: Safe numerical helpers + `compute_cinema_scale`
+- `backend/app/routes/{analyze,tmdb,feedback}.py`: FastAPI routers
+- `backend/app/services/{analysis,scraper,tmdb_client}.py`: Domain logic (CSV pipeline, public-profile scrape, TMDB)
+- `backend/app/models/`: Pydantic request/response shapes
+- `backend/Dockerfile`, `backend/requirements.txt`, `backend/pytest.ini`, `backend/tests/`
 
 ## Environment variables (never hardcode values)
 Backend:
@@ -50,20 +57,25 @@ Both:
 - `npm run dev`
 
 ## API surface
-Backend (see `backend/app/main.py`):
-- `GET /` Health check
-- `GET /api/progress`
-- `POST /api/analyze`
-- `GET /api/tmdb/person/search`
-- `POST /api/parse-username`
-- `GET /tmdb-proxy/{path}` (TMDB image proxy)
-- `OPTIONS /tmdb-proxy/{path}` (CORS preflight)
-- `POST /api/feedback` (rate-limited)
-- `POST /api/report` (rate-limited)
+Backend (routers in `backend/app/routes/`):
+- `GET /` — root banner (in `main.py`)
+- `GET /health` — liveness probe (in `main.py`)
+- `POST /api/analyze` — **202 Accepted**, returns `{task_id, status}`; analysis runs in a background task (`routes/analyze.py`)
+- `POST /api/scrape-profile` — synchronous scrape + analyze for a public Letterboxd username (`routes/analyze.py`)
+- `GET /api/progress/{task_id}` — poll task state (`pending|running|done|failed` + stage/message/progress + final `result`)
+- `GET /api/progress` — legacy: returns the most recent active task's stage (no task_id)
+- `GET /api/tmdb/person/search` (`routes/tmdb.py`)
+- `GET /tmdb-proxy/{path:path}` + `OPTIONS /tmdb-proxy/{path:path}` — image proxy + CORS preflight
+- `POST /api/parse-username` (`routes/feedback.py`)
+- `POST /api/feedback` (rate-limited, `routes/feedback.py`)
+- `POST /api/report` (rate-limited, `routes/feedback.py`)
 
-Frontend route handlers:
-- `POST /api/upload` Placeholder (does not process uploads)
-- `POST /api/analytics` Validates event payload and returns `ok`
+Frontend route handlers (built into static export only when statically generable):
+- `POST /api/upload` — placeholder, does not process uploads (see Known issues)
+- `POST /api/analytics` — validates event payload and returns `ok`
+
+Run logging:
+- Each successful `analyze`/`scrape-profile` writes `backend/runs/{username}-{iso-ts}.json` (best-effort; gitignored).
 
 ## Hard constraints (do not violate)
 - Read the relevant file(s) before making any change.
@@ -74,15 +86,8 @@ Frontend route handlers:
 - Commit messages must be in English.
 
 ## Known issues (triage order)
-1) Backend defines `GET /` twice (duplicate route)
-   - Fix by keeping one handler (preferred: one minimal health check).
-2) Consent key naming inconsistency:
-   - `consentDecision` vs `consent_decision`
-   - Standardize to one key across frontend (storage + gating + event helper).
-3) `frontend/src/app/layout.tsx` uses backslashes (`\\`) in favicon paths
-   - Replace with forward slashes.
-4) `frontend/src/app/api/upload/route.ts` is a placeholder
-   - Keep it minimal OR remove/replace with a clear message, but remember: static export constraints.
+1) `frontend/src/app/api/upload/route.ts` returns 501
+   - This is intentional for the static export build. Backend API should be used for all processing.
 
 ## AI workflow (how to work in this repo)
 When asked to implement a change:
@@ -100,9 +105,19 @@ over time and inflated nearly every user to 80+. Popularity is still available a
 separate `stats.popularity_info` field for Mainstream-vs-Niche display but must never
 feed back into the cinema scale number.
 
-## Backend refactor note (do later)
-There is a planned TODO to refactor the backend into modular packages (split the FastAPI file).
-Do NOT do it unless explicitly asked.
+## Backend structure (already modular)
+The FastAPI backend is already split into `routes/`, `services/`, `models/`, with `task_manager.py`
+and `config.py` separated from `main.py`. Don't reintroduce a monolithic `main.py` — add new
+endpoints under the appropriate router and new domain logic under `services/`.
+
+CORS + error-middleware ordering matters: unhandled-exception handling is implemented as a
+**custom `@app.middleware("http")`** that wraps the response *inside* the CORS layer.
+Do NOT replace it with `@app.exception_handler(Exception)` — Starlette's `ServerErrorMiddleware`
+sits *outside* `CORSMiddleware` and would strip `Access-Control-Allow-Origin` on 500s.
+
+When returning JSON that may contain NaN (e.g. pandas-derived `poster_path` for missing rows),
+guard with `isinstance(x, str)` before placing it in the response — `JSONResponse(allow_nan=False)`
+will otherwise raise during render and surface as a CORS-shaped 500 in the browser.
 
 ## Operational safety
 - Supabase: use ANON/public key only in frontend. Never introduce service_role keys.

@@ -22,7 +22,7 @@ export const imgCache = new Map<string, string | null>();
 // Development flag
 
 let activeRequests = 0;
-const MAX_CONCURRENT = 5;
+const MAX_CONCURRENT = 8;
 const queue: Array<() => void> = [];
 function acquire(): Promise<() => void> {
   return new Promise((resolve) => {
@@ -170,8 +170,11 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
         ) : imageUrl ? (
           <Image src={imageUrl} alt={director?.name ?? 'director'} width={72} height={72} className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-400">
-            <User />
+          <div 
+            className="w-full h-full flex items-center justify-center text-slate-100/50"
+            style={{ background: `linear-gradient(135deg, #1e293b 0%, #0f172a 100%)` }}
+          >
+            <User size={32} strokeWidth={1.5} />
           </div>
         )}
       </div>
@@ -274,8 +277,12 @@ export const ActorCard: React.FC<{
           ) : imageUrl ? (
             <Image src={imageUrl} alt={actor.name} width={128} height={128} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-300" aria-label={actor.name}>
-              <Heart />
+            <div 
+              className="w-full h-full flex items-center justify-center text-pink-200/40"
+              style={{ background: `linear-gradient(135deg, #312e81 0%, #1e1b4b 100%)` }}
+              aria-label={actor.name}
+            >
+              <Heart size={48} strokeWidth={1.5} fill="currentColor" className="opacity-20" />
             </div>
           )}
         </div>
