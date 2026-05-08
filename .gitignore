@@ -50,6 +50,9 @@ coverage/
 **/runs/
 NOTES.md
 
+# design exploration (local-only)
+frontend/design-prototypes/
+
 # tools / package managers
 .npm
 jspm_packages/
