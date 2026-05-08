@@ -792,7 +792,7 @@ async def process_comprehensive_letterboxd_data(
                 "title": str(row.get("title") or ""),
                 "year": _clean_year(row.get("year")),
                 "rating": float(row.get("rating")),
-                "poster_path": row.get("poster_path") or "",
+                "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
             }
             for _, row in rated_rows.sort_values("rating", ascending=False).iterrows()
         ]
@@ -809,7 +809,7 @@ async def process_comprehensive_letterboxd_data(
             "countries": row.get("countries") if isinstance(row.get("countries"), list) else [],
             "language": row.get("language") if pd.notna(row.get("language")) else None,
             "runtime": _clean_year(row.get("runtime")),
-            "poster_path": row.get("poster_path") or "",
+            "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
             "decade": row.get("decade") if pd.notna(row.get("decade")) else None,
             "rating": _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None,
         }

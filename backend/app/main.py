@@ -10,13 +10,19 @@ import asyncio
 import warnings
 from contextlib import asynccontextmanager
 
+import logging
+import traceback
+
 import aiohttp
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, tmdb
+
+logger = logging.getLogger("letterboxd_wrapped")
 
 warnings.filterwarnings("ignore")
 
@@ -55,6 +61,21 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def catch_unhandled_exceptions(request: Request, call_next):
+        # Catching exceptions here (inside user-middleware) lets CORSMiddleware
+        # wrap the JSONResponse on the way out. @app.exception_handler(Exception)
+        # routes to Starlette's ServerErrorMiddleware which sits OUTSIDE CORS
+        # and would strip the Access-Control-Allow-Origin header.
+        try:
+            return await call_next(request)
+        except Exception:
+            logger.error("Unhandled exception on %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+            return JSONResponse(
+                status_code=500,
+                content={"error_code": "internal_error", "message": "Something went wrong on the server."},
+            )
 
     app.include_router(analyze.router)
     app.include_router(tmdb.router)
