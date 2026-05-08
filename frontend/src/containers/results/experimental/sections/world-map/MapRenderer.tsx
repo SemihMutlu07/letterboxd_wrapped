@@ -265,7 +265,7 @@ export function MapLegend({ mode }: { mode: MapMode }) {
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {items.map((item, i) => (
+      {items.map((item) => (
         <div key={item.label} className="flex items-center gap-1">
           <span
             className="w-3 h-3 rounded-[2px] shrink-0 border border-white/[0.06]"

@@ -168,9 +168,9 @@ export default function ResultsPage() {
           total_countries: parsedStats.total_countries,
           average_runtime: parsedStats.average_runtime,
         });
-      } catch (error) {
-      } 
-    } else {
+      } catch {
+        // silent: stale localStorage data
+      }
     }
     setLoading(false); 
     
@@ -178,7 +178,6 @@ export default function ResultsPage() {
     const storedUsername = getUsername();
     if (storedUsername) {
       setUsername(storedUsername);
-    } else {
     }
   }, []);
 
@@ -397,7 +396,7 @@ export default function ResultsPage() {
   }, [stats, cineScore]);
 
   if (loading) return <div className="min-h-screen bg-slate-900" />;
-  if (!stats) {
+  if (!stats || (typeof stats === 'object' && Object.keys(stats).length === 0)) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
         <div className="text-center">

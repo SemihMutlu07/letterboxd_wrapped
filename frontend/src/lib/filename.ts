@@ -1,3 +1,8 @@
+/**
+ * @deprecated Username parsing is owned by backend `POST /api/parse-username`.
+ * Use `parseLetterboxdUsername` from `@/lib/api` in UI flows that can await it.
+ * This legacy helper remains only for older synchronous call sites.
+ */
 export function parseLetterboxdUsername(filename: string): string | null {
   // Accept both raw names and path-like values from folder uploads.
   const base = filename.split('/').pop()?.split('\\').pop() ?? filename;

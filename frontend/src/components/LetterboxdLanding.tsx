@@ -1,14 +1,14 @@
 'use client';
 
 import JSZip from 'jszip';
+import Link from 'next/link';
 import React, { useState, useCallback, useEffect } from 'react';
-import { Film, Star, Clock, Globe, Upload } from 'lucide-react';
-import { analyzeFiles, scrapeProfile, testBackend } from '@/lib/api';
+import { Film, Star, Clock, Globe, Upload, Users } from 'lucide-react';
+import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
 import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
-import { parseLetterboxdUsername } from '@/lib/filename';
 import { normalizeError, type NormalizedError } from '@/lib/errors';
 import ErrorBanner from '@/components/ErrorBanner';
 import LoadingScreen from '@/components/landing/LoadingScreen';
@@ -23,6 +23,7 @@ export default function LetterboxdLanding() {
   const [inputMode, setInputMode] = useState<'upload' | 'username'>('upload');
   const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
+  const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
 
   // Track initial session on page load
@@ -46,8 +47,10 @@ export default function LetterboxdLanding() {
     const testBackendConnectivity = async () => {
       try {
         await testBackend();
+        setBackendOffline(false);
         trackEvent('backend_health_check_ok');
       } catch {
+        setBackendOffline(true);
         trackEvent('backend_health_check_failed');
       }
     };
@@ -109,7 +112,8 @@ export default function LetterboxdLanding() {
       const relativePath = file.webkitRelativePath || '';
       const pathParts = relativePath ? relativePath.split('/').filter(Boolean) : [];
       for (const candidate of [file.name, relativePath, pathParts[0] || '']) {
-        const parsed = parseLetterboxdUsername(candidate);
+        if (!candidate) continue;
+        const { username: parsed } = await parseLetterboxdUsername(candidate);
         if (parsed) { detectedUsername = parsed; break; }
       }
       if (detectedUsername) break;
@@ -218,6 +222,10 @@ export default function LetterboxdLanding() {
       setError({ title: 'No username', message: 'Please enter your Letterboxd username.', reason: 'no_username' });
       return;
     }
+    if (!/^[a-z0-9_]+$/.test(username)) {
+      setError({ title: 'Invalid username', message: 'Letterboxd usernames can only contain lowercase letters, numbers, and underscores.', reason: 'invalid_username' });
+      return;
+    }
 
     setIsScraping(true);
     setError(null);
@@ -239,10 +247,17 @@ export default function LetterboxdLanding() {
     }
   }, [usernameInput]);
 
-  if (isUploading) return <LoadingScreen />;
+  const handleCancel = useCallback(() => {
+    setIsUploading(false);
+    setIsScraping(false);
+    setError(null);
+  }, []);
+
+  if (isUploading) return <LoadingScreen onCancel={handleCancel} />;
   if (isScraping) {
     return (
       <LoadingScreen
+        onCancel={handleCancel}
         title="Scanning Your Profile"
         message="Reading your public Letterboxd diary and building your movie profile."
         detail="Profile scans depend on Letterboxd response speed and can take longer than ZIP uploads."
@@ -303,6 +318,16 @@ export default function LetterboxdLanding() {
             </button>
           </div>
 
+          <div className="flex justify-center">
+            <Link
+              href="/watchlist"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-700/60 bg-slate-900/30 px-4 py-2 text-xs font-semibold text-slate-400 transition hover:border-orange-400/40 hover:text-orange-200"
+            >
+              <Users className="h-4 w-4" />
+              Compare two watchlists
+            </Link>
+          </div>
+
           {inputMode === 'upload' ? (
             <UploadZone onFiles={handleFiles} />
           ) : (
@@ -339,6 +364,14 @@ export default function LetterboxdLanding() {
                 <p className="mt-3 text-xs text-slate-500">Public profile scans are less complete than official exports, but useful for fast tests.</p>
               </div>
             </section>
+          )}
+
+          {backendOffline && (
+            <div className="mx-auto max-w-xl rounded-2xl border border-amber-700/50 bg-amber-900/20 p-4 text-center">
+              <p className="text-sm text-amber-200">
+                ⚠ Backend server is starting up. Analysis may not work immediately.
+              </p>
+            </div>
           )}
 
           {error && <ErrorBanner error={error} onDismiss={() => setError(null)} onRetry={() => setError(null)} />}

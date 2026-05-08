@@ -2,6 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+vi.mock('@/lib/api', () => ({
+  compareWatchlists: vi.fn(),
+  recommendFromCompare: vi.fn(),
+  dateNight: vi.fn(),
+}));
+
 // ---- OrientationToggle -------------------------------------------------------
 
 import OrientationToggle from '@/components/share/OrientationToggle';
@@ -74,5 +80,77 @@ describe('UploadZone', () => {
     expect(input).not.toBeNull();
     expect(input.accept).toContain('.zip');
     expect(input.accept).toContain('.csv');
+  });
+});
+
+// ---- WatchlistCompare --------------------------------------------------------
+
+import WatchlistCompare from '@/components/watchlist/WatchlistCompare';
+import { compareWatchlists, recommendFromCompare } from '@/lib/api';
+
+describe('WatchlistCompare', () => {
+  it('compares two watchlists and renders buckets', async () => {
+    vi.mocked(compareWatchlists).mockResolvedValueOnce({
+      status: 'success',
+      users: ['alice', 'bob'],
+      counts: {
+        first_total: 2,
+        second_total: 2,
+        common: 1,
+        first_only: 1,
+        second_only: 1,
+      },
+      match_score: 50,
+      common: [{ title: 'Aftersun', year: '2022', slug: '/film/aftersun/' }],
+      first_only: [{ title: 'Heat', year: '1995', slug: '/film/heat-1995/' }],
+      second_only: [{ title: 'Past Lives', year: '2023', slug: '/film/past-lives/' }],
+    });
+
+    render(<WatchlistCompare />);
+    await userEvent.type(screen.getByPlaceholderText('alice'), 'alice');
+    await userEvent.type(screen.getByPlaceholderText('bob'), 'bob');
+    await userEvent.click(screen.getByRole('button', { name: /compare/i }));
+
+    expect(await screen.findByText('50%')).toBeInTheDocument();
+    expect(screen.getByText('Aftersun')).toBeInTheDocument();
+    expect(screen.getByText('Heat')).toBeInTheDocument();
+    expect(screen.getByText('Past Lives')).toBeInTheDocument();
+  });
+
+  it('requests a shared recommendation', async () => {
+    vi.mocked(compareWatchlists).mockResolvedValueOnce({
+      status: 'success',
+      users: ['alice', 'bob'],
+      counts: {
+        first_total: 1,
+        second_total: 1,
+        common: 1,
+        first_only: 0,
+        second_only: 0,
+      },
+      match_score: 100,
+      common: [{ title: 'Aftersun', year: '2022', slug: '/film/aftersun/' }],
+      first_only: [],
+      second_only: [],
+    });
+    vi.mocked(recommendFromCompare).mockResolvedValueOnce({
+      recommendation: {
+        title: 'Aftersun',
+        year: '2022',
+        reason: 'Both of you have it on your watchlist.',
+        poster_path: '/p.jpg',
+      },
+      alternatives: [],
+    });
+
+    render(<WatchlistCompare />);
+    await userEvent.type(screen.getByPlaceholderText('alice'), 'alice');
+    await userEvent.type(screen.getByPlaceholderText('bob'), 'bob');
+    await userEvent.click(screen.getByRole('button', { name: /compare/i }));
+    await screen.findByText('100%');
+
+    await userEvent.click(screen.getByRole('button', { name: /pick one/i }));
+    expect(await screen.findByText("Tonight's pick")).toBeInTheDocument();
+    expect(screen.getAllByText('Aftersun').length).toBeGreaterThan(0);
   });
 });

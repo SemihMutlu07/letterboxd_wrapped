@@ -9,6 +9,7 @@ export type ErrorReason =
   | 'tmdb_timeout'
   | 'tmdb_rate_limited'
   | 'no_username'
+  | 'invalid_username'
   | 'user_not_found'
   | 'scrape_failed'
   | 'unknown_error';

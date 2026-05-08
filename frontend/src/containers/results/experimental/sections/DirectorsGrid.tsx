@@ -105,10 +105,9 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
     >
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {shown.map((d, i) => (
+        {shown.map((d) => (
           <PersonCard
             key={d.name}
-            rank={i + 1}
             name={d.name}
             profilePath={d.profile_path}
             primaryStat={
@@ -181,13 +180,11 @@ export function SectionShell({
 
 /** Circular portrait card shared by Directors and Cast sections. */
 export function PersonCard({
-  rank,
   name,
   profilePath,
   primaryStat,
   onClick,
 }: {
-  rank: number;
   name: string;
   profilePath?: string;
   primaryStat: string;
