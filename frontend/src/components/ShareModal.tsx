@@ -315,14 +315,19 @@ export default function ShareModal({
 
   // Fullscreen toggle
   const [isFs, setIsFs] = useState(false);
+  const isIOS = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }, []);
 
   const toggleFullscreen = async () => {
-    const el = viewportRef.current;
+    const el = cardRef.current;
     if (!el) return;
     if (!document.fullscreenElement) {
       try {
-        if ((el as any).webkitRequestFullscreen) {
-          await (el as any).webkitRequestFullscreen();
+        const fsEl = el as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+        if (fsEl.webkitRequestFullscreen) {
+          await fsEl.webkitRequestFullscreen();
         } else {
           await el.requestFullscreen();
         }
@@ -613,13 +618,15 @@ export default function ShareModal({
             >
               <Scan size={16} />
             </button>
-            <button
-              onClick={toggleFullscreen}
-              className="rounded-lg p-2 text-slate-200 hover:bg-slate-700/70 transition-colors"
-              aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
-            >
-              {isFs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
+            {!isIOS && (
+              <button
+                onClick={toggleFullscreen}
+                className="rounded-lg p-2 text-slate-200 hover:bg-slate-700/70 transition-colors"
+                aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                {isFs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            )}
           </div>
 
           <div
