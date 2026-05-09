@@ -127,7 +127,7 @@ function RatingDeviationInner({ stats }: { stats: StatsData }) {
 
       {/* Film grid */}
       {shown.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {shown.map((film) => (
             <FilmPosterCard
               key={`${film.title}-${film.year}`}
@@ -238,7 +238,7 @@ function SubtabButton({
   return (
     <button
       onClick={onClick}
-      className="px-3 py-1 rounded-full text-xs font-semibold transition-colors"
+      className="px-3 py-1 min-h-[44px] rounded-full text-xs font-semibold transition-colors"
       style={
         active
           ? { background: accent + '26', color: accent, border: `1px solid ${accent}4d` }
