@@ -133,7 +133,7 @@ function WorldMapInner({ stats }: { stats: StatsData }) {
             className={toggleClass(mode === 'highest_rated')}
             onClick={() => hasRatedMode && handleModeChange('highest_rated')}
             disabled={!hasRatedMode}
-            title={!hasRatedMode ? 'Ratings data not available in this export' : undefined}
+            title={!hasRatedMode ? 'Ratings data not available in this export' : "Your average rating across films you've rated for each country (minimum 5 rated films)"}
             style={!hasRatedMode ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
           >
             Highest Rated

@@ -142,6 +142,7 @@ export function SectionShell({
   onToggle,
   ratedTabDisabled,
   ratedTabHint,
+  ratedTabTooltip,
   children,
 }: {
   title: string;
@@ -149,8 +150,13 @@ export function SectionShell({
   onToggle: (m: SectionToggle) => void;
   ratedTabDisabled?: boolean;
   ratedTabHint?: string;
+  /** Tooltip for the "Highest Rated" tab explaining what the metric means. */
+  ratedTabTooltip?: string;
   children: React.ReactNode;
 }) {
+  const activeTooltip = ratedTabTooltip
+    ? ratedTabTooltip
+    : ratedTabHint;
   return (
     <div className="bg-[#1a1a1a]/80 border border-white/8 rounded-2xl p-5 md:p-6 space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -166,7 +172,7 @@ export function SectionShell({
             className={toggleClass(mode === 'highest_rated')}
             onClick={() => !ratedTabDisabled && onToggle('highest_rated')}
             disabled={ratedTabDisabled}
-            title={ratedTabHint}
+            title={ratedTabDisabled ? ratedTabHint : activeTooltip}
             style={ratedTabDisabled ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
           >
             Highest Rated
