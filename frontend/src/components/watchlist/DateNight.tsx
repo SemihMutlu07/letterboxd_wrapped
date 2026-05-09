@@ -6,18 +6,19 @@ import Image from 'next/image';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
+import { pickRandomUsernames } from '@/lib/usernames';
 
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
 }
 
 export default function DateNight() {
+  const placeholders = useMemo(() => pickRandomUsernames(2), []);
   const [first, setFirst] = useState('');
   const [second, setSecond] = useState('');
   const [result, setResult] = useState<DateNightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && normalized[0] !== normalized[1];
 
@@ -26,7 +27,6 @@ export default function DateNight() {
     setLoading(true);
     setError(null);
     setResult(null);
-    setSelectedIndex(null);
     try {
       setResult(await dateNight(normalized[0], normalized[1]));
     } catch (err) {
@@ -34,10 +34,6 @@ export default function DateNight() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSelectFilm = (index: number) => {
-    setSelectedIndex(selectedIndex === index ? null : index);
   };
 
   return (
@@ -56,7 +52,7 @@ export default function DateNight() {
         <input
           value={first}
           onChange={(event) => setFirst(event.target.value)}
-          placeholder="alice"
+          placeholder={placeholders[0]}
           className="border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-red-300"
         />
         <input
@@ -65,7 +61,7 @@ export default function DateNight() {
           onKeyDown={(event) => {
             if (event.key === 'Enter') void handleSubmit();
           }}
-          placeholder="bob"
+          placeholder={placeholders[1]}
           className="border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-red-300"
         />
         <button
@@ -128,9 +124,8 @@ export default function DateNight() {
           {result.recommendations.length === 0 ? (
             <p className="border border-stone-800 bg-[#201b16] p-4 text-sm text-stone-400">No shared recommendations found. Try different usernames.</p>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-3">
               {result.recommendations.map((film, index) => {
-                const isSelected = selectedIndex === index;
                 const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
                 const letterboxdUrl = film.slug
                   ? `https://letterboxd.com/film/${film.slug}/`
@@ -139,59 +134,51 @@ export default function DateNight() {
                 return (
                   <article
                     key={`${film.title}-${film.year}-${index}`}
-                    className="cursor-pointer border border-stone-800 bg-[#201b16] p-4 transition-all duration-150 ease-out hover:border-stone-600 active:scale-[0.98] active:opacity-90"
-                    onClick={() => handleSelectFilm(index)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleSelectFilm(index);
-                      }
-                    }}
+                    className="flex gap-4 border border-stone-800 bg-[#201b16] p-4 transition-all duration-150 ease-out hover:border-stone-600"
                   >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <h3 className="text-lg font-black text-stone-100">{film.title}</h3>
-                      <span className="font-mono text-xs text-stone-500">{film.year}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-stone-400">{film.reason}</p>
-
-                    {isSelected && (
-                      <div className="mt-4 flex items-start gap-4 border-t border-stone-700/60 pt-4">
-                        {posterUrl && (
-                          <div className="relative h-36 w-24 shrink-0 overflow-hidden bg-stone-800">
-                            <Image
-                              src={posterUrl}
-                              alt={`${film.title} poster`}
-                              fill
-                              className="object-cover"
-                              sizes="96px"
-                              unoptimized
-                            />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <a
-                            href={letterboxdUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            View on Letterboxd
-                          </a>
+                    {/* Poster */}
+                    <div className="relative h-[120px] w-[80px] shrink-0 overflow-hidden bg-stone-800">
+                      {posterUrl ? (
+                        <Image
+                          src={posterUrl}
+                          alt={`${film.title} poster`}
+                          fill
+                          className="object-cover"
+                          sizes="80px"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-stone-600">
+                          <ExternalLink className="h-6 w-6" />
                         </div>
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div className="min-w-0 flex flex-col justify-center gap-1">
+                      <h3 className="text-base font-black text-stone-100 leading-tight">{film.title}</h3>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
+                        <span>{film.year || '—'}</span>
+                        <span>·</span>
+                        <span className="text-stone-600">—</span>
                       </div>
-                    )}
+                      <p className="text-xs text-stone-600 line-clamp-2">—</p>
+                      <p className="text-xs italic text-stone-400">{film.reason}</p>
+                      <a
+                        href={letterboxdUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        View on Letterboxd
+                      </a>
+                    </div>
                   </article>
                 );
               })}
             </div>
           )}
-          <p className="text-center font-mono text-[11px] uppercase tracking-[0.18em] text-stone-600">
-            Tap a film to reveal poster
-          </p>
         </div>
       )}
     </div>
