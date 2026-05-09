@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 from collections import deque
 from typing import Any, Dict, List, Optional
+import unicodedata
 
 import aiofiles
 import aiohttp
@@ -90,6 +91,41 @@ async def tmdb_get(
             return None
 
     return None
+
+
+def _normalize_person_name(name: str) -> str:
+    normalized = unicodedata.normalize("NFKD", name)
+    ascii_name = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(ascii_name.lower().split())
+
+
+async def search_person_with_fallback(
+    session: aiohttp.ClientSession,
+    name: str,
+) -> Optional[Dict[str, Any]]:
+    """Search TMDB person by name, retrying with a diacritic-stripped query."""
+    try:
+        normalized_name = _normalize_person_name(name)
+        exact_data = await tmdb_get(session, "search/person", {"query": name})
+        exact_results = exact_data.get("results", []) if exact_data else []
+        if exact_results:
+            exact_matches = [
+                result
+                for result in exact_results
+                if _normalize_person_name(str(result.get("name") or "")) == normalized_name
+            ]
+            if exact_matches:
+                other_results = [result for result in exact_results if result not in exact_matches]
+                return {**exact_data, "results": exact_matches + other_results}
+
+        if normalized_name and normalized_name != name.lower().strip():
+            normalized_data = await tmdb_get(session, "search/person", {"query": normalized_name})
+            if normalized_data and normalized_data.get("results"):
+                return normalized_data
+
+        return exact_data
+    except Exception:
+        return None
 
 
 async def resolve_tmdb_id(

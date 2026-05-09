@@ -15,6 +15,7 @@ from app.services.review_analysis import compute_review_metrics
 from app.services.tmdb_client import (
     fetch_comprehensive_film_details,
     resolve_tmdb_id,
+    search_person_with_fallback,
     tmdb_get,
 )
 
@@ -658,11 +659,27 @@ async def process_comprehensive_letterboxd_data(
 
     # === DETAILED ANALYSIS ===
     director_counts = Counter(films_enriched["director"].dropna())
-    stats["top_directors"] = [{"name": n, "count": c} for n, c in director_counts.most_common(20)]
+    director_profile_map: dict[str, str | None] = {}
+    for name, _count in director_counts.most_common(5):
+        profile_path = None
+        try:
+            person_data = await tmdb_get(session, "search/person", {"query": name})
+            if person_data and person_data.get("results"):
+                pp = person_data["results"][0].get("profile_path")
+                if isinstance(pp, str):
+                    profile_path = pp
+        except Exception:
+            pass
+        director_profile_map[name] = profile_path
+
+    stats["top_directors"] = [
+        {"name": n, "count": c, "profile_path": director_profile_map.get(n)}
+        for n, c in director_counts.most_common(20)
+    ]
     stats["total_directors"] = len(director_counts)
     if director_counts:
         n, c = director_counts.most_common(1)[0]
-        stats["most_watched_director"] = {"name": n, "count": c}
+        stats["most_watched_director"] = {"name": n, "count": c, "profile_path": director_profile_map.get(n)}
     else:
         stats["most_watched_director"] = None
     _progress("analyzing", "Director analysis complete", 4, 10)
@@ -729,9 +746,11 @@ async def process_comprehensive_letterboxd_data(
     for name, count in cast_counts.most_common(3):
         profile_path = None
         try:
-            person_data = await tmdb_get(session, "search/person", {"query": name})
+            person_data = await search_person_with_fallback(session, name)
             if person_data and person_data.get("results"):
-                profile_path = person_data["results"][0].get("profile_path")
+                pp = person_data["results"][0].get("profile_path")
+                if isinstance(pp, str):
+                    profile_path = pp
         except Exception:
             pass
         top_actors_with_profiles.append({"name": name, "count": count, "profile_path": profile_path})
