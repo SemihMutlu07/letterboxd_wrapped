@@ -65,14 +65,13 @@ function FilmList({ title, films }: { title: string; films: WatchlistFilm[] }) {
     <section className="min-h-[280px] border border-stone-800 bg-[#171411] p-4">
       <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">{title}</h3>
       <div className="mt-4 space-y-2">
-        {films.slice(0, 10).map((film) => (
+        {films.map((film) => (
           <div key={`${film.title}-${film.year}-${film.slug}`} className="flex items-baseline justify-between gap-3 border-b border-stone-800/80 pb-2">
             <span className="text-sm text-stone-100">{film.title}</span>
-            <span className="shrink-0 text-sm text-stone-500">{film.year}</span>
+            <span className="shrink-0 text-right text-sm text-stone-500">{film.year}</span>
           </div>
         ))}
         {films.length === 0 && <p className="text-sm text-stone-500">No films in this bucket.</p>}
-        {films.length > 10 && <p className="font-mono text-xs text-stone-500">+{films.length - 10} more</p>}
       </div>
     </section>
   );
@@ -224,7 +223,7 @@ export default function WatchlistCompare() {
               {counts && (
                 <>
                   <div
-                    style={{ flexGrow: counts.first_only || 1 }}
+                    style={{ flex: counts.first_only || 1 }}
                     className="group relative h-12 bg-orange-500/80"
                     title={`Only @${result.users[0]}: ${counts.first_only} (${formatPct(counts.first_only)})`}
                   >
@@ -233,7 +232,7 @@ export default function WatchlistCompare() {
                     </span>
                   </div>
                   <div
-                    style={{ flexGrow: counts.common || 1 }}
+                    style={{ flex: counts.common || 1 }}
                     className="group relative h-12 bg-amber-300"
                     title={`Both: ${counts.common} (${formatPct(counts.common)})`}
                   >
@@ -242,7 +241,7 @@ export default function WatchlistCompare() {
                     </span>
                   </div>
                   <div
-                    style={{ flexGrow: counts.second_only || 1 }}
+                    style={{ flex: counts.second_only || 1 }}
                     className="group relative h-12 bg-emerald-500/80"
                     title={`Only @${result.users[1]}: ${counts.second_only} (${formatPct(counts.second_only)})`}
                   >
@@ -261,7 +260,7 @@ export default function WatchlistCompare() {
           </section>
 
           {/* Film lists */}
-          <section className="grid gap-4 lg:grid-cols-3">
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <FilmList title={`Only @${result.users[0]} (${result.counts.first_only})`} films={result.first_only} />
             <FilmList title={`On both (${result.counts.common})`} films={result.common} />
             <FilmList title={`Only @${result.users[1]} (${result.counts.second_only})`} films={result.second_only} />
