@@ -7,30 +7,7 @@ from typing import Any, Iterable, Optional
 import aiohttp
 
 from app.models.recommend import FilmRecommendation, RecommendationStrategy
-from app.services.tmdb_client import fetch_comprehensive_film_details, resolve_tmdb_id, tmdb_get
-
-
-GENRE_IDS = {
-    "Action": 28,
-    "Adventure": 12,
-    "Animation": 16,
-    "Comedy": 35,
-    "Crime": 80,
-    "Documentary": 99,
-    "Drama": 18,
-    "Family": 10751,
-    "Fantasy": 14,
-    "History": 36,
-    "Horror": 27,
-    "Music": 10402,
-    "Mystery": 9648,
-    "Romance": 10749,
-    "Science Fiction": 878,
-    "TV Movie": 10770,
-    "Thriller": 53,
-    "War": 10752,
-    "Western": 37,
-}
+from app.services.tmdb_client import fetch_comprehensive_film_details, resolve_tmdb_id
 
 
 def film_key(film: dict[str, Any]) -> tuple[str, str]:
@@ -159,52 +136,88 @@ def build_mutual_profile(first_enriched: list[dict], second_enriched: list[dict]
     }
 
 
+def _profile_match_score(film: dict[str, Any], mutual_genres: set[str], era_overlap: str) -> int:
+    """Score how well a film matches the mutual taste profile."""
+    score = 0
+    film_genres = {str(g) for g in (film.get("genres") or [])}
+    if film_genres & mutual_genres:
+        score += 2
+    film_decade = str(film.get("decade") or "")
+    if film_decade and era_overlap and film_decade == era_overlap:
+        score += 1
+    return score
+
+
+def _recommendation_reason(film: dict[str, Any], mutual_profile: dict[str, Any], whose: str) -> str:
+    """Build a human-readable reason string for a recommendation."""
+    mutual_genres = mutual_profile.get("top_genres", [])
+    film_genres = {str(g) for g in (film.get("genres") or [])}
+    matched_genre = next((g for g in mutual_genres if g in film_genres), None)
+    if matched_genre:
+        return f"On {whose} watchlist — you both lean toward {matched_genre}"
+    if mutual_profile.get("era_overlap") and str(film.get("decade") or "") == mutual_profile["era_overlap"]:
+        return f"On {whose} watchlist — fits your shared {mutual_profile['era_overlap']} era"
+    return f"On {whose} watchlist"
+
+
 async def discover_date_night_recommendations(
-    session: aiohttp.ClientSession,
+    first_enriched: list[dict],
+    second_enriched: list[dict],
     mutual_profile: dict[str, Any],
-    watched_keys: set[tuple[str, str]],
     limit: int = 6,
 ) -> list[FilmRecommendation]:
-    genre_id = None
-    for genre in mutual_profile.get("top_genres", []):
-        if genre in GENRE_IDS:
-            genre_id = GENRE_IDS[genre]
-            break
+    """Recommend films ONLY from the union of both users' watchlists.
 
-    params: dict[str, Any] = {
-        "include_adult": "false",
-        "sort_by": "vote_average.desc",
-        "vote_count.gte": "300",
-    }
-    if genre_id:
-        params["with_genres"] = str(genre_id)
+    Priority order:
+      1. Intersection — films on BOTH watchlists (score 10)
+      2. First-only films that match the mutual taste profile (score 1-3)
+      3. Second-only films that match the mutual taste profile (score 1-3)
+    """
+    first_by_key = {film_key(f): f for f in first_enriched if f.get("title")}
+    second_by_key = {film_key(f): f for f in second_enriched if f.get("title")}
 
-    data = await tmdb_get(session, "discover/movie", params)
-    results = data.get("results", []) if data else []
+    first_keys = set(first_by_key.keys())
+    second_keys = set(second_by_key.keys())
+
+    common_keys = first_keys & second_keys
+    first_only_keys = first_keys - second_keys
+    second_only_keys = second_keys - first_keys
+
+    mutual_genres = set(mutual_profile.get("top_genres", []))
+    era_overlap = str(mutual_profile.get("era_overlap", ""))
+
+    scored: list[tuple[int, dict[str, Any], str]] = []
+
+    # 1. Intersection (both watchlists) — highest priority
+    for key in common_keys:
+        film = first_by_key[key]
+        scored.append((10, film, "On both your watchlists — you both want to see this!"))
+
+    # 2. First-only films that match mutual taste profile
+    for key in first_only_keys:
+        film = first_by_key[key]
+        score = _profile_match_score(film, mutual_genres, era_overlap)
+        if score > 0:
+            scored.append((score, film, _recommendation_reason(film, mutual_profile, "their")))
+
+    # 3. Second-only films that match mutual taste profile
+    for key in second_only_keys:
+        film = second_by_key[key]
+        score = _profile_match_score(film, mutual_genres, era_overlap)
+        if score > 0:
+            scored.append((score, film, _recommendation_reason(film, mutual_profile, "their")))
+
+    # Sort by score descending
+    scored.sort(key=lambda x: x[0], reverse=True)
 
     recommendations: list[FilmRecommendation] = []
-    for result in results:
-        title = str(result.get("title") or "")
-        release_date = str(result.get("release_date") or "")
-        year = release_date[:4]
-        if not title or (title.strip().lower(), year) in watched_keys:
+    seen: set[tuple[str, str]] = set()
+    for _, film, reason in scored:
+        key = film_key(film)
+        if key in seen:
             continue
-        reason_parts = []
-        if mutual_profile.get("top_genres"):
-            reason_parts.append(f"you both lean toward {mutual_profile['top_genres'][0]}")
-        if mutual_profile.get("era_overlap") and mutual_profile["era_overlap"] != "mixed eras":
-            reason_parts.append(f"your overlap points to {mutual_profile['era_overlap']}")
-        reason = "Matched from your shared taste profile" if not reason_parts else "Matched because " + " and ".join(reason_parts)
-        recommendations.append(
-            FilmRecommendation(
-                title=title,
-                year=year,
-                reason=reason,
-                poster_path=str(result.get("poster_path") or ""),
-                vote_average=result.get("vote_average") if isinstance(result.get("vote_average"), (int, float)) else None,
-                release_date=release_date,
-            )
-        )
+        seen.add(key)
+        recommendations.append(recommendation_from_film(film, reason))
         if len(recommendations) >= limit:
             break
 
