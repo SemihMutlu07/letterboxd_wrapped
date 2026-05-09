@@ -5,10 +5,10 @@ import type { SharePersonStat } from './types';
 type Props = {
   topActors?: SharePersonStat[];
   topDirectors?: SharePersonStat[];
-  crushIndex: number | null;
-  directorIndex: number | null;
-  onCrushChange: (index: number | null) => void;
-  onDirectorChange: (index: number | null) => void;
+  actorIdx: number;
+  directorIdx: number;
+  onActorIdxChange: (index: number) => void;
+  onDirectorIdxChange: (index: number) => void;
 };
 
 function lastName(name: string): string {
@@ -19,10 +19,10 @@ function lastName(name: string): string {
 export default function CrushDirectorSwap({
   topActors,
   topDirectors,
-  crushIndex,
-  directorIndex,
-  onCrushChange,
-  onDirectorChange,
+  actorIdx,
+  directorIdx,
+  onActorIdxChange,
+  onDirectorIdxChange,
 }: Props) {
   const hasActors = (topActors?.length ?? 0) >= 1;
   const hasDirectors = (topDirectors?.length ?? 0) >= 1;
@@ -36,13 +36,13 @@ export default function CrushDirectorSwap({
             <span className="text-slate-400 font-medium shrink-0">Actor:</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               {topActors!.map((a, i) => {
-                const active = (crushIndex === null && i === 0) || crushIndex === i;
+                const active = actorIdx === i;
                 const label = `${i + 1}. ${lastName(a.name)}`;
                 return (
                   <button
                     key={a.name}
                     type="button"
-                    onClick={() => onCrushChange(crushIndex === i ? null : i)}
+                    onClick={() => onActorIdxChange(i)}
                     className={`px-3 py-1.5 rounded-md font-medium transition-colors whitespace-nowrap ${
                       active
                         ? 'bg-pink-500/25 text-pink-300 border border-pink-500/40'
@@ -62,13 +62,13 @@ export default function CrushDirectorSwap({
             <span className="text-slate-400 font-medium shrink-0">Director:</span>
             <div className="flex items-center gap-1.5 flex-wrap">
               {topDirectors!.map((d, i) => {
-                const active = (directorIndex === null && i === 0) || directorIndex === i;
+                const active = directorIdx === i;
                 const label = `${i + 1}. ${lastName(d.name)}`;
                 return (
                   <button
                     key={d.name}
                     type="button"
-                    onClick={() => onDirectorChange(directorIndex === i ? null : i)}
+                    onClick={() => onDirectorIdxChange(i)}
                     className={`px-3 py-1.5 rounded-md font-medium transition-colors whitespace-nowrap ${
                       active
                         ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/40'
