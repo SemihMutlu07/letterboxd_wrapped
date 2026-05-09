@@ -273,7 +273,7 @@ export default function ShareModal({
       const currentDistance = getDistance(e.touches[0], e.touches[1]);
       if (lastPinchDistance > 0) {
         const scaleChange = currentDistance / lastPinchDistance;
-        setUserScale(prev => Math.max(0.5, Math.min(3, prev * scaleChange)));
+        setUserScale(prev => Math.max(1, Math.min(4, prev * scaleChange)));
       }
       setLastPinchDistance(currentDistance);
     }
@@ -294,7 +294,7 @@ export default function ShareModal({
       wheelDeltaRef.current = 0;
       wheelRafRef.current = null;
       const scaleFactor = Math.exp(-delta * 0.0015);
-      setUserScale(prev => Math.max(0.5, Math.min(3, prev * scaleFactor)));
+      setUserScale(prev => Math.max(1, Math.min(4, prev * scaleFactor)));
     });
   }, []);
 
@@ -421,11 +421,11 @@ export default function ShareModal({
   }, [orientation]);
 
   const zoomIn = useCallback(() => {
-    setUserScale((prev) => Math.min(3, prev + 0.15));
+    setUserScale((prev) => Math.min(4, prev + 0.15));
   }, []);
 
   const zoomOut = useCallback(() => {
-    setUserScale((prev) => Math.max(0.5, prev - 0.15));
+    setUserScale((prev) => Math.max(1, prev - 0.15));
   }, []);
 
   const handleSavePNG = async () => {
@@ -501,17 +501,17 @@ export default function ShareModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 p-4 md:p-8">
+    <div className="fixed inset-0 z-50 md:p-8">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
 
       {/* Modal shell */}
-      <div 
+      <div
         data-modal="share-modal"
-        className="relative w-full max-w-6xl h-full bg-gradient-to-br from-slate-900/98 to-slate-800/95 backdrop-blur-2xl mx-auto rounded-2xl md:rounded-3xl shadow-2xl border border-slate-700/50 flex flex-col overflow-hidden"
+        className="relative w-full max-w-6xl h-full bg-gradient-to-br from-slate-900/98 to-slate-800/95 backdrop-blur-2xl mx-auto rounded-none md:rounded-3xl shadow-2xl border-0 md:border md:border-slate-700/50 flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="relative px-6 md:px-8 py-6 md:py-8 border-b border-slate-700/30">
+        <div className="relative px-4 md:px-8 py-3 md:py-8 border-b border-slate-700/30">
           {/* Background glow */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5" />
           
