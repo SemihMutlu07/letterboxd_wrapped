@@ -128,6 +128,62 @@ async def search_person_with_fallback(
         return None
 
 
+def _name_match(query_name: str, candidate_name: str) -> bool:
+    """Fuzzy name comparison: diacritic-stripped, case-insensitive, token overlap >= 80%."""
+    q_tokens = set(_normalize_person_name(query_name).split())
+    c_tokens = set(_normalize_person_name(candidate_name).split())
+    if not q_tokens or not c_tokens:
+        return False
+    overlap = len(q_tokens & c_tokens)
+    return (overlap / max(len(q_tokens), len(c_tokens))) >= 0.8
+
+
+async def find_person_by_film_credit(
+    session: aiohttp.ClientSession,
+    person_name: str,
+    films: list[dict],
+) -> Optional[str]:
+    """Reverse-lookup a person's TMDB profile_path via film credits.
+
+    When search/person returns no results, try searching for films the
+    person is known for and extracting their profile_path from the
+    film's credits response (crew + cast).
+
+    Returns the profile_path string or None.
+    """
+    for film in films[:3]:
+        year = film.get("year")
+        params: dict = {"query": str(film.get("title", ""))}
+        if year:
+            try:
+                params["year"] = int(year)
+            except (ValueError, TypeError):
+                pass
+        movie = await tmdb_get(session, "search/movie", params)
+        if not movie or not movie.get("results"):
+            # Retry without year constraint
+            movie = await tmdb_get(session, "search/movie", {"query": str(film.get("title", ""))})
+            if not movie or not movie.get("results"):
+                continue
+        tmdb_id = movie["results"][0]["id"]
+        credits = await tmdb_get(session, f"movie/{tmdb_id}/credits", {})
+        if not credits:
+            continue
+        # Check crew first (for directors)
+        for member in credits.get("crew", []):
+            if _name_match(person_name, member.get("name", "")):
+                pp = member.get("profile_path")
+                if isinstance(pp, str) and pp:
+                    return pp
+        # Then cast (for actors)
+        for member in credits.get("cast", []):
+            if _name_match(person_name, member.get("name", "")):
+                pp = member.get("profile_path")
+                if isinstance(pp, str) and pp:
+                    return pp
+    return None
+
+
 async def resolve_tmdb_id(
     session: aiohttp.ClientSession,
     title: str,

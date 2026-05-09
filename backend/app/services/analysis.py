@@ -14,6 +14,7 @@ from app.analysis_utils import compute_cinema_scale
 from app.services.review_analysis import compute_review_metrics
 from app.services.tmdb_client import (
     fetch_comprehensive_film_details,
+    find_person_by_film_credit,
     resolve_tmdb_id,
     search_person_with_fallback,
     tmdb_get,
@@ -658,16 +659,40 @@ async def process_comprehensive_letterboxd_data(
     stats["story_analytics"] = story_analytics
 
     # === DETAILED ANALYSIS ===
+    # Build director→films map for reverse credit lookup fallback
+    director_films_map: dict[str, list[dict]] = {}
+    for _, row in films_enriched.iterrows():
+        d = row.get("director")
+        if pd.notna(d):
+            year_val = row.get("year", "")
+            year_str = ""
+            if pd.notna(year_val):
+                try:
+                    year_str = str(int(year_val))
+                except (ValueError, TypeError):
+                    pass
+            director_films_map.setdefault(d, []).append({
+                "title": str(row.get("title", "")),
+                "year": year_str,
+            })
+
     director_counts = Counter(films_enriched["director"].dropna())
     director_profile_map: dict[str, str | None] = {}
-    for name, _count in director_counts.most_common(5):
+    for name, _count in director_counts.most_common(20):
         profile_path = None
         try:
-            person_data = await tmdb_get(session, "search/person", {"query": name})
+            # Step 1+2: search/person with fallback (exact + diacritic-stripped)
+            person_data = await search_person_with_fallback(session, name)
             if person_data and person_data.get("results"):
                 pp = person_data["results"][0].get("profile_path")
-                if isinstance(pp, str):
+                if isinstance(pp, str) and pp:
                     profile_path = pp
+
+            # Step 3: reverse lookup via film credits
+            if not profile_path:
+                films = director_films_map.get(name, [])
+                if films:
+                    profile_path = await find_person_by_film_credit(session, name, films)
         except Exception:
             pass
         director_profile_map[name] = profile_path
@@ -742,15 +767,38 @@ async def process_comprehensive_letterboxd_data(
     # === TOP ACTORS with profiles ===
     cast_counts = Counter([actor for cast_list in films_enriched["cast"].dropna() for actor in cast_list])
 
+    # Build actor→films map for reverse credit lookup fallback
+    actor_films_map: dict[str, list[dict]] = {}
+    for _, row in films_enriched.iterrows():
+        cast_list = row.get("cast")
+        if isinstance(cast_list, list):
+            year_val = row.get("year", "")
+            year_str = ""
+            if pd.notna(year_val):
+                try:
+                    year_str = str(int(year_val))
+                except (ValueError, TypeError):
+                    pass
+            film_info = {"title": str(row.get("title", "")), "year": year_str}
+            for actor in cast_list:
+                actor_films_map.setdefault(actor, []).append(film_info)
+
     top_actors_with_profiles = []
     for name, count in cast_counts.most_common(3):
         profile_path = None
         try:
+            # Step 1+2: search/person with fallback (exact + diacritic-stripped)
             person_data = await search_person_with_fallback(session, name)
             if person_data and person_data.get("results"):
                 pp = person_data["results"][0].get("profile_path")
-                if isinstance(pp, str):
+                if isinstance(pp, str) and pp:
                     profile_path = pp
+
+            # Step 3: reverse lookup via film credits
+            if not profile_path:
+                films = actor_films_map.get(name, [])
+                if films:
+                    profile_path = await find_person_by_film_credit(session, name, films)
         except Exception:
             pass
         top_actors_with_profiles.append({"name": name, "count": count, "profile_path": profile_path})
