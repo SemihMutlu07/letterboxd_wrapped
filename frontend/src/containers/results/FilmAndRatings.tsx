@@ -88,12 +88,13 @@ export function FilmHistory({
 export function RatingsBar({
   data,
   max,
+  isMobile,
 }: {
   data: { label: string; count: number }[];
   max: number;
+  isMobile: boolean;
 }) {
   const rating = '#eab308';
-  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
   
   return (
     <Section title="Rating Patterns" subtitle="How you rate films">
