@@ -22,6 +22,7 @@ class FilmRecommendation(BaseModel):
     reason: str
     poster_path: str = ""
     slug: str = ""
+    letterboxd_slug: str = ""
     vote_average: Optional[float] = None
     release_date: str = ""
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 from collections import Counter
 from typing import Any, Iterable, Optional
 
@@ -8,6 +9,15 @@ import aiohttp
 
 from app.models.recommend import FilmRecommendation, RecommendationStrategy
 from app.services.tmdb_client import fetch_comprehensive_film_details, resolve_tmdb_id
+
+
+def _slugify_title(title: str) -> str:
+    """Convert a film title to a Letterboxd-compatible URL slug."""
+    slug = title.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    return slug.strip("-")
 
 
 def film_key(film: dict[str, Any]) -> tuple[str, str]:
@@ -88,18 +98,26 @@ def pick_from_common(
 
 
 def recommendation_from_film(film: dict[str, Any], reason: str) -> FilmRecommendation:
+    slug = str(film.get("slug") or "")
+    letterboxd_slug = slug or _slugify_title(str(film.get("title", "")))
     return FilmRecommendation(
         title=str(film.get("title", "")),
         year=str(film.get("year") or str(film.get("release_date", ""))[:4] or ""),
         reason=reason,
         poster_path=str(film.get("poster_path") or ""),
-        slug=str(film.get("slug") or ""),
+        slug=slug,
+        letterboxd_slug=letterboxd_slug,
         vote_average=film.get("vote_average") if isinstance(film.get("vote_average"), (int, float)) else None,
         release_date=str(film.get("release_date") or ""),
     )
 
 
 def build_mutual_profile(first_enriched: list[dict], second_enriched: list[dict]) -> dict[str, Any]:
+    """Build a shared taste profile from two enriched film lists.
+
+    Pure-computation function. Callers should wrap with asyncio.wait_for
+    (~60 s) to guard against degenerate data.
+    """
     def counts(items: list[dict], field: str) -> Counter:
         counter: Counter = Counter()
         for film in items:
