@@ -25,7 +25,7 @@ USERNAME_RE = re.compile(r"^[a-z0-9_]+$")
 MAX_WATCHLIST_PAGES = 40
 
 _RATE_LIMIT_WINDOW = 600  # 10 minutes
-_RATE_LIMIT_MAX = 3
+_RATE_LIMIT_MAX = 10
 _rate_limiter: dict[str, list[float]] = {}
 
 
@@ -45,6 +45,16 @@ def _check_rate_limit(client_key: str) -> bool:
     events.append(now)
     _rate_limiter[client_key] = events
     return True
+
+
+def _rate_limit_exception() -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail={
+            "error_code": "watchlist_lab_rate_limited",
+            "message": "Too many watchlist lab requests. Wait a few minutes, then try again.",
+        },
+    )
 
 
 class WatchlistCompareRequest(BaseModel):
@@ -68,7 +78,7 @@ def _validate_username(username: str) -> str:
 @router.post("/api/watchlist-compare")
 async def compare_watchlists(request: Request, payload: WatchlistCompareRequest):
     if not _check_rate_limit(_client_key(request)):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        raise _rate_limit_exception()
 
     first = _validate_username(payload.usernames[0])
     second = _validate_username(payload.usernames[1])
@@ -109,7 +119,7 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
 @router.post("/api/recommend-from-compare", response_model=RecommendFromCompareResponse)
 async def recommend_from_compare(request: Request, payload: RecommendFromCompareRequest):
     if not _check_rate_limit(_client_key(request)):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        raise _rate_limit_exception()
 
     first = _validate_username(payload.usernames[0])
     second = _validate_username(payload.usernames[1])

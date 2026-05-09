@@ -98,10 +98,50 @@ export function normalizeError(err: unknown): NormalizedError {
     };
   }
 
-  // Fallback
+  // Scrape-specific: user truly not found vs blocked
+  if (/user_not_found/i.test(raw)) {
+    return {
+      title: 'Profile not found',
+      message: raw || 'This Letterboxd user could not be found.',
+      action:
+        'Check the username is spelled exactly right and the profile is public (not a private/patron-only profile).',
+      reason: 'user_not_found',
+    };
+  }
+
+  if (/blocked|blocking|automated access/i.test(raw)) {
+    return {
+      title: 'Blocked by Letterboxd',
+      message: raw || 'Letterboxd blocked the request.',
+      action: 'Try again in a few minutes. If it persists, use the ZIP upload method instead.',
+      reason: 'scrape_failed',
+    };
+  }
+
+  if (/scrape_unreachable|Could not reach Letterboxd/i.test(raw)) {
+    return {
+      title: "Can't reach Letterboxd",
+      message: raw || 'The server could not connect to Letterboxd.',
+      action: 'Check your internet connection and try again.',
+      reason: 'backend_unreachable',
+    };
+  }
+
+  if (/402|429|rate.?limit/i.test(raw)) {
+    return {
+      title: 'Rate limited',
+      message: 'Letterboxd is rate-limiting requests from this server.',
+      action: 'Wait a minute and try again, or use the ZIP upload.',
+      reason: 'scrape_failed',
+    };
+  }
+
+  // Fallback — include raw debug detail for backend errors
+  const showDebug = /Debug:/.test(raw);
   return {
-    title: 'Something went wrong',
+    title: showDebug ? 'Something went wrong (debug)' : 'Something went wrong',
     message: raw || 'An unexpected error occurred during analysis.',
+    action: showDebug ? undefined : 'Try again. If the issue persists, use the ZIP upload instead.',
     reason: 'unknown_error',
   };
 }

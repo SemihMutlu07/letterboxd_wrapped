@@ -159,7 +159,7 @@ function CountriesSectionInner({ stats }: { stats: StatsData }) {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h3 className="text-xs font-bold text-slate-500 uppercase tracking-[0.2em]">
-            Destinations
+            Countries
           </h3>
           <p className="text-lg font-bold text-white mt-0.5" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace" }}>
             {stats.top_countries?.length ?? 0}{' '}

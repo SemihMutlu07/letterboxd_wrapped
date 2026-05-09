@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 
 from app.models.recommend import DateNightResponse, MutualProfile, UserPairRequest
-from app.routes.watchlist import _check_rate_limit, _client_key, _validate_username
+from app.routes.watchlist import _check_rate_limit, _client_key, _rate_limit_exception, _validate_username
 from app.services.recommender import (
     build_mutual_profile,
     discover_date_night_recommendations,
@@ -26,7 +26,7 @@ MAX_ENRICHED_FILMS = 80
 @router.post("/api/date-night", response_model=DateNightResponse)
 async def date_night(request: Request, payload: UserPairRequest):
     if not _check_rate_limit(_client_key(request)):
-        raise HTTPException(status_code=429, detail="Rate limit exceeded. Try again later.")
+        raise _rate_limit_exception()
 
     first = _validate_username(payload.usernames[0])
     second = _validate_username(payload.usernames[1])

@@ -3,7 +3,7 @@
 import JSZip from 'jszip';
 import Link from 'next/link';
 import React, { useState, useCallback, useEffect } from 'react';
-import { Film, Star, Clock, Globe, Upload, Users } from 'lucide-react';
+import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
 import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
@@ -25,6 +25,9 @@ export default function LetterboxdLanding() {
   const [error, setError] = useState<NormalizedError | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
+  const [debugResult, setDebugResult] = useState<object | null>(null);
+  const [debugError, setDebugError] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Track initial session on page load
   useEffect(() => {
@@ -247,6 +250,20 @@ export default function LetterboxdLanding() {
     }
   }, [usernameInput]);
 
+  const handleDebug = useCallback(async () => {
+    const username = usernameInput.trim().replace(/^@/, '').toLowerCase();
+    if (!username) return;
+    setDebugResult(null);
+    setDebugError(null);
+    try {
+      const result = await scrapeProfile(username);
+      setDebugResult(result);
+    } catch (err) {
+      setDebugError(err instanceof Error ? err.message : String(err));
+    }
+    setShowDebug(true);
+  }, [usernameInput]);
+
   const handleCancel = useCallback(() => {
     setIsUploading(false);
     setIsScraping(false);
@@ -362,6 +379,15 @@ export default function LetterboxdLanding() {
                   </button>
                 </div>
                 <p className="mt-3 text-xs text-slate-500">Public profile scans are less complete than official exports, but useful for fast tests.</p>
+                <button
+                  type="button"
+                  onClick={() => void handleDebug()}
+                  disabled={!usernameInput.trim()}
+                  className="mt-4 inline-flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-slate-300 disabled:opacity-30"
+                >
+                  <Bug className="size-3.5" />
+                  Debug — show raw response
+                </button>
               </div>
             </section>
           )}
@@ -406,6 +432,26 @@ export default function LetterboxdLanding() {
           </section>
         </div>
       </div>
+
+      {/* Debug overlay */}
+      {showDebug && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="relative max-h-[80vh] w-full max-w-2xl overflow-auto rounded-2xl border border-slate-700/60 bg-slate-900 p-5">
+            <button
+              onClick={() => setShowDebug(false)}
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+            >
+              <X className="size-4" />
+            </button>
+            <h3 className="mb-3 text-base font-semibold text-slate-200">
+              {debugError ? 'Scrape Error' : 'Raw Scrape Response'}
+            </h3>
+            <pre className="overflow-auto rounded-xl bg-slate-950 p-4 text-xs leading-relaxed text-slate-300">
+              {JSON.stringify(debugError ? { error: debugError } : debugResult, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
