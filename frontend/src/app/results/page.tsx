@@ -7,6 +7,7 @@ import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
 
 import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
+import ReviewAnalysisSection from '@/containers/results/experimental/sections/ReviewAnalysisSection';
 import CastGrid from '@/containers/results/experimental/sections/CastGrid';
 import DirectorsGrid from '@/containers/results/experimental/sections/DirectorsGrid';
 import type { StatsData } from '@/containers/results/experimental/types';
@@ -568,7 +569,10 @@ function ResultsContent({
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
 
         {/* Ratings Bar */}
-        <LazyRatingsBar data={ratingsArr} max={ratingMax} />
+        <LazyRatingsBar data={ratingsArr} max={ratingMax} isMobile={isMobile} />
+
+        {/* Review Analysis */}
+        {stats.review_analysis && <ReviewAnalysisSection stats={stats} />}
 
         {/* Quick Facts */}
         <LazyQuickFacts
@@ -691,13 +695,13 @@ function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; is
 }
 
 // Lazy wrapper for Ratings Bar
-function LazyRatingsBar({ data, max }: { data: any[]; max: number }) {
+function LazyRatingsBar({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
   const { ref, shouldMount } = useLazyMount(200);
-  
+
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <RatingsBar data={data} max={max} />
+        <RatingsBar data={data} max={max} isMobile={isMobile} />
       ) : (
         <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}
