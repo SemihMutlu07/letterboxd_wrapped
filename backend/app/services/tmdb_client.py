@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+import time
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import aiofiles
@@ -14,6 +16,32 @@ from app.config import settings
 
 CACHE_DIR = Path("tmdb_cache")
 CACHE_DIR.mkdir(exist_ok=True)
+_tmdb_request_times: deque[float] = deque()
+_tmdb_rate_lock = asyncio.Lock()
+
+
+async def _wait_for_tmdb_slot() -> None:
+    """Conservative process-wide TMDB request pacing.
+
+    TMDB no longer publishes a fixed hard quota, but its docs mention upper
+    limits around 40 req/sec. We stay below that by default and still rely on
+    429 backoff if the effective limit changes.
+    """
+    limit = max(1, settings.tmdb_requests_per_second)
+
+    while True:
+        async with _tmdb_rate_lock:
+            now = time.monotonic()
+            while _tmdb_request_times and now - _tmdb_request_times[0] >= 1:
+                _tmdb_request_times.popleft()
+
+            if len(_tmdb_request_times) < limit:
+                _tmdb_request_times.append(now)
+                return
+
+            sleep_for = max(0.01, 1 - (now - _tmdb_request_times[0]))
+
+        await asyncio.sleep(sleep_for)
 
 
 async def tmdb_get(
@@ -23,7 +51,7 @@ async def tmdb_get(
     cache: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """GET from TMDB API with disk caching."""
-    params = params or {}
+    params = dict(params or {})
     params["api_key"] = settings.tmdb_api_key
 
     params_str = json.dumps(params, sort_keys=True)
@@ -38,17 +66,30 @@ async def tmdb_get(
             pass
 
     url = f"https://api.themoviedb.org/3/{endpoint}"
-    try:
-        async with session.get(url, params=params) as response:
-            response.raise_for_status()
-            data = await response.json()
-            async with aiofiles.open(cache_file, "w", encoding="utf-8") as f:
-                await f.write(json.dumps(data, ensure_ascii=False, indent=2))
-            await asyncio.sleep(0.05)
-            return data
-    except aiohttp.ClientError as e:
-        print(f"Error fetching {url}: {e}")
-        return None
+    for attempt in range(settings.tmdb_429_retries + 1):
+        try:
+            await _wait_for_tmdb_slot()
+            async with session.get(url, params=params) as response:
+                if response.status == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        delay = float(retry_after) if retry_after else 1.5 * (attempt + 1)
+                    except ValueError:
+                        delay = 1.5 * (attempt + 1)
+                    if attempt < settings.tmdb_429_retries:
+                        await asyncio.sleep(delay)
+                        continue
+
+                response.raise_for_status()
+                data = await response.json()
+                async with aiofiles.open(cache_file, "w", encoding="utf-8") as f:
+                    await f.write(json.dumps(data, ensure_ascii=False, indent=2))
+                return data
+        except aiohttp.ClientError as e:
+            print(f"Error fetching {url}: {e}")
+            return None
+
+    return None
 
 
 async def resolve_tmdb_id(
