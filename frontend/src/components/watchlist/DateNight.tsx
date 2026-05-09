@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
-import Image from 'next/image';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
@@ -19,6 +18,7 @@ export default function DateNight() {
   const [result, setResult] = useState<DateNightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [erroredPosters, setErroredPosters] = useState<Set<string>>(new Set());
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && normalized[0] !== normalized[1];
 
@@ -127,9 +127,16 @@ export default function DateNight() {
             <div className="space-y-3">
               {result.recommendations.map((film, index) => {
                 const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
-                const letterboxdUrl = film.slug
-                  ? `https://letterboxd.com/film/${film.slug}/`
+                const extra = film as unknown as Record<string, unknown>;
+                const director = extra.director as string | undefined;
+                const overview = extra.overview as string | undefined;
+                const watchlistAddedAt = extra.watchlist_added_at as string | undefined;
+                const slug = (extra.letterboxd_slug as string) || film.slug;
+                const letterboxdUrl = slug
+                  ? `https://letterboxd.com/film/${slug}/`
                   : `https://letterboxd.com/search/${encodeURIComponent(film.title)}/`;
+                const posterKey = `${film.title}-${film.year}`;
+                const imgError = erroredPosters.has(posterKey);
 
                 return (
                   <article
@@ -138,14 +145,12 @@ export default function DateNight() {
                   >
                     {/* Poster */}
                     <div className="relative h-[120px] w-[80px] shrink-0 overflow-hidden bg-stone-800">
-                      {posterUrl ? (
-                        <Image
+                      {posterUrl && !imgError ? (
+                        <img
                           src={posterUrl}
                           alt={`${film.title} poster`}
-                          fill
-                          className="object-cover"
-                          sizes="80px"
-                          unoptimized
+                          className="h-full w-full object-cover"
+                          onError={() => setErroredPosters(prev => new Set(prev).add(posterKey))}
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-stone-600">
@@ -160,10 +165,13 @@ export default function DateNight() {
                       <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
                         <span>{film.year || '—'}</span>
                         <span>·</span>
-                        <span className="text-stone-600">—</span>
+                        <span>{director || '—'}</span>
                       </div>
-                      <p className="text-xs text-stone-600 line-clamp-2">—</p>
+                      <p className="text-xs text-stone-600 line-clamp-2">{overview || '—'}</p>
                       <p className="text-xs italic text-stone-400">{film.reason}</p>
+                      {watchlistAddedAt && (
+                        <span className="text-xs text-stone-500">added {watchlistAddedAt}</span>
+                      )}
                       <a
                         href={letterboxdUrl}
                         target="_blank"
