@@ -115,4 +115,19 @@ export interface StatsData {
     decade?: string;
     rating?: number;
   }[];
+
+  /** Review text metrics from compute_review_metrics (review_analysis.py). */
+  review_analysis?: {
+    total_reviews: number;
+    reviews_with_text: number;
+    review_rate: number;
+    total_words_written: number;
+    avg_review_length_words: number;
+    unique_words_used: number;
+    vocab_richness: number;
+    word_frequency: { word: string; count: number }[];
+    bigram_frequency: { bigram: string; count: number }[];
+    avg_length_by_rating: Record<string, number>;
+    language_mix: Record<string, { count: number; percentage: number }>;
+  };
 }
