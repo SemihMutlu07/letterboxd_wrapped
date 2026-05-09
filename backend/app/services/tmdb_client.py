@@ -103,9 +103,16 @@ async def search_person_with_fallback(
     session: aiohttp.ClientSession,
     name: str,
 ) -> Optional[Dict[str, Any]]:
-    """Search TMDB person by name, retrying with a diacritic-stripped query."""
+    """Search TMDB person by name with a 3-step fallback strategy.
+
+    Step 1: exact name query
+    Step 2: query with language=en-US (helps with non-Latin/diacritic names)
+    Step 3: diacritic-stripped / normalized query
+    """
     try:
         normalized_name = _normalize_person_name(name)
+
+        # Step 1: search with exact name
         exact_data = await tmdb_get(session, "search/person", {"query": name})
         exact_results = exact_data.get("results", []) if exact_data else []
         if exact_results:
@@ -118,6 +125,20 @@ async def search_person_with_fallback(
                 other_results = [result for result in exact_results if result not in exact_matches]
                 return {**exact_data, "results": exact_matches + other_results}
 
+        # Step 2: retry with language=en-US (TMDB may index names differently per locale)
+        if not exact_results and normalized_name != name.lower().strip():
+            en_data = await tmdb_get(session, "search/person", {"query": name, "language": "en-US"})
+            en_results = en_data.get("results", []) if en_data else []
+            if en_results:
+                en_matches = [
+                    r for r in en_results
+                    if _normalize_person_name(str(r.get("name") or "")) == normalized_name
+                ]
+                if en_matches:
+                    other_results = [r for r in en_results if r not in en_matches]
+                    return {**en_data, "results": en_matches + other_results}
+
+        # Step 3: search with diacritic-stripped / normalized name
         if normalized_name and normalized_name != name.lower().strip():
             normalized_data = await tmdb_get(session, "search/person", {"query": normalized_name})
             if normalized_data and normalized_data.get("results"):
