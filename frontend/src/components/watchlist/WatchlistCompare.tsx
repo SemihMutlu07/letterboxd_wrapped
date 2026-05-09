@@ -12,6 +12,7 @@ import {
   type WatchlistCompareResult,
   type WatchlistFilm,
 } from '@/lib/api';
+import { pickRandomUsernames } from '@/lib/usernames';
 
 function LoadingPanel({
   title,
@@ -67,7 +68,7 @@ function FilmList({ title, films }: { title: string; films: WatchlistFilm[] }) {
         {films.slice(0, 10).map((film) => (
           <div key={`${film.title}-${film.year}-${film.slug}`} className="flex items-baseline justify-between gap-3 border-b border-stone-800/80 pb-2">
             <span className="text-sm text-stone-100">{film.title}</span>
-            <span className="shrink-0 font-mono text-xs text-stone-500">{film.year}</span>
+            <span className="shrink-0 text-sm text-stone-500">{film.year}</span>
           </div>
         ))}
         {films.length === 0 && <p className="text-sm text-stone-500">No films in this bucket.</p>}
@@ -94,6 +95,7 @@ function RecommendationStrip({ recommendation }: { recommendation: FilmRecommend
 }
 
 export default function WatchlistCompare() {
+  const placeholders = useMemo(() => pickRandomUsernames(2), []);
   const [first, setFirst] = useState('');
   const [second, setSecond] = useState('');
   const [strategy, setStrategy] = useState<RecommendationStrategy>('random');
@@ -139,9 +141,8 @@ export default function WatchlistCompare() {
 
   const counts = result?.counts;
   const total = counts ? Math.max(counts.first_total + counts.second_total - counts.common, 1) : 1;
-  const commonPct = counts ? Math.max(12, (counts.common / total) * 100) : 12;
-  const firstPct = counts ? Math.max(12, (counts.first_only / total) * 100) : 12;
-  const secondPct = counts ? Math.max(12, (counts.second_only / total) * 100) : 12;
+  const barTotal = counts ? Math.max(counts.first_only + counts.common + counts.second_only, 1) : 1;
+  const formatPct = (n: number) => `${Math.round((n / barTotal) * 100)}%`;
 
   return (
     <div className="space-y-8">
@@ -152,7 +153,7 @@ export default function WatchlistCompare() {
             <input
               value={first}
               onChange={(event) => setFirst(event.target.value)}
-              placeholder="alice"
+              placeholder={placeholders[0]}
               className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-amber-400"
             />
           </label>
@@ -164,7 +165,7 @@ export default function WatchlistCompare() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void handleCompare();
               }}
-              placeholder="bob"
+              placeholder={placeholders[1]}
               className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-amber-400"
             />
           </label>
@@ -190,33 +191,79 @@ export default function WatchlistCompare() {
 
       {result && (
         <>
-          <section className="grid gap-4 lg:grid-cols-[280px_1fr]">
-            <div className="border border-amber-400 bg-[#0f0d0b] p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">Match score</p>
-              <p className="mt-4 text-7xl font-black leading-none text-stone-50">{result.match_score}%</p>
-              <p className="mt-4 text-sm text-stone-400">
-                <span className="font-semibold text-orange-400">@{result.users[0]}</span>
-                <span className="mx-1.5 text-stone-600">vs</span>
-                <span className="font-semibold text-emerald-400">@{result.users[1]}</span>
-              </p>
+          {/* Match score header */}
+          <section className="border border-amber-400/40 bg-[#0f0d0b] p-5 text-center">
+            <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">Match score</p>
+            <p className="mt-2 text-7xl font-black leading-none text-stone-50">{result.match_score}%</p>
+            <p className="mt-2 text-sm text-stone-400">
+              <span className="font-semibold text-orange-400">@{result.users[0]}</span>
+              <span className="mx-1.5 text-stone-600">vs</span>
+              <span className="font-semibold text-emerald-400">@{result.users[1]}</span>
+            </p>
+          </section>
+
+          {/* Split headers: ONLY @A | BOTH | ONLY @B */}
+          <section className="grid grid-cols-3 gap-3">
+            <div className="border border-orange-500/30 bg-[#171411] p-4 text-center">
+              <p className="font-mono text-xs uppercase tracking-[0.12em] text-orange-400">Only @{result.users[0]}</p>
+              <p className="mt-1 text-2xl font-black text-stone-100">{counts?.first_only ?? 0}</p>
             </div>
-            <div className="border border-stone-800 bg-[#171411] p-5">
-              <div className="flex h-full items-center gap-3">
-                <div style={{ flexGrow: firstPct }} className="h-24 bg-orange-500/80" title="First only" />
-                <div style={{ flexGrow: commonPct }} className="h-24 bg-amber-300" title="On both watchlists" />
-                <div style={{ flexGrow: secondPct }} className="h-24 bg-emerald-500/80" title="Second only" />
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 font-mono text-[11px] uppercase tracking-[0.12em]">
-                <span className="text-orange-400/90">Only @{result.users[0]}: {counts?.first_only}</span>
-                <span className="text-amber-300">Both watchlists: {counts?.common}</span>
-                <span className="text-emerald-400/90">Only @{result.users[1]}: {counts?.second_only}</span>
-              </div>
+            <div className="border border-amber-300/40 bg-[#171411] p-4 text-center">
+              <p className="font-mono text-xs uppercase tracking-[0.12em] text-amber-300">Both</p>
+              <p className="mt-1 text-2xl font-black text-stone-100">{counts?.common ?? 0}</p>
+            </div>
+            <div className="border border-emerald-500/30 bg-[#171411] p-4 text-center">
+              <p className="font-mono text-xs uppercase tracking-[0.12em] text-emerald-400">Only @{result.users[1]}</p>
+              <p className="mt-1 text-2xl font-black text-stone-100">{counts?.second_only ?? 0}</p>
             </div>
           </section>
 
+          {/* Proportional bar */}
+          <section className="border border-stone-800 bg-[#171411] p-5">
+            <div className="flex w-full gap-0.5">
+              {counts && (
+                <>
+                  <div
+                    style={{ flexGrow: counts.first_only || 1 }}
+                    className="group relative h-12 bg-orange-500/80"
+                    title={`Only @${result.users[0]}: ${counts.first_only} (${formatPct(counts.first_only)})`}
+                  >
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      {formatPct(counts.first_only)}
+                    </span>
+                  </div>
+                  <div
+                    style={{ flexGrow: counts.common || 1 }}
+                    className="group relative h-12 bg-amber-300"
+                    title={`Both: ${counts.common} (${formatPct(counts.common)})`}
+                  >
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-stone-950 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {formatPct(counts.common)}
+                    </span>
+                  </div>
+                  <div
+                    style={{ flexGrow: counts.second_only || 1 }}
+                    className="group relative h-12 bg-emerald-500/80"
+                    title={`Only @${result.users[1]}: ${counts.second_only} (${formatPct(counts.second_only)})`}
+                  >
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                      {formatPct(counts.second_only)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 font-mono text-[11px] uppercase tracking-[0.12em]">
+              <span className="text-orange-400/90 text-center">Only @{result.users[0]}: {counts?.first_only}</span>
+              <span className="text-amber-300 text-center">Both: {counts?.common}</span>
+              <span className="text-emerald-400/90 text-center">Only @{result.users[1]}: {counts?.second_only}</span>
+            </div>
+          </section>
+
+          {/* Film lists */}
           <section className="grid gap-4 lg:grid-cols-3">
-            <FilmList title={`On both watchlists (${result.counts.common})`} films={result.common} />
             <FilmList title={`Only @${result.users[0]} (${result.counts.first_only})`} films={result.first_only} />
+            <FilmList title={`On both (${result.counts.common})`} films={result.common} />
             <FilmList title={`Only @${result.users[1]} (${result.counts.second_only})`} films={result.second_only} />
           </section>
 
