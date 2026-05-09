@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabase } from "@/lib/supabaseClient";
+import { getSupabase, safeSupabaseCall } from "@/lib/supabaseClient";
 
 export type Consent = "accept" | "decline";
 
@@ -19,20 +19,27 @@ export async function upsertUserSession(input: UserSessionInsert) {
     
     
     const supabase = getSupabase();
-    const { error } = await supabase
-        .from("user_sessions")
-        .upsert({
-            session_id: input.session_id,
-            username: input.username,
-            consent: input.consent,
-            film_count: input.film_count ?? null,
-            favorite_genre: input.favorite_genre ?? null,
-        }, { 
-            onConflict: "session_id", 
-            ignoreDuplicates: false
-        });
+    const { error } = await safeSupabaseCall(() =>
+        supabase
+            .from("user_sessions")
+            .upsert({
+                session_id: input.session_id,
+                username: input.username,
+                consent: input.consent,
+                film_count: input.film_count ?? null,
+                favorite_genre: input.favorite_genre ?? null,
+            }, { 
+                onConflict: "session_id", 
+                ignoreDuplicates: false
+            })
+    );
     
     if (error) {
+        // Network errors (DNS / timeout) are handled and logged by safeSupabaseCall
+        if ('code' in error && error.code === 'NETWORK_ERROR') {
+            console.warn('[supabase] session upsert skipped (network error):', error.message);
+            return;
+        }
         throw error;
     }
     

@@ -126,7 +126,11 @@ export default function LetterboxdLanding() {
       setDetectedUsername(detectedUsername);
       setUsername(detectedUsername);
       // Fire-and-forget — Supabase analytics shouldn't block the upload UI.
-      upsertUserSession({ session_id: ensureSessionId(), username: detectedUsername, consent: getConsent() || 'decline', film_count: null, favorite_genre: null }).catch(() => {});
+      try {
+        await upsertUserSession({ session_id: ensureSessionId(), username: detectedUsername, consent: getConsent() || 'decline', film_count: null, favorite_genre: null });
+      } catch (err) {
+        console.warn('[supabase] session upsert failed (non-blocking):', err);
+      }
     }
 
     let uploadFiles: File[] = [];

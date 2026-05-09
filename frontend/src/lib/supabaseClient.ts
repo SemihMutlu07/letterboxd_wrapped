@@ -78,6 +78,25 @@ export function getSupabase(): SupabaseClient {
   }
 }
 
+/**
+ * Wrap a supabase operation to gracefully handle network errors (DNS / connection reset).
+ * Catches TypeError (fetch failures) and returns a clean error object instead of throwing.
+ */
+export async function safeSupabaseCall<T>(
+  operation: () => PromiseLike<{ data: T | null; error: any }>
+): Promise<{ data: T | null; error: any }> {
+  try {
+    return await operation();
+  } catch (err) {
+    if (err instanceof TypeError) {
+      console.warn('[supabase] Network error (DNS / connection):', err.message);
+      return { data: null, error: { message: `Network error: ${err.message}`, code: 'NETWORK_ERROR' } };
+    }
+    // Re-throw unexpected errors
+    throw err;
+  }
+}
+
 export async function testSupabaseConnection(): Promise<boolean> {
   try {
     const supabase = getSupabase();
