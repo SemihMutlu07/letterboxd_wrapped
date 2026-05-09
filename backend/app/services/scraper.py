@@ -10,12 +10,15 @@ proper cookie/session handling that aiohttp doesn't replicate well.
 
 import re
 import asyncio
+import logging
 from typing import Optional
 from functools import partial
 import time
 
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger("letterboxd_wrapped.scraper")
 
 BASE_URL = "https://letterboxd.com"
 HEADERS = {
@@ -29,6 +32,11 @@ HEADERS = {
 }
 PAGE_DELAY = 0.5  # seconds between requests
 MAX_PAGES = 60    # safety cap (~3000 films)
+
+
+def _is_cloudflare_block(body: str) -> bool:
+    """Check if the response body is a Cloudflare challenge page."""
+    return "Just a moment" in body[:500] and "challenges.cloudflare.com" in body[:1000]
 
 
 def _parse_rating(rating_span) -> Optional[float]:
@@ -81,12 +89,32 @@ def _parse_diary_rows(soup: BeautifulSoup) -> list[dict]:
     return films
 
 
+
+
 def _sync_check_profile(username: str) -> bool:
-    """Synchronous profile check."""
+    """Synchronous profile check — logs every outcome for debugging."""
+    url = f"{BASE_URL}/{username}/"
     try:
-        r = requests.get(f"{BASE_URL}/{username}/", headers=HEADERS, timeout=10)
-        return r.status_code == 200
-    except requests.RequestException:
+        scraper = cloudscraper.create_scraper()
+        scraper.headers.update(HEADERS)
+        r = scraper.get(url, timeout=15)
+        if r.status_code == 200:
+            if _is_cloudflare_block(r.text):
+                logger.warning("Profile check BLOCKED: %s → Cloudflare challenge", username)
+                return False
+            logger.info("Profile check OK: %s → 200", username)
+            return True
+        elif r.status_code == 404:
+            logger.warning("Profile check FAILED: %s → 404 (user not found)", username)
+        elif r.status_code == 403:
+            logger.warning("Profile check FAILED: %s → 403 (blocked by Letterboxd)", username)
+        else:
+            logger.warning("Profile check FAILED: %s → %d (unexpected status)", username, r.status_code)
+        # Log first 500 chars of body for diagnosis
+        logger.debug("Response preview for %s: %s", username, r.text[:500])
+        return False
+    except Exception as exc:
+        logger.warning("Profile check FAILED: %s → %s: %s", username, type(exc).__name__, exc)
         return False
 
 
@@ -123,16 +151,16 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
     return films
 
 
-def _new_session() -> requests.Session:
-    s = requests.Session()
+def _new_session() -> cloudscraper.CloudScraper:
+    s = cloudscraper.create_scraper()
     s.headers.update(HEADERS)
     return s
 
 
-def _warm_session(session: requests.Session) -> None:
+def _warm_session(session: cloudscraper.CloudScraper) -> None:
     try:
         session.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
-    except requests.RequestException:
+    except Exception:
         pass
     time.sleep(0.3)
 
@@ -140,7 +168,7 @@ def _warm_session(session: requests.Session) -> None:
 def _sync_scrape_films_grid(
     username: str,
     max_pages: int,
-    session: Optional[requests.Session] = None,
+    session: Optional[cloudscraper.CloudScraper] = None,
 ) -> list[dict]:
     """Synchronous full-watched grid scraper.
 
@@ -148,6 +176,7 @@ def _sync_scrape_films_grid(
     watched (superset of diary entries — covers films with no logged date).
     """
     owns_session = session is None
+    logger.info("Starting grid scrape for %s (max_pages=%d)", username, max_pages)
     s = session or _new_session()
     if owns_session:
         _warm_session(s)
@@ -157,13 +186,19 @@ def _sync_scrape_films_grid(
     try:
         for page in range(1, max_pages + 1):
             url = f"{BASE_URL}/{username}/films/page/{page}/"
+            logger.debug("Grid page %d: GET %s", page, url)
             r = s.get(url, timeout=10)
 
             if r.status_code == 404:
+                logger.warning("Grid page %d: 404 for %s", page, username)
                 if page == 1:
                     raise ValueError(f"User '{username}' not found")
                 break
             if r.status_code != 200:
+                logger.warning("Grid page %d: unexpected status %d for %s", page, r.status_code, username)
+                break
+            if _is_cloudflare_block(r.text):
+                logger.warning("Grid page %d: Cloudflare block for %s", page, username)
                 break
 
             soup = BeautifulSoup(r.text, "html.parser")
@@ -178,13 +213,14 @@ def _sync_scrape_films_grid(
         if owns_session:
             s.close()
 
+    logger.info("Grid scrape complete for %s: %d films", username, len(all_films))
     return all_films
 
 
 def _sync_scrape_watchlist(
     username: str,
     max_pages: int,
-    session: Optional[requests.Session] = None,
+    session: Optional[cloudscraper.CloudScraper] = None,
 ) -> list[dict]:
     """Synchronous public watchlist scraper.
 
@@ -192,6 +228,7 @@ def _sync_scrape_watchlist(
     used by watched-films pages.
     """
     owns_session = session is None
+    logger.info("Starting watchlist scrape for %s (max_pages=%d)", username, max_pages)
     s = session or _new_session()
     if owns_session:
         _warm_session(s)
@@ -201,13 +238,16 @@ def _sync_scrape_watchlist(
     try:
         for page in range(1, max_pages + 1):
             url = f"{BASE_URL}/{username}/watchlist/page/{page}/"
+            logger.debug("Watchlist page %d: GET %s", page, url)
             r = s.get(url, timeout=10)
 
             if r.status_code == 404:
+                logger.warning("Watchlist page %d: 404 for %s", page, username)
                 if page == 1:
                     raise ValueError(f"User '{username}' not found")
                 break
             if r.status_code != 200:
+                logger.warning("Watchlist page %d: unexpected status %d for %s", page, r.status_code, username)
                 break
 
             soup = BeautifulSoup(r.text, "html.parser")
@@ -222,16 +262,18 @@ def _sync_scrape_watchlist(
         if owns_session:
             s.close()
 
+    logger.info("Watchlist scrape complete for %s: %d films", username, len(all_films))
     return all_films
 
 
 def _sync_scrape_diary(
     username: str,
     max_pages: int,
-    session: Optional[requests.Session] = None,
+    session: Optional[cloudscraper.CloudScraper] = None,
 ) -> list[dict]:
     """Synchronous diary scraper with session cookies."""
     owns_session = session is None
+    logger.info("Starting diary scrape for %s (max_pages=%d)", username, max_pages)
     s = session or _new_session()
     if owns_session:
         _warm_session(s)
@@ -241,13 +283,19 @@ def _sync_scrape_diary(
     try:
         for page in range(1, max_pages + 1):
             url = f"{BASE_URL}/{username}/films/diary/page/{page}/"
+            logger.debug("Diary page %d: GET %s", page, url)
             r = s.get(url, timeout=10)
 
             if r.status_code == 404:
+                logger.warning("Diary page %d: 404 for %s", page, username)
                 if page == 1:
                     raise ValueError(f"User '{username}' not found")
                 break
             if r.status_code != 200:
+                logger.warning("Diary page %d: unexpected status %d for %s", page, r.status_code, username)
+                break
+            if _is_cloudflare_block(r.text):
+                logger.warning("Diary page %d: Cloudflare block for %s", page, username)
                 break
 
             soup = BeautifulSoup(r.text, "html.parser")
@@ -262,6 +310,8 @@ def _sync_scrape_diary(
         if owns_session:
             s.close()
 
+
+    logger.info("Diary scrape complete for %s: %d films", username, len(all_films))
     return all_films
 
 
@@ -272,15 +322,22 @@ def _sync_scrape_profile_sources(username: str, max_pages: int) -> tuple[list[di
     closer to a single browser visit and avoids losing diary dates after one
     source has already established Letterboxd session state.
     """
+    logger.info("Starting combined profile scrape for %s", username)
     with _new_session() as session:
         _warm_session(session)
         diary = _sync_scrape_diary(username, max_pages, session=session)
         grid = _sync_scrape_films_grid(username, max_pages, session=session)
+        logger.info("Combined scrape complete for %s: diary=%d grid=%d", username, len(diary), len(grid))
         return diary, grid
 
 
 async def check_profile_exists(username: str) -> bool:
-    """Check if a Letterboxd profile exists (async wrapper)."""
+    """Check if a Letterboxd profile exists (async wrapper).
+
+    Returns True if the profile URL returns 200.
+    All failures (404, 403, timeout, etc.) are logged in detail
+    by _sync_check_profile.
+    """
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, partial(_sync_check_profile, username))
 

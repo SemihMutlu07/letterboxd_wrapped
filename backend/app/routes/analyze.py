@@ -176,21 +176,29 @@ async def scrape_profile(request: Request):
         logger.warning("check_profile_exists failed for %s: %s", username, exc)
         raise HTTPException(
             status_code=502,
-            detail={"error_code": "scrape_unreachable", "message": "Could not reach Letterboxd. Try again in a moment."},
+            detail={"error_code": "scrape_unreachable", "message": f"Could not reach Letterboxd to check @{username}. (Debug: {type(exc).__name__}: {exc}) Try again in a moment."},
         )
     if not exists:
+        # _sync_check_profile already logged the exact status — route just surfaces
         raise HTTPException(
             status_code=404,
-            detail={"error_code": "user_not_found", "message": f"Letterboxd user '{username}' not found."},
+            detail={"error_code": "user_not_found", "message": f"Letterboxd user '{username}' not found. If you're sure this user exists, Letterboxd may be blocking automated access (see server logs)."},
         )
 
     try:
         diary_films, grid_films = await scrape_profile_sources(username, max_pages=60)
+    except ValueError as exc:
+        # Re-raise 404s from scraper (user truly gone or profile private)
+        logger.warning("Scrape value error for %s: %s", username, exc)
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "user_not_found", "message": f"{exc}"},
+        )
     except Exception as exc:
-        logger.warning("Scraping failed for %s: %s", username, exc)
+        logger.exception("Scraping failed for %s: %s", username, exc)
         raise HTTPException(
             status_code=502,
-            detail={"error_code": "scrape_failed", "message": "Letterboxd blocked or returned an unexpected page. Try again later."},
+            detail={"error_code": "scrape_failed", "message": f"Letterboxd returned an unexpected response for @{username}. (Debug: {type(exc).__name__}: {exc}) Try again later."},
         )
 
     request_dir: Optional[Path] = None
@@ -228,10 +236,10 @@ async def scrape_profile(request: Request):
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("scrape_profile failed for %s", username)
+        logger.exception("scrape_profile analysis failed for %s", username)
         raise HTTPException(
             status_code=500,
-            detail={"error_code": "analysis_failed", "message": f"Analysis failed: {type(exc).__name__}: {exc}"},
+            detail={"error_code": "analysis_failed", "message": f"Analysis failed after scraping @{username}: {type(exc).__name__}: {exc}"},
         )
     finally:
         if request_dir is not None:

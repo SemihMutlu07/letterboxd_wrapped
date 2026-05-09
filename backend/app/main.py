@@ -23,6 +23,10 @@ from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist
 
 logger = logging.getLogger("letterboxd_wrapped")
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(levelname)-8s [%(name)s] %(message)s",
+)
 
 warnings.filterwarnings("ignore")
 
