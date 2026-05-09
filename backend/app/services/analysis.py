@@ -11,6 +11,7 @@ import pandas as pd
 
 from app import task_manager
 from app.analysis_utils import compute_cinema_scale
+from app.services.review_analysis import compute_review_metrics
 from app.services.tmdb_client import (
     fetch_comprehensive_film_details,
     resolve_tmdb_id,
@@ -31,11 +32,12 @@ async def process_comprehensive_letterboxd_data(
         else:
             print(f"📊 {stage}: {message} ({progress}/{total})")
 
-    _progress("loading", "Loading CSV data files...", 0, 4)
+    _progress("loading", "Loading CSV data files...", 0, 5)
 
     watched_df = pd.read_csv(csv_files["watched.csv"]) if "watched.csv" in csv_files else pd.DataFrame()
     ratings_df = pd.read_csv(csv_files["ratings.csv"]) if "ratings.csv" in csv_files else pd.DataFrame()
     diary_df = pd.read_csv(csv_files["diary.csv"]) if "diary.csv" in csv_files else pd.DataFrame()
+    reviews_df = pd.read_csv(csv_files["reviews.csv"]) if "reviews.csv" in csv_files else pd.DataFrame()
 
     if watched_df.empty:
         raise ValueError("❌ watched.csv is required for analysis.")
@@ -951,5 +953,9 @@ async def process_comprehensive_letterboxd_data(
                 stats["furthest_destination"] = country["name"]
                 break
 
-    _progress("analyzing", "Analysis complete!", 10, 10)
+    # === REVIEW TEXT ANALYSIS ===
+    _progress("analyzing", "Analyzing review text...", 10, 11)
+    stats["review_analysis"] = compute_review_metrics(reviews_df)
+
+    _progress("analyzing", "Analysis complete!", 11, 11)
     return stats
