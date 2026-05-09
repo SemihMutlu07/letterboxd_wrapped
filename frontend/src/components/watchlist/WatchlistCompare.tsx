@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowRight, Clapperboard, Shuffle, Sparkles } from 'lucide-react';
+import { Clapperboard, Shuffle, Sparkles } from 'lucide-react';
 
 import {
   compareWatchlists,
@@ -12,6 +12,48 @@ import {
   type WatchlistCompareResult,
   type WatchlistFilm,
 } from '@/lib/api';
+
+function LoadingPanel({
+  title,
+  message,
+  showPosterRail = false,
+}: {
+  title: string;
+  message: string;
+  showPosterRail?: boolean;
+}) {
+  return (
+    <section className="border border-amber-300/60 bg-[#171411] p-5">
+      <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
+        <div>
+          <div className="flex items-center gap-4">
+            <span className="h-9 w-9 shrink-0 animate-spin rounded-full border-2 border-amber-200/20 border-t-amber-300" />
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">{title}</p>
+              <p className="mt-1 text-sm text-stone-400">{message}</p>
+            </div>
+          </div>
+          <div className="mt-4 h-1 overflow-hidden bg-stone-900">
+            <div className="h-full w-1/2 animate-pulse bg-amber-300" />
+          </div>
+        </div>
+        {showPosterRail && (
+          <div className="flex gap-2">
+            {[0, 1, 2].map((index) => (
+              <div
+                key={index}
+                className="h-24 w-16 border border-amber-300/30 bg-gradient-to-b from-stone-700 via-stone-900 to-amber-950/50"
+                style={{ animationDelay: `${index * 120}ms` }}
+              >
+                <div className="h-full w-full animate-pulse bg-amber-200/10" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
@@ -70,7 +112,6 @@ export default function WatchlistCompare() {
     setError(null);
     setRecommendation(null);
     setResult(null);
-    setRecommendation(null);
     try {
       const next = await compareWatchlists(normalized[0], normalized[1]);
       setResult(next);
@@ -131,7 +172,7 @@ export default function WatchlistCompare() {
             type="button"
             onClick={() => void handleCompare()}
             disabled={!canSubmit || loading}
-            className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition hover:bg-amber-200 disabled:bg-stone-800 disabled:text-stone-500"
+            className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-all duration-150 ease-out hover:bg-amber-200 active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
           >
             <Clapperboard className="h-4 w-4" />
             {loading ? 'Reading' : 'Compare'}
@@ -140,30 +181,41 @@ export default function WatchlistCompare() {
         {error && <p className="mt-4 border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p>}
       </section>
 
+      {loading && (
+        <LoadingPanel
+          title="Comparing watchlists"
+          message="Reading both public watchlists and sorting the shared shelf from the one-sided picks."
+        />
+      )}
+
       {result && (
         <>
           <section className="grid gap-4 lg:grid-cols-[280px_1fr]">
             <div className="border border-amber-400 bg-[#0f0d0b] p-5">
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">Match score</p>
               <p className="mt-4 text-7xl font-black leading-none text-stone-50">{result.match_score}%</p>
-              <p className="mt-4 text-sm text-stone-400">@{result.users[0]} <ArrowRight className="mx-1 inline h-3 w-3" /> @{result.users[1]}</p>
+              <p className="mt-4 text-sm text-stone-400">
+                <span className="font-semibold text-orange-400">@{result.users[0]}</span>
+                <span className="mx-1.5 text-stone-600">vs</span>
+                <span className="font-semibold text-emerald-400">@{result.users[1]}</span>
+              </p>
             </div>
             <div className="border border-stone-800 bg-[#171411] p-5">
               <div className="flex h-full items-center gap-3">
                 <div style={{ flexGrow: firstPct }} className="h-24 bg-orange-500/80" title="First only" />
-                <div style={{ flexGrow: commonPct }} className="h-24 bg-amber-300" title="Watched by both" />
+                <div style={{ flexGrow: commonPct }} className="h-24 bg-amber-300" title="On both watchlists" />
                 <div style={{ flexGrow: secondPct }} className="h-24 bg-emerald-500/80" title="Second only" />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-stone-500">
-                <span>Only @{result.users[0]}: {counts?.first_only}</span>
-                <span className="text-amber-300">Both: {counts?.common}</span>
-                <span>Only @{result.users[1]}: {counts?.second_only}</span>
+              <div className="mt-4 grid grid-cols-3 gap-2 font-mono text-[11px] uppercase tracking-[0.12em]">
+                <span className="text-orange-400/90">Only @{result.users[0]}: {counts?.first_only}</span>
+                <span className="text-amber-300">Both watchlists: {counts?.common}</span>
+                <span className="text-emerald-400/90">Only @{result.users[1]}: {counts?.second_only}</span>
               </div>
             </div>
           </section>
 
           <section className="grid gap-4 lg:grid-cols-3">
-            <FilmList title={`Watched by both (${result.counts.common})`} films={result.common} />
+            <FilmList title={`On both watchlists (${result.counts.common})`} films={result.common} />
             <FilmList title={`Only @${result.users[0]} (${result.counts.first_only})`} films={result.first_only} />
             <FilmList title={`Only @${result.users[1]} (${result.counts.second_only})`} films={result.second_only} />
           </section>
@@ -177,8 +229,8 @@ export default function WatchlistCompare() {
                     key={item}
                     type="button"
                     onClick={() => setStrategy(item)}
-                    className={`border px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition ${
-                      strategy === item ? 'border-amber-300 bg-amber-300 text-stone-950' : 'border-stone-700 text-stone-400 hover:text-stone-100'
+                    className={`border px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition-all duration-150 ease-out active:scale-[0.97] active:opacity-90 ${
+                      strategy === item ? 'border-amber-300 bg-amber-300 text-stone-950' : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
                     }`}
                   >
                     {item.replace('_', ' ')}
@@ -190,7 +242,7 @@ export default function WatchlistCompare() {
               type="button"
               onClick={() => void handleRecommend()}
               disabled={recommending}
-              className="inline-flex h-[46px] items-center justify-center gap-2 bg-stone-100 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition hover:bg-white disabled:bg-stone-800 disabled:text-stone-500"
+              className="inline-flex h-[46px] items-center justify-center gap-2 bg-stone-100 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-all duration-150 ease-out hover:bg-white active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
             >
               <Shuffle className="h-4 w-4" />
               {recommending ? 'Choosing' : 'Pick one'}
@@ -199,6 +251,14 @@ export default function WatchlistCompare() {
 
           {recommendation && <RecommendationStrip recommendation={recommendation} />}
         </>
+      )}
+
+      {recommending && (
+        <LoadingPanel
+          title="Choosing from the overlap"
+          message="Enriching shared watchlist films with TMDB data before picking one."
+          showPosterRail
+        />
       )}
     </div>
   );

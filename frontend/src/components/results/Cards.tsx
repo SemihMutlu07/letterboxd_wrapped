@@ -84,6 +84,7 @@ const splitName = (full: string) => {
 export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = React.memo(function DirectorCard({ director, rank }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -110,7 +111,10 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
       const cacheKey = `director-${director.name}`;
       if (imgCache.has(cacheKey)) {
         const cached = imgCache.get(cacheKey);
-        if (cached) setImageUrl(cached);
+        if (cached) {
+          setImageError(false);
+          setImageUrl(cached);
+        }
         return;
       }
 
@@ -120,6 +124,7 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
         const data = await searchPerson(director.name, 'director');
         if (data.found && data.url) {
           imgCache.set(cacheKey, data.url);
+          setImageError(false);
           setImageUrl(data.url);
         } else {
           imgCache.set(cacheKey, null);
@@ -167,8 +172,19 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
       <div className="w-[72px] h-[72px] rounded-full overflow-hidden bg-slate-700 border-2 border-slate-600/50">
         {imageLoading ? (
           <div className="w-full h-full bg-gradient-to-br from-slate-600 to-slate-700 animate-pulse" />
-        ) : imageUrl ? (
-          <Image src={imageUrl} alt={director?.name ?? 'director'} width={72} height={72} className="w-full h-full object-cover" />
+        ) : imageUrl && !imageError ? (
+          <Image
+            src={imageUrl}
+            alt={director?.name ?? 'director'}
+            width={72}
+            height={72}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              console.error(`[DirectorCard] Image failed for ${director?.name}:`, imageUrl, e);
+              setImageError(true);
+            }}
+            onLoad={() => setImageError(false)}
+          />
         ) : (
           <div 
             className="w-full h-full flex items-center justify-center text-slate-100/50"
@@ -198,6 +214,7 @@ export const ActorCard: React.FC<{
 }> = React.memo(function ActorCard({ actor, rank, variant = 'small', topCount }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
 
@@ -222,7 +239,10 @@ export const ActorCard: React.FC<{
       const cacheKey = `actor-${actor.name}`;
       if (imgCache.has(cacheKey)) {
         const cached = imgCache.get(cacheKey);
-        if (cached) setImageUrl(cached);
+        if (cached) {
+          setImageError(false);
+          setImageUrl(cached);
+        }
         return;
       }
 
@@ -233,6 +253,7 @@ export const ActorCard: React.FC<{
           if ((actor as { profile_path?: string })?.profile_path) {
               const fallbackUrl = getTmdbImageUrl((actor as { profile_path?: string }).profile_path);
           imgCache.set(cacheKey, fallbackUrl);
+          setImageError(false);
           setImageUrl(fallbackUrl);
           return;
         }
@@ -240,6 +261,7 @@ export const ActorCard: React.FC<{
         const data = await searchPerson(actor.name, 'actor');
         if (data.found && data.url) {
           imgCache.set(cacheKey, data.url);
+          setImageError(false);
           setImageUrl(data.url);
         } else {
           imgCache.set(cacheKey, null);
@@ -274,8 +296,19 @@ export const ActorCard: React.FC<{
         <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-2 border-pink-400/40 bg-slate-700 flex-shrink-0">
           {imageLoading ? (
             <div className="w-full h-full bg-gradient-to-br from-pink-600/30 to-rose-600/30 animate-pulse" />
-          ) : imageUrl ? (
-            <Image src={imageUrl} alt={actor.name} width={128} height={128} className="w-full h-full object-cover" />
+          ) : imageUrl && !imageError ? (
+            <Image
+              src={imageUrl}
+              alt={actor.name}
+              width={128}
+              height={128}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error(`[ActorCard] Image failed for ${actor.name}:`, imageUrl, e);
+                setImageError(true);
+              }}
+              onLoad={() => setImageError(false)}
+            />
           ) : (
             <div 
               className="w-full h-full flex items-center justify-center text-pink-200/40"

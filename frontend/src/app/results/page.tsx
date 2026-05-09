@@ -5,13 +5,15 @@ import Link from 'next/link';
 import ShareModal from '@/components/ShareModal';
 import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
-import WorldMapSection from '@/containers/results/experimental/sections/world-map/WorldMapSection';
-import CountriesSection from '@/containers/results/experimental/sections/CountriesSection';
+
 import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
 import CastGrid from '@/containers/results/experimental/sections/CastGrid';
 import DirectorsGrid from '@/containers/results/experimental/sections/DirectorsGrid';
 import type { StatsData } from '@/containers/results/experimental/types';
 
+import { ThemeProvider, useTheme } from '@/lib/theme';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
+import ThemeWrapper from '@/components/ThemeWrapper';
 import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
@@ -409,74 +411,166 @@ export default function ResultsPage() {
   }
   
   return (
-    <div className="font-sans bg-slate-900 text-white overflow-x-hidden relative min-h-screen">
+    <ThemeProvider>
+      <ThemeWrapper>
+        <ResultsContent
+          stats={stats}
+          showConsentModal={showConsentModal}
+          handleConsentAccept={handleConsentAccept}
+          handleConsentDecline={handleConsentDecline}
+          sessionId={sessionId}
+          username={username}
+          dateRangeText={dateRangeText}
+          timePct={timePct}
+          decadeData={decadeData}
+          decadeMax={decadeMax}
+          isMobile={isMobile}
+          ratingsArr={ratingsArr}
+          ratingMax={ratingMax}
+          quickMetrics={quickMetrics}
+          cineScore={cineScore}
+          showShareModal={showShareModal}
+          setShowShareModal={setShowShareModal}
+          shareCardData={shareCardData}
+          orientation={orientation}
+          setOrientation={setOrientation}
+          hasTriggeredFeedback={hasTriggeredFeedback}
+          setHasTriggeredFeedback={setHasTriggeredFeedback}
+          feedbackRef={feedbackRef}
+        />
+      </ThemeWrapper>
+    </ThemeProvider>
+  );
+}
+
+/* ===================== RESULTS CONTENT (theme-aware) ===================== */
+
+function ResultsContent({
+  stats,
+  showConsentModal,
+  handleConsentAccept,
+  handleConsentDecline,
+  sessionId,
+  username,
+  dateRangeText,
+  timePct,
+  decadeData,
+  decadeMax,
+  isMobile,
+  ratingsArr,
+  ratingMax,
+  quickMetrics,
+  cineScore,
+  showShareModal,
+  setShowShareModal,
+  shareCardData,
+  orientation,
+  setOrientation,
+  hasTriggeredFeedback,
+  setHasTriggeredFeedback,
+  feedbackRef,
+}: any) {
+  const { theme, config } = useTheme();
+
+  return (
+    <>
       <PreResultsConsentModal open={showConsentModal} onAccept={handleConsentAccept} onDecline={handleConsentDecline} sessionId={sessionId} />
 
-      <div className="fixed inset-0 -z-10">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full filter blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-orange-600/10 rounded-full filter blur-[120px]" />
-        </div>
-
       <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
-                {/* Header */}
+        {/* Header */}
         <header className="text-center py-4 md:py-10">
-          <h1 className="text-[clamp(32px,6vw,72px)] font-black text-white mb-4 leading-[0.95] tracking-tighter [font-family:var(--font-display)]">
-            Your <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Letterboxd</span> Wrapped
+          <h1
+            className="text-[clamp(32px,6vw,72px)] font-black mb-4 leading-[0.95] tracking-tighter"
+            style={{
+              fontFamily: 'var(--theme-font-display)',
+              color: theme === 'current' ? '#fff' : theme === 'vhs' ? '#f0e6d8' : '#e8e0d8',
+            }}
+          >
+            Your{' '}
+            <span
+              className="bg-clip-text text-transparent"
+              style={{
+                backgroundImage: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']}${theme === 'current' ? ', #d946ef' : ''})`,
+              }}
+            >
+              Letterboxd
+            </span>{' '}
+            Wrapped
           </h1>
-          <p className="text-xl text-gray-300 mb-2">A comprehensive analysis of your cinematic journey.</p>
-          <p className="text-center text-gray-400 text-lg">
+          <p
+            className="text-xl mb-2"
+            style={{
+              color: theme === 'current' ? '#d1d5db' : theme === 'vhs' ? '#d4955a' : '#8a8a8a',
+            }}
+          >
+            A comprehensive analysis of your cinematic journey.
+          </p>
+          <p
+            className="text-center text-lg"
+            style={{
+              color: theme === 'current' ? '#9ca3af' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
+            }}
+          >
             {dateRangeText}
           </p>
           {username && (
             <div className="mt-3">
-              <span className="inline-block px-3 py-1 bg-slate-800/60 border border-slate-700/60 rounded-full text-sm text-slate-300">
+              <span
+                className="inline-block px-3 py-1 text-sm rounded-full"
+                style={{
+                  background: theme === 'current' ? 'rgba(51,65,85,0.6)' : 'rgba(0,0,0,0.06)',
+                  border: `1px solid ${theme === 'current' ? 'rgba(51,65,85,0.6)' : 'rgba(0,0,0,0.1)'}`,
+                  color: theme === 'current' ? '#cbd5e1' : theme === 'vhs' ? '#d4955a' : '#8a8a8a',
+                }}
+              >
                 @{username}
               </span>
             </div>
           )}
+
+          {/* Theme Switcher */}
+          <div className="mt-6">
+            <ThemeSwitcher />
+          </div>
         </header>
 
         {/* Hero Stats */}
-        <HeroStats
-          totalFilms={stats.total_films}
-          avgRating={stats.average_rating}
-          days={stats.days_watched}
-          topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
-          timePct={timePct}
-          favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
-          favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
-        />
+        <SectionContainer theme={theme}>
+          <HeroStats
+            totalFilms={stats.total_films}
+            avgRating={stats.average_rating}
+            days={stats.days_watched}
+            topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
+            timePct={timePct}
+            favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
+            favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
+          />
+        </SectionContainer>
 
-        {/* 1. World Map - Broadest view */}
-        <div className="mt-8">
-          <WorldMapSection stats={stats} />
-        </div>
-
-        {/* 2. Directors & Cast - People analysis */}
+        {/* 1. Directors & Cast */}
         <div className="grid grid-cols-1 gap-6">
           <DirectorsGrid stats={stats} />
           <CastGrid stats={stats} />
         </div>
 
-        {/* 3. Rating Outliers - Personal opinions */}
+        {/* 3. Rating Outliers */}
         <RatingDeviation stats={stats} />
 
-        {/* 4. Countries Detail */}
-        <CountriesSection stats={stats} />
+        {/* 4. Genres */}
+        <SectionContainer theme={theme}>
+          <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
+        </SectionContainer>
 
-        {/* 5. Genres & Other stats */}
-        <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
-
-        {/* Languages - Lazy loaded */}
+        {/* Languages */}
         <LazyLanguages data={stats.top_languages ?? []} />
 
-        {/* Film History - Lazy loaded */}
+        {/* Film History */}
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
 
-        {/* Ratings Bar - Lazy loaded */}
+        {/* Ratings Bar */}
         <LazyRatingsBar data={ratingsArr} max={ratingMax} />
 
-        {/* Quick Facts - Lazy loaded */}
+        {/* Quick Facts */}
         <LazyQuickFacts
           avgMinutes={stats.average_runtime || 0}
           totalCountries={stats.total_countries || 0}
@@ -486,13 +580,15 @@ export default function ResultsPage() {
           decadeSpan={quickMetrics.decadeSpan}
         />
 
-        {/* Cinema Scale - Lazy loaded */}
-        <LazyCinemaScale
-          type={stats.sinefil_meter?.type || 'Independent Cinephile'}
-          description={stats.sinefil_meter?.description}
-          score={cineScore || 50}
-          breakdown={stats.sinefil_meter?.breakdown}
-        />
+        {/* Cinema Scale */}
+        <SectionContainer theme={theme}>
+          <LazyCinemaScale
+            type={stats.sinefil_meter?.type || 'Independent Cinephile'}
+            description={stats.sinefil_meter?.description}
+            score={cineScore || 50}
+            breakdown={stats.sinefil_meter?.breakdown}
+          />
+        </SectionContainer>
 
         {/* Share button */}
         <div className="flex flex-col items-center my-8 gap-3">
@@ -501,12 +597,28 @@ export default function ResultsPage() {
               setShowShareModal(true);
               trackEvent('share_modal_opened');
             }}
-            className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
+            style={{
+              background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`,
+              color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614',
+            }}
           >
-            <div className="w-6 h-6 bg-white rounded" />
+            <div
+              className="w-6 h-6 rounded"
+              style={{
+                background: theme === 'current' ? '#fff' : 'var(--theme-bg)',
+              }}
+            />
             Share Your Wrapped
           </button>
-          <p className="text-xs text-slate-500 text-center">Your raw files are never stored. With consent, only anonymous viewing stats are kept to improve the product.</p>
+          <p
+            className="text-xs text-center"
+            style={{
+              color: theme === 'current' ? '#64748b' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
+            }}
+          >
+            Your raw files are never stored. With consent, only anonymous viewing stats are kept to improve the product.
+          </p>
         </div>
       </main>
 
@@ -526,6 +638,18 @@ export default function ResultsPage() {
       />
       
       <FeedbackFab ref={feedbackRef} sessionId={sessionId} />
+    </>
+  );
+}
+
+/** Small helper: theme-aware section wrapper */
+function SectionContainer({ theme, children }: { theme: string; children: React.ReactNode }) {
+  if (theme === 'current') return <>{children}</>;
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{
+      border: theme === 'vhs' ? '1px solid rgba(212,149,90,0.2)' : '1px solid rgba(255,255,255,0.06)',
+    }}>
+      {children}
     </div>
   );
 }

@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { HeartHandshake, Search } from 'lucide-react';
+import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
+import Image from 'next/image';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
+import { getPosterUrl } from '@/lib/analytics';
 
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
@@ -15,6 +17,7 @@ export default function DateNight() {
   const [result, setResult] = useState<DateNightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && normalized[0] !== normalized[1];
 
@@ -23,6 +26,7 @@ export default function DateNight() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setSelectedIndex(null);
     try {
       setResult(await dateNight(normalized[0], normalized[1]));
     } catch (err) {
@@ -30,6 +34,10 @@ export default function DateNight() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectFilm = (index: number) => {
+    setSelectedIndex(selectedIndex === index ? null : index);
   };
 
   return (
@@ -64,7 +72,7 @@ export default function DateNight() {
           type="button"
           onClick={() => void handleSubmit()}
           disabled={!canSubmit || loading}
-          className="inline-flex h-[46px] items-center justify-center gap-2 bg-red-200 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition hover:bg-red-100 disabled:bg-stone-800 disabled:text-stone-500"
+          className="inline-flex h-[46px] items-center justify-center gap-2 bg-red-200 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-all duration-150 ease-out hover:bg-red-100 active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
         >
           <Search className="h-4 w-4" />
           {loading ? 'Profiling' : 'Find films'}
@@ -72,6 +80,33 @@ export default function DateNight() {
       </div>
 
       {error && <p className="border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p>}
+
+      {loading && (
+        <section className="border border-red-200/50 bg-[#201612] p-4">
+          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <div className="flex items-center gap-4">
+                <span className="h-8 w-8 shrink-0 animate-spin rounded-full border-2 border-red-100/20 border-t-red-200" />
+                <div>
+                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-red-200">Building mutual profile</p>
+                  <p className="mt-1 text-sm text-stone-400">Scanning both public profiles, finding shared taste signals, then looking for unwatched recommendations.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {[0, 1, 2].map((index) => (
+                <div
+                  key={index}
+                  className="h-24 w-16 border border-red-200/30 bg-gradient-to-b from-stone-700 via-stone-950 to-red-950/50"
+                  style={{ animationDelay: `${index * 120}ms` }}
+                >
+                  <div className="h-full w-full animate-pulse bg-red-100/10" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {result && (
         <div className="space-y-5">
@@ -93,18 +128,70 @@ export default function DateNight() {
           {result.recommendations.length === 0 ? (
             <p className="border border-stone-800 bg-[#201b16] p-4 text-sm text-stone-400">No shared recommendations found. Try different usernames.</p>
           ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {result.recommendations.map((film) => (
-              <article key={`${film.title}-${film.year}`} className="border border-stone-800 bg-[#201b16] p-4">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-lg font-black text-stone-100">{film.title}</h3>
-                  <span className="font-mono text-xs text-stone-500">{film.year}</span>
-                </div>
-                <p className="mt-2 text-sm text-stone-400">{film.reason}</p>
-              </article>
-            ))}
-          </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {result.recommendations.map((film, index) => {
+                const isSelected = selectedIndex === index;
+                const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
+                const letterboxdUrl = film.slug
+                  ? `https://letterboxd.com/film/${film.slug}/`
+                  : `https://letterboxd.com/search/${encodeURIComponent(film.title)}/`;
+
+                return (
+                  <article
+                    key={`${film.title}-${film.year}-${index}`}
+                    className="cursor-pointer border border-stone-800 bg-[#201b16] p-4 transition-all duration-150 ease-out hover:border-stone-600 active:scale-[0.98] active:opacity-90"
+                    onClick={() => handleSelectFilm(index)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelectFilm(index);
+                      }
+                    }}
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h3 className="text-lg font-black text-stone-100">{film.title}</h3>
+                      <span className="font-mono text-xs text-stone-500">{film.year}</span>
+                    </div>
+                    <p className="mt-2 text-sm text-stone-400">{film.reason}</p>
+
+                    {isSelected && (
+                      <div className="mt-4 flex items-start gap-4 border-t border-stone-700/60 pt-4">
+                        {posterUrl && (
+                          <div className="relative h-36 w-24 shrink-0 overflow-hidden bg-stone-800">
+                            <Image
+                              src={posterUrl}
+                              alt={`${film.title} poster`}
+                              fill
+                              className="object-cover"
+                              sizes="96px"
+                              unoptimized
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <a
+                            href={letterboxdUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            View on Letterboxd
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
           )}
+          <p className="text-center font-mono text-[11px] uppercase tracking-[0.18em] text-stone-600">
+            Tap a film to reveal poster
+          </p>
         </div>
       )}
     </div>

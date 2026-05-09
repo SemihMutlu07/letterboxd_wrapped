@@ -199,7 +199,7 @@ export async function testBackend(retries = 2, delayMs = 1000) {
 }
 
 // Scrape a Letterboxd profile by username
-export async function scrapeProfile(username: string) {
+export async function scrapeProfile(username: string, signal?: AbortSignal) {
   const url = `${API_BASE}/api/scrape-profile`;
 
   try {
@@ -207,6 +207,7 @@ export async function scrapeProfile(username: string) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username }),
+      signal,
     });
 
     if (!r.ok) {
@@ -232,6 +233,10 @@ export async function scrapeProfile(username: string) {
 
     return data;
   } catch (error) {
+    // Pass through AbortError so the caller can distinguish cancellation
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
     throw handleApiError(error, 'profile scraping');
   }
 }

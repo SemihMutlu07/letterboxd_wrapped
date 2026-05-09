@@ -191,6 +191,9 @@ export function PersonCard({
   onClick?: () => void;
 }) {
   const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
   const initials = name
     .split(' ')
     .map((w) => w[0])
@@ -202,6 +205,9 @@ export function PersonCard({
   const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
   const gradient = `hsl(${hue},40%,25%)`;
 
+  const showImage = imageUrl && !imageError;
+  const showFallback = !imageUrl || imageError || !imageLoaded;
+
   return (
     <button
       onClick={onClick}
@@ -210,20 +216,30 @@ export function PersonCard({
       {/* Avatar */}
       <div
         className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
-        style={{ background: imageUrl ? undefined : gradient }}
+        style={{ background: gradient }}
       >
-        {imageUrl ? (
+        {showImage && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={imageUrl}
+            src={imageUrl!}
             alt={name}
             loading="lazy"
-            className="w-full h-full object-cover"
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+              imageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            onLoad={() => {
+              setImageLoaded(true);
+              setImageError(false);
+            }}
             onError={(e) => {
+              console.error(`[PersonCard] Image failed for ${name}:`, imageUrl);
+              setImageError(true);
+              setImageLoaded(true);
               (e.currentTarget as HTMLImageElement).style.display = 'none';
             }}
           />
-        ) : (
+        )}
+        {showFallback && (
           <span className="flex items-center justify-center w-full h-full text-xl font-bold text-white/70">
             {initials}
           </span>
