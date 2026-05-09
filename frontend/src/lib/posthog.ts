@@ -3,6 +3,11 @@ import posthog from 'posthog-js';
 
 let isInitialized = false;
 
+// Kill-switch: when NEXT_PUBLIC_POSTHOG_KEY is not set,
+// the entire module is a silent no-op (e.g. adblocker workaround).
+const POSTHOG_DISABLED =
+  !process.env.NEXT_PUBLIC_POSTHOG_KEY || process.env.NEXT_PUBLIC_POSTHOG_KEY.length === 0;
+
 const isDev = process.env.NODE_ENV !== 'production';
 
 // ── Event queue (persisted to sessionStorage so it survives full-page nav) ──
@@ -46,7 +51,7 @@ function enqueue(event: string, properties?: Record<string, unknown>) {
  * Call AFTER initPostHog() and after capturing consent_decision.
  */
 export function flushQueue() {
-  if (!posthog.__loaded) return;
+  if (POSTHOG_DISABLED || !posthog.__loaded) return;
 
   const queue = loadQueue();
   if (queue.length === 0) return;
@@ -70,6 +75,7 @@ export function flushQueue() {
  * Discard all queued events (user declined consent).
  */
 export function clearQueue() {
+  if (POSTHOG_DISABLED) return;
   const queue = loadQueue();
   sessionStorage.removeItem(QUEUE_KEY);
   if (isDev) {
@@ -80,7 +86,7 @@ export function clearQueue() {
 // ── Consent helper ──
 
 export function hasAnalyticsConsent(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (POSTHOG_DISABLED || typeof window === 'undefined') return false;
   return (
     sessionStorage.getItem('consent_decision') === 'accept' && posthog.__loaded === true
   );
@@ -89,17 +95,12 @@ export function hasAnalyticsConsent(): boolean {
 // ── Init (call only on consent accept) ──
 
 export function initPostHog() {
-  if (typeof window === 'undefined' || posthog.__loaded || isInitialized) return;
+  if (POSTHOG_DISABLED || typeof window === 'undefined' || posthog.__loaded || isInitialized) return;
 
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
 
-  if (!key || !host) {
-    if (isDev) {
-      console.warn('[posthog] key or host missing — analytics disabled.', { key: !!key, host: !!host });
-    }
-    return;
-  }
+  if (!key || !host) return;
 
   // DEBUG (temporary): verify correct host + key prefix at runtime
   console.log(`[posthog] init → host=${host} key=${key.slice(0, 6)}…`);
@@ -144,6 +145,7 @@ function initPostHogSync(key: string, host: string) {
 // ── Capture (queues if consent undecided, sends if accepted, no-ops if declined) ──
 
 export function captureEvent(event: string, properties?: Record<string, unknown>) {
+  if (POSTHOG_DISABLED) return;
   try {
     if (typeof window === 'undefined') return;
 
@@ -173,6 +175,7 @@ export function captureEvent(event: string, properties?: Record<string, unknown>
 // ── Feature flags (graceful fallback when PostHog not loaded) ──
 
 export const onFeatureFlagsReady = (cb: () => void) => {
+  if (POSTHOG_DISABLED) { cb(); return; }
   try {
     if (posthog.__loaded) {
       posthog.onFeatureFlags(cb);
@@ -190,6 +193,7 @@ export const onFeatureFlagsReady = (cb: () => void) => {
 
 export const getFlagVariant = (key: string, fallback = 'control'): Promise<string> =>
   new Promise((resolve) => {
+    if (POSTHOG_DISABLED) return resolve(fallback);
     try {
       if (posthog.__loaded) {
         const v = posthog.getFeatureFlag?.(key) as string | undefined;
