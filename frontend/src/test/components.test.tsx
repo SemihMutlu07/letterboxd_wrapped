@@ -107,8 +107,8 @@ describe('WatchlistCompare', () => {
     });
 
     render(<WatchlistCompare />);
-    await userEvent.type(screen.getByPlaceholderText('alice'), 'alice');
-    await userEvent.type(screen.getByPlaceholderText('bob'), 'bob');
+    await userEvent.type(screen.getByLabelText('First watchlist'), 'alice');
+    await userEvent.type(screen.getByLabelText('Second watchlist'), 'bob');
     await userEvent.click(screen.getByRole('button', { name: /compare/i }));
 
     expect(await screen.findByText('50%')).toBeInTheDocument();
@@ -144,10 +144,11 @@ describe('WatchlistCompare', () => {
     });
 
     render(<WatchlistCompare />);
-    await userEvent.type(screen.getByPlaceholderText('alice'), 'alice');
-    await userEvent.type(screen.getByPlaceholderText('bob'), 'bob');
+    await userEvent.type(screen.getByLabelText('First watchlist'), 'alice');
+    await userEvent.type(screen.getByLabelText('Second watchlist'), 'bob');
     await userEvent.click(screen.getByRole('button', { name: /compare/i }));
-    await screen.findByText('100%');
+    await screen.findByText('Match score');
+    expect(screen.getByRole('button', { name: /pick one/i })).not.toBeDisabled();
 
     await userEvent.click(screen.getByRole('button', { name: /pick one/i }));
     expect(await screen.findByText("Tonight's pick")).toBeInTheDocument();
