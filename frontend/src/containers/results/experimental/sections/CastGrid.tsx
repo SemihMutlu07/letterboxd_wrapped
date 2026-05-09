@@ -96,6 +96,7 @@ function CastGridInner({ stats }: { stats: StatsData }) {
       onToggle={handleToggle}
       ratedTabDisabled={!hasRatings}
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
+  ratedTabTooltip="Your average rating across films you&apos;ve rated for each actor (minimum 3 rated films)"
     >
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {shown.map((a) => (
