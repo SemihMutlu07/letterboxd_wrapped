@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Loader2, Plus, Minus, Scan } from 'lucide-react';
+import { X, Download, Loader2, Plus, Minus, Scan, Maximize2, Minimize2 } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
 import OrientationToggle from '@/components/share/OrientationToggle';
@@ -162,21 +162,17 @@ export default function ShareModal({
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const [crushOverride, setCrushOverride] = useState<number | null>(null);
-  const [directorOverride, setDirectorOverride] = useState<number | null>(null);
+  const [actorIdx, setActorIdx] = useState(0);
+  const [directorIdx, setDirectorIdx] = useState(0);
 
-  // Apply swap overrides — when an index is set and the corresponding top
-  // entry exists, replace the card's crush/director with that selection.
-  const effectiveCardProps = useMemo<ShareCardData>(() => {
-    const next = { ...cardProps };
-    if (crushOverride !== null && cardProps.topActors?.[crushOverride]) {
-      next.onScreenCrush = cardProps.topActors[crushOverride];
-    }
-    if (directorOverride !== null && cardProps.topDirectors?.[directorOverride]) {
-      next.favoriteDirector = cardProps.topDirectors[directorOverride];
-    }
-    return next;
-  }, [cardProps, crushOverride, directorOverride]);
+  // Apply swap overrides — always select from topActors/topDirectors at the
+  // current index, falling back to the original card default if the array is
+  // missing or empty at that index.
+  const effectiveCardProps = useMemo<ShareCardData>(() => ({
+    ...cardProps,
+    onScreenCrush: cardProps.topActors?.[actorIdx] ?? cardProps.onScreenCrush,
+    favoriteDirector: cardProps.topDirectors?.[directorIdx] ?? cardProps.favoriteDirector,
+  }), [cardProps, actorIdx, directorIdx]);
 
   // Touch handling for pinch zoom
   
@@ -316,6 +312,37 @@ export default function ShareModal({
     setPanOffset({ x: 0, y: 0 });
   };
 
+
+  // Fullscreen toggle
+  const [isFs, setIsFs] = useState(false);
+
+  const toggleFullscreen = async () => {
+    const el = viewportRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      try {
+        if ((el as any).webkitRequestFullscreen) {
+          await (el as any).webkitRequestFullscreen();
+        } else {
+          await el.requestFullscreen();
+        }
+        setIsFs(true);
+      } catch (e) { console.warn('fullscreen denied', e); }
+    } else {
+      await document.exitFullscreen();
+      setIsFs(false);
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, []);
 
   // Performance hooks
   const adaptivePixelRatio = useAdaptivePixelRatio();
@@ -539,10 +566,10 @@ export default function ShareModal({
           <CrushDirectorSwap
             topActors={cardProps.topActors}
             topDirectors={cardProps.topDirectors}
-            crushIndex={crushOverride}
-            directorIndex={directorOverride}
-            onCrushChange={setCrushOverride}
-            onDirectorChange={setDirectorOverride}
+            actorIdx={actorIdx}
+            directorIdx={directorIdx}
+            onActorIdxChange={setActorIdx}
+            onDirectorIdxChange={setDirectorIdx}
           />
         </div>
 
@@ -585,6 +612,13 @@ export default function ShareModal({
               aria-label="Reset zoom"
             >
               <Scan size={16} />
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className="rounded-lg p-2 text-slate-200 hover:bg-slate-700/70 transition-colors"
+              aria-label={isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
           </div>
 
