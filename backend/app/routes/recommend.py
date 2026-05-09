@@ -11,9 +11,8 @@ from app.services.recommender import (
     build_mutual_profile,
     discover_date_night_recommendations,
     enrich_films,
-    film_key,
 )
-from app.services.scraper import merge_scraped_films, scrape_profile_sources
+from app.services.scraper import merge_scraped_films, scrape_profile_sources, scrape_watchlist
 
 logger = logging.getLogger("letterboxd_wrapped.recommend")
 
@@ -21,6 +20,8 @@ router = APIRouter()
 
 MAX_PROFILE_PAGES = 25
 MAX_ENRICHED_FILMS = 80
+SCRAPE_TIMEOUT = 90  # seconds per scrape operation
+ENRICH_TIMEOUT = 90  # seconds per enrich operation
 
 
 @router.post("/api/date-night", response_model=DateNightResponse)
@@ -38,9 +39,17 @@ async def date_night(request: Request, payload: UserPairRequest):
         )
 
     try:
-        first_sources, second_sources = await asyncio.gather(
-            scrape_profile_sources(first, max_pages=MAX_PROFILE_PAGES),
-            scrape_profile_sources(second, max_pages=MAX_PROFILE_PAGES),
+        first_sources, second_sources, first_watchlist, second_watchlist = await asyncio.gather(
+            asyncio.wait_for(scrape_profile_sources(first, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
+            asyncio.wait_for(scrape_profile_sources(second, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
+            asyncio.wait_for(scrape_watchlist(first, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
+            asyncio.wait_for(scrape_watchlist(second, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
+        )
+    except asyncio.TimeoutError:
+        logger.exception("Date night scrape timed out for %s/%s", first, second)
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "scrape_timeout", "message": "Reading profiles took too long. Try again later."},
         )
     except ValueError as exc:
         logger.warning("Date night user lookup failed for %s/%s: %s", first, second, exc)
@@ -57,16 +66,33 @@ async def date_night(request: Request, payload: UserPairRequest):
 
     first_films = merge_scraped_films(*first_sources)
     second_films = merge_scraped_films(*second_sources)
-    watched_keys = {film_key(film) for film in first_films + second_films}
 
     session = request.app.state.aiohttp_session
-    first_enriched, second_enriched = await asyncio.gather(
-        enrich_films(session, first_films, limit=MAX_ENRICHED_FILMS),
-        enrich_films(session, second_films, limit=MAX_ENRICHED_FILMS),
-    )
+
+    try:
+        first_enriched, second_enriched, first_wl_enriched, second_wl_enriched = await asyncio.gather(
+            asyncio.wait_for(enrich_films(session, first_films, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
+            asyncio.wait_for(enrich_films(session, second_films, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
+            asyncio.wait_for(enrich_films(session, first_watchlist, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
+            asyncio.wait_for(enrich_films(session, second_watchlist, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
+        )
+    except asyncio.TimeoutError:
+        logger.exception("Date night TMDB enrich timed out for %s/%s", first, second)
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "enrich_timeout", "message": "Film enrichment took too long. Try again later."},
+        )
+    except Exception:
+        logger.exception("Date night TMDB enrich failed for %s/%s", first, second)
+        raise HTTPException(
+            status_code=502,
+            detail={"error_code": "enrichment_failed", "message": "Could not look up film details. Try again later."},
+        )
 
     mutual_profile = build_mutual_profile(first_enriched, second_enriched)
-    recommendations = await discover_date_night_recommendations(session, mutual_profile, watched_keys)
+    recommendations = await discover_date_night_recommendations(
+        first_wl_enriched, second_wl_enriched, mutual_profile
+    )
 
     if not recommendations:
         raise HTTPException(
