@@ -89,10 +89,34 @@ async def date_night(request: Request, payload: UserPairRequest):
             detail={"error_code": "enrichment_failed", "message": "Could not look up film details. Try again later."},
         )
 
-    mutual_profile = build_mutual_profile(first_enriched, second_enriched)
-    recommendations = await discover_date_night_recommendations(
-        first_wl_enriched, second_wl_enriched, mutual_profile
-    )
+    try:
+        mutual_profile = await asyncio.wait_for(
+            asyncio.to_thread(build_mutual_profile, first_enriched, second_enriched),
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        logger.exception("Date night mutual profile timed out for %s/%s", first, second)
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "profile_timeout", "message": "Building taste profile took too long. Try again later."},
+        )
+    except Exception:
+        logger.exception("Date night mutual profile failed for %s/%s", first, second)
+        raise HTTPException(
+            status_code=502,
+            detail={"error_code": "profile_failed", "message": "Could not build taste profile. Try again later."},
+        )
+
+    try:
+        recommendations = await discover_date_night_recommendations(
+            first_wl_enriched, second_wl_enriched, mutual_profile
+        )
+    except Exception:
+        logger.exception("Date night recommendation discovery failed for %s/%s", first, second)
+        raise HTTPException(
+            status_code=502,
+            detail={"error_code": "recommendation_failed", "message": "Could not find recommendations. Try again later."},
+        )
 
     if not recommendations:
         raise HTTPException(
