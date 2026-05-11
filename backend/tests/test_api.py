@@ -28,24 +28,19 @@ def zip_with_watched(minimal_watched_csv: bytes) -> bytes:
 
 @pytest.fixture
 async def client():
-    """ASGI test client — lifespan is bypassed; aiohttp session is mocked."""
+    """ASGI test client — lifespan is bypassed; network clients are mocked."""
     with patch.dict("os.environ", {"TMDB_API_KEY": "test-key"}):
         from app.main import create_app  # noqa: PLC0415
-        import aiohttp
 
         app = create_app()
 
-        # Inject a real aiohttp session so route handlers can reference it
-        # without triggering the full lifespan startup.
-        session = aiohttp.ClientSession()
+        # Route handlers only pass this through to mocked service calls in tests.
+        session = object()
         app.state.aiohttp_session = session
 
         transport = ASGITransport(app=app)
-        try:
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                yield ac
-        finally:
-            await session.close()
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
 
 
 # ---- health ------------------------------------------------------------------
@@ -317,6 +312,9 @@ async def test_date_night_success(client: AsyncClient):
             [{"title": "Heat", "year": "1995", "rating": 4.0, "watch_date": ""}],
         )
 
+    async def fake_scrape_watchlist(username, max_pages=25):
+        return [{"title": "Past Lives", "year": "2023", "slug": "/film/past-lives/"}]
+
     async def fake_enrich(session, films, limit=80):
         return [
             {
@@ -342,6 +340,7 @@ async def test_date_night_success(client: AsyncClient):
 
     with (
         patch("app.routes.recommend.scrape_profile_sources", side_effect=fake_scrape_profile_sources),
+        patch("app.routes.recommend.scrape_watchlist", side_effect=fake_scrape_watchlist),
         patch("app.routes.recommend.enrich_films", side_effect=fake_enrich),
         patch("app.routes.recommend.discover_date_night_recommendations", side_effect=fake_discover),
     ):
