@@ -64,3 +64,6 @@ jspm_packages/
 Thumbs.db
 
 .vercel/
+
+# prototype backup (do not track)
+prototype_backup_DO_NOT_TOUCH/
