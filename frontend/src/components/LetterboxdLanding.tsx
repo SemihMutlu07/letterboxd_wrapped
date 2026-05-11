@@ -15,7 +15,7 @@ import LoadingScreen from '@/components/landing/LoadingScreen';
 import UploadZone from '@/components/landing/UploadZone';
 import ExportInstructions from '@/components/landing/ExportInstructions';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '0.0.1';
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
