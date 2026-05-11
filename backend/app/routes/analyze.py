@@ -19,7 +19,6 @@ from app import task_manager
 from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services.scraper import (
-    check_profile_exists,
     diary_to_csv_dicts,
     merge_scraped_films,
     scrape_profile_sources,
@@ -168,21 +167,6 @@ async def scrape_profile(request: Request):
         raise HTTPException(
             status_code=400,
             detail={"error_code": "invalid_username", "message": "Please enter a valid Letterboxd username."},
-        )
-
-    try:
-        exists = await check_profile_exists(username)
-    except Exception as exc:
-        logger.warning("check_profile_exists failed for %s: %s", username, exc)
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "scrape_unreachable", "message": f"Could not reach Letterboxd to check @{username}. (Debug: {type(exc).__name__}: {exc}) Try again in a moment."},
-        )
-    if not exists:
-        # _sync_check_profile already logged the exact status — route just surfaces
-        raise HTTPException(
-            status_code=404,
-            detail={"error_code": "user_not_found", "message": f"Letterboxd user '{username}' not found. If you're sure this user exists, Letterboxd may be blocking automated access (see server logs)."},
         )
 
     try:
