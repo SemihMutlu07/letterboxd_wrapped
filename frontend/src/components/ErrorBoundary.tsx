@@ -31,9 +31,8 @@ export class ErrorBoundary extends Component<Props, State> {
     if (process.env.NODE_ENV === 'development') {
       console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
-    
-    // In production, you might want to send this to an error reporting service
-    // Example: Sentry.captureException(error, { extra: errorInfo });
+    // Sentry is initialized globally in lib/sentry.ts via initSentry().
+    // It already captures uncaught exceptions — no need for manual captureException here.
   }
 
   handleRetry = () => {
@@ -120,8 +119,7 @@ export function useErrorHandler() {
     if (process.env.NODE_ENV === 'development') {
       console.error('Error caught by useErrorHandler:', error, errorInfo);
     }
-    
-    // In production, you might want to send this to an error reporting service
-    // Example: Sentry.captureException(error, { extra: errorInfo });
+    // Sentry is initialized globally in lib/sentry.ts via initSentry().
+    // It already captures uncaught exceptions — no need for manual captureException here.
   }, []);
 }

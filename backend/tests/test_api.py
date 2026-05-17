@@ -197,12 +197,12 @@ async def test_watchlist_compare_success(client: AsyncClient):
     async def fake_scrape_watchlist(username, max_pages=40):
         if username == "alice":
             return [
-                {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
-                {"title": "Inception", "year": "2010", "slug": "/film/inception/"},
+                {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/", "poster_url": "https://img/aftersun.jpg"},
+                {"title": "Inception", "year": "2010", "slug": "/film/inception/", "poster_url": ""},
             ]
         return [
-            {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
-            {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"},
+            {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/", "poster_url": "https://img/aftersun.jpg"},
+            {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/", "poster_url": ""},
         ]
 
     with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
@@ -219,8 +219,15 @@ async def test_watchlist_compare_success(client: AsyncClient):
         "first_only": 1,
         "second_only": 1,
     }
+    assert body["returned_counts"] == {"common": 1, "first_only": 1, "second_only": 1}
+    assert body["truncated"] == {"common": False, "first_only": False, "second_only": False}
     assert body["match_score"] == 50.0
-    assert body["common"] == [{"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"}]
+    assert body["common"] == [{
+        "title": "Aftersun",
+        "year": "2022",
+        "slug": "/film/aftersun/",
+        "poster_url": "https://img/aftersun.jpg",
+    }]
 
 
 @pytest.mark.asyncio
@@ -306,10 +313,14 @@ async def test_recommend_from_compare_no_overlap(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_date_night_success(client: AsyncClient):
-    async def fake_scrape_profile_sources(username, max_pages=25):
-        return (
-            [{"title": "Before Sunrise", "year": "1995", "rating": 4.5, "watch_date": "2024-01-01"}],
-            [{"title": "Heat", "year": "1995", "rating": 4.0, "watch_date": ""}],
+    from app.services.scraper import ProfileScrapeSources
+
+    async def fake_scrape_profile_sources(username, max_pages=25, include_reviews=False):
+        return ProfileScrapeSources(
+            diary=[{"title": "Before Sunrise", "year": "1995", "rating": 4.5, "watch_date": "2024-01-01"}],
+            grid=[{"title": "Heat", "year": "1995", "rating": 4.0, "watch_date": ""}],
+            review_count=0,
+            film_count=2,
         )
 
     async def fake_scrape_watchlist(username, max_pages=25):

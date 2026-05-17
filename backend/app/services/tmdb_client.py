@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from pathlib import Path
 import time
 from collections import deque
@@ -14,6 +15,8 @@ import aiohttp
 import pandas as pd
 
 from app.config import settings
+
+logger = logging.getLogger("letterboxd_wrapped.tmdb")
 
 CACHE_DIR = Path("tmdb_cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -103,18 +106,15 @@ async def search_person_with_fallback(
     session: aiohttp.ClientSession,
     name: str,
 ) -> Optional[Dict[str, Any]]:
-    """Search TMDB person by name with a 3-step fallback strategy.
-
-    Step 1: exact name query
-    Step 2: query with language=en-US (helps with non-Latin/diacritic names)
-    Step 3: diacritic-stripped / normalized query
-    """
+    """Search TMDB person by name with a 3-step fallback strategy."""
     try:
         normalized_name = _normalize_person_name(name)
+        logger.debug("[tmdb-search] '%s' → normalized='%s'", name, normalized_name)
 
         # Step 1: search with exact name
         exact_data = await tmdb_get(session, "search/person", {"query": name})
         exact_results = exact_data.get("results", []) if exact_data else []
+        logger.debug("[tmdb-search] step1 exact: %s results, data=%s", len(exact_results), "present" if exact_data else "NONE")
         if exact_results:
             exact_matches = [
                 result
@@ -122,13 +122,17 @@ async def search_person_with_fallback(
                 if _normalize_person_name(str(result.get("name") or "")) == normalized_name
             ]
             if exact_matches:
+                logger.debug("[tmdb-search] step1 exact_matches=%s", len(exact_matches))
                 other_results = [result for result in exact_results if result not in exact_matches]
                 return {**exact_data, "results": exact_matches + other_results}
+            else:
+                logger.debug("[tmdb-search] step1 no exact name match in %s results", len(exact_results))
 
-        # Step 2: retry with language=en-US (TMDB may index names differently per locale)
+        # Step 2: retry with language=en-US
         if not exact_results and normalized_name != name.lower().strip():
             en_data = await tmdb_get(session, "search/person", {"query": name, "language": "en-US"})
             en_results = en_data.get("results", []) if en_data else []
+            logger.debug("[tmdb-search] step2 en-US: %s results", len(en_results))
             if en_results:
                 en_matches = [
                     r for r in en_results
@@ -138,14 +142,17 @@ async def search_person_with_fallback(
                     other_results = [r for r in en_results if r not in en_matches]
                     return {**en_data, "results": en_matches + other_results}
 
-        # Step 3: search with diacritic-stripped / normalized name
+        # Step 3: search with diacritic-stripped name
         if normalized_name and normalized_name != name.lower().strip():
             normalized_data = await tmdb_get(session, "search/person", {"query": normalized_name})
+            logger.debug("[tmdb-search] step3 normalized: data=%s", "present" if normalized_data else "NONE")
             if normalized_data and normalized_data.get("results"):
                 return normalized_data
 
+        logger.debug("[tmdb-search] '%s' returning exact_data (no matches)", name)
         return exact_data
-    except Exception:
+    except Exception as exc:
+        logger.warning("[tmdb-search] '%s' crashed: %s", name, exc)
         return None
 
 

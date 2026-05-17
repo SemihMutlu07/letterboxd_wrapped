@@ -16,14 +16,19 @@ function themeCss(themeId: string): string {
 
   const isVhs = themeId === 'vhs';
   const isBw = themeId === 'classic-bw';
+  const isApple = themeId === 'apple';
 
-  // Shared overrides for both non-current themes
-  const sharedSurfaceBg = isVhs ? '#2a1a10' : '#2a2a2a';
-  const sharedBorder = isVhs ? 'rgba(212,149,90,0.25)' : 'rgba(255,255,255,0.10)';
-  const sharedText = isVhs ? '#f0e6d8' : '#e8e0d8';
-  const sharedMuted = isVhs ? '#d4955a' : '#8a8a8a';
-  const sharedMuted2 = isVhs ? '#b07a40' : '#6a6a6a';
-  const sharedRadius = isVhs ? '10px' : '4px';
+  // Shared overrides — Apple is light, the other two are dark.
+  const sharedSurfaceBg = isApple ? '#FFFFFF' : isVhs ? '#2a1a10' : '#2a2a2a';
+  const sharedBorder = isApple
+    ? 'rgba(0,0,0,0.08)'
+    : isVhs
+    ? 'rgba(212,149,90,0.25)'
+    : 'rgba(255,255,255,0.10)';
+  const sharedText = isApple ? '#1D1D1F' : isVhs ? '#f0e6d8' : '#e8e0d8';
+  const sharedMuted = isApple ? '#6E6E73' : isVhs ? '#d4955a' : '#8a8a8a';
+  const sharedMuted2 = isApple ? '#86868B' : isVhs ? '#b07a40' : '#6a6a6a';
+  const sharedRadius = isApple ? '16px' : isVhs ? '10px' : '4px';
 
   // Color-specific stat card overrides (QuickFacts, etc.)
   const colorReplacements = isVhs
@@ -50,6 +55,21 @@ function themeCss(themeId: string): string {
         rose: { bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.08)', text: '#c0b8b0', text2: '#c0b8b0' },
         blue: { bg: 'rgba(255,255,255,0.03)', border: 'rgba(255,255,255,0.06)', text: '#8a8a8a', text2: '#8a8a8a' },
       }
+    : isApple
+    ? {
+        // Apple HIG: one accent + neutral grays. Every accent slot becomes
+        // a subtle gray surface; the actual SF Blue is reserved for the
+        // single primary CTA / score, not stat chips.
+        emerald: { bg: 'rgba(52,199,89,0.10)',  border: 'rgba(52,199,89,0.18)',  text: '#1B8434', text2: '#1B8434' },
+        purple:  { bg: '#F2F2F7',               border: 'rgba(0,0,0,0.08)',     text: '#1D1D1F', text2: '#6E6E73' },
+        yellow:  { bg: 'rgba(255,159,10,0.10)', border: 'rgba(255,159,10,0.22)', text: '#A85D00', text2: '#A85D00' },
+        cyan:    { bg: '#F2F2F7',               border: 'rgba(0,0,0,0.08)',     text: '#1D1D1F', text2: '#6E6E73' },
+        orange:  { bg: 'rgba(255,149,0,0.10)',  border: 'rgba(255,149,0,0.22)', text: '#9A4A00', text2: '#9A4A00' },
+        fuchsia: { bg: '#F2F2F7',               border: 'rgba(0,0,0,0.08)',     text: '#1D1D1F', text2: '#6E6E73' },
+        pink:    { bg: '#F2F2F7',               border: 'rgba(0,0,0,0.08)',     text: '#1D1D1F', text2: '#6E6E73' },
+        rose:    { bg: '#F2F2F7',               border: 'rgba(0,0,0,0.08)',     text: '#1D1D1F', text2: '#6E6E73' },
+        blue:    { bg: 'rgba(0,102,204,0.08)',  border: 'rgba(0,102,204,0.20)', text: '#0044AA', text2: '#0066CC' },
+      }
     : {};
 
   // Build color replacement CSS
@@ -75,7 +95,7 @@ function themeCss(themeId: string): string {
   background: ${sharedSurfaceBg} !important;
 }
 [data-theme="${themeId}"] [class*="bg-slate-700"] {
-  background: ${isVhs ? '#1a0a08' : '#3a3a3a'} !important;
+  background: ${isApple ? '#F2F2F7' : isVhs ? '#1a0a08' : '#3a3a3a'} !important;
 }
 
 /* Borders */
@@ -109,8 +129,15 @@ function themeCss(themeId: string): string {
 [data-theme="${themeId}"] [class*="from-blue-600"],
 [data-theme="${themeId}"] [class*="from-orange-400"],
 [data-theme="${themeId}"] [class*="from-pink-500"] {
-  background: ${isVhs ? 'linear-gradient(135deg, #2a1a10, #1a0a08) !important' : 'linear-gradient(135deg, #3a3a3a, #2a2a2a) !important'};
+  background: ${
+    isApple
+      ? 'linear-gradient(135deg, #0066CC, #0044AA) !important'
+      : isVhs
+      ? 'linear-gradient(135deg, #2a1a10, #1a0a08) !important'
+      : 'linear-gradient(135deg, #3a3a3a, #2a2a2a) !important'
+  };
   border: 1px solid ${sharedBorder} !important;
+  color: ${isApple ? '#FFFFFF' : sharedText} !important;
 }
 
 /* Purple/pink gradient backgrounds in hero */
@@ -130,7 +157,7 @@ ${colorCss}
 
 /* Filmstrip / bar chart backgrounds */
 [data-theme="${themeId}"] [class*="bg-\\[\\#0a0a0a\\]"] {
-  background: ${isVhs ? '#1a0a08' : '#2a2a2a'} !important;
+  background: ${isApple ? '#F2F2F7' : isVhs ? '#1a0a08' : '#2a2a2a'} !important;
 }
 
 /* CinemaScale / Section accent borders */
@@ -152,8 +179,28 @@ ${colorCss}
 
 /* Skeleton / loading pulse backgrounds */
 [data-theme="${themeId}"] [class*="animate-pulse"] {
-  background: ${isVhs ? 'rgba(42,26,16,0.5)' : 'rgba(42,42,42,0.5)'} !important;
+  background: ${
+    isApple ? 'rgba(0,0,0,0.04)' : isVhs ? 'rgba(42,26,16,0.5)' : 'rgba(42,42,42,0.5)'
+  } !important;
 }
+
+${isApple ? `
+/* Apple-specific polish: lift surfaces with a single soft shadow,
+   raise contrast on white-on-white edges, lighten heavy inline shadows. */
+[data-theme="apple"] [class*="bg-slate-800"],
+[data-theme="apple"] [class*="bg-slate-900"],
+[data-theme="apple"] [class*="bg-slate-800\\/"] {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 1px rgba(0,0,0,0.03) !important;
+}
+/* Section component uses backdrop-blur which produces nothing on white — make it crisp */
+[data-theme="apple"] section[class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+}
+/* Heavy black drop-shadow utilities (shadow-2xl) are too aggressive on light bg */
+[data-theme="apple"] [class*="shadow-2xl"] {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.04) !important;
+}
+` : ''}
 `;
 }
 
@@ -180,6 +227,7 @@ export default function ThemeWrapper({ children }: { children: ReactNode }) {
       className={`relative min-h-screen transition-colors duration-500 ${
         theme === 'current' ? 'bg-slate-900 text-white' :
         theme === 'vhs' ? 'bg-[#1a1410] text-[#f0e6d8]' :
+        theme === 'apple' ? 'bg-[#FBFAF7] text-[#1D1D1F]' :
         'bg-[#1a1a1a] text-[#e8e0d8]'
       }`}
       style={style}

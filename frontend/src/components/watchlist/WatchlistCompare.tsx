@@ -14,6 +14,8 @@ import {
 } from '@/lib/api';
 import { pickRandomUsernames } from '@/lib/usernames';
 
+const COLLAPSED_FILM_LIMIT = 10;
+
 function LoadingPanel({
   title,
   message,
@@ -60,19 +62,85 @@ function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
 }
 
-function FilmList({ title, films }: { title: string; films: WatchlistFilm[] }) {
+const USERNAME_RE = /^[a-z0-9_]+$/;
+
+interface FilmListProps {
+  title: string;
+  films: WatchlistFilm[];
+  totalCount: number;
+  truncated: boolean;
+}
+
+function FilmList({ title, films, totalCount, truncated }: FilmListProps) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? films : films.slice(0, COLLAPSED_FILM_LIMIT);
+  const remaining = films.length - visible.length;
+
   return (
     <section className="min-h-[280px] border border-stone-800 bg-[#171411] p-4">
       <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">{title}</h3>
-      <div className="mt-4 space-y-2">
-        {films.map((film) => (
-          <div key={`${film.title}-${film.year}-${film.slug}`} className="flex items-baseline justify-between gap-3 border-b border-stone-800/80 pb-2">
-            <span className="text-sm text-stone-100">{film.title}</span>
-            <span className="shrink-0 text-right text-sm text-stone-500">{film.year}</span>
-          </div>
-        ))}
-        {films.length === 0 && <p className="text-sm text-stone-500">No films in this bucket.</p>}
-      </div>
+      <ul className="mt-4 divide-y divide-stone-800/80">
+        {visible.map((film) => {
+          const slug = film.slug?.replace(/^\/film\/|\/$/g, '');
+          const href = slug ? `https://letterboxd.com/film/${slug}/` : null;
+          const content = (
+            <div className="flex items-center gap-3 py-2">
+              <div className="h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">
+                {film.poster_url ? (
+                  <img
+                    src={film.poster_url}
+                    alt={`${film.title} poster`}
+                    width={40}
+                    height={60}
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-stone-100">{film.title}</p>
+                <p className="font-mono text-[11px] text-stone-500">{film.year}</p>
+              </div>
+            </div>
+          );
+          return (
+            <li key={`${film.title}-${film.year}-${film.slug}`}>
+              {href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block transition-colors duration-150 ease-out hover:bg-stone-900/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+                >
+                  {content}
+                </a>
+              ) : (
+                content
+              )}
+            </li>
+          );
+        })}
+        {films.length === 0 && <li className="py-2 text-sm text-stone-500">No films in this bucket.</li>}
+      </ul>
+
+      {(films.length > COLLAPSED_FILM_LIMIT || truncated) && (
+        <div className="mt-3 space-y-2">
+          {films.length > COLLAPSED_FILM_LIMIT && (
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              className="w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+            >
+              {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT} more` : `Show ${remaining} more`}
+            </button>
+          )}
+          {truncated && (
+            <p className="font-mono text-[11px] text-stone-500">
+              Showing {films.length} of {totalCount}. Backend caps each bucket at {films.length}.
+            </p>
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -105,7 +173,17 @@ export default function WatchlistCompare() {
   const [error, setError] = useState<string | null>(null);
 
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
-  const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && normalized[0] !== normalized[1];
+  const validationMessage = useMemo(() => {
+    const filled = normalized.filter(Boolean);
+    if (filled.some((username) => !USERNAME_RE.test(username))) {
+      return 'Use only lowercase letters, numbers, or underscores for Letterboxd usernames.';
+    }
+    if (normalized[0] && normalized[1] && normalized[0] === normalized[1]) {
+      return 'Enter two different Letterboxd usernames.';
+    }
+    return null;
+  }, [normalized]);
+  const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && !validationMessage;
 
   const handleCompare = async () => {
     if (!canSubmit) return;
@@ -139,7 +217,6 @@ export default function WatchlistCompare() {
   };
 
   const counts = result?.counts;
-  const total = counts ? Math.max(counts.first_total + counts.second_total - counts.common, 1) : 1;
   const barTotal = counts ? Math.max(counts.first_only + counts.common + counts.second_only, 1) : 1;
   const formatPct = (n: number) => `${Math.round((n / barTotal) * 100)}%`;
 
@@ -153,7 +230,7 @@ export default function WatchlistCompare() {
               value={first}
               onChange={(event) => setFirst(event.target.value)}
               placeholder={placeholders[0]}
-              className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-amber-400"
+              className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-amber-400 focus:outline-none focus-visible:outline-none"
             />
           </label>
           <label className="block">
@@ -165,19 +242,20 @@ export default function WatchlistCompare() {
                 if (event.key === 'Enter') void handleCompare();
               }}
               placeholder={placeholders[1]}
-              className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-amber-400"
+              className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-amber-400 focus:outline-none focus-visible:outline-none"
             />
           </label>
           <button
             type="button"
             onClick={() => void handleCompare()}
             disabled={!canSubmit || loading}
-            className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-all duration-150 ease-out hover:bg-amber-200 active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
+            className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-amber-200 active:scale-[0.97] active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
           >
             <Clapperboard className="h-4 w-4" />
             {loading ? 'Reading' : 'Compare'}
           </button>
         </div>
+        {validationMessage && <p className="mt-4 border border-amber-900/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{validationMessage}</p>}
         {error && <p className="mt-4 border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p>}
       </section>
 
@@ -261,10 +339,34 @@ export default function WatchlistCompare() {
 
           {/* Film lists */}
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <FilmList title={`Only @${result.users[0]} (${result.counts.first_only})`} films={result.first_only} />
-            <FilmList title={`On both (${result.counts.common})`} films={result.common} />
-            <FilmList title={`Only @${result.users[1]} (${result.counts.second_only})`} films={result.second_only} />
+            <FilmList
+              title={`Only @${result.users[0]} (${result.counts.first_only})`}
+              films={result.first_only}
+              totalCount={result.counts.first_only}
+              truncated={result.truncated?.first_only ?? false}
+            />
+            <FilmList
+              title={`On both (${result.counts.common})`}
+              films={result.common}
+              totalCount={result.counts.common}
+              truncated={result.truncated?.common ?? false}
+            />
+            <FilmList
+              title={`Only @${result.users[1]} (${result.counts.second_only})`}
+              films={result.second_only}
+              totalCount={result.counts.second_only}
+              truncated={result.truncated?.second_only ?? false}
+            />
           </section>
+
+          {result.counts.common === 0 && (
+            <section className="border border-stone-800 bg-[#171411] p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No overlap yet</p>
+              <p className="mt-2 text-sm text-stone-400">
+                These public watchlists can be compared, but there are no shared films to recommend from.
+              </p>
+            </section>
+          )}
 
           <section className="grid gap-4 border border-stone-800 bg-[#201b16] p-5 md:grid-cols-[1fr_auto]">
             <div>
@@ -275,7 +377,7 @@ export default function WatchlistCompare() {
                     key={item}
                     type="button"
                     onClick={() => setStrategy(item)}
-                    className={`border px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition-all duration-150 ease-out active:scale-[0.97] active:opacity-90 ${
+                    className={`border px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors duration-150 ease-out active:scale-[0.97] active:opacity-90 ${
                       strategy === item ? 'border-amber-300 bg-amber-300 text-stone-950' : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
                     }`}
                   >
@@ -287,8 +389,8 @@ export default function WatchlistCompare() {
             <button
               type="button"
               onClick={() => void handleRecommend()}
-              disabled={recommending}
-              className="inline-flex h-[46px] items-center justify-center gap-2 bg-stone-100 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-all duration-150 ease-out hover:bg-white active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
+              disabled={recommending || result.counts.common === 0}
+              className="inline-flex h-[46px] items-center justify-center gap-2 bg-stone-100 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-colors duration-150 ease-out hover:bg-white active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
             >
               <Shuffle className="h-4 w-4" />
               {recommending ? 'Choosing' : 'Pick one'}

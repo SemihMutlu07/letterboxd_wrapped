@@ -7,6 +7,8 @@ const OPTIONS: { id: DesignTheme; label: string }[] = [
   { id: 'current', label: '1 · Current' },
   { id: 'vhs', label: '2 · VHS' },
   { id: 'classic-bw', label: '3 · B&W Classic' },
+  // Apple theme disabled: contrast/readability issues on light bg need a redesign pass.
+  // { id: 'apple', label: '4 · Apple' },
 ];
 
 export default function ThemeSwitcher() {

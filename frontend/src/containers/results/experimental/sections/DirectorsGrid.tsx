@@ -46,7 +46,7 @@ interface DirectorCard {
   profile_path?: string;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 3;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -213,6 +213,14 @@ export function PersonCard({
 
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
+
+  useEffect(() => {
+    if (!profilePath) {
+      console.debug(`[PersonCard] No profile_path for ${name}`);
+    } else if (!imageUrl) {
+      console.debug(`[PersonCard] getProfileUrl returned null for ${name}: profilePath=${profilePath}`);
+    }
+  }, [profilePath, imageUrl, name]);
 
   return (
     <button

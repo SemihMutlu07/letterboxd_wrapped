@@ -49,26 +49,34 @@ export default function DateNight() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-        <input
-          value={first}
-          onChange={(event) => setFirst(event.target.value)}
-          placeholder={placeholders[0]}
-          className="border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-red-300"
-        />
-        <input
-          value={second}
-          onChange={(event) => setSecond(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') void handleSubmit();
-          }}
-          placeholder={placeholders[1]}
-          className="border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 outline-none transition focus:border-red-300"
-        />
+        <label className="block">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">First profile</span>
+          <input
+            value={first}
+            onChange={(event) => setFirst(event.target.value)}
+            placeholder={placeholders[0]}
+            aria-label="First Letterboxd username"
+            className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
+          />
+        </label>
+        <label className="block">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Second profile</span>
+          <input
+            value={second}
+            onChange={(event) => setSecond(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void handleSubmit();
+            }}
+            placeholder={placeholders[1]}
+            aria-label="Second Letterboxd username"
+            className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
+          />
+        </label>
         <button
           type="button"
           onClick={() => void handleSubmit()}
           disabled={!canSubmit || loading}
-          className="inline-flex h-[46px] items-center justify-center gap-2 bg-red-200 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-all duration-150 ease-out hover:bg-red-100 active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
+          className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-red-200 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-red-100 active:scale-[0.97] active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-200 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
         >
           <Search className="h-4 w-4" />
           {loading ? 'Profiling' : 'Find films'}
@@ -124,7 +132,7 @@ export default function DateNight() {
           {result.recommendations.length === 0 ? (
             <p className="border border-stone-800 bg-[#201b16] p-4 text-sm text-stone-400">No shared recommendations found. Try different usernames.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {result.recommendations.map((film, index) => {
                 const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
                 const extra = film as unknown as Record<string, unknown>;
@@ -141,25 +149,26 @@ export default function DateNight() {
                 return (
                   <article
                     key={`${film.title}-${film.year}-${index}`}
-                    className="flex gap-4 border border-stone-800 bg-[#201b16] p-4 transition-all duration-150 ease-out hover:border-stone-600"
+                    className="flex gap-4 border border-stone-800 bg-[#201b16] p-4 transition-colors duration-150 ease-out hover:border-stone-600"
                   >
-                    {/* Poster */}
                     <div className="relative h-[120px] w-[80px] shrink-0 overflow-hidden bg-stone-800">
                       {posterUrl && !imgError ? (
                         <img
                           src={posterUrl}
                           alt={`${film.title} poster`}
+                          width={80}
+                          height={120}
+                          loading="lazy"
                           className="h-full w-full object-cover"
                           onError={() => setErroredPosters(prev => new Set(prev).add(posterKey))}
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-stone-600">
+                        <div className="flex h-full w-full items-center justify-center text-stone-600" aria-hidden="true">
                           <ExternalLink className="h-6 w-6" />
                         </div>
                       )}
                     </div>
 
-                    {/* Details */}
                     <div className="min-w-0 flex flex-col justify-center gap-1">
                       <h3 className="text-base font-black text-stone-100 leading-tight">{film.title}</h3>
                       <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
@@ -176,7 +185,7 @@ export default function DateNight() {
                         href={letterboxdUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200"
+                        className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         View on Letterboxd

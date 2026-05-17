@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist
+from app import admin
 
 logger = logging.getLogger("letterboxd_wrapped")
 logging.basicConfig(
@@ -67,6 +68,16 @@ def create_app() -> FastAPI:
     )
 
     @app.middleware("http")
+    async def limit_upload_size(request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > 50 * 1024 * 1024:
+            return JSONResponse(
+                status_code=413,
+                content={"error_code": "payload_too_large", "message": "Request body must be under 50 MB."},
+            )
+        return await call_next(request)
+
+    @app.middleware("http")
     async def catch_unhandled_exceptions(request: Request, call_next):
         # Catching exceptions here (inside user-middleware) lets CORSMiddleware
         # wrap the JSONResponse on the way out. @app.exception_handler(Exception)
@@ -81,21 +92,42 @@ def create_app() -> FastAPI:
                 content={"error_code": "internal_error", "message": "Something went wrong on the server."},
             )
 
+    app.include_router(admin.router)
     app.include_router(analyze.router)
     app.include_router(tmdb.router)
     app.include_router(feedback.router)
     app.include_router(watchlist.router)
     app.include_router(recommend.router)
 
+    # Sentry integration (lightweight — only if SENTRY_DSN is set and sentry-sdk is installed)
+    _init_sentry()
+
     @app.get("/")
     async def root():
-        return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend"}
+        return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend", "admin": "/admin"}
 
     @app.get("/health")
     async def health_check():
         return {"status": "ok"}
 
     return app
+
+
+def _init_sentry() -> None:
+    """Initialise Sentry if SENTRY_DSN is set and sentry-sdk is available."""
+    import os
+
+    dsn = os.getenv("SENTRY_DSN")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk  # type: ignore[import-untyped]
+        from sentry_sdk.integrations.asgi import SentryAsgiMiddleware  # type: ignore[import-untyped]
+
+        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.1)
+        logger.info("Sentry initialized (DSN set)")
+    except ImportError:
+        pass  # sentry-sdk not installed — silently skip
 
 
 app = create_app()

@@ -48,6 +48,8 @@ export interface StatsData {
     name: string;
     count: number;
   };
+  /** Username when data came from scrape-profile path. */
+  scraped_username?: string;
   most_watched_director?: {
     name: string;
     count: number;
@@ -129,5 +131,19 @@ export interface StatsData {
     bigram_frequency: { bigram: string; count: number }[];
     avg_length_by_rating: Record<string, number>;
     language_mix: Record<string, { count: number; percentage: number }>;
+    /** Top liked reviews; present only on scrape-profile path with HTML like data. */
+    top_liked_reviews?: {
+      title: string;
+      year: string;
+      slug?: string;
+      like_count: number;
+      rating?: number | null;
+      review_date?: string;
+      text_preview?: string;
+    }[];
+    /** Sum of like_count across all reviews with HTML like data. */
+    total_review_likes?: number | null;
+    /** Number of reviews whose like_count was successfully parsed. */
+    reviews_with_likes_data?: number | null;
   };
 }

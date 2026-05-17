@@ -48,7 +48,9 @@ coverage/
 *.zip
 **/letterboxd_data/
 **/runs/
+**/watchlist_runs/
 NOTES.md
+.planning/
 
 # design exploration (local-only)
 frontend/design-prototypes/

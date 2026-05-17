@@ -24,11 +24,15 @@ def film_key(film: dict[str, Any]) -> tuple[str, str]:
     return (str(film.get("title", "")).strip().lower(), str(film.get("year", "")).strip())
 
 
+BUCKET_CAP = 50  # max items per compare-bucket array
+
+
 def public_film(film: dict[str, Any]) -> dict[str, Any]:
     return {
         "title": film.get("title", ""),
         "year": str(film.get("year", "") or ""),
         "slug": film.get("slug", ""),
+        "poster_url": str(film.get("poster_url") or ""),
     }
 
 
@@ -42,6 +46,10 @@ def compare_watchlist_sets(first_watchlist: list[dict], second_watchlist: list[d
     larger_count = max(len(first_by_key), len(second_by_key), 1)
     match_score = round((len(common_keys) / larger_count) * 100, 1)
 
+    common = [public_film(first_by_key[key]) for key in common_keys[:BUCKET_CAP]]
+    first_only = [public_film(first_by_key[key]) for key in first_only_keys[:BUCKET_CAP]]
+    second_only = [public_film(second_by_key[key]) for key in second_only_keys[:BUCKET_CAP]]
+
     return {
         "counts": {
             "first_total": len(first_by_key),
@@ -50,10 +58,20 @@ def compare_watchlist_sets(first_watchlist: list[dict], second_watchlist: list[d
             "first_only": len(first_only_keys),
             "second_only": len(second_only_keys),
         },
+        "returned_counts": {
+            "common": len(common),
+            "first_only": len(first_only),
+            "second_only": len(second_only),
+        },
+        "truncated": {
+            "common": len(common_keys) > len(common),
+            "first_only": len(first_only_keys) > len(first_only),
+            "second_only": len(second_only_keys) > len(second_only),
+        },
         "match_score": match_score,
-        "common": [public_film(first_by_key[key]) for key in common_keys],
-        "first_only": [public_film(first_by_key[key]) for key in first_only_keys],
-        "second_only": [public_film(second_by_key[key]) for key in second_only_keys],
+        "common": common,
+        "first_only": first_only,
+        "second_only": second_only,
     }
 
 

@@ -15,11 +15,12 @@ import type { StatsData } from '@/containers/results/experimental/types';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import ThemeWrapper from '@/components/ThemeWrapper';
-import PreResultsConsentModal from '@/components/PreResultsConsentModal';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
 import { getTmdbImageUrl, trackEvent, trackConsentedEvent } from '@/lib/analytics';
 import { getUsername } from '@/lib/session-id';
+import { initPostHog, flushQueue } from '@/lib/posthog';
+import { saveConsentDecisionToDb } from '@/lib/consentFlow';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
 
@@ -118,19 +119,18 @@ export default function ResultsPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
 
-  // consent
-  const [showConsentModal, setShowConsentModal] = useState(false);
+  // consent — anonymous-only stats are kept by default; no permission prompt
   const [sessionId, setSessionId] = useState<string>('');
 
   // share
   const [showShareModal, setShowShareModal] = useState(false);
-  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('vertical');
   const [directorImageUrl, setDirectorImageUrl] = useState<string>('');
-  
+
   // feedback
   const feedbackRef = useRef<FeedbackFabRef>(null);
   const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
-  
+
 
   // session helpers
   const getSessionId = () => {
@@ -139,29 +139,26 @@ export default function ResultsPage() {
     if (!id) { id = (crypto?.randomUUID?.() ?? `session_${Date.now()}`); sessionStorage.setItem('session_id', id); }
     return id;
   };
-  const hasModal = () => typeof window !== 'undefined' && sessionStorage.getItem('consent_modal_shown') === 'true';
-  const setModalShown = () => typeof window !== 'undefined' && sessionStorage.setItem('consent_modal_shown', 'true');
-  const saveConsent = (d: 'accept' | 'decline') => typeof window !== 'undefined' && sessionStorage.setItem('consent_decision', d);
 
   // Throttled resize handler
   const handleResize = useCallback(() => {
     setIsMobile(window.innerWidth < 480);
   }, []);
-  
+
   const throttledResize = useRafThrottle(handleResize, []);
-  
+
   useEffect(() => {
     throttledResize();
     window.addEventListener('resize', throttledResize);
     return () => window.removeEventListener('resize', throttledResize);
   }, [throttledResize]);
 
-  useEffect(() => { 
-    const saved = localStorage.getItem('letterboxdStats'); 
-    if (saved) { 
-      try { 
+  useEffect(() => {
+    const saved = localStorage.getItem('letterboxdStats');
+    if (saved) {
+      try {
         const parsedStats = JSON.parse(saved);
-        setStats(parsedStats); 
+        setStats(parsedStats);
         // Track that results were successfully loaded
         trackEvent('results_viewed', {
           total_films: parsedStats.total_films,
@@ -175,8 +172,8 @@ export default function ResultsPage() {
         // silent: stale localStorage data
       }
     }
-    setLoading(false); 
-    
+    setLoading(false);
+
     // Get username from shared session helper
     const storedUsername = getUsername();
     if (storedUsername) {
@@ -184,18 +181,15 @@ export default function ResultsPage() {
     }
   }, []);
 
-  useEffect(() => { const id = getSessionId(); setSessionId(id); const t = setTimeout(() => { if (!hasModal()) setShowConsentModal(true); }, 500); return () => clearTimeout(t); }, []);
-
-  const handleConsentAccept = useCallback(() => { 
-    setModalShown(); 
-    saveConsent('accept'); 
-    setShowConsentModal(false); 
-  }, []);
-  
-  const handleConsentDecline = useCallback(() => { 
-    setModalShown(); 
-    saveConsent('decline'); 
-    setShowConsentModal(false); 
+  useEffect(() => {
+    const id = getSessionId();
+    setSessionId(id);
+    if (typeof window === 'undefined') return;
+    if (sessionStorage.getItem('consent_decision') === 'accept') return;
+    sessionStorage.setItem('consent_decision', 'accept');
+    initPostHog();
+    flushQueue();
+    void saveConsentDecisionToDb(true);
   }, []);
 
   // Derived data - maintain hook order
@@ -223,13 +217,13 @@ export default function ResultsPage() {
       try {
         const startDate = new Date(stats.data_timeline.earliest_date);
         const endDate = new Date(stats.data_timeline.latest_date);
-        
+
         if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
           const daysDiff = Math.max(1, stats.data_timeline.total_days || 1);
-          
+
           const startText = startDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
           const endText = endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-          
+
           return {
             actualRangeDays: daysDiff,
             dateRangeText: startText === endText ? `Analysed on ${startText}` : `Analysed from ${startText} to ${endText}`
@@ -239,7 +233,7 @@ export default function ResultsPage() {
         // Silent error handling
       }
     }
-    
+
     // Fallback to monthly habits
     const monthlyHabits = stats?.monthly_viewing_habits;
     if (monthlyHabits && monthlyHabits.length > 0) {
@@ -247,10 +241,10 @@ export default function ResultsPage() {
         const sortedMonths = [...monthlyHabits].sort((a, b) => a.month.localeCompare(b.month));
         const firstMonth = sortedMonths[0].month;
         const lastMonth = sortedMonths[sortedMonths.length - 1].month;
-        
+
         // Parse month formats
         let startDate, endDate;
-        
+
         if (firstMonth.includes('-') && firstMonth.length >= 7) {
           startDate = new Date(firstMonth + (firstMonth.length === 7 ? '-01' : ''));
           endDate = new Date(lastMonth + (lastMonth.length === 7 ? '-01' : ''));
@@ -266,18 +260,18 @@ export default function ResultsPage() {
           startDate = new Date(firstMonth);
           endDate = new Date(lastMonth);
         }
-        
+
         if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
           const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
           let daysDiff = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-          
+
           if (firstMonth === lastMonth) {
             daysDiff = 30;
           }
-          
+
           const startText = startDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
           const endText = endDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
-          
+
           return {
             actualRangeDays: daysDiff,
             dateRangeText: startText === endText ? `Analysed in ${startText}` : `Analysed from ${startText} to ${endText}`
@@ -287,7 +281,7 @@ export default function ResultsPage() {
         // Silent error handling
       }
     }
-    
+
     // Default fallback
     return {
       actualRangeDays: 365,
@@ -298,20 +292,20 @@ export default function ResultsPage() {
   const timePct = useMemo(() => {
     const daysWatched = stats?.days_watched ?? 0;
     const safeRangeDays = Math.max(1, actualRangeDays);
-    
+
     // Calculate based on waking hours
     const wakingHoursPerDay = 16;
     const totalWakingHours = safeRangeDays * wakingHoursPerDay;
     const hoursWatched = daysWatched * 24;
-    
+
     let percentage = Math.round((hoursWatched / totalWakingHours) * 100);
-    
+
     // Adjust for short periods
     if (safeRangeDays <= 30) {
       const totalAvailableHours = safeRangeDays * 24;
       percentage = Math.round((hoursWatched / totalAvailableHours) * 100);
     }
-    
+
     return `${Math.min(percentage, 100)}%`;
   }, [stats?.days_watched, actualRangeDays]);
 
@@ -322,67 +316,93 @@ export default function ResultsPage() {
     const languageCount = stats?.top_languages?.length ?? 0;
     const decadeSpan = (stats?.decades ?? []).filter((d) => d.count > 0).length;
 
+    // 'diary' when backend gave us an actual earliest_date from the diary CSV
+    // (so the window is real); 'fallback' when we defaulted to 365 days.
+    const paceWindowSource: 'diary' | 'fallback' =
+      stats?.data_timeline?.earliest_date && stats?.data_timeline?.latest_date
+        ? 'diary'
+        : 'fallback';
+
     return {
       filmsPerWeek,
       languageCount,
       decadeSpan,
+      paceWindowDays: safeRange,
+      paceWindowSource,
     };
-  }, [stats?.total_films, stats?.top_languages, stats?.decades, actualRangeDays]);
+  }, [stats?.total_films, stats?.top_languages, stats?.decades, stats?.data_timeline, actualRangeDays]);
 
-  // Share card props - must be before early returns to maintain hook order
-  const shareCardData = useMemo<ShareCardData>(() => ({
-    onScreenCrush: {
-      name: stats?.top_actors?.[0]?.name || 'Unknown Actor',
-      headshotUrl: getTmdbImageUrl(stats?.top_actors?.[0]?.profile_path) || '',
-      count: stats?.top_actors?.[0]?.count || 0,
-    },
-    favoriteDirector: {
-      name: stats?.most_watched_director?.name || 'Unknown Director',
-      headshotUrl: directorImageUrl,
-      count: stats?.most_watched_director?.count || 0,
-    },
-    watchedFilms: stats?.total_films || 0,
-    spentDays: Math.round(stats?.days_watched || 0),
-    timePercent: Number.parseInt(timePct, 10) || 0,
-    cinemaScale: cineScore,
-    personaLabel: stats?.cinematic_persona?.persona || '',
-    minutesAverage: Math.round(stats?.average_runtime || 0),
-    mostCommonRating: stats?.most_common_rating || 3.5,
-    peakDecade: stats?.favorite_decade?.name || '2020s',
-    peakDecadeCount: stats?.favorite_decade?.count || 0,
-    topActors: (stats?.top_actors || []).slice(0, 5).map((a) => ({
+  // Build top actors & directors list, ensuring no duplicate person across both roles
+  const topActors = useMemo(() => {
+    return (stats?.top_actors || []).slice(0, 5).map((a) => ({
       name: a.name,
       headshotUrl: getTmdbImageUrl(a.profile_path) || '',
       count: a.count,
-    })),
-    topDirectors: (stats?.top_directors || []).slice(0, 5).map((d) => ({
-      name: d.name,
-      headshotUrl: getTmdbImageUrl(d.profile_path) || '',
-      count: d.count,
-    })),
-  }), [stats, directorImageUrl, cineScore, timePct]);
+    }));
+  }, [stats]);
+
+  const topDirectors = useMemo(() => {
+    const actorsSet = new Set((stats?.top_actors || []).slice(0, 5).map((a) => a.name));
+    return (stats?.top_directors || [])
+      .filter((d) => !actorsSet.has(d.name))
+      .slice(0, 5)
+      .map((d) => ({
+        name: d.name,
+        headshotUrl: getTmdbImageUrl(d.profile_path) || '',
+        count: d.count,
+      }));
+  }, [stats]);
+
+  const shareCardData = useMemo<ShareCardData>(() => {
+    // Avoid crush being same person as director
+    const actorIdx = 0;
+    let directorIdx = 0;
+
+    // If first actor === first director, try next director
+    if (
+      topActors.length > 0 &&
+      topDirectors.length > 0 &&
+      topActors[0].name === topDirectors[0].name
+    ) {
+      directorIdx = topDirectors.length > 1 ? 1 : 0;
+    }
+
+    return {
+      onScreenCrush: topActors[actorIdx] || { name: 'Unknown Actor', headshotUrl: '', count: 0 },
+      favoriteDirector: topDirectors[directorIdx] || { name: 'Unknown Director', headshotUrl: '', count: 0 },
+      watchedFilms: stats?.total_films || 0,
+      spentDays: Math.round(stats?.days_watched || 0),
+      timePercent: Number.parseInt(timePct, 10) || 0,
+      cinemaScale: cineScore,
+      personaLabel: stats?.cinematic_persona?.persona || '',
+      minutesAverage: Math.round(stats?.average_runtime || 0),
+      mostCommonRating: stats?.most_common_rating || 3.5,
+      peakDecade: stats?.favorite_decade?.name || '2020s',
+      peakDecadeCount: stats?.favorite_decade?.count || 0,
+      topActors,
+      topDirectors,
+    };
+  }, [stats, topActors, topDirectors, cineScore, timePct]);
 
   // Load director headshot with lazy loading
   const loadDirectorImage = useCallback(async () => {
     const nm = stats?.most_watched_director?.name;
     if (!nm) return;
-    
-    // Only try to load director image if we have a backend API available
+
     if (process.env.NEXT_PUBLIC_API_BASE) {
       try {
         const data = await searchPerson(nm, 'director');
         if (data.found && data.url) {
-          // Use getTmdbImageUrl to handle any URL format consistently
           const imageUrl = getTmdbImageUrl(data.url);
-          if (imageUrl) {
+          if (imageUrl && !directorImageUrl) {
             setDirectorImageUrl(imageUrl);
           }
         }
       } catch {
-        // Silent error handling - fallback to no image
+        // Silent
       }
     }
-  }, [stats?.most_watched_director?.name]);
+  }, [stats?.most_watched_director?.name, directorImageUrl]);
 
   useEffect(() => {
     loadDirectorImage();
@@ -410,15 +430,12 @@ export default function ResultsPage() {
       </div>
     );
   }
-  
+
   return (
     <ThemeProvider>
       <ThemeWrapper>
         <ResultsContent
           stats={stats}
-          showConsentModal={showConsentModal}
-          handleConsentAccept={handleConsentAccept}
-          handleConsentDecline={handleConsentDecline}
           sessionId={sessionId}
           username={username}
           dateRangeText={dateRangeText}
@@ -448,9 +465,6 @@ export default function ResultsPage() {
 
 function ResultsContent({
   stats,
-  showConsentModal,
-  handleConsentAccept,
-  handleConsentDecline,
   sessionId,
   username,
   dateRangeText,
@@ -475,8 +489,6 @@ function ResultsContent({
 
   return (
     <>
-      <PreResultsConsentModal open={showConsentModal} onAccept={handleConsentAccept} onDecline={handleConsentDecline} sessionId={sessionId} />
-
       <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
         {/* Header */}
         <header className="text-center py-4 md:py-10">
@@ -484,7 +496,11 @@ function ResultsContent({
             className="text-[clamp(32px,6vw,72px)] font-black mb-4 leading-[0.95] tracking-tighter"
             style={{
               fontFamily: 'var(--theme-font-display)',
-              color: theme === 'current' ? '#fff' : theme === 'vhs' ? '#f0e6d8' : '#e8e0d8',
+              color:
+                theme === 'current' ? '#fff'
+                : theme === 'vhs' ? '#f0e6d8'
+                : theme === 'apple' ? '#1D1D1F'
+                : '#e8e0d8',
             }}
           >
             Your{' '}
@@ -501,7 +517,11 @@ function ResultsContent({
           <p
             className="text-xl mb-2"
             style={{
-              color: theme === 'current' ? '#d1d5db' : theme === 'vhs' ? '#d4955a' : '#8a8a8a',
+              color:
+                theme === 'current' ? '#d1d5db'
+                : theme === 'vhs' ? '#d4955a'
+                : theme === 'apple' ? '#6E6E73'
+                : '#8a8a8a',
             }}
           >
             A comprehensive analysis of your cinematic journey.
@@ -509,7 +529,11 @@ function ResultsContent({
           <p
             className="text-center text-lg"
             style={{
-              color: theme === 'current' ? '#9ca3af' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
+              color:
+                theme === 'current' ? '#9ca3af'
+                : theme === 'vhs' ? '#d4955a'
+                : theme === 'apple' ? '#86868B'
+                : '#6a6a6a',
             }}
           >
             {dateRangeText}
@@ -519,9 +543,20 @@ function ResultsContent({
               <span
                 className="inline-block px-3 py-1 text-sm rounded-full"
                 style={{
-                  background: theme === 'current' ? 'rgba(51,65,85,0.6)' : 'rgba(0,0,0,0.06)',
-                  border: `1px solid ${theme === 'current' ? 'rgba(51,65,85,0.6)' : 'rgba(0,0,0,0.1)'}`,
-                  color: theme === 'current' ? '#cbd5e1' : theme === 'vhs' ? '#d4955a' : '#8a8a8a',
+                  background:
+                    theme === 'current' ? 'rgba(51,65,85,0.6)'
+                    : theme === 'apple' ? '#F2F2F7'
+                    : 'rgba(0,0,0,0.06)',
+                  border: `1px solid ${
+                    theme === 'current' ? 'rgba(51,65,85,0.6)'
+                    : theme === 'apple' ? 'rgba(0,0,0,0.08)'
+                    : 'rgba(0,0,0,0.1)'
+                  }`,
+                  color:
+                    theme === 'current' ? '#cbd5e1'
+                    : theme === 'vhs' ? '#d4955a'
+                    : theme === 'apple' ? '#1D1D1F'
+                    : '#8a8a8a',
                 }}
               >
                 @{username}
@@ -569,7 +604,7 @@ function ResultsContent({
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
 
         {/* Ratings Bar */}
-        <LazyRatingsBar data={ratingsArr} max={ratingMax} isMobile={isMobile} />
+        <LazyRatingsBar data={ratingsArr} max={ratingMax} isMobile={isMobile} mostCommonRating={stats.most_common_rating} />
 
         {/* Review Analysis */}
         {stats.review_analysis && <ReviewAnalysisSection stats={stats} />}
@@ -578,10 +613,14 @@ function ResultsContent({
         <LazyQuickFacts
           avgMinutes={stats.average_runtime || 0}
           totalCountries={stats.total_countries || 0}
-          mostCommonRating={stats.most_common_rating || 3.5}
           filmsPerWeek={quickMetrics.filmsPerWeek}
           languageCount={quickMetrics.languageCount}
           decadeSpan={quickMetrics.decadeSpan}
+          topCountry={stats.top_countries?.[0]?.name}
+          rewatchedCount={stats.rewatched_count}
+          totalFilms={stats.total_films}
+          paceWindowDays={quickMetrics.paceWindowDays}
+          paceWindowSource={quickMetrics.paceWindowSource}
         />
 
         {/* Cinema Scale */}
@@ -599,7 +638,7 @@ function ResultsContent({
           <button
             onClick={() => {
               setShowShareModal(true);
-              trackEvent('share_modal_opened');
+              trackEvent('share_export_started');
             }}
             className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
             style={{
@@ -633,14 +672,14 @@ function ResultsContent({
         setOrientation={setOrientation}
         cardProps={shareCardData}
         onDownloadSuccess={() => {
-          trackEvent('share_download_success');
+          trackEvent('share_export_succeeded');
           if (!hasTriggeredFeedback) {
             setHasTriggeredFeedback(true);
             feedbackRef.current?.open();
           }
         }}
       />
-      
+
       <FeedbackFab ref={feedbackRef} sessionId={sessionId} />
     </>
   );
@@ -661,13 +700,13 @@ function SectionContainer({ theme, children }: { theme: string; children: React.
 // ===================== LAZY LOADING COMPONENTS =====================
 
 // Lazy wrapper for Languages
-function LazyLanguages({ 
-  data 
-}: { 
-  data: any[]; 
+function LazyLanguages({
+  data
+}: {
+  data: any[];
 }) {
   const { ref, shouldMount } = useLazyMount(100);
-  
+
   return (
     <div ref={ref}>
       {shouldMount ? (
@@ -682,7 +721,7 @@ function LazyLanguages({
 // Lazy wrapper for Film History
 function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
   const { ref, shouldMount } = useLazyMount(150);
-  
+
   return (
     <div ref={ref}>
       {shouldMount ? (
@@ -695,13 +734,13 @@ function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; is
 }
 
 // Lazy wrapper for Ratings Bar
-function LazyRatingsBar({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
+function LazyRatingsBar({ data, max, isMobile, mostCommonRating }: { data: any[]; max: number; isMobile: boolean; mostCommonRating?: number }) {
   const { ref, shouldMount } = useLazyMount(200);
 
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <RatingsBar data={data} max={max} isMobile={isMobile} />
+        <RatingsBar data={data} max={max} isMobile={isMobile} mostCommonRating={mostCommonRating} />
       ) : (
         <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}
@@ -710,33 +749,45 @@ function LazyRatingsBar({ data, max, isMobile }: { data: any[]; max: number; isM
 }
 
 // Lazy wrapper for Quick Facts
-function LazyQuickFacts({ 
-  avgMinutes, 
-  totalCountries, 
-  mostCommonRating,
+function LazyQuickFacts({
+  avgMinutes,
+  totalCountries,
   filmsPerWeek,
   languageCount,
   decadeSpan,
-}: { 
-  avgMinutes: number; 
-  totalCountries: number; 
-  mostCommonRating: number; 
+  topCountry,
+  rewatchedCount,
+  totalFilms,
+  paceWindowDays,
+  paceWindowSource,
+}: {
+  avgMinutes: number;
+  totalCountries: number;
   filmsPerWeek: number;
   languageCount: number;
   decadeSpan: number;
+  topCountry?: string;
+  rewatchedCount?: number;
+  totalFilms?: number;
+  paceWindowDays?: number;
+  paceWindowSource?: 'diary' | 'fallback';
 }) {
   const { ref, shouldMount } = useLazyMount(250);
-  
+
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <QuickFacts 
-          avgMinutes={avgMinutes} 
-          totalCountries={totalCountries} 
-          mostCommonRating={mostCommonRating} 
+        <QuickFacts
+          avgMinutes={avgMinutes}
+          totalCountries={totalCountries}
           filmsPerWeek={filmsPerWeek}
           languageCount={languageCount}
           decadeSpan={decadeSpan}
+          topCountry={topCountry}
+          rewatchedCount={rewatchedCount}
+          totalFilms={totalFilms}
+          paceWindowDays={paceWindowDays}
+          paceWindowSource={paceWindowSource}
         />
       ) : (
         <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />

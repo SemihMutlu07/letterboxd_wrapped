@@ -106,33 +106,57 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
     let released = false;
 
     const fetchDirectorImage = async () => {
-      if (!director?.name || !isVisible) return;
+      if (!director?.name || !isVisible) {
+        if (director?.name) console.warn(`[DirectorCard] Not visible, skipping fetch for ${director.name}`);
+        return;
+      }
 
       const cacheKey = `director-${director.name}`;
+      const profileUrl = getTmdbImageUrl(director.profile_path);
+      if (profileUrl) {
+        imgCache.set(cacheKey, profileUrl);
+        setImageError(false);
+        setImageUrl(profileUrl);
+        return;
+      }
+
+      if (!director.profile_path) {
+        console.debug(`[DirectorCard] No profile_path for ${director.name}`);
+      }
+
       if (imgCache.has(cacheKey)) {
         const cached = imgCache.get(cacheKey);
         if (cached) {
           setImageError(false);
           setImageUrl(cached);
+        } else {
+          console.debug(`[DirectorCard] Cached null for ${director.name}, skipping searchPerson`);
+          setImageError(false);
+          setImageUrl(null);
         }
         return;
       }
 
+      if (released) return;
       setImageLoading(true);
       try {
         releaseFn = await acquire();
         const data = await searchPerson(director.name, 'director');
         if (data.found && data.url) {
-          imgCache.set(cacheKey, data.url);
+          const proxyUrl = getTmdbImageUrl(data.url);
+          imgCache.set(cacheKey, proxyUrl);
           setImageError(false);
-          setImageUrl(data.url);
+          setImageUrl(proxyUrl);
         } else {
+          console.debug(`[DirectorCard] searchPerson no result for ${director.name}:`, data);
           imgCache.set(cacheKey, null);
+          setImageUrl(null);
         }
-              } catch {
-          // Silent error handling
-          imgCache.set(`director-${director.name}`, null);
-        } finally {
+      } catch (err: any) {
+        console.error(`[DirectorCard] searchPerson error for ${director.name}:`, err?.message || err);
+        imgCache.set(`director-${director.name}`, null);
+        setImageUrl(null);
+      } finally {
         setImageLoading(false);
         try {
           if (releaseFn) releaseFn();
@@ -146,7 +170,7 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
       clearTimeout(t);
       if (!released && releaseFn) try { releaseFn(); } catch {}
     };
-  }, [director?.name, rank, isVisible]);
+  }, [director?.name, director?.profile_path, rank, isVisible]);
 
   const getRankColor = (n: number) =>
     n === 1
@@ -181,6 +205,8 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
             className="w-full h-full object-cover"
             onError={(e) => {
               console.error(`[DirectorCard] Image failed for ${director?.name}:`, imageUrl, e);
+              imgCache.set(`director-${director.name}`, null);
+              setImageUrl(null);
               setImageError(true);
             }}
             onLoad={() => setImageError(false)}
@@ -234,42 +260,58 @@ export const ActorCard: React.FC<{
     let released = false;
 
     const fetchActorImage = async () => {
-      if (!actor?.name || !visible) return;
+      if (!actor?.name || !visible) {
+        if (actor?.name) console.warn(`[ActorCard] Not visible, skipping fetch for ${actor.name}`);
+        return;
+      }
 
       const cacheKey = `actor-${actor.name}`;
+      const profileUrl = getTmdbImageUrl(actor.profile_path);
+      if (profileUrl) {
+        imgCache.set(cacheKey, profileUrl);
+        setImageError(false);
+        setImageUrl(profileUrl);
+        return;
+      }
+
+      if (!actor.profile_path) {
+        console.debug(`[ActorCard] No profile_path for ${actor.name}`);
+      }
+
       if (imgCache.has(cacheKey)) {
         const cached = imgCache.get(cacheKey);
         if (cached) {
           setImageError(false);
           setImageUrl(cached);
+        } else {
+          console.debug(`[ActorCard] Cached null for ${actor.name}, skipping searchPerson`);
+          setImageError(false);
+          setImageUrl(null);
         }
         return;
       }
 
+      if (released) return;
       setImageLoading(true);
       try {
         releaseFn = await acquire();
 
-          if ((actor as { profile_path?: string })?.profile_path) {
-              const fallbackUrl = getTmdbImageUrl((actor as { profile_path?: string }).profile_path);
-          imgCache.set(cacheKey, fallbackUrl);
-          setImageError(false);
-          setImageUrl(fallbackUrl);
-          return;
-        }
-
         const data = await searchPerson(actor.name, 'actor');
         if (data.found && data.url) {
-          imgCache.set(cacheKey, data.url);
+          const proxyUrl = getTmdbImageUrl(data.url);
+          imgCache.set(cacheKey, proxyUrl);
           setImageError(false);
-          setImageUrl(data.url);
+          setImageUrl(proxyUrl);
         } else {
+          console.debug(`[ActorCard] searchPerson no result for ${actor.name}:`, data);
           imgCache.set(cacheKey, null);
+          setImageUrl(null);
         }
-              } catch {
-          // Silent error handling
-          imgCache.set(`actor-${actor.name}`, null);
-        } finally {
+      } catch (err: any) {
+        console.error(`[ActorCard] searchPerson error for ${actor.name}:`, err?.message || err);
+        imgCache.set(`actor-${actor.name}`, null);
+        setImageUrl(null);
+      } finally {
         setImageLoading(false);
         try {
           if (releaseFn) releaseFn();
@@ -283,7 +325,7 @@ export const ActorCard: React.FC<{
       clearTimeout(t);
       if (!released && releaseFn) try { releaseFn(); } catch {}
     };
-  }, [actor?.name, rank, visible, actor]);
+  }, [actor?.name, actor?.profile_path, rank, visible]);
 
   if (!actor) return null;
 
@@ -305,6 +347,8 @@ export const ActorCard: React.FC<{
               className="w-full h-full object-cover"
               onError={(e) => {
                 console.error(`[ActorCard] Image failed for ${actor.name}:`, imageUrl, e);
+                imgCache.set(`actor-${actor.name}`, null);
+                setImageUrl(null);
                 setImageError(true);
               }}
               onLoad={() => setImageError(false)}
@@ -346,5 +390,3 @@ export const ActorCard: React.FC<{
     </div>
   );
 });
-
-
