@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MoviesWrapped Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-500/15 border border-orange-400/30 mb-4">
+        <svg class="w-8 h-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+      </div>
+      <h1 class="text-2xl font-black tracking-tight">MoviesWrapped <span class="text-orange-400">Admin</span></h1>
+    </div>
+
+    <form action="/admin/dashboard" method="get" class="bg-slate-800/60 border border-slate-700/50 rounded-2xl p-6 space-y-4">
+      <div>
+        <label class="block text-xs uppercase tracking-wider text-slate-500 font-medium mb-1.5">Admin Key</label>
+        <input type="password" name="key" required autofocus
+               class="w-full bg-slate-900/70 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-orange-400/60 focus:outline-none focus:ring-2 focus:ring-orange-400/20"
+               placeholder="Enter key...">
+      </div>
+      <button type="submit"
+              class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+        Enter Dashboard
+      </button>
+    </form>
+  </div>
+</body>
+</html>

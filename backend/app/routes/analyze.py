@@ -29,12 +29,8 @@ logger = logging.getLogger("letterboxd_wrapped.analyze")
 router = APIRouter()
 
 
-def _persist_run(username: Optional[str], source: str, stats: dict) -> None:
-    """Best-effort local run log under backend/runs/{username}-{iso-ts}.json.
-
-    Never raises — logging failures don't break the user's request. The directory
-    is gitignored via repo-root .gitignore (`**/runs/`).
-    """
+def _persist_run(username: Optional[str], source: str, stats: dict, ok: bool = True, error_message: Optional[str] = None) -> None:
+    """Best-effort local run log under backend/runs/{username}-{iso-ts}.json."""
     try:
         runs_dir = Path("runs")
         runs_dir.mkdir(parents=True, exist_ok=True)
@@ -45,12 +41,14 @@ def _persist_run(username: Optional[str], source: str, stats: dict) -> None:
             "username": username,
             "source": source,
             "timestamp": ts,
+            "ok": ok,
+            "error_message": error_message,
             "total_films": stats.get("total_films"),
             "sinefil_meter": stats.get("sinefil_meter"),
             "stats": stats,
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info("Persisted run: %s (source=%s, films=%s)", path, source, payload["total_films"])
+        logger.info("Persisted run: %s (source=%s, ok=%s, films=%s)", path, source, ok, payload["total_films"])
     except Exception as exc:
         logger.warning("Failed to persist run for %s: %s", username, exc)
 
@@ -65,10 +63,14 @@ def _find_csv_files(directory: Path) -> dict:
     for root, _dirs, files in os.walk(directory):
         for file in files:
             if file.lower().endswith(".csv"):
+                logger.debug("[upload-debug] Found CSV: %s", file)
                 for req in _REQUIRED_FILES:
                     if req not in csv_found and req.split(".")[0] in file.lower():
                         csv_found[req] = os.path.join(root, file)
+                        logger.info("[upload-debug] Matched %s → %s", req, file)
                         break
+    if not csv_found:
+        logger.warning("[upload-debug] No matching CSV files in %s. Files found: %s", directory, list(os.walk(directory)))
     return csv_found
 
 
@@ -83,7 +85,7 @@ async def _run_analysis(
         task_manager.set_task_running(task_id)
         stats = await process_comprehensive_letterboxd_data(session, csv_files, task_id)
         task_manager.set_task_done(task_id, {"status": "success", "stats": stats})
-        _persist_run(username, "upload", stats)
+        _persist_run(username, "upload", stats, ok=True)
     except Exception as exc:
         task_manager.set_task_failed(task_id, str(exc))
     finally:
@@ -170,7 +172,7 @@ async def scrape_profile(request: Request):
         )
 
     try:
-        diary_films, grid_films = await scrape_profile_sources(username, max_pages=60)
+        sources = await scrape_profile_sources(username, max_pages=60, include_reviews=True)
     except ValueError as exc:
         # Re-raise 404s from scraper (user truly gone or profile private)
         logger.warning("Scrape value error for %s: %s", username, exc)
@@ -187,8 +189,12 @@ async def scrape_profile(request: Request):
 
     request_dir: Optional[Path] = None
     try:
-        logger.info("scrape_profile: %s diary=%d grid=%d", username, len(diary_films), len(grid_films))
-        films = merge_scraped_films(diary_films, grid_films)
+        logger.info(
+            "scrape_profile: %s diary=%d grid=%d reviews=%d films=%d scraped_reviews=%d",
+            username, len(sources.diary), len(sources.grid),
+            sources.review_count, sources.film_count, len(sources.reviews),
+        )
+        films = merge_scraped_films(sources.diary, sources.grid)
         csv_dicts = diary_to_csv_dicts(films)
         if not films or not csv_dicts["watched"]:
             raise HTTPException(
@@ -200,6 +206,8 @@ async def scrape_profile(request: Request):
         request_dir.mkdir(parents=True, exist_ok=True)
         watched_path = request_dir / "watched.csv"
         ratings_path = request_dir / "ratings.csv"
+        diary_path = request_dir / "diary.csv"
+        reviews_path = request_dir / "reviews.csv"
 
         import pandas as pd
 
@@ -210,12 +218,40 @@ async def scrape_profile(request: Request):
             pd.DataFrame(csv_dicts["ratings"]).to_csv(ratings_path, index=False)
             csv_files["ratings.csv"] = str(ratings_path)
 
+        if csv_dicts.get("diary"):
+            pd.DataFrame(csv_dicts["diary"]).to_csv(diary_path, index=False)
+            csv_files["diary.csv"] = str(diary_path)
+
+        # Synthesize reviews.csv from scraped HTML so the existing
+        # compute_review_metrics path is reused for both upload and scrape flows.
+        if sources.reviews:
+            review_rows = [
+                {
+                    "Date": r.get("date", ""),
+                    "Name": r.get("title", ""),
+                    "Year": r.get("year", ""),
+                    "Rating": r.get("rating"),
+                    "Rewatch": "",
+                    "Review": r.get("review_text", ""),
+                    "Tags": "",
+                    "Watched Date": "",
+                    "Likes": r.get("like_count") if r.get("like_count") is not None else "",
+                    "Slug": r.get("slug", ""),
+                }
+                for r in sources.reviews
+            ]
+            pd.DataFrame(review_rows).to_csv(reviews_path, index=False)
+            csv_files["reviews.csv"] = str(reviews_path)
+
         stats = await process_comprehensive_letterboxd_data(request.app.state.aiohttp_session, csv_files)
         stats["scraped_username"] = username
         stats["scraped_film_count"] = len(films)
-        stats["scraped_diary_count"] = len(diary_films)
-        stats["scraped_grid_only_count"] = len(films) - len(diary_films)
-        _persist_run(username, "scrape", stats)
+        stats["scraped_diary_count"] = len(sources.diary)
+        stats["scraped_grid_only_count"] = len(films) - len(sources.diary)
+        stats["scraped_review_count"] = sources.review_count
+        stats["scraped_film_count_estimated"] = sources.film_count
+        stats["scraped_reviews_with_text"] = sum(1 for r in sources.reviews if r.get("review_text"))
+        _persist_run(username, "scrape", stats, ok=True)
         return {"status": "success", "stats": stats}
     except HTTPException:
         raise

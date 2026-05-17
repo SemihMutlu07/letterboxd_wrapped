@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — MoviesWrapped Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  .tab-active { background: rgba(249,115,22,0.15); color: #fb923c; border-color: rgba(249,115,22,0.3); }
+  .tab-inactive { background: transparent; color: #94a3b8; border-color: transparent; }
+  .tab-inactive:hover { background: rgba(148,163,184,0.1); color: #e2e8f0; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-orange-500/15 border border-orange-400/30 flex items-center justify-center">
+          <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold text-white">MoviesWrapped <span class="text-orange-400">Admin</span></h1>
+          <p class="text-[10px] text-slate-500 uppercase tracking-wider">Local Debug Dashboard</p>
+        </div>
+      </div>
+      <div class="text-xs text-slate-500">{{ runs|length }} analysis · {{ watchlist_runs|length }} compare · {{ date_night_runs|length }} date</div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <!-- Tabs -->
+    <div class="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl w-fit">
+      <button onclick="switchTab('analysis')" id="tab-analysis" class="tab-active px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Analysis Runs</button>
+      <button onclick="switchTab('watchlist')" id="tab-watchlist" class="tab-inactive px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Watchlist Compare</button>
+      <button onclick="switchTab('datenight')" id="tab-datenight" class="tab-inactive px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Date Night</button>
+    </div>
+
+    <!-- ANALYSIS TAB -->
+    <div id="panel-analysis" class="space-y-6">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Analysis Runs</p>
+          <p class="text-2xl font-black text-white">{{ runs|length }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Success</p>
+          <p class="text-2xl font-black text-emerald-400">{{ runs | selectattr("ok", "sameas", true) | list | length }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Failed</p>
+          <p class="text-2xl font-black {% if runs | selectattr("ok", "sameas", false) | list | length > 0 %}text-red-400{% else %}text-slate-600{% endif %}">{{ runs | selectattr("ok", "sameas", false) | list | length }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Avg Films</p>
+          <p class="text-2xl font-black text-white">{% set fc = runs | map(attribute="total_films") | list %}{% if fc %}{{ (fc | sum / fc | length) | round(1) }}{% else %}—{% endif %}</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Recent Analysis Runs</h2>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">User</th><th class="text-left px-4 py-2 font-medium">Source</th>
+              <th class="text-right px-4 py-2 font-medium">Films</th><th class="text-right px-4 py-2 font-medium">Score</th>
+              <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
+            </tr></thead>
+            <tbody>
+              {% for run in runs[:50] %}
+              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+                <td class="px-4 py-2.5">
+                  <a href="/admin/run/{{ run._filename }}?key={{ key }}" class="text-orange-400 hover:text-orange-300 font-medium">@{{ run.username or "anon" }}</a>
+                </td>
+                <td class="px-4 py-2.5 text-slate-400">{{ run.source }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.total_films or "—" }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.sinefil_meter.score if run.sinefil_meter else "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ run._mtime[:16].replace("T", " ") }}</td>
+                <td class="px-4 py-2.5 text-center">
+                  {% if run.ok is sameas false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- WATCHLIST TAB -->
+    <div id="panel-watchlist" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Watchlist Comparisons</h2>
+          <span class="text-[10px] text-slate-500">Last 50</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Users</th><th class="text-right px-4 py-2 font-medium">Match</th>
+              <th class="text-right px-4 py-2 font-medium">Common</th><th class="text-left px-4 py-2 font-medium">Device</th>
+              <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
+            </tr></thead>
+            <tbody>
+              {% for w in watchlist_runs[:50] %}
+              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+                <td class="px-4 py-2.5 text-slate-300">@{{ w.usernames | join(" × @") }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ w.match_score or "—" }}%</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ w.counts.common if w.counts else "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ w.device.user_agent[:30] if w.device and w.device.user_agent else "—" }}…</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ w._mtime[:16].replace("T", " ") }}</td>
+                <td class="px-4 py-2.5 text-center">
+                  {% if w.ok is sameas false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATE NIGHT TAB -->
+    <div id="panel-datenight" class="space-y-6 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Date Night Engine</h2>
+          <span class="text-[10px] text-slate-500">Last 50</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Users</th><th class="text-left px-4 py-2 font-medium">Era</th>
+              <th class="text-left px-4 py-2 font-medium">Top Genres</th><th class="text-left px-4 py-2 font-medium">Picks</th>
+              <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
+            </tr></thead>
+            <tbody>
+              {% for d in date_night_runs[:50] %}
+              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+                <td class="px-4 py-2.5 text-slate-300">@{{ d.usernames | join(" × @") }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ d.mutual_profile.era_overlap or "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ (d.mutual_profile.top_genres or [])[:3] | join(", ") }}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ d.recommendations | join(", ") if d.recommendations else "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ d._mtime[:16].replace("T", " ") }}</td>
+                <td class="px-4 py-2.5 text-center">
+                  {% if d.ok is sameas false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-center text-[10px] text-slate-600 pt-4 pb-8">
+      MoviesWrapped Admin · Local debug dashboard
+    </div>
+  </main>
+
+  <script>
+    function switchTab(tab) {
+      ['analysis', 'watchlist', 'datenight'].forEach(t => {
+        document.getElementById('panel-' + t).classList.add('hidden');
+        document.getElementById('tab-' + t).classList.remove('tab-active');
+        document.getElementById('tab-' + t).classList.add('tab-inactive');
+      });
+      document.getElementById('panel-' + tab).classList.remove('hidden');
+      document.getElementById('tab-' + tab).classList.remove('tab-inactive');
+      document.getElementById('tab-' + tab).classList.add('tab-active');
+    }
+  </script>
+</body>
+</html>

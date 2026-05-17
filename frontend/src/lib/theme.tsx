@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
-export type DesignTheme = 'current' | 'vhs' | 'classic-bw';
+export type DesignTheme = 'current' | 'vhs' | 'classic-bw' | 'apple';
 
 export interface ThemeConfig {
   id: DesignTheme;
@@ -64,6 +64,25 @@ const themes: Record<DesignTheme, ThemeConfig> = {
       '--theme-accent-3': '#e8ddd0',
       '--theme-radius': '2px',
       '--theme-radius-sm': '1px',
+    },
+  },
+  apple: {
+    id: 'apple',
+    label: 'Apple',
+    cssVars: {
+      // Warm off-white system background — Apple's signature `secondarySystemBackground`-ish
+      '--theme-bg': '#FBFAF7',
+      '--theme-surface': '#FFFFFF',
+      '--theme-surface-2': '#F2F2F7',     // Apple system gray 6
+      '--theme-border': 'rgba(0,0,0,0.08)',
+      '--theme-text': '#1D1D1F',          // Apple near-black
+      '--theme-muted': '#6E6E73',         // Apple system gray
+      '--theme-muted-2': '#86868B',       // Apple system gray 2
+      '--theme-accent': '#0066CC',        // SF Blue, contrast-tuned for light bg
+      '--theme-accent-2': '#1D1D1F',
+      '--theme-accent-3': '#34C759',      // Apple system green
+      '--theme-radius': '16px',
+      '--theme-radius-sm': '12px',
     },
   },
 };

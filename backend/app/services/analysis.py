@@ -28,6 +28,13 @@ async def process_comprehensive_letterboxd_data(
 ) -> Dict[str, Any]:
     """Process Letterboxd data with concurrent TMDB enrichment."""
 
+    import time
+    import logging as _logging
+
+    _bench_logger = _logging.getLogger("letterboxd_wrapped")
+    logger = _bench_logger
+    t0 = time.perf_counter()
+
     def _progress(stage: str, message: str, progress: int = 0, total: int = 0) -> None:
         if task_id:
             task_manager.update_task_progress(task_id, stage, message, progress, total)
@@ -53,6 +60,11 @@ async def process_comprehensive_letterboxd_data(
         films_df = pd.merge(films_df, ratings_df_renamed, on=["title", "year"], how="left")
 
     unique_films = films_df[["title", "year"]].drop_duplicates().reset_index(drop=True)
+
+    t1 = time.perf_counter()
+    total_rows = len(watched_df) + len(ratings_df) + len(diary_df) + len(reviews_df)
+    _bench_logger.info("[bench] parsed %d files, %d rows, %d ms", len(csv_files), total_rows, int((t1 - t0) * 1000))
+
     _progress("processing", f"Found {len(unique_films)} unique films", 1, 3)
 
     _progress("tmdb_matching", "Matching films to TMDb (fast)...", 0, len(unique_films))
@@ -60,6 +72,11 @@ async def process_comprehensive_letterboxd_data(
     tmdb_ids = await asyncio.gather(*resolve_tasks)
     unique_films["tmdb_id"] = tmdb_ids
     match_rate = unique_films["tmdb_id"].notna().mean() * 100
+    matched_count = int(unique_films["tmdb_id"].notna().sum())
+
+    t2 = time.perf_counter()
+    _bench_logger.info("[bench] tmdb match: %d/%d films, %d ms", matched_count, len(unique_films), int((t2 - t1) * 1000))
+
     _progress("tmdb_matching", f"Matched {match_rate:.1f}% of films", len(unique_films), len(unique_films))
 
     unique_tmdb_ids = unique_films["tmdb_id"].dropna().unique()
@@ -80,6 +97,10 @@ async def process_comprehensive_letterboxd_data(
         columns=[col for col in ["title_csv", "title_tmdb"] if col in films_enriched.columns],
         inplace=True,
     )
+
+    t3 = time.perf_counter()
+    enriched_count = len(films_enriched[films_enriched["tmdb_id"].notna()])
+    _bench_logger.info("[bench] enriched %d films, %d ms", enriched_count, int((t3 - t2) * 1000))
 
     _progress("analyzing", "Generating comprehensive statistics...", 0, 10)
 
@@ -174,6 +195,14 @@ async def process_comprehensive_letterboxd_data(
 
     # === BASIC STATS ===
     stats["total_films"] = len(films_df)
+
+    # Rewatch count from watched.csv (Rewatch column: Yes/No)
+    rewatched_count = 0
+    if "Rewatch" in films_df.columns:
+        rewatch_mask = films_df["Rewatch"].fillna("No").astype(str).str.strip().str.lower().eq("yes")
+        rewatched_count = int(rewatch_mask.sum())
+    stats["rewatched_count"] = rewatched_count
+
     stats["films_with_metadata"] = len(metadata_df)
     stats["metadata_coverage"] = round((len(metadata_df) / len(unique_films)) * 100, 1) if len(unique_films) > 0 else 0
     _progress("analyzing", "Basic stats complete", 1, 10)
@@ -680,6 +709,7 @@ async def process_comprehensive_letterboxd_data(
     director_profile_map: dict[str, str | None] = {}
     for name, _count in director_counts.most_common(20):
         profile_path = None
+        search_source = None
         try:
             # Step 1+2: search/person with fallback (exact + diacritic-stripped)
             person_data = await search_person_with_fallback(session, name)
@@ -687,15 +717,20 @@ async def process_comprehensive_letterboxd_data(
                 pp = person_data["results"][0].get("profile_path")
                 if isinstance(pp, str) and pp:
                     profile_path = pp
+                    search_source = "tmdb_search"
 
             # Step 3: reverse lookup via film credits
             if not profile_path:
                 films = director_films_map.get(name, [])
                 if films:
                     profile_path = await find_person_by_film_credit(session, name, films)
-        except Exception:
-            pass
+                    if profile_path:
+                        search_source = "film_credit"
+        except Exception as exc:
+            logger.warning("[profile-debug] director '%s' lookup failed: %s", name, exc)
         director_profile_map[name] = profile_path
+        if not profile_path:
+            logger.info("[profile-debug] director '%s' NO IMAGE (source=%s)", name, search_source or "none")
 
     stats["top_directors"] = [
         {"name": n, "count": c, "profile_path": director_profile_map.get(n)}
@@ -786,6 +821,7 @@ async def process_comprehensive_letterboxd_data(
     top_actors_with_profiles = []
     for name, count in cast_counts.most_common(3):
         profile_path = None
+        search_source = None
         try:
             # Step 1+2: search/person with fallback (exact + diacritic-stripped)
             person_data = await search_person_with_fallback(session, name)
@@ -793,15 +829,20 @@ async def process_comprehensive_letterboxd_data(
                 pp = person_data["results"][0].get("profile_path")
                 if isinstance(pp, str) and pp:
                     profile_path = pp
+                    search_source = "tmdb_search"
 
             # Step 3: reverse lookup via film credits
             if not profile_path:
                 films = actor_films_map.get(name, [])
                 if films:
                     profile_path = await find_person_by_film_credit(session, name, films)
-        except Exception:
-            pass
+                    if profile_path:
+                        search_source = "film_credit"
+        except Exception as exc:
+            logger.warning("[profile-debug] actor '%s' lookup failed: %s", name, exc)
         top_actors_with_profiles.append({"name": name, "count": count, "profile_path": profile_path})
+        if not profile_path:
+            logger.info("[profile-debug] actor '%s' NO IMAGE (source=%s)", name, search_source or "none")
 
     remaining_actors = [{"name": n, "count": c} for n, c in cast_counts.most_common(20)[3:]]
     stats["top_actors"] = top_actors_with_profiles + remaining_actors
@@ -1025,4 +1066,9 @@ async def process_comprehensive_letterboxd_data(
     stats["review_analysis"] = compute_review_metrics(reviews_df)
 
     _progress("analyzing", "Analysis complete!", 11, 11)
+
+    t4 = time.perf_counter()
+    _bench_logger.info("[bench] stats computed, %d ms", int((t4 - t3) * 1000))
+    _bench_logger.info("[bench] total pipeline: %d ms for %d films", int((t4 - t0) * 1000), len(films_enriched))
+
     return stats

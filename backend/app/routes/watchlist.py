@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import re
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -23,6 +27,39 @@ router = APIRouter()
 
 USERNAME_RE = re.compile(r"^[a-z0-9_]+$")
 MAX_WATCHLIST_PAGES = 40
+
+WATCHLIST_RUNS_DIR = Path("watchlist_runs")
+
+
+def _persist_watchlist_run(
+    usernames: list[str],
+    comparison: dict,
+    request: Request,
+    ok: bool = True,
+    error_message: str | None = None,
+) -> None:
+    """Best-effort log of a watchlist comparison."""
+    try:
+        WATCHLIST_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
+        safe = "_".join(usernames)
+        path = WATCHLIST_RUNS_DIR / f"{safe}-{ts}.json"
+        payload = {
+            "usernames": usernames,
+            "timestamp": ts,
+            "ok": ok,
+            "error_message": error_message,
+            "match_score": comparison.get("match_score") if comparison else None,
+            "counts": comparison.get("counts") if comparison else None,
+            "common_films": (comparison.get("common") or [])[:10] if comparison else [],
+            "device": {
+                "ip": request.client.host if request.client else None,
+                "user_agent": request.headers.get("user-agent"),
+            },
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.warning("Failed to persist watchlist run: %s", exc)
 
 _RATE_LIMIT_WINDOW = 600  # 10 minutes
 _RATE_LIMIT_MAX = 10
@@ -108,6 +145,7 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
         )
 
     comparison = compare_watchlist_sets(first_watchlist, second_watchlist)
+    _persist_watchlist_run([first, second], comparison, request, ok=True)
 
     return {
         "status": "success",
@@ -150,6 +188,7 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
 
     common = compare_watchlist_sets(first_watchlist, second_watchlist)["common"]
     if not common:
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="no_common_watchlist")
         raise HTTPException(
             status_code=404,
             detail={"error_code": "no_common_watchlist", "message": "Those watchlists do not overlap yet."},
@@ -158,8 +197,9 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
     enriched = await enrich_films(request.app.state.aiohttp_session, common, limit=30)
     selected, alternatives = pick_from_common(enriched, payload.strategy)
     reason = "Both of you have it on your watchlist."
-
-    return RecommendFromCompareResponse(
+    response = RecommendFromCompareResponse(
         recommendation=recommendation_from_film(selected, reason),
         alternatives=[recommendation_from_film(film, reason) for film in alternatives],
     )
+    _persist_watchlist_run([first, second], {"recommendation": selected.get("title"), "alternatives": len(alternatives)}, request, ok=True)
+    return response

@@ -5,6 +5,7 @@ export type ShareVariant =
   | 'editorial'
   | 'variant-3'
   | 'stat-hero'
+  | 'apple-hig'
   | 'narrative'
   | 'visual-first'
   | 'dense-data';

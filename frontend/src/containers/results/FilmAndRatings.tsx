@@ -44,7 +44,7 @@ export function FilmHistory({
               textAnchor={isMobile ? 'end' : 'middle'}
               height={isMobile ? 40 : 32}
               tickLine={{ stroke: '#475569' }}
-              interval={isMobile ? 0 : 'preserveStartEnd'}
+              interval={isMobile ? 1 : 'preserveStartEnd'}
               axisLine={{ stroke: '#475569' }}
               tickMargin={isMobile ? 1 : 4}
             />
@@ -89,15 +89,23 @@ export function RatingsBar({
   data,
   max,
   isMobile,
+  mostCommonRating,
 }: {
   data: { label: string; count: number }[];
   max: number;
   isMobile: boolean;
+  mostCommonRating?: number;
 }) {
   const rating = '#eab308';
-  
+
   return (
     <Section title="Rating Patterns" subtitle="How you rate films">
+      {mostCommonRating != null && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-xs uppercase tracking-wider text-slate-500 font-medium">Most given rating</span>
+          <span className="text-sm font-black text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1">{mostCommonRating}★</span>
+        </div>
+      )}
       <div className="w-full h-44 md:h-56 lg:h-64 px-2 md:px-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart 
@@ -116,6 +124,7 @@ export function RatingsBar({
               tickLine={{ stroke: '#64748b' }}
               axisLine={{ stroke: '#64748b' }}
               tickMargin={isMobile ? 2 : 4}
+              interval={isMobile ? 1 : 'preserveStartEnd'}
             />
             <YAxis
               stroke="#9ca3af"

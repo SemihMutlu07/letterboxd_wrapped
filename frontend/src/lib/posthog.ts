@@ -102,9 +102,6 @@ export function initPostHog() {
 
   if (!key || !host) return;
 
-  // DEBUG (temporary): verify correct host + key prefix at runtime
-  console.log(`[posthog] init → host=${host} key=${key.slice(0, 6)}…`);
-
   // Init synchronously — no defer, consent was just given
   initPostHogSync(key, host);
 }
@@ -127,9 +124,7 @@ function initPostHogSync(key: string, host: string) {
       capture_pageview: false,
       autocapture: false,
       loaded: () => {
-        if (isDev) {
-          console.log('[posthog] initialized', { host });
-        }
+        // PostHog initialized successfully
       },
       bootstrap: bootstrapConfig,
     });

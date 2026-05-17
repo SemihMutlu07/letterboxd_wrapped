@@ -51,10 +51,10 @@ export default function LetterboxdLanding() {
       try {
         await testBackend();
         setBackendOffline(false);
-        trackEvent('backend_health_check_ok');
+        trackEvent('app_opened');
       } catch {
         setBackendOffline(true);
-        trackEvent('backend_health_check_failed');
+        trackEvent('app_opened', { backend_offline: true });
       }
     };
     testBackendConnectivity();
@@ -76,7 +76,7 @@ export default function LetterboxdLanding() {
   const handleFiles = useCallback(async (files: FileList | File[] | null) => {
     if (!files || files.length === 0) {
       setError({ title: 'No files selected', message: 'Please choose your Letterboxd export files.', reason: 'no_files_selected' });
-      trackEvent('upload_failed', { reason: 'no_files_selected', step: 'validation' });
+      trackEvent('analyze_failed', { reason: 'no_files_selected', step: 'validation' });
       return;
     }
 
@@ -91,13 +91,13 @@ export default function LetterboxdLanding() {
       if (file.size > maxFileSize) {
         const sizeMb = (file.size / 1024 / 1024).toFixed(1);
         setError({ title: 'File too large', message: `"${file.name}" is ${sizeMb} MB. Maximum size is 50 MB.`, action: 'Try exporting a smaller date range or compressing the file.', reason: 'file_too_large' });
-        trackEvent('upload_failed', { reason: 'file_too_large', step: 'validation' });
+        trackEvent('analyze_failed', { reason: 'file_too_large', step: 'validation' });
         return;
       }
       const hasValidExtension = ['.csv', '.zip'].some((ext) => file.name.toLowerCase().endsWith(ext));
       if (!hasValidExtension) {
         setError({ title: 'Unsupported file', message: `"${file.name}" is not a supported format. Please upload .csv or .zip files only.`, reason: 'invalid_file_type' });
-        trackEvent('upload_failed', { reason: 'invalid_extension', step: 'validation' });
+        trackEvent('analyze_failed', { reason: 'invalid_extension', step: 'validation' });
         return;
       }
     }
@@ -106,7 +106,7 @@ export default function LetterboxdLanding() {
     // Anything async (Supabase upsert, network calls) happens after this.
     setIsUploading(true);
     setError(null);
-    trackEvent('upload_started', { fileCount: files.length });
+    trackEvent('analyze_started', { fileCount: files.length, method: 'upload' });
 
     // Detect username
     let detectedUsername: string | null = null;
@@ -144,7 +144,7 @@ export default function LetterboxdLanding() {
       if (csvFiles.length === 0) {
         setError({ title: 'No CSV files found', message: 'The selected folder contains no Letterboxd CSV files.', action: 'Make sure you selected the extracted Letterboxd export folder.', reason: 'no_csv_files' });
         setIsUploading(false);
-        trackEvent('upload_failed', { reason: 'no_csv_in_folder', step: 'preparation' });
+        trackEvent('analyze_failed', { reason: 'no_csv_in_folder', step: 'preparation' });
         return;
       }
       try {
@@ -152,7 +152,7 @@ export default function LetterboxdLanding() {
       } catch {
         setError({ title: 'Failed to prepare folder', message: 'Could not package the selected folder for upload.', action: 'Please try again or upload the original .zip file instead.', reason: 'unknown_error' });
         setIsUploading(false);
-        trackEvent('upload_failed', { reason: 'zip_pack_failed', step: 'preparation' });
+        trackEvent('analyze_failed', { reason: 'zip_pack_failed', step: 'preparation' });
         return;
       }
     } else if (files.length === 1) {
@@ -165,7 +165,7 @@ export default function LetterboxdLanding() {
       } catch {
         setError({ title: 'Failed to prepare files', message: 'Could not package the selected files for upload.', action: 'Please try again or upload as a single ZIP.', reason: 'unknown_error' });
         setIsUploading(false);
-        trackEvent('upload_failed', { reason: 'zip_pack_failed', step: 'preparation' });
+        trackEvent('analyze_failed', { reason: 'zip_pack_failed', step: 'preparation' });
         return;
       }
     }
@@ -187,7 +187,7 @@ export default function LetterboxdLanding() {
       }
 
       startedAt = performance.now();
-      trackEvent('analysis_started', { hasZip: !!isZip, fileCount: files.length });
+      trackEvent('analyze_started', { hasZip: !!isZip, fileCount: files.length, method: 'upload' });
 
       const result = await analyzeFiles(formData);
       const durationMs = performance.now() - startedAt;
@@ -195,7 +195,7 @@ export default function LetterboxdLanding() {
       if (detectedUsername) setUsername(detectedUsername);
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
 
-      trackConsentedEvent('analyze_completed', { total_films: result.stats.total_films, duration_ms: Math.round(durationMs), ok: true });
+      trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, duration_ms: Math.round(durationMs) });
       trackFilmStats({ total_films: result.stats.total_films, total_countries: result.stats.total_countries, average_rating: result.stats.average_rating });
 
       if (analysisRun && detectedUsername) {
@@ -217,7 +217,7 @@ export default function LetterboxdLanding() {
       if (analysisRun && detectedUsername) {
         try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
       }
-      trackEvent('analyze_completed', { ok: false, reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0, total_films: null });
+      trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0 });
       setError(normalized);
       setIsUploading(false);
     }
@@ -236,19 +236,45 @@ export default function LetterboxdLanding() {
 
     setIsScraping(true);
     setError(null);
-    trackEvent('scrape_started', { username });
+    trackEvent('analyze_started', { username, method: 'scrape' });
 
+    const sessionId = ensureSessionId();
+    let analysisRun: { id: string } | null = null;
+    let startedAt = 0;
     try {
+      try {
+        const runId = crypto?.randomUUID?.();
+        analysisRun = await startAnalysis({ id: runId, session_id: sessionId, username });
+      } catch { /* analytics failure is non-fatal */ }
+
+      startedAt = performance.now();
       const result = await scrapeProfile(username);
+      const durationMs = performance.now() - startedAt;
       setUsername(username);
       localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
 
-      trackConsentedEvent('scrape_completed', { total_films: result.stats.total_films, ok: true });
+      trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method: 'scrape' });
+
+      if (analysisRun) {
+        try {
+          await finishAnalysis({ id: analysisRun.id, ok: true, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+          await upsertUserSession({
+            session_id: sessionId,
+            username,
+            consent: sessionStorage.getItem('consent_decision') === 'accept' ? 'accept' : 'decline',
+            film_count: result.stats.total_films || null,
+            favorite_genre: result.stats.favorite_genre?.name || null,
+          });
+        } catch { /* analytics failure is non-fatal */ }
+      }
 
       setTimeout(() => { window.location.href = '/results'; }, 100);
     } catch (err) {
       const normalized = normalizeError(err);
-      trackEvent('scrape_failed', { reason: normalized.reason });
+      if (analysisRun) {
+        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
+      }
+      trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0, method: 'scrape' });
       setError(normalized);
       setIsScraping(false);
     }
@@ -274,14 +300,13 @@ export default function LetterboxdLanding() {
     setError(null);
   }, []);
 
-  if (isUploading) return <LoadingScreen onCancel={handleCancel} />;
+  if (isUploading) return <LoadingScreen onCancel={handleCancel} typicalSeconds={45} />;
   if (isScraping) {
     return (
       <LoadingScreen
         onCancel={handleCancel}
-        title="Scanning Your Profile"
-        message="Reading your public Letterboxd diary and building your movie profile."
-        detail="Profile scans depend on Letterboxd response speed and can take longer than ZIP uploads."
+        mode="scrape"
+        typicalSeconds={30}
       />
     );
   }

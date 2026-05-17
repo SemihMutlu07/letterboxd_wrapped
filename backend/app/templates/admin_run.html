@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>@{{ run.username or "anon" }} — Run Detail</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .json-viewer { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.6; }
+  .json-key { color: #94a3b8; }
+  .json-string { color: #a5f3fc; }
+  .json-number { color: #fca5a5; }
+  .json-bool { color: #86efac; }
+  .json-null { color: #f87171; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/admin/dashboard?key={{ key }}" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center transition-colors">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <div>
+          <h1 class="text-sm font-bold text-white">Run Detail</h1>
+          <p class="text-[10px] text-slate-500">{{ filename }}</p>
+        </div>
+      </div>
+      <div class="text-xs text-slate-500">{{ run._mtime[:16].replace("T", " ") if run._mtime else "" }}</div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <!-- User header -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <div class="flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">User</p>
+          <h2 class="text-xl font-black text-white">@{{ run.username or "anon" }}</h2>
+          <p class="text-sm text-slate-400 mt-0.5">{{ run.source }} · {{ run.total_films or "?" }} films</p>
+        </div>
+        <div class="text-right">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Cinema Scale</p>
+          <p class="text-3xl font-black text-orange-400">{{ run.sinefil_meter.score if run.sinefil_meter else "—" }}</p>
+          <p class="text-xs text-slate-500">{{ run.sinefil_meter.type if run.sinefil_meter else "" }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Total Films</p>
+        <p class="text-xl font-black text-white">{{ run.total_films or "—" }}</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Avg Rating</p>
+        <p class="text-xl font-black text-white">{{ "%.1f" % run.stats.average_rating if run.stats and run.stats.average_rating else "—" }}★</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Days Watched</p>
+        <p class="text-xl font-black text-white">{{ run.stats.days_watched or "—" }}</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Countries</p>
+        <p class="text-xl font-black text-white">{{ run.stats.total_countries or "—" }}</p>
+      </div>
+    </div>
+
+    <!-- Top lists -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- Directors -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800">
+          <h3 class="text-xs font-bold text-white">Top Directors</h3>
+        </div>
+        <div class="p-2 space-y-1">
+          {% for d in (run.stats.top_directors or [])[:5] %}
+          <div class="flex items-center justify-between px-3 py-2 rounded-lg">
+            <span class="text-xs text-slate-300 truncate">{{ d.name }}</span>
+            <span class="text-xs text-slate-500 tabular-nums">{{ d.count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Actors -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800">
+          <h3 class="text-xs font-bold text-white">Top Actors</h3>
+        </div>
+        <div class="p-2 space-y-1">
+          {% for a in (run.stats.top_actors or [])[:5] %}
+          <div class="flex items-center justify-between px-3 py-2 rounded-lg">
+            <span class="text-xs text-slate-300 truncate">{{ a.name }}</span>
+            <span class="text-xs text-slate-500 tabular-nums">{{ a.count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Genres -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800">
+          <h3 class="text-xs font-bold text-white">Top Genres</h3>
+        </div>
+        <div class="p-2 space-y-1">
+          {% for g in (run.stats.top_genres or [])[:5] %}
+          <div class="flex items-center justify-between px-3 py-2 rounded-lg">
+            <span class="text-xs text-slate-300 truncate">{{ g.name }}</span>
+            <span class="text-xs text-slate-500 tabular-nums">{{ g.count }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Raw JSON -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-xs font-bold text-white">Raw Stats</h3>
+        <button onclick="document.getElementById('raw-json').classList.toggle('hidden')" class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
+          Toggle
+        </button>
+      </div>
+      <div id="raw-json" class="hidden p-4 overflow-x-auto">
+        <pre class="json-viewer text-slate-400">{{ run | tojson(indent=2) }}</pre>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-[10px] text-slate-600 pt-4 pb-8">
+      <a href="/admin/dashboard?key={{ key }}" class="text-orange-400 hover:text-orange-300 transition-colors">← Back to Dashboard</a>
+    </div>
+  </main>
+</body>
+</html>

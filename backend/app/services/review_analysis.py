@@ -80,7 +80,26 @@ _ENGLISH_STOPWORDS: set[str] = {
     "yourselves",
 }
 
-STOPWORDS = _TURKISH_STOPWORDS | _ENGLISH_STOPWORDS
+# Movie-review noise: ultra-common content words that drown out interesting
+# vocabulary like 'sinematografi', 'ekspresyonizm'. Filtering them surfaces
+# the words that actually characterize a viewer's voice.
+_REVIEW_NOISE: set[str] = {
+    # TR — film references
+    "film", "filmi", "filme", "filmde", "filmin", "filmler", "filmleri",
+    "filmlerin", "filmlerde", "sinema", "sinemanın", "sinemayı",
+    # TR — viewing verbs / generic descriptors
+    "izledim", "izledik", "izledi", "izleyin", "izlerken", "izleyip", "izlerken",
+    "gördüm", "baktım", "anlatıyor", "anlatıyordu", "yapıyor", "yapıyordu",
+    "söylüyor", "söylüyordu", "diyor", "diyordu",
+    # TR — generic praise/critique words that everyone uses
+    "iyi", "kötü", "güzel", "harika", "fena", "süper", "berbat",
+    # EN — same shapes that show up in mixed-language reviews
+    "film", "films", "movie", "movies", "watch", "watched", "watching",
+    "scene", "scenes", "actor", "actors", "actress", "director",
+    "really", "very", "just", "even", "still", "thing", "things",
+}
+
+STOPWORDS = _TURKISH_STOPWORDS | _ENGLISH_STOPWORDS | _REVIEW_NOISE
 
 # Turkish-specific Unicode characters for language-origin detection
 _TURKISH_CHARS = set("ığüşöçİĞÜŞÖÇ")
@@ -165,6 +184,10 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         rename_map["Date"] = "date"
     if "Rewatch" in df.columns:
         rename_map["Rewatch"] = "rewatch"
+    if "Likes" in df.columns:
+        rename_map["Likes"] = "like_count"
+    if "Slug" in df.columns:
+        rename_map["Slug"] = "slug"
 
     df = df.rename(columns=rename_map)
 
@@ -320,6 +343,37 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     # Estimate vocab richness: unique tokens / total tokens
     vocab_richness = round(len(word_counts) / total_words, 4) if total_words > 0 else 0.0
 
+    # --- Top liked reviews + total likes (scraped HTML path only) ---
+    # The 'like_count' column holds, per row, the count of people who liked
+    # that specific review (parsed from each card's LikeComponent[data-count]).
+    # The sum is therefore likes RECEIVED on the user's reviews — never likes
+    # this user has given to other people's reviews (that lives on a different
+    # Letterboxd surface and is not scraped here).
+    top_liked_reviews: list[dict] = []
+    total_review_likes: Optional[int] = None
+    reviews_with_likes_data: Optional[int] = None
+    if "like_count" in with_text.columns:
+        likes_series = pd.to_numeric(with_text["like_count"], errors="coerce")
+        liked = with_text.assign(_likes=likes_series).dropna(subset=["_likes"])
+        if not liked.empty:
+            total_review_likes = int(liked["_likes"].sum())
+            reviews_with_likes_data = int(len(liked))
+            ranked = liked.sort_values("_likes", ascending=False).head(3)
+            for _, row in ranked.iterrows():
+                preview = str(row.get("review", ""))[:240]
+                top_liked_reviews.append({
+                    "title": str(row.get("title", "")),
+                    "year": str(row.get("year", "")),
+                    "slug": str(row.get("slug", "")),
+                    "like_count": int(row["_likes"]),
+                    "rating": (float(row["rating"]) if "rating" in row and pd.notna(row.get("rating")) else None),
+                    "review_date": (
+                        row["date"].isoformat() if "date" in row and isinstance(row.get("date"), pd.Timestamp)
+                        else str(row.get("date", ""))
+                    ),
+                    "text_preview": preview,
+                })
+
     return {
         "total_reviews": total_reviews,
         "reviews_with_text": reviews_with_text,
@@ -339,4 +393,7 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         "review_volume_by_year": volume_by_year,
         "avg_length_over_time": length_over_time,
         "most_reviewed_films": most_reviewed,
+        "top_liked_reviews": top_liked_reviews,
+        "total_review_likes": total_review_likes,
+        "reviews_with_likes_data": reviews_with_likes_data,
     }

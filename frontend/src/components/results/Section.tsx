@@ -9,7 +9,7 @@ const containerVariants = {
 };
 
 export const typography = {
-  sectionTitle: 'text-3xl md:text-[2.5rem] font-bold leading-tight',
+  sectionTitle: 'text-2xl md:text-[2.25rem] font-bold leading-tight',
   caption: 'text-sm md:text-base opacity-80',
 };
 
@@ -42,12 +42,12 @@ export default function Section({
       whileInView="visible"
       viewport={{ once: true, amount: 0.2 }}
       variants={containerVariants}
-      className={`${variants[variant]} rounded-3xl p-6 md:p-8 ${className}`}
+      className={`${variants[variant]} rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-8 ${className}`}
     >
       {title && (
-        <div className="flex items-center gap-4 mb-6">
-          {icon && <div className="text-3xl">{icon}</div>}
-          <div>
+        <div className="flex items-start gap-3 md:gap-4 mb-4 md:mb-6">
+          {icon && <div className="text-2xl md:text-3xl shrink-0">{icon}</div>}
+          <div className="min-w-0">
             <h2 className={typography.sectionTitle}>{title}</h2>
             {subtitle && <p className={`${typography.caption} mt-1`}>{subtitle}</p>}
           </div>

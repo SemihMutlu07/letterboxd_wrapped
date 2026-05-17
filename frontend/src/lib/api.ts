@@ -12,6 +12,19 @@ export interface WatchlistFilm {
   title: string;
   year: string;
   slug: string;
+  poster_url?: string;
+}
+
+export interface WatchlistBucketCounts {
+  common: number;
+  first_only: number;
+  second_only: number;
+}
+
+export interface WatchlistTruncation {
+  common: boolean;
+  first_only: boolean;
+  second_only: boolean;
 }
 
 export interface WatchlistCompareResult {
@@ -24,6 +37,8 @@ export interface WatchlistCompareResult {
     first_only: number;
     second_only: number;
   };
+  returned_counts?: WatchlistBucketCounts;
+  truncated?: WatchlistTruncation;
   match_score: number;
   common: WatchlistFilm[];
   first_only: WatchlistFilm[];

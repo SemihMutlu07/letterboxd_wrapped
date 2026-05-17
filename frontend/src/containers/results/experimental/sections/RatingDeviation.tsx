@@ -127,7 +127,7 @@ function RatingDeviationInner({ stats }: { stats: StatsData }) {
 
       {/* Film grid */}
       {shown.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4">
           {shown.map((film) => (
             <FilmPosterCard
               key={`${film.title}-${film.year}`}
@@ -171,16 +171,22 @@ function FilmPosterCard({
   onClick?: () => void;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const imageUrl = film.poster_path ? getPosterUrl(film.poster_path, 'grid') : null;
   const deltaStr = formatDelta(film.delta);
   const deltaColor = polarity === 'higher' ? LB_GREEN : '#f87171';
   const hue = film.title.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
   const showFallback = !imageUrl || imgFailed;
 
+  const handleClick = () => {
+    setRevealed((prev) => !prev);
+    onClick?.();
+  };
+
   return (
     <button
-      onClick={onClick}
-      className="flex flex-col gap-1.5 text-left group cursor-default"
+      onClick={handleClick}
+      className="flex min-w-0 flex-col gap-1.5 text-left group cursor-default"
     >
       {/* Poster */}
       <div
@@ -203,17 +209,47 @@ function FilmPosterCard({
         )}
         {/* Delta badge */}
         <span
-          className="absolute top-1.5 right-1.5 text-xs font-bold px-2 py-1 rounded-full shadow-lg"
+          className="absolute top-1.5 right-1.5 text-xs font-bold px-2 py-1 rounded-full shadow-lg z-10"
           style={{ background: deltaColor, color: '#000', border: `1px solid ${deltaColor}` }}
         >
           {deltaStr}
         </span>
+
+        {/* ↗ hint icon */}
+        {!revealed && (
+          <span className="absolute bottom-1.5 right-1.5 text-white/40 text-xs leading-none pointer-events-none">
+            ↗
+          </span>
+        )}
+
+        {/* Ticket overlay — slides up from bottom */}
+        <div
+          className={`absolute inset-0 flex flex-col justify-end p-3 bg-[#141414]/95 transition-transform duration-300 ease-out border-t-2 border-dashed border-white/20 ${
+            revealed ? 'translate-y-0' : 'translate-y-full'
+          }`}
+        >
+          <p className="text-xs font-bold text-white leading-tight line-clamp-2">
+            {film.title}
+          </p>
+          {film.year && (
+            <p className="text-[10px] text-slate-400 mt-0.5">{film.year}</p>
+          )}
+          <a
+            href={`https://letterboxd.com/search/${encodeURIComponent(film.title)}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="mt-2 text-[10px] font-semibold px-3 py-1.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors text-center"
+          >
+            View on Letterboxd
+          </a>
+        </div>
       </div>
 
       {/* Caption */}
-      <div className="px-0.5 space-y-0.5">
+      <div className="min-w-0 px-0.5 space-y-0.5">
         <p className="text-xs font-medium text-white leading-tight line-clamp-1">{film.title}</p>
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[10px] sm:text-[11px] text-slate-400 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
           ★ {film.rating.toFixed(1)} vs avg {userAvg.toFixed(1)}
         </p>
       </div>
