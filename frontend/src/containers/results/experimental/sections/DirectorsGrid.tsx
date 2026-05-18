@@ -46,7 +46,8 @@ interface DirectorCard {
   profile_path?: string;
 }
 
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 4;
+const EXPANDED_MAX = 8;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
       onToggle={handleToggle}
       ratedTabDisabled={!hasRatings}
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
+      ratedTabTooltip="Your average rating across films you&apos;ve rated for each director (minimum 3 rated films)"
     >
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
         {shown.map((d) => (
@@ -115,20 +117,29 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
                 ? `★ ${d.avg_rating.toFixed(1)} avg`
                 : `${d.count} film${d.count !== 1 ? 's' : ''}`
             }
+            secondaryStat={
+              mode === 'highest_rated' && d.avg_rating != null
+                ? `${d.count} film${d.count !== 1 ? 's' : ''}`
+                : d.avg_rating != null ? `★ ${d.avg_rating.toFixed(1)} avg` : undefined
+            }
             onClick={() => trackItemClicked('directors_grid', 'director')}
           />
         ))}
       </div>
 
-      {hasMore && (
-        <ShowMoreButton
-          onClick={() => {
-            setVisible((v) => v + PAGE_SIZE);
-            trackShowMore('directors_grid');
-          }}
-          remaining={directors.length - visible}
-        />
-      )}
+      {/* Show more disabled — showing exactly 4 per user request */}
+
+      {/* Scoring explanation */}
+      <div className="mt-3 text-center">
+        <p className="text-[11px] md:text-xs text-slate-500 italic leading-relaxed max-w-lg mx-auto">
+          <strong className="text-slate-400 not-italic">Highest Rated</strong> sorts by{' '}
+          <em>your</em> average rating across films you&apos;ve rated for each{' '}
+          {mode === 'highest_rated' ? 'director' : 'person'} (minimum 3 rated films).
+          {mode === 'most_watched' && hasRatings && (
+            <> Switch to <strong className="text-slate-400 not-italic">Highest Rated</strong> to see avg ratings.</>
+          )}
+        </p>
+      </div>
     </SectionShell>
   );
 }
@@ -189,11 +200,13 @@ export function PersonCard({
   name,
   profilePath,
   primaryStat,
+  secondaryStat,
   onClick,
 }: {
   name: string;
   profilePath?: string;
   primaryStat: string;
+  secondaryStat?: string;
   onClick?: () => void;
 }) {
   const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
@@ -229,7 +242,7 @@ export function PersonCard({
     >
       {/* Avatar */}
       <div
-        className="relative w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
+        className="relative w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
         style={{ background: gradient }}
       >
         {showImage && (
@@ -261,8 +274,11 @@ export function PersonCard({
       </div>
       {/* Name + stat */}
       <div className="space-y-0.5">
-        <p className="text-sm font-medium text-white leading-tight line-clamp-2">{name}</p>
-        <p className="text-xs text-slate-300">{primaryStat}</p>
+        <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2">{name}</p>
+        <p className="text-sm md:text-base text-slate-200">{primaryStat}</p>
+        {secondaryStat && (
+          <p className="text-xs md:text-sm text-slate-300">{secondaryStat}</p>
+        )}
       </div>
     </button>
   );

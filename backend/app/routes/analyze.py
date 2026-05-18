@@ -164,8 +164,10 @@ async def scrape_profile(request: Request):
             status_code=400,
             detail={"error_code": "invalid_json", "message": "Request body must be valid JSON."},
         )
-    username = str(body.get("username") or "").strip().lower()
+    raw_username = str(body.get("username") or "").strip()
+    username = raw_username.lower()
     if not username or not re.match(r"^[a-z0-9_]+$", username):
+        logger.warning("scrape-profile invalid_username: raw=%r sanitized=%r", raw_username, username if username else "<empty>")
         raise HTTPException(
             status_code=400,
             detail={"error_code": "invalid_username", "message": "Please enter a valid Letterboxd username."},
@@ -174,8 +176,15 @@ async def scrape_profile(request: Request):
     try:
         sources = await scrape_profile_sources(username, max_pages=60, include_reviews=True)
     except ValueError as exc:
-        # Re-raise 404s from scraper (user truly gone or profile private)
-        logger.warning("Scrape value error for %s: %s", username, exc)
+        # Re-raise 404s / 403s / rate-limits from scraper as service-unavailable
+        # (not 400/404) so the frontend shows the correct guidance message.
+        logger.warning("Scrape blocked/value error for %s: %s", username, exc)
+        msg = str(exc)
+        if "Letterboxd is blocking" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail={"error_code": "scrape_blocked", "message": msg},
+            )
         raise HTTPException(
             status_code=404,
             detail={"error_code": "user_not_found", "message": f"{exc}"},
@@ -197,9 +206,16 @@ async def scrape_profile(request: Request):
         films = merge_scraped_films(sources.diary, sources.grid)
         csv_dicts = diary_to_csv_dicts(films)
         if not films or not csv_dicts["watched"]:
+            # Distinguish "scraper broke" from "profile is actually empty"
+            scraper_ok = sources.film_count > 0 and (len(sources.diary) > 0 or len(sources.grid) > 0)
+            if scraper_ok:
+                raise HTTPException(
+                    status_code=500,
+                    detail={"error_code": "analysis_failed", "message": f"Scraped @{username} but analysis pipeline returned empty. Please try again."},
+                )
             raise HTTPException(
                 status_code=400,
-                detail={"error_code": "no_films", "message": f"No public films found for @{username}. The profile may be private or empty."},
+                detail={"error_code": "no_films", "message": f"No public films found for @{username}. The profile may be private, empty, or temporarily blocked by Letterboxd."},
             )
 
         request_dir = Path("uploads") / str(uuid.uuid4())

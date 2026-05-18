@@ -27,12 +27,15 @@ const SERIF: React.CSSProperties = {
 /* ---------- helpers ---------- */
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
+const formatReviewWords = (words?: ShareCardData['topReviewWords']) =>
+  words?.slice(0, 3).map(({ word }) => word).join(' / ') || '';
+
 const Label: React.FC<React.PropsWithChildren<{ className?: string }>> = ({
   className,
   children,
 }) => (
   <div
-    className={cx('uppercase tracking-[.22em] font-medium text-[10px]', className)}
+    className={cx('uppercase tracking-[.18em] font-medium text-[12px]', className)}
     style={{ color: SECONDARY }}
   >
     {children}
@@ -92,7 +95,7 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
               src={url}
               alt={alt}
               fill
-              className="object-cover object-[50%_15%]"
+              className="object-cover object-center"
               priority
               crossOrigin="anonymous"
               onError={onError}
@@ -136,7 +139,9 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
       value: React.ReactNode,
       unit?: string,
       accentColor?: string
-    ) => (
+    ) => {
+      const valueIsLongText = typeof value === 'string' && value.length > 12;
+      return (
       <div
         className="flex flex-col items-center justify-center text-center px-3 py-3"
         style={{
@@ -151,8 +156,9 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
           <span
             className="font-bold tabular-nums leading-none"
             style={{
-              fontSize: isVertical ? 28 : 24,
+              fontSize: valueIsLongText ? (isVertical ? 18 : 16) : isVertical ? 28 : 24,
               color: accentColor || CHARCOAL,
+              lineHeight: valueIsLongText ? 1.15 : 1,
             }}
           >
             {value}
@@ -164,16 +170,20 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
           )}
         </div>
       </div>
-    );
+      );
+    };
+
+    const reviewWordsText = formatReviewWords(data.topReviewWords);
 
     /* ============================================================
-       VERTICAL (630 x 1200)
+       VERTICAL (675 x 1200)
        ============================================================ */
     if (isVertical) {
       return (
         <div
           ref={ref}
-          className={cx('w-[630px] h-[1200px] flex flex-col', className)}
+          data-export-root="true"
+          className={cx('w-[675px] h-[1200px] flex flex-col', className)}
           style={{ background: CREAM, color: CHARCOAL, ...SERIF }}
         >
           {/* top bar */}
@@ -181,17 +191,17 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
             className="flex items-center justify-between px-10 pt-8 pb-3"
             style={{ borderBottom: `1px solid ${TILE_BORDER}` }}
           >
-            <div className="text-[11px] uppercase tracking-[.28em] font-medium" style={{ color: SECONDARY }}>
+            <div className="text-[13px] uppercase tracking-[.20em] font-medium" style={{ color: SECONDARY }}>
               Letterboxd Wrapped
             </div>
-            <div className="text-[11px] uppercase tracking-[.28em] font-medium" style={{ color: SECONDARY }}>
+            <div className="text-[13px] uppercase tracking-[.20em] font-medium" style={{ color: SECONDARY }}>
               Year in Film
             </div>
           </div>
 
           {/* hero stat */}
           <div className="px-10 pt-8 pb-4">
-            <div className="text-[11px] uppercase tracking-[.28em] font-medium" style={{ color: LB_GREEN }}>
+            <div className="text-[13px] uppercase tracking-[.20em] font-medium" style={{ color: LB_GREEN }}>
               Films Watched
             </div>
             <div className="mt-1 text-[96px] font-bold leading-none tabular-nums" style={{ color: NAVY }}>
@@ -249,7 +259,9 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
           {/* bottom row */}
           <div className="px-10 pb-4 grid grid-cols-2 gap-4">
             {metricCell('Peak Decade', data.peakDecade, `${data.peakDecadeCount} films`, SAGE_DARK)}
-            {metricCell('Time Spent', `${data.timePercent}%`, 'of your time', LB_GREEN)}
+            {reviewWordsText
+              ? metricCell('Review Words', reviewWordsText, undefined, LB_GREEN)
+              : metricCell('Time Spent', `${data.timePercent}%`, 'of your time', LB_GREEN)}
           </div>
 
           {/* spacer + footer */}
@@ -272,6 +284,7 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
     return (
       <div
         ref={ref}
+        data-export-root="true"
         className={cx('w-[1200px] h-[630px] grid grid-cols-12', className)}
         style={{ background: CREAM, color: CHARCOAL, ...SERIF }}
       >
@@ -279,18 +292,18 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
         <div className="col-span-6 flex flex-col px-10 py-8">
           {/* header */}
           <div className="flex items-center gap-3 mb-5">
-            <div className="text-[10px] uppercase tracking-[.28em] font-medium" style={{ color: SECONDARY }}>
+            <div className="text-[12px] uppercase tracking-[.22em] font-medium" style={{ color: SECONDARY }}>
               Letterboxd Wrapped
             </div>
             <div style={{ width: 32, height: 1, background: TILE_BORDER }} />
-            <div className="text-[10px] uppercase tracking-[.28em] font-medium" style={{ color: SECONDARY }}>
+            <div className="text-[12px] uppercase tracking-[.22em] font-medium" style={{ color: SECONDARY }}>
               Year in Film
             </div>
           </div>
 
           {/* hero number */}
           <div>
-            <div className="text-[10px] uppercase tracking-[.28em] font-medium" style={{ color: LB_GREEN }}>
+            <div className="text-[12px] uppercase tracking-[.22em] font-medium" style={{ color: LB_GREEN }}>
               Films Watched
             </div>
             <div className="mt-1 text-[88px] font-bold leading-none tabular-nums" style={{ color: NAVY }}>
@@ -380,7 +393,7 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
                   src={crushUrl}
                   alt={data.onScreenCrush.name || 'On-screen crush'}
                   fill
-                  className="object-cover object-[50%_15%]"
+                  className="object-cover object-center"
                   priority
                   crossOrigin="anonymous"
                   onError={() => setCrushBroken(true)}
@@ -429,7 +442,7 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
                   src={directorUrl}
                   alt={data.favoriteDirector.name || 'Favorite director'}
                   fill
-                  className="object-cover object-[50%_15%]"
+                  className="object-cover object-center"
                   priority
                   crossOrigin="anonymous"
                   onError={() => setDirectorBroken(true)}

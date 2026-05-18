@@ -17,6 +17,10 @@ interface QuickFactsProps {
   paceWindowDays?: number;
   /** Whether the pace window came from real diary dates or a 365-day fallback. */
   paceWindowSource?: 'diary' | 'fallback';
+  /** Films actually logged during the Letterboxd window (excludes lifetime backfill). */
+  diaryFilmCount?: number;
+  /** Total films marked as watched (lifetime, including pre-Letterboxd). */
+  lifetimeFilmCount?: number;
 }
 
 function formatYears(days: number): string {
@@ -50,17 +54,33 @@ export default function QuickFacts({
   totalFilms,
   paceWindowDays,
   paceWindowSource,
+  diaryFilmCount,
+  lifetimeFilmCount,
 }: QuickFactsProps) {
   const pace = paceTier(filmsPerWeek);
   const runtimeLabel = runtimeTier(avgMinutes);
 
   const paceExplainer = (() => {
-    if (!totalFilms || !paceWindowDays) return null;
+    if (!paceWindowDays) return null;
     const window = formatYears(paceWindowDays);
-    const source = paceWindowSource === 'diary'
-      ? `${totalFilms} films across ${window} of Letterboxd activity`
-      : `${totalFilms} films / ${window} (no diary dates — using a 365-day estimate)`;
-    return source;
+    // Prefer the diary-only count (films actually logged inside the Letterboxd
+    // window). When that count is meaningfully smaller than the lifetime total,
+    // surface both so users see that the pace is computed honestly.
+    const diary = diaryFilmCount ?? 0;
+    const lifetime = lifetimeFilmCount ?? totalFilms ?? 0;
+    if (paceWindowSource === 'fallback') {
+      return `${lifetime || diary} films / ${window} (no diary dates — using a 365-day estimate)`;
+    }
+    if (diary > 0 && lifetime > diary) {
+      return `${diary} films logged across ${window} (${lifetime} lifetime watched)`;
+    }
+    if (diary > 0) {
+      return `${diary} films logged across ${window} of Letterboxd activity`;
+    }
+    if (lifetime > 0) {
+      return `${lifetime} films across ${window} of Letterboxd activity`;
+    }
+    return null;
   })();
 
   return (

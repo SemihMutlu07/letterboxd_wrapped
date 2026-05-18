@@ -16,6 +16,26 @@ export type SharePersonStat = {
   count: number;
 };
 
+export type ShareFilmStat = {
+  title: string;
+  year: string;
+  posterPath: string | null;
+};
+
+export type ShareReviewWordStat = {
+  word: string;
+  count: number;
+};
+
+export type ShareOutlierFilm = {
+  title: string;
+  year: string;
+  posterPath: string | null;
+  userRating: number;
+  avgRating: number;
+  delta: number;
+};
+
 export type ShareCardData = {
   onScreenCrush: SharePersonStat;
   favoriteDirector: SharePersonStat;
@@ -32,4 +52,10 @@ export type ShareCardData = {
   topActors?: SharePersonStat[];
   /** All available directors for swap UI (optional) */
   topDirectors?: SharePersonStat[];
+  /** Top-rated films for poster strip (optional, up to 6) */
+  topFilms?: ShareFilmStat[];
+  /** Top distinctive review words from review_analysis.word_frequency (optional, up to 3) */
+  topReviewWords?: ShareReviewWordStat[];
+  /** Single film where user rating diverges most from TMDB community average. */
+  ratingOutlierFilm?: ShareOutlierFilm;
 };

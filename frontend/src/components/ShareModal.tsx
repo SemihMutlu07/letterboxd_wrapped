@@ -1,6 +1,6 @@
 'use client';
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Loader2 } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { X, Download, Sliders } from 'lucide-react';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
 import EditorialShareCard from '@/components/share/variants/EditorialShareCard';
@@ -140,18 +140,23 @@ export default function ShareModal({
   cardProps,
   onDownloadSuccess,
 }: Props) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [variant, setVariant] = useState<ShareVariant>('apple-hig');
-  const [scale, setScale] = useState(0.45);
+  const railRef = useRef<HTMLDivElement>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [pageW, setPageW] = useState(0);
+  const [pageH, setPageH] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [actorIdx, setActorIdx] = useState(0);
   const [directorIdx, setDirectorIdx] = useState(0);
+  const [swapOpen, setSwapOpen] = useState(false);
+
+  const variantKey = VARIANTS[Math.max(0, Math.min(VARIANTS.length - 1, activeIdx))].key;
 
   useEffect(() => {
     if (!open) return;
     setActorIdx(0);
     setDirectorIdx(0);
-    setVariant('apple-hig');
+    setActiveIdx(0);
+    setSwapOpen(false);
   }, [open]);
 
   useEffect(() => {
@@ -165,16 +170,14 @@ export default function ShareModal({
     favoriteDirector: cardProps.topDirectors?.[directorIdx] ?? cardProps.favoriteDirector,
   }), [cardProps, actorIdx, directorIdx]);
 
-  const selectedCardKey = `${orientation}:${effectiveCardProps.onScreenCrush.name}:${effectiveCardProps.favoriteDirector.name}`;
-
   const adaptivePixelRatio = useAdaptivePixelRatio();
   const target = useMemo(() =>
     orientation === 'horizontal'
       ? { w: 1200, h: 630 }
-      : { w: 630, h: 1200 }
+      : { w: 675, h: 1200 }
   , [orientation]);
 
-  // Lock body scroll
+  // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -182,32 +185,63 @@ export default function ShareModal({
     return () => { document.body.style.overflow = prev; };
   }, [open]);
 
-  // Auto scale
+  // Measure rail viewport so ScaledCard can fit each page
   useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-    const padding = isMobile ? 24 : 40;
-    const availW = window.innerWidth - padding * 2;
-    const availH = window.innerHeight * 0.55; // 55% of viewport for card
-    const s = Math.min(availW / target.w, availH / target.h, 1);
-    const minScale = isMobile ? 0.32 : 0.40;
-    setScale(Math.max(minScale, s));
-  }, [target.w, target.h, open]);
+    if (!open) return;
+    const el = railRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setPageW(rect.width);
+      setPageH(rect.height || el.parentElement?.clientHeight || window.innerHeight * 0.5);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open]);
+
+  // Keep rail aligned to active page when pageW or orientation changes
+  useLayoutEffect(() => {
+    const el = railRef.current;
+    if (!el || pageW === 0) return;
+    el.scrollLeft = activeIdx * pageW;
+  }, [pageW, orientation, activeIdx]);
+
+  const handleRailScroll: React.UIEventHandler<HTMLDivElement> = () => {
+    const el = railRef.current;
+    if (!el || pageW === 0) return;
+    const idx = Math.round(el.scrollLeft / pageW);
+    setActiveIdx((prev) => (prev === idx ? prev : idx));
+  };
+
+  const jumpTo = (idx: number) => {
+    const el = railRef.current;
+    if (!el || pageW === 0) return;
+    el.scrollTo({ left: idx * pageW, behavior: 'smooth' });
+    setActiveIdx(idx);
+  };
+
+  const findExportRoot = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>('[data-active="true"] [data-export-root="true"]');
 
   const handleSavePNG = async () => {
-    if (!cardRef.current || isSaving) return;
+    if (isSaving) return;
     setIsSaving(true);
     const originalSrcs: string[] = [];
     try {
-      const exportRoot = document.getElementById('wrapped-export-root');
+      const exportRoot = findExportRoot();
       if (!exportRoot) throw new Error('Export root not found');
-      const images = exportRoot.querySelectorAll('img');
+      const images = Array.from(exportRoot.querySelectorAll('img'));
       images.forEach((img, i) => {
         originalSrcs[i] = img.src;
         const safeUrl = shareSafeUrl(img.src);
         img.crossOrigin = 'anonymous';
         img.src = safeUrl;
       });
-      const bg = variant === 'apple-hig' ? '#000000' : '#0B1220';
+      // Wait for any in-flight decodes so the snapshot captures pixels, not blanks
+      await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
+      const bg = variantKey === 'apple-hig' ? '#000000' : '#0B1220';
       let blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg);
       if (!blob) { await delay(80); blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg); }
       if (!blob) throw new Error('Export failed');
@@ -215,12 +249,12 @@ export default function ShareModal({
       const shared = await shareToSystem(blob);
       if (shared) { method = 'system_share'; }
       else { const saved = await saveWithFilePicker(blob); if (saved) method = 'file_picker'; else downloadFallback(blob); }
-      trackEvent('share_export_succeeded', { variant: orientation, method });
+      trackEvent('share_export_succeeded', { variant: variantKey, orientation, method });
       onDownloadSuccess?.();
     } catch (err) {
       console.error('Export failed:', err);
     } finally {
-      const exportRoot = document.getElementById('wrapped-export-root');
+      const exportRoot = findExportRoot();
       if (exportRoot) {
         const imgs = exportRoot.querySelectorAll('img');
         imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
@@ -233,6 +267,7 @@ export default function ShareModal({
 
   const hasActors = (cardProps.topActors?.length ?? 0) >= 2;
   const hasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
+  const showSwapTrigger = hasActors || hasDirectors;
 
   return (
     <div className="fixed inset-0 z-50">
@@ -240,100 +275,85 @@ export default function ShareModal({
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
 
       {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className="relative h-full md:h-auto md:max-h-[95vh] md:max-w-2xl md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
-        {/* Header: just close button */}
+      <div className="relative h-full md:h-auto md:min-h-[520px] md:max-h-[95vh] md:max-w-[480px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
+        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <span className="text-sm font-semibold text-slate-300">Share</span>
+          <span className="text-sm font-semibold text-white/90">Share</span>
           <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-white/10 transition text-slate-400 hover:text-white"
+            className="grid place-items-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
             aria-label="Close"
           >
-            <X size={20} />
+            <X size={18} strokeWidth={2.5} />
           </button>
         </div>
 
-        {/* Card preview — takes most of the space */}
-        <div className="flex-1 flex items-center justify-center px-4 py-2 overflow-hidden min-h-0">
-          <div
-            ref={cardRef}
-            className="origin-top-left"
-            style={{
-              width: target.w,
-              height: target.h,
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            {variant === 'default' && (
-              <ShareCard key={selectedCardKey} {...effectiveCardProps} orientation={orientation} />
-            )}
-            {variant === 'editorial' && (
-              <EditorialShareCard key={selectedCardKey} data={effectiveCardProps} orientation={orientation} />
-            )}
-            {variant === 'variant-3' && (
-              <Variant3ShareCard key={selectedCardKey} data={effectiveCardProps} orientation={orientation} />
-            )}
-            {variant === 'apple-hig' && (
-              <AppleHIGShareCard key={selectedCardKey} data={effectiveCardProps} orientation={orientation} />
-            )}
+        {/* Rail — horizontal swipeable variant gallery */}
+        <div
+          ref={railRef}
+          onScroll={handleRailScroll}
+          className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0"
+          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
+        >
+          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * VARIANTS.length}px` : '100%' }}>
+            {VARIANTS.map((v, i) => {
+              const isActive = i === activeIdx;
+              const inBudget = Math.abs(i - activeIdx) <= 1;
+              return (
+                <section
+                  key={v.key}
+                  data-variant={v.key}
+                  data-active={isActive}
+                  className="shrink-0 snap-center snap-always flex items-center justify-center px-4"
+                  style={{ width: pageW || '100%', height: '100%' }}
+                >
+                  {inBudget && pageW > 0 && pageH > 0 && (
+                    <VariantPage
+                      variantKey={v.key}
+                      target={target}
+                      pageW={pageW}
+                      pageH={pageH}
+                      data={effectiveCardProps}
+                      orientation={orientation}
+                    />
+                  )}
+                </section>
+              );
+            })}
           </div>
         </div>
 
-        {/* Controls row */}
-        <div className="px-5 py-3 space-y-3">
-          {/* Variant + Orientation in one compact row */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
-              {VARIANTS.map((v) => (
-                <button
-                  key={v.key}
-                  onClick={() => setVariant(v.key)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                    variant === v.key
-                      ? 'bg-white/15 text-white'
-                      : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1 ml-auto">
-              <button
-                onClick={() => setOrientation('vertical')}
-                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                  orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                Vert
-              </button>
-              <button
-                onClick={() => setOrientation('horizontal')}
-                className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${
-                  orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                Horiz
-              </button>
-            </div>
-          </div>
+        {/* Page indicator dots */}
+        <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
+          {VARIANTS.map((v, i) => (
+            <button
+              key={v.key}
+              onClick={() => jumpTo(i)}
+              aria-label={`Go to ${v.label}`}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
+              }`}
+            />
+          ))}
+        </div>
 
-          {/* Actor/Director swap — compact inline */}
-          {(hasActors || hasDirectors) && (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        {/* Footer controls */}
+        <div className="relative px-5 pb-6 pt-3 space-y-3">
+          {/* Swap drawer (slides up over CTA region when open) */}
+          {showSwapTrigger && swapOpen && (
+            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
               {hasActors && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-500">Actor:</span>
-                  <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 w-16 shrink-0">Actor</span>
+                  <div className="flex items-center gap-1 flex-wrap">
                     {cardProps.topActors!.slice(0, 3).map((a, i) => (
                       <button
                         key={a.name}
                         onClick={() => setActorIdx(i)}
-                        className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                           actorIdx === i
                             ? 'text-pink-300 bg-pink-500/15'
-                            : 'text-slate-500 hover:text-slate-300'
+                            : 'text-slate-400 hover:text-slate-200 bg-white/5'
                         }`}
                       >
                         {lastName(a.name)}
@@ -343,17 +363,17 @@ export default function ShareModal({
                 </div>
               )}
               {hasDirectors && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-500">Director:</span>
-                  <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-400 w-16 shrink-0">Director</span>
+                  <div className="flex items-center gap-1 flex-wrap">
                     {cardProps.topDirectors!.slice(0, 3).map((d, i) => (
                       <button
                         key={d.name}
                         onClick={() => setDirectorIdx(i)}
-                        className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                           directorIdx === i
                             ? 'text-cyan-300 bg-cyan-500/15'
-                            : 'text-slate-500 hover:text-slate-300'
+                            : 'text-slate-400 hover:text-slate-200 bg-white/5'
                         }`}
                       >
                         {lastName(d.name)}
@@ -364,10 +384,41 @@ export default function ShareModal({
               )}
             </div>
           )}
-        </div>
 
-        {/* Footer: single dominant CTA */}
-        <div className="px-5 pb-6 pt-2">
+          {/* Orientation + swap trigger */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+              <button
+                onClick={() => setOrientation('vertical')}
+                className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                  orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Vert
+              </button>
+              <button
+                onClick={() => setOrientation('horizontal')}
+                className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                  orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Horiz
+              </button>
+            </div>
+            {showSwapTrigger && (
+              <button
+                onClick={() => setSwapOpen((s) => !s)}
+                aria-label="Tune actor and director"
+                className={`grid place-items-center w-9 h-9 rounded-full transition ${
+                  swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <Sliders size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Single dominant CTA */}
           <button
             onClick={handleSavePNG}
             disabled={isSaving}
@@ -384,3 +435,66 @@ export default function ShareModal({
     </div>
   );
 }
+
+/* ─── ScaledCard: fixes the transform-origin layout bug ─── */
+type ScaledCardProps = {
+  target: { w: number; h: number };
+  pageW: number;
+  pageH: number;
+  children: React.ReactNode;
+};
+
+function ScaledCard({ target, pageW, pageH, children }: ScaledCardProps) {
+  if (!pageW || !pageH) return null;
+  const availW = Math.max(0, pageW - 16);   // section already has px-4 horizontal padding
+  const availH = Math.max(0, pageH - 16);
+  const scale = Math.max(0.05, Math.min(availW / target.w, availH / target.h, 1));
+  return (
+    <div
+      className="relative"
+      style={{ width: target.w * scale, height: target.h * scale }}
+    >
+      <div
+        style={{
+          width: target.w,
+          height: target.h,
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ─── VariantPage: memoised wrapper so swap reruns only the active variant ─── */
+type VariantPageProps = {
+  variantKey: ShareVariant;
+  target: { w: number; h: number };
+  pageW: number;
+  pageH: number;
+  data: ShareCardData;
+  orientation: Orientation;
+};
+
+const VariantPage = React.memo(function VariantPage({
+  variantKey,
+  target,
+  pageW,
+  pageH,
+  data,
+  orientation,
+}: VariantPageProps) {
+  return (
+    <ScaledCard target={target} pageW={pageW} pageH={pageH}>
+      {variantKey === 'apple-hig' && <AppleHIGShareCard data={data} orientation={orientation} />}
+      {variantKey === 'default' && <ShareCard {...data} orientation={orientation} />}
+      {variantKey === 'editorial' && <EditorialShareCard data={data} orientation={orientation} />}
+      {variantKey === 'variant-3' && <Variant3ShareCard data={data} orientation={orientation} />}
+    </ScaledCard>
+  );
+});

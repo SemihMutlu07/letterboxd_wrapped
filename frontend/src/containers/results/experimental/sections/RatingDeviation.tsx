@@ -222,24 +222,24 @@ function FilmPosterCard({
           </span>
         )}
 
-        {/* Ticket overlay — slides up from bottom */}
+        {/* Bottom panel overlay — covers lower ~55% of poster */}
         <div
-          className={`absolute inset-0 flex flex-col justify-end p-3 bg-[#141414]/95 transition-transform duration-300 ease-out border-t-2 border-dashed border-white/20 ${
+          className={`absolute bottom-0 left-0 right-0 h-[55%] flex flex-col items-center justify-center gap-2 p-4 bg-[#0f0f0f]/95 transition-transform duration-300 ease-out ${
             revealed ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
-          <p className="text-xs font-bold text-white leading-tight line-clamp-2">
+          <p className="text-sm font-bold text-white leading-tight line-clamp-3 text-center">
             {film.title}
           </p>
           {film.year && (
-            <p className="text-[10px] text-slate-400 mt-0.5">{film.year}</p>
+            <p className="text-xs text-slate-300">{film.year}</p>
           )}
           <a
             href={`https://letterboxd.com/search/${encodeURIComponent(film.title)}/`}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="mt-2 text-[10px] font-semibold px-3 py-1.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors text-center"
+            className="mt-1 text-[11px] font-semibold px-4 py-2 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors text-center"
           >
             View on Letterboxd
           </a>

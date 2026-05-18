@@ -46,7 +46,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://letterboxd.com/",
 }
-PAGE_DELAY = 0.2  # seconds between requests (was 0.5)
+PAGE_DELAY = 0.8  # seconds between requests (was 0.2 — increased for Cloudflare bot tolerance)
 MAX_PAGES = 60    # safety cap (~3000 films)
 
 
@@ -105,8 +105,6 @@ def _parse_diary_rows(soup: BeautifulSoup) -> list[dict]:
     return films
 
 
-
-
 def _sync_check_profile(username: str) -> bool:
     """Synchronous profile check — logs every outcome for debugging."""
     url = f"{BASE_URL}/{username}/"
@@ -135,12 +133,14 @@ def _sync_check_profile(username: str) -> bool:
 
 
 def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
-    """Parse film grid items (li.griditem) into film dicts.
+    """Parse film grid items from Letterboxd grid pages.
 
-    Grid has title + year (in data-item-name) + rating + (best-effort) poster URL,
-    but no watch_date.
+    Tries multiple DOM strategies because Letterboxd changes their HTML
+    structure unpredictably. The returned list is deduped by (title, year).
     """
-    films = []
+    films: list[dict] = []
+
+    # Strategy 1: legacy selector (pre-mid 2025)
     for li in soup.select("li.griditem"):
         poster = li.select_one('div[data-component-class="LazyPoster"]')
         if not poster:
@@ -157,15 +157,13 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
 
         rating = _parse_rating(li.select_one("span.rating"))
 
-        # Best-effort poster thumbnail straight from Letterboxd's HTML.
-        # Falls back to data-poster-url, then any img[src|data-src].
         poster_url = ""
         if poster.has_attr("data-poster-url"):
             poster_url = str(poster.get("data-poster-url") or "")
         if not poster_url:
             img = poster.find("img") or li.find("img")
             if img:
-                poster_url = str(img.get("src") or img.get("data-src") or "")
+                poster_url = str(img.get("data-src") or img.get("src") or "")
 
         if title:
             films.append({
@@ -176,6 +174,89 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
                 "slug": slug,
                 "poster_url": poster_url,
             })
+
+    if films:
+        return films
+
+    # Strategy 2: poster-container selector (mid-2025 onwards)
+    for container in soup.select("li.poster-container, div.poster-container"):
+        img = container.find("img")
+        title = ""
+        year = ""
+        slug = ""
+        poster_url = ""
+        if img:
+            alt = str(img.get("alt") or "").strip()
+            m = re.match(r"^(.+)\s*\((\d{4})\)$", alt)
+            if m:
+                title, year = m.group(1).strip(), m.group(2)
+            else:
+                title = alt
+            poster_url = str(img.get("src") or img.get("data-src") or "")
+
+        if not slug:
+            poster_div = container.select_one("[data-film-slug]")
+            if poster_div:
+                slug = str(poster_div.get("data-film-slug") or "")
+        if not slug:
+            link = container.find("a", href=re.compile(r"/film/"))
+            if link:
+                href = str(link.get("href") or "")
+                m = re.search(r"/film/([^/]+)/", href)
+                if m:
+                    slug = m.group(1)
+
+        if title:
+            films.append({
+                "title": title,
+                "year": year,
+                "rating": None,
+                "watch_date": "",
+                "slug": slug,
+                "poster_url": poster_url,
+            })
+
+    if films:
+        return films
+
+    # Strategy 3: generic fallback (any img with film title pattern)
+    seen: set[tuple[str, str]] = set()
+    for img in soup.find_all("img"):
+        alt = str(img.get("alt") or "").strip()
+        m = re.match(r"^(.+)\s*\((\d{4})\)$", alt)
+        if not m:
+            continue
+        title_raw, year = m.group(1).strip(), m.group(2)
+        key = (title_raw.lower(), year)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        slug = ""
+        for parent in [img.parent, img.parent.parent if img.parent else None]:
+            if parent is None:
+                continue
+            link = parent.find("a", href=re.compile(r"/film/")) if hasattr(parent, "find") else None
+            if link:
+                href = str(link.get("href") or "")
+                m2 = re.search(r"/film/([^/]+)/", href)
+                if m2:
+                    slug = m2.group(1)
+                    break
+            data_slug = parent.get("data-film-slug") if hasattr(parent, "get") else None
+            if data_slug:
+                slug = str(data_slug)
+                break
+
+        films.append({
+            "title": title_raw,
+            "year": year,
+            "rating": None,
+            "watch_date": "",
+            "slug": slug,
+            "poster_url": str(img.get("src") or img.get("data-src") or ""),
+        })
+
     return films
 
 
@@ -222,17 +303,32 @@ def _sync_scrape_films_grid(
                 if page == 1:
                     raise ValueError(f"User '{username}' not found")
                 break
-            if r.status_code != 200:
-                logger.warning("Grid page %d: unexpected status %d for %s", page, r.status_code, username)
-                break
+            if r.status_code == 403:
+                logger.error("Letterboxd returned 403 for %s page %d — bot detection blocked this IP", username, page)
+                raise ValueError(
+                    "Letterboxd is blocking automated access to this profile. "
+                    "Please download your Letterboxd export and upload it for the best experience."
+                )
+            if r.status_code == 429:
+                logger.warning("Letterboxd rate-limited request for %s page %d", username, page)
+                raise ValueError(
+                    "Letterboxd rate limit hit. Please wait a moment and try again, or use the export upload option."
+                )
             if _is_cloudflare_block(r.text):
                 logger.warning("Grid page %d: Cloudflare block for %s", page, username)
                 break
 
             soup = BeautifulSoup(r.text, "html.parser")
             films = _parse_grid_items(soup)
-
+            logger.info("Grid page %d parsed %d films for %s", page, len(films), username)
             if not films:
+                has_griditem = bool(soup.select("li.griditem"))
+                has_poster_container = bool(soup.select("li.poster-container, div.poster-container"))
+                img_count = len(soup.find_all("img"))
+                logger.warning(
+                    "Grid page %d empty parse for %s: griditem=%s poster_container=%s img_count=%d html_len=%d",
+                    page, username, has_griditem, has_poster_container, img_count, len(r.text),
+                )
                 break
 
             all_films.extend(films)
@@ -328,6 +424,7 @@ def _sync_scrape_diary(
 
             soup = BeautifulSoup(r.text, "html.parser")
             films = _parse_diary_rows(soup)
+            logger.info("Diary page %d parsed %d films for %s", page, len(films), username)
 
             if not films:
                 break
@@ -337,7 +434,6 @@ def _sync_scrape_diary(
     finally:
         if owns_session:
             s.close()
-
 
     logger.info("Diary scrape complete for %s: %d films", username, len(all_films))
     return all_films
@@ -489,8 +585,9 @@ def _sync_scrape_profile_sources(
     When include_reviews=True, also scrapes review pages (title/text/likes/date).
     """
     logger.info("Starting combined profile scrape for %s (include_reviews=%s)", username, include_reviews)
-    with _new_session() as session:
-        _warm_session(session)
+    session = _new_session()
+    _warm_session(session)
+    try:
         # Profile overview — extract film count + review count from the stats bar
         film_count = 0
         review_count = 0
@@ -536,6 +633,8 @@ def _sync_scrape_profile_sources(
             film_count=film_count,
             reviews=reviews,
         )
+    finally:
+        session.close()
 
 
 async def check_profile_exists(username: str) -> bool:
