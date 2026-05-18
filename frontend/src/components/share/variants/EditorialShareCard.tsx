@@ -19,6 +19,9 @@ const normalizeTmdb = (url?: string | null): string | undefined => {
   return url;
 };
 
+const formatReviewWords = (words?: ShareCardData['topReviewWords']) =>
+  words?.slice(0, 3).map(({ word }) => word).join(' / ') || '';
+
 /* ── Portrait with optional VHS glitch ── */
 function Portrait({
   label,
@@ -52,9 +55,9 @@ function Portrait({
       {/* Label */}
       <div
         style={{
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 800,
-          letterSpacing: '0.22em',
+          letterSpacing: '0.20em',
           textTransform: 'uppercase' as const,
           color: accentColor,
           marginBottom: 10,
@@ -83,7 +86,7 @@ function Portrait({
               src={imageUrl}
               alt={name}
               fill
-              className="object-cover object-[50%_10%]"
+              className="object-cover object-center"
               priority
               crossOrigin="anonymous"
               onError={() => setBroken(true)}
@@ -217,6 +220,7 @@ function StatCell({
   unit?: React.ReactNode;
   valueColor?: string;
 }) {
+  const valueIsLongText = typeof value === 'string' && value.length > 12;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div
@@ -234,10 +238,10 @@ function StatCell({
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
         <span
           style={{
-            fontSize: 28,
+            fontSize: valueIsLongText ? 18 : 28,
             fontWeight: 900,
             color: valueColor,
-            lineHeight: 1,
+            lineHeight: valueIsLongText ? 1.15 : 1,
             fontFamily: 'Avenir Next, Manrope, Segoe UI, system-ui, sans-serif',
           }}
         >
@@ -271,15 +275,17 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardPr
       () => normalizeTmdb(data.favoriteDirector.headshotUrl),
       [data.favoriteDirector.headshotUrl],
     );
+    const reviewWordsText = formatReviewWords(data.topReviewWords);
 
-    /* ────────────────── VERTICAL (630×1200) ────────────────── */
+    /* ────────────────── VERTICAL (675×1200) ────────────────── */
     if (isVertical) {
       return (
         <div
           ref={ref}
+          data-export-root="true"
           className={cx(className)}
           style={{
-            width: 630,
+            width: 675,
             height: 1200,
             position: 'relative',
             overflow: 'hidden',
@@ -321,9 +327,9 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardPr
             <div style={{ marginBottom: 28 }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 700,
-                  letterSpacing: '0.32em',
+                  letterSpacing: '0.24em',
                   textTransform: 'uppercase' as const,
                   color: 'rgba(255,255,255,0.55)',
                   fontFamily: 'Georgia, Playfair Display, serif',
@@ -389,7 +395,11 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardPr
                 unit="/ 100"
                 valueColor="#00ffe5"
               />
-              <StatCell label="Avg Runtime" value={String(data.minutesAverage)} unit="min" />
+              {reviewWordsText ? (
+                <StatCell label="Review Words" value={reviewWordsText} valueColor="#c084fc" />
+              ) : (
+                <StatCell label="Avg Runtime" value={String(data.minutesAverage)} unit="min" />
+              )}
               <StatCell
                 label="Most Common Rating"
                 value={String(data.mostCommonRating)}
@@ -494,6 +504,7 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardPr
     return (
       <div
         ref={ref}
+        data-export-root="true"
         className={cx(className)}
         style={{
           width: 1200,

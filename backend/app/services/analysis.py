@@ -203,6 +203,47 @@ async def process_comprehensive_letterboxd_data(
         rewatched_count = int(rewatch_mask.sum())
     stats["rewatched_count"] = rewatched_count
 
+    # Diary-only film count — films actually logged during the Letterboxd-usage window.
+    # total_films counts EVERY film the user has ever marked as watched (including
+    # pre-Letterboxd backfill). For pace calculations the diary window is the
+    # honest denominator, so we expose a separate count + per-film watch tally.
+    diary_film_count = 0
+    rewatch_champions: list[dict] = []
+    if not diary_df.empty and "Name" in diary_df.columns:
+        diary_year_col = "Year" if "Year" in diary_df.columns else None
+        group_cols = ["Name", diary_year_col] if diary_year_col else ["Name"]
+        # Each diary row = one logged watch event; group by film to get rewatch tally
+        watches_per_film = diary_df.groupby(group_cols, dropna=False).size().reset_index(name="watch_count")
+        diary_film_count = int(len(watches_per_film))
+        top_rewatched = watches_per_film[watches_per_film["watch_count"] >= 2].sort_values(
+            "watch_count", ascending=False
+        ).head(5)
+        for _, row in top_rewatched.iterrows():
+            title = str(row.get("Name") or "")
+            year_val = row.get(diary_year_col) if diary_year_col else None
+            try:
+                year_int: Optional[int] = None if year_val is None or pd.isna(year_val) else int(year_val)
+            except Exception:
+                year_int = None
+            # Resolve poster_path via films_enriched join when available
+            poster = ""
+            if not films_enriched.empty and "title" in films_enriched.columns:
+                match = films_enriched[films_enriched["title"] == title]
+                if year_int is not None and "year" in films_enriched.columns:
+                    match = match[match["year"] == year_int]
+                if not match.empty:
+                    pp = match.iloc[0].get("poster_path")
+                    if isinstance(pp, str):
+                        poster = pp
+            rewatch_champions.append({
+                "title": title,
+                "year": year_int,
+                "poster_path": poster,
+                "watch_count": int(row["watch_count"]),
+            })
+    stats["diary_film_count"] = diary_film_count
+    stats["rewatch_champions"] = rewatch_champions
+
     stats["films_with_metadata"] = len(metadata_df)
     stats["metadata_coverage"] = round((len(metadata_df) / len(unique_films)) * 100, 1) if len(unique_films) > 0 else 0
     _progress("analyzing", "Basic stats complete", 1, 10)
@@ -438,6 +479,28 @@ async def process_comprehensive_letterboxd_data(
                     "title": guilty_pleasure["title"],
                     "tmdb_rating": round(guilty_pleasure["vote_average"], 1),
                     "your_rating": guilty_pleasure["rating"],
+                }
+
+            # Rating outlier — the film where your rating diverges most from TMDB community
+            # User rating is on a 0-5 scale (Letterboxd), TMDB vote_average is 0-10. Scale up to compare.
+            outlier_candidates = enriched_with_ratings.dropna(subset=["vote_average", "rating"])
+            if not outlier_candidates.empty:
+                deltas = (outlier_candidates["rating"] * 2.0) - outlier_candidates["vote_average"]
+                idx = deltas.abs().idxmax()
+                pick = outlier_candidates.loc[idx]
+                poster_path = pick.get("poster_path")
+                year_raw = pick.get("year")
+                try:
+                    year_clean: Optional[int] = None if pd.isna(year_raw) else int(year_raw)
+                except Exception:
+                    year_clean = None
+                stats["rating_outlier_film"] = {
+                    "title": str(pick.get("title") or ""),
+                    "year": year_clean,
+                    "poster_path": poster_path if isinstance(poster_path, str) else "",
+                    "user_rating": float(pick["rating"]),
+                    "avg_rating": round(float(pick["vote_average"]), 1),
+                    "delta": round(float(deltas.loc[idx]), 1),
                 }
 
         if "genres" in films_enriched.columns:
@@ -712,7 +775,7 @@ async def process_comprehensive_letterboxd_data(
         search_source = None
         try:
             # Step 1+2: search/person with fallback (exact + diacritic-stripped)
-            person_data = await search_person_with_fallback(session, name)
+            person_data = await search_person_with_fallback(session, name, role="director")
             if person_data and person_data.get("results"):
                 pp = person_data["results"][0].get("profile_path")
                 if isinstance(pp, str) and pp:
@@ -819,12 +882,12 @@ async def process_comprehensive_letterboxd_data(
                 actor_films_map.setdefault(actor, []).append(film_info)
 
     top_actors_with_profiles = []
-    for name, count in cast_counts.most_common(3):
+    for name, count in cast_counts.most_common(4):
         profile_path = None
         search_source = None
         try:
             # Step 1+2: search/person with fallback (exact + diacritic-stripped)
-            person_data = await search_person_with_fallback(session, name)
+            person_data = await search_person_with_fallback(session, name, role="actor")
             if person_data and person_data.get("results"):
                 pp = person_data["results"][0].get("profile_path")
                 if isinstance(pp, str) and pp:
@@ -844,7 +907,7 @@ async def process_comprehensive_letterboxd_data(
         if not profile_path:
             logger.info("[profile-debug] actor '%s' NO IMAGE (source=%s)", name, search_source or "none")
 
-    remaining_actors = [{"name": n, "count": c} for n, c in cast_counts.most_common(20)[3:]]
+    remaining_actors = [{"name": n, "count": c} for n, c in cast_counts.most_common(20)[4:]]
     stats["top_actors"] = top_actors_with_profiles + remaining_actors
     _progress("analyzing", "Cast analysis complete", 9, 10)
 

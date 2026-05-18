@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Clapperboard, Shuffle, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Clapperboard, Shuffle, Sparkles, X } from 'lucide-react';
 
 import {
   compareWatchlists,
@@ -16,17 +16,31 @@ import { pickRandomUsernames } from '@/lib/usernames';
 
 const COLLAPSED_FILM_LIMIT = 10;
 
+/* ── Toggle-able loading panel with close button ───────────────────────────── */
+
 function LoadingPanel({
   title,
   message,
   showPosterRail = false,
+  onClose,
 }: {
   title: string;
   message: string;
   showPosterRail?: boolean;
+  onClose?: () => void;
 }) {
   return (
-    <section className="border border-amber-300/60 bg-[#171411] p-5">
+    <section className="border border-amber-300/60 bg-[#171411] p-5 relative">
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 p-1 text-stone-500 hover:text-stone-200 transition-colors"
+          aria-label="Close loading panel"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
       <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
         <div>
           <div className="flex items-center gap-4">
@@ -64,74 +78,95 @@ function cleanUsername(value: string) {
 
 const USERNAME_RE = /^[a-z0-9_]+$/;
 
-interface FilmListProps {
+/* ── Shared film-row renderer (used by both open + accordion) ──────────────── */
+
+function FilmRows({ films }: { films: WatchlistFilm[] }) {
+  return (
+    <>
+      {films.map((film) => {
+        const slug = film.slug?.replace(/^\/film\/|\/$/g, '');
+        const href = slug ? `https://letterboxd.com/film/${slug}/` : null;
+        const content = (
+          <div className="flex items-center gap-3 py-2">
+            <div className="h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">
+              {film.poster_url ? (
+                <img
+                  src={film.poster_url}
+                  alt={`${film.title} poster`}
+                  width={40}
+                  height={60}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              ) : null}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-stone-100">{film.title}</p>
+              <p className="font-mono text-[11px] text-stone-500">{film.year}</p>
+            </div>
+          </div>
+        );
+        return (
+          <li key={`${film.title}-${film.year}-${film.slug}`}>
+            {href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block transition-colors duration-150 ease-out hover:bg-stone-900/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+              >
+                {content}
+              </a>
+            ) : (
+              content
+            )}
+          </li>
+        );
+      })}
+    </>
+  );
+}
+
+/* ── Always-open list (used for Common / both watchlists) ──────────────────── */
+
+function FilmListOpen({
+  title,
+  films,
+  totalCount,
+  truncated,
+  emptyMessage,
+}: {
   title: string;
   films: WatchlistFilm[];
   totalCount: number;
-  truncated: boolean;
-}
-
-function FilmList({ title, films, totalCount, truncated }: FilmListProps) {
+  truncated?: boolean;
+  emptyMessage?: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? films : films.slice(0, COLLAPSED_FILM_LIMIT);
   const remaining = films.length - visible.length;
 
   return (
-    <section className="min-h-[280px] border border-stone-800 bg-[#171411] p-4">
+    <section className="border border-stone-800 bg-[#171411] p-4">
       <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">{title}</h3>
       <ul className="mt-4 divide-y divide-stone-800/80">
-        {visible.map((film) => {
-          const slug = film.slug?.replace(/^\/film\/|\/$/g, '');
-          const href = slug ? `https://letterboxd.com/film/${slug}/` : null;
-          const content = (
-            <div className="flex items-center gap-3 py-2">
-              <div className="h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">
-                {film.poster_url ? (
-                  <img
-                    src={film.poster_url}
-                    alt={`${film.title} poster`}
-                    width={40}
-                    height={60}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-                ) : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-stone-100">{film.title}</p>
-                <p className="font-mono text-[11px] text-stone-500">{film.year}</p>
-              </div>
-            </div>
-          );
-          return (
-            <li key={`${film.title}-${film.year}-${film.slug}`}>
-              {href ? (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block transition-colors duration-150 ease-out hover:bg-stone-900/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
-                >
-                  {content}
-                </a>
-              ) : (
-                content
-              )}
-            </li>
-          );
-        })}
-        {films.length === 0 && <li className="py-2 text-sm text-stone-500">No films in this bucket.</li>}
+        {films.length === 0 && (
+          <li className="py-2 text-sm text-stone-500">
+            {emptyMessage || 'No films in this bucket.'}
+          </li>
+        )}
+        <FilmRows films={visible} />
       </ul>
 
-      {(films.length > COLLAPSED_FILM_LIMIT || truncated) && (
+      {(films.length > COLLAPSED_FILM_LIMIT || (truncated && films.length > 0)) && (
         <div className="mt-3 space-y-2">
           {films.length > COLLAPSED_FILM_LIMIT && (
             <button
               type="button"
-              onClick={() => setExpanded((value) => !value)}
+              onClick={() => setExpanded((v) => !v)}
               className="w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
             >
-              {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT} more` : `Show ${remaining} more`}
+              {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT}` : `Show ${remaining} more`}
             </button>
           )}
           {truncated && (
@@ -144,6 +179,69 @@ function FilmList({ title, films, totalCount, truncated }: FilmListProps) {
     </section>
   );
 }
+
+/* ── Accordion list (used for individual watchlists) ───────────────────────── */
+
+function WatchlistAccordion({
+  user,
+  count,
+  films,
+}: {
+  user: string;
+  count: number;
+  films: WatchlistFilm[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? films : films.slice(0, COLLAPSED_FILM_LIMIT);
+  const remaining = films.length - visible.length;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center justify-between border border-stone-700 bg-[#171411] px-4 py-3 text-left transition-colors duration-150 ease-out hover:border-stone-500 hover:bg-[#1e1a14]"
+      >
+        <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-300">
+          Only @{user} <span className="ml-1 text-amber-300">({count})</span>
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-stone-500" />
+      </button>
+    );
+  }
+
+  return (
+    <section className="border border-stone-800 bg-[#171411] p-4">
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="mb-3 flex w-full items-center justify-between text-left"
+      >
+        <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">
+          Only @{user} <span className="text-stone-400">({count})</span>
+        </h3>
+        <ChevronUp className="h-4 w-4 shrink-0 text-stone-500" />
+      </button>
+
+      <ul className="divide-y divide-stone-800/80">
+        <FilmRows films={visible} />
+      </ul>
+
+      {films.length > COLLAPSED_FILM_LIMIT && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-3 w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100"
+        >
+          {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT}` : `Show ${remaining} more`}
+        </button>
+      )}
+    </section>
+  );
+}
+
+/* ── Recommendation strip ──────────────────────────────────────────────────── */
 
 function RecommendationStrip({ recommendation }: { recommendation: FilmRecommendation }) {
   return (
@@ -161,14 +259,23 @@ function RecommendationStrip({ recommendation }: { recommendation: FilmRecommend
   );
 }
 
+/* ── Main exported component ───────────────────────────────────────────────── */
+
 export default function WatchlistCompare() {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
-  const [first, setFirst] = useState('');
-  const [second, setSecond] = useState('');
+  const [first, setFirst] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return sessionStorage.getItem('wc_first') || '';
+  });
+  const [second, setSecond] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return sessionStorage.getItem('wc_second') || '';
+  });
   const [strategy, setStrategy] = useState<RecommendationStrategy>('random');
   const [result, setResult] = useState<WatchlistCompareResult | null>(null);
   const [recommendation, setRecommendation] = useState<FilmRecommendation | null>(null);
   const [loading, setLoading] = useState(false);
+  const [dismissLoading, setDismissLoading] = useState(false);
   const [recommending, setRecommending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -185,9 +292,22 @@ export default function WatchlistCompare() {
   }, [normalized]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && !validationMessage;
 
+  // Persist inputs so users don't re-type after error / refresh
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('wc_first', first);
+    }
+  }, [first]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('wc_second', second);
+    }
+  }, [second]);
+
   const handleCompare = async () => {
     if (!canSubmit) return;
     setLoading(true);
+    setDismissLoading(false);
     setError(null);
     setRecommendation(null);
     setResult(null);
@@ -256,13 +376,26 @@ export default function WatchlistCompare() {
           </button>
         </div>
         {validationMessage && <p className="mt-4 border border-amber-900/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{validationMessage}</p>}
-        {error && <p className="mt-4 border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p>}
+        {error && (
+          <div className="mt-4 border border-red-900/70 bg-red-950/40 px-4 py-3">
+            <p className="text-sm text-red-200">{error}</p>
+            <button
+              type="button"
+              onClick={() => void handleCompare()}
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-300 hover:text-red-100 transition-colors"
+            >
+              <Clapperboard className="h-3.5 w-3.5" />
+              Try again
+            </button>
+          </div>
+        )}
       </section>
 
-      {loading && (
+      {loading && !dismissLoading && (
         <LoadingPanel
           title="Comparing watchlists"
           message="Reading both public watchlists and sorting the shared shelf from the one-sided picks."
+          onClose={() => setDismissLoading(true)}
         />
       )}
 
@@ -279,19 +412,25 @@ export default function WatchlistCompare() {
             </p>
           </section>
 
-          {/* Split headers: ONLY @A | BOTH | ONLY @B */}
-          <section className="grid grid-cols-3 gap-3">
-            <div className="border border-orange-500/30 bg-[#171411] p-4 text-center">
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-orange-400">Only @{result.users[0]}</p>
-              <p className="mt-1 text-2xl font-black text-stone-100">{counts?.first_only ?? 0}</p>
+          {/* Responsive summary cards */}
+          <section className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="border border-orange-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-orange-400 truncate">
+                Only @{result.users[0]}
+              </p>
+              <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.first_only ?? 0}</p>
             </div>
-            <div className="border border-amber-300/40 bg-[#171411] p-4 text-center">
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-amber-300">Both</p>
-              <p className="mt-1 text-2xl font-black text-stone-100">{counts?.common ?? 0}</p>
+            <div className="border border-amber-300/40 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-amber-300">
+                Both
+              </p>
+              <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.common ?? 0}</p>
             </div>
-            <div className="border border-emerald-500/30 bg-[#171411] p-4 text-center">
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-emerald-400">Only @{result.users[1]}</p>
-              <p className="mt-1 text-2xl font-black text-stone-100">{counts?.second_only ?? 0}</p>
+            <div className="border border-emerald-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-emerald-400 truncate">
+                Only @{result.users[1]}
+              </p>
+              <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.second_only ?? 0}</p>
             </div>
           </section>
 
@@ -337,33 +476,33 @@ export default function WatchlistCompare() {
             </div>
           </section>
 
-          {/* Film lists */}
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <FilmList
-              title={`Only @${result.users[0]} (${result.counts.first_only})`}
+          {/* Common shelf — always visible */}
+          <FilmListOpen
+            title="Shared shelf"
+            films={result.common}
+            totalCount={result.counts.common}
+            emptyMessage="Zero shared films in both watchlists."
+          />
+
+          {/* Individual watchlists — collapsed by default */}
+          <div className="grid grid-cols-1 gap-3">
+            <WatchlistAccordion
+              user={result.users[0]}
+              count={result.counts.first_only}
               films={result.first_only}
-              totalCount={result.counts.first_only}
-              truncated={result.truncated?.first_only ?? false}
             />
-            <FilmList
-              title={`On both (${result.counts.common})`}
-              films={result.common}
-              totalCount={result.counts.common}
-              truncated={result.truncated?.common ?? false}
-            />
-            <FilmList
-              title={`Only @${result.users[1]} (${result.counts.second_only})`}
+            <WatchlistAccordion
+              user={result.users[1]}
+              count={result.counts.second_only}
               films={result.second_only}
-              totalCount={result.counts.second_only}
-              truncated={result.truncated?.second_only ?? false}
             />
-          </section>
+          </div>
 
           {result.counts.common === 0 && (
             <section className="border border-stone-800 bg-[#171411] p-5">
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No overlap yet</p>
               <p className="mt-2 text-sm text-stone-400">
-                These public watchlists can be compared, but there are no shared films to recommend from.
+                Zero shared films. Expand individual watchlists above to see what each person wants to watch.
               </p>
             </section>
           )}
@@ -406,6 +545,7 @@ export default function WatchlistCompare() {
           title="Choosing from the overlap"
           message="Enriching shared watchlist films with TMDB data before picking one."
           showPosterRail
+          onClose={() => {/* recommending state is handled by the async call, can't be dismissed mid-flight */}}
         />
       )}
     </div>

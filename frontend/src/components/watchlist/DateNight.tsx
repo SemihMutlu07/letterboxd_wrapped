@@ -130,7 +130,12 @@ export default function DateNight() {
           </div>
 
           {result.recommendations.length === 0 ? (
-            <p className="border border-stone-800 bg-[#201b16] p-4 text-sm text-stone-400">No shared recommendations found. Try different usernames.</p>
+            <div className="border border-stone-800 bg-[#201b16] p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No mutual picks</p>
+              <p className="mt-2 text-sm text-stone-400">
+                Zero overlap between your watchlists — no films on both lists. But you can still check what's on <em>their</em> watchlist by scrolling down.
+              </p>
+            </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {result.recommendations.map((film, index) => {

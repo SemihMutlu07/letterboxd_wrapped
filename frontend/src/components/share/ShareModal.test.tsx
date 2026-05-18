@@ -22,7 +22,13 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 class ResizeObserverMock {
-  observe = vi.fn();
+  private cb: ResizeObserverCallback;
+  constructor(cb: ResizeObserverCallback) {
+    this.cb = cb;
+  }
+  observe = (target: Element) => {
+    this.cb([{ target } as ResizeObserverEntry], this as unknown as ResizeObserver);
+  };
   disconnect = vi.fn();
   unobserve = vi.fn();
 }
@@ -47,14 +53,19 @@ const baseData: ShareCardData = {
     { name: 'Director One', headshotUrl: '/tmdb-proxy/t/p/w300/d1.jpg', count: 5 },
     { name: 'Director Two', headshotUrl: '/tmdb-proxy/t/p/w300/d2.jpg', count: 2 },
   ],
+  topReviewWords: [
+    { word: 'dreamlike', count: 12 },
+    { word: 'lonely', count: 9 },
+    { word: 'funny', count: 7 },
+  ],
 };
 
-function renderShareModal(cardProps = baseData) {
+function renderShareModal(cardProps = baseData, orientation: 'horizontal' | 'vertical' = 'horizontal') {
   return render(
     <ShareModal
       open
       onClose={() => {}}
-      orientation="horizontal"
+      orientation={orientation}
       setOrientation={() => {}}
       cardProps={cardProps}
     />,
@@ -62,12 +73,20 @@ function renderShareModal(cardProps = baseData) {
 }
 
 function exportRoot() {
-  const root = document.getElementById('wrapped-export-root');
+  const root = document.querySelector<HTMLElement>('[data-active="true"] [data-export-root="true"]');
   expect(root).not.toBeNull();
   return root as HTMLElement;
 }
 
+async function openSwapDrawer() {
+  await userEvent.click(screen.getByRole('button', { name: /tune actor/i }));
+}
+
 beforeEach(() => {
+  // jsdom returns 0 for clientWidth/Height by default; the modal sizes its rail
+  // off these, so without a mock variants never enter the mount budget.
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 400 });
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 700 });
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     cb(0);
@@ -83,6 +102,7 @@ describe('ShareModal person swap', () => {
     expect(within(exportRoot()).getByText('Actor One')).toBeInTheDocument();
     expect(within(exportRoot()).getByText('Director One')).toBeInTheDocument();
 
+    await openSwapDrawer();
     await userEvent.click(screen.getAllByRole('button', { name: 'Two' })[0]);
     expect(within(exportRoot()).getByText('Actor Two')).toBeInTheDocument();
 
@@ -94,6 +114,7 @@ describe('ShareModal person swap', () => {
   it('resets stale selected indexes when fresh share data arrives', async () => {
     const { rerender } = renderShareModal();
 
+    await openSwapDrawer();
     await userEvent.click(screen.getAllByRole('button', { name: 'Two' })[0]);
     expect(within(exportRoot()).getByText('Actor Two')).toBeInTheDocument();
 
@@ -123,6 +144,24 @@ describe('ShareModal person swap', () => {
 
     expect(within(exportRoot()).getByText('Actor Three')).toBeInTheDocument();
     expect(within(exportRoot()).getByText('Director Three')).toBeInTheDocument();
+  });
+});
+
+describe('ShareModal review words', () => {
+  it('renders the top review words in vertical share cards when available', () => {
+    renderShareModal(baseData, 'vertical');
+
+    const root = within(exportRoot());
+    expect(root.getByText(/review words/i)).toBeInTheDocument();
+    expect(root.getByText('dreamlike / lonely / funny')).toBeInTheDocument();
+  });
+
+  it('keeps the original metric when review words are unavailable', () => {
+    renderShareModal({ ...baseData, topReviewWords: undefined }, 'vertical');
+
+    const root = within(exportRoot());
+    expect(root.queryByText(/review words/i)).not.toBeInTheDocument();
+    expect(root.getByText(/peak decade/i)).toBeInTheDocument();
   });
 });
 

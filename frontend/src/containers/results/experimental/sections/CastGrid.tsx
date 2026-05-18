@@ -43,7 +43,8 @@ interface ActorCard {
   profile_path?: string;
 }
 
-const PAGE_SIZE = 3;
+const PAGE_SIZE = 4;
+const EXPANDED_MAX = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -109,20 +110,29 @@ function CastGridInner({ stats }: { stats: StatsData }) {
                 ? `★ ${a.avg_rating.toFixed(1)} avg`
                 : `${a.count} film${a.count !== 1 ? 's' : ''}`
             }
+            secondaryStat={
+              mode === 'highest_rated' && a.avg_rating != null
+                ? `${a.count} film${a.count !== 1 ? 's' : ''}`
+                : a.avg_rating != null ? `★ ${a.avg_rating.toFixed(1)} avg` : undefined
+            }
             onClick={() => trackItemClicked('cast_grid', 'actor')}
           />
         ))}
       </div>
 
-      {hasMore && (
-        <ShowMoreButton
-          onClick={() => {
-            setVisible((v) => v + PAGE_SIZE);
-            trackShowMore('cast_grid');
-          }}
-          remaining={actors.length - visible}
-        />
-      )}
+      {/* Show more disabled — showing exactly 4 per user request */}
+
+      {/* Scoring explanation */}
+      <div className="mt-3 text-center">
+        <p className="text-[11px] md:text-xs text-slate-500 italic leading-relaxed max-w-lg mx-auto">
+          <strong className="text-slate-400 not-italic">Highest Rated</strong> sorts by{' '}
+          <em>your</em> average rating across films you&apos;ve rated for each{' '}
+          {mode === 'highest_rated' ? 'actor' : 'person'} (minimum 3 rated films).
+          {mode === 'most_watched' && hasRatings && (
+            <> Switch to <strong className="text-slate-400 not-italic">Highest Rated</strong> to see avg ratings.</>
+          )}
+        </p>
+      </div>
     </SectionShell>
   );
 }

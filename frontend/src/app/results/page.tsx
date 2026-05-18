@@ -26,9 +26,9 @@ import { useLazyMount } from '@/hooks/useIntersectionObserver';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
-import Genres from '@/containers/results/Genres';
 import { FilmHistory, RatingsBar } from '@/containers/results/FilmAndRatings';
 import QuickFacts from '@/containers/results/QuickFacts';
+import RewatchChampions from '@/containers/results/RewatchChampions';
 import CinemaScale from '@/containers/results/CinemaScale';
 
 // Note: StatsData is imported from @/containers/results/experimental/types
@@ -312,7 +312,14 @@ export default function ResultsPage() {
   const cineScore = useMemo(() => Math.max(0, Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats))), [stats]);
   const quickMetrics = useMemo(() => {
     const safeRange = Math.max(1, actualRangeDays);
-    const filmsPerWeek = ((stats?.total_films ?? 0) / safeRange) * 7;
+    // Pace honesty: when the user has a Letterboxd diary window, count only films
+    // actually logged in that window — total_films also includes pre-Letterboxd
+    // backfill (e.g. movies the user watched years before joining and ticked off
+    // retroactively), which would deflate pace if used as the numerator.
+    const diaryCount = stats?.diary_film_count ?? 0;
+    const lifetimeCount = stats?.total_films ?? 0;
+    const paceNumerator = diaryCount > 0 ? diaryCount : lifetimeCount;
+    const filmsPerWeek = (paceNumerator / safeRange) * 7;
     const languageCount = stats?.top_languages?.length ?? 0;
     const decadeSpan = (stats?.decades ?? []).filter((d) => d.count > 0).length;
 
@@ -329,8 +336,10 @@ export default function ResultsPage() {
       decadeSpan,
       paceWindowDays: safeRange,
       paceWindowSource,
+      diaryFilmCount: diaryCount,
+      lifetimeFilmCount: lifetimeCount,
     };
-  }, [stats?.total_films, stats?.top_languages, stats?.decades, stats?.data_timeline, actualRangeDays]);
+  }, [stats?.total_films, stats?.diary_film_count, stats?.top_languages, stats?.decades, stats?.data_timeline, actualRangeDays]);
 
   // Build top actors & directors list, ensuring no duplicate person across both roles
   const topActors = useMemo(() => {
@@ -367,6 +376,31 @@ export default function ResultsPage() {
       directorIdx = topDirectors.length > 1 ? 1 : 0;
     }
 
+    const topFilms = (stats?.rated_films ?? [])
+      .slice(0, 6)
+      .map((f) => ({
+        title: f.title,
+        year: f.year ? String(f.year) : '',
+        posterPath: f.poster_path && f.poster_path.length > 0 ? f.poster_path : null,
+      }));
+
+    const topReviewWords = (stats?.review_analysis?.word_frequency ?? [])
+      .filter(({ word }) => word && word.trim().length > 0)
+      .slice(0, 3)
+      .map(({ word, count }) => ({ word, count }));
+
+    const outlier = stats?.rating_outlier_film;
+    const ratingOutlierFilm = outlier
+      ? {
+          title: outlier.title,
+          year: outlier.year != null ? String(outlier.year) : '',
+          posterPath: outlier.poster_path && outlier.poster_path.length > 0 ? outlier.poster_path : null,
+          userRating: outlier.user_rating,
+          avgRating: outlier.avg_rating,
+          delta: outlier.delta,
+        }
+      : undefined;
+
     return {
       onScreenCrush: topActors[actorIdx] || { name: 'Unknown Actor', headshotUrl: '', count: 0 },
       favoriteDirector: topDirectors[directorIdx] || { name: 'Unknown Director', headshotUrl: '', count: 0 },
@@ -381,6 +415,9 @@ export default function ResultsPage() {
       peakDecadeCount: stats?.favorite_decade?.count || 0,
       topActors,
       topDirectors,
+      topFilms,
+      topReviewWords,
+      ratingOutlierFilm,
     };
   }, [stats, topActors, topDirectors, cineScore, timePct]);
 
@@ -592,22 +629,14 @@ function ResultsContent({
         {/* 3. Rating Outliers */}
         <RatingDeviation stats={stats} />
 
-        {/* 4. Genres */}
-        <SectionContainer theme={theme}>
-          <Genres genres={(stats.top_genres ?? []).slice(0, 5)} />
-        </SectionContainer>
-
-        {/* Languages */}
-        <LazyLanguages data={stats.top_languages ?? []} />
+        {/* 4. Your Reviews — promoted: it's the most personal section */}
+        {stats.review_analysis && <ReviewAnalysisSection stats={stats} />}
 
         {/* Film History */}
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
 
         {/* Ratings Bar */}
         <LazyRatingsBar data={ratingsArr} max={ratingMax} isMobile={isMobile} mostCommonRating={stats.most_common_rating} />
-
-        {/* Review Analysis */}
-        {stats.review_analysis && <ReviewAnalysisSection stats={stats} />}
 
         {/* Quick Facts */}
         <LazyQuickFacts
@@ -621,7 +650,17 @@ function ResultsContent({
           totalFilms={stats.total_films}
           paceWindowDays={quickMetrics.paceWindowDays}
           paceWindowSource={quickMetrics.paceWindowSource}
+          diaryFilmCount={quickMetrics.diaryFilmCount}
+          lifetimeFilmCount={quickMetrics.lifetimeFilmCount}
         />
+
+        {/* Rewatch Champions — only when user has films watched 2+ times */}
+        {stats.rewatch_champions && stats.rewatch_champions.length > 0 && (
+          <RewatchChampions films={stats.rewatch_champions} />
+        )}
+
+        {/* Languages — moved lower; supporting info, not headline */}
+        <LazyLanguages data={stats.top_languages ?? []} />
 
         {/* Cinema Scale */}
         <SectionContainer theme={theme}>
@@ -760,6 +799,8 @@ function LazyQuickFacts({
   totalFilms,
   paceWindowDays,
   paceWindowSource,
+  diaryFilmCount,
+  lifetimeFilmCount,
 }: {
   avgMinutes: number;
   totalCountries: number;
@@ -771,6 +812,8 @@ function LazyQuickFacts({
   totalFilms?: number;
   paceWindowDays?: number;
   paceWindowSource?: 'diary' | 'fallback';
+  diaryFilmCount?: number;
+  lifetimeFilmCount?: number;
 }) {
   const { ref, shouldMount } = useLazyMount(250);
 
@@ -788,6 +831,8 @@ function LazyQuickFacts({
           totalFilms={totalFilms}
           paceWindowDays={paceWindowDays}
           paceWindowSource={paceWindowSource}
+          diaryFilmCount={diaryFilmCount}
+          lifetimeFilmCount={lifetimeFilmCount}
         />
       ) : (
         <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />

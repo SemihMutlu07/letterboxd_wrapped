@@ -6,6 +6,20 @@ export { hasAnalyticsConsent };
 
 type Props = Record<string, unknown>;
 
+let _warnedMissingApiBase = false;
+function warnIfMissingApiBase(): void {
+  if (_warnedMissingApiBase) return;
+  if (typeof window === 'undefined') return;
+  if (API_BASE) return;
+  if (process.env.NODE_ENV === 'production') return;
+  _warnedMissingApiBase = true;
+  console.warn(
+    '[tmdb] NEXT_PUBLIC_API_BASE is empty — image requests will use relative paths. ' +
+    'Set NEXT_PUBLIC_API_BASE to your backend origin (e.g. http://localhost:8000 in dev, ' +
+    'https://wrapped-backend.onrender.com in production) so /tmdb-proxy/ reaches the backend.',
+  );
+}
+
 /**
  * Generate TMDB image URL with proxy to avoid CORS issues
  */
@@ -14,6 +28,7 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
 
   const proxiedPath = (cleanPath: string) => {
     const base = typeof window !== 'undefined' ? (API_BASE || '') : '';
+    if (!base) warnIfMissingApiBase();
     const path = `/tmdb-proxy/${cleanPath.replace(/^\/+/, '')}`;
     return base ? `${base}${path}` : path;
   };

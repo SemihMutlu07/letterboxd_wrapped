@@ -92,6 +92,24 @@ export interface StatsData {
   }[];
   /** Total number of rated films in the upload. */
   total_rated_films?: number;
+  /** The film whose user rating diverges most from TMDB community average. */
+  rating_outlier_film?: {
+    title: string;
+    year?: number | string;
+    poster_path?: string;
+    user_rating: number;
+    avg_rating: number;
+    delta: number;
+  };
+  /** Films actually logged inside the diary window (excludes pre-Letterboxd backfill). */
+  diary_film_count?: number;
+  /** Top films by rewatch count from diary. Each entry watched 2+ times. */
+  rewatch_champions?: {
+    title: string;
+    year?: number | null;
+    poster_path?: string;
+    watch_count: number;
+  }[];
   /**
    * ISO-2 keyed country data emitted from production_countries TMDB field.
    * More reliable than top_countries (which uses name strings only).

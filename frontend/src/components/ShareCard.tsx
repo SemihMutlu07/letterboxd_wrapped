@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import { Heart, User, Clock, Star, Calendar, Film } from "lucide-react";
 import { getTmdbImageUrl } from "@/lib/analytics";
+import type { ShareFilmStat, ShareReviewWordStat } from "@/components/share/types";
 
 // ==================== Types ====================
 export type ShareCardProps = {
@@ -16,6 +17,8 @@ export type ShareCardProps = {
   mostCommonRating: number;
   peakDecade: string;
   peakDecadeCount: number;
+  topFilms?: ShareFilmStat[];
+  topReviewWords?: ShareReviewWordStat[];
   className?: string;
   orientation?: "horizontal" | "vertical";
 };
@@ -31,7 +34,7 @@ const SUBTEXT = "#A3A3A3";      // neutral-400
 const ELEVATION = "#18181B";    // zinc-900
 
 const SectionLabel: React.FC<React.PropsWithChildren> = ({ children }) => (
-  <p className="text-xs font-bold uppercase tracking-[0.28em] text-neutral-500">
+  <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-neutral-400">
     {children}
   </p>
 );
@@ -47,7 +50,46 @@ const GiantNumber: React.FC<{ children: React.ReactNode; className?: string }> =
   </span>
 );
 
-const StatPill: React.FC<{ icon: React.ReactNode; label: string; value: string; accent?: string }> = ({
+const PosterStrip: React.FC<{ films?: ShareFilmStat[]; size: "xl" | "lg" | "sm" }> = ({ films, size }) => {
+  if (!films || films.length === 0) return null;
+  const shown = films.slice(0, 4);
+  const w = size === "xl" ? 128 : size === "lg" ? 72 : 56;
+  const h = size === "xl" ? 192 : size === "lg" ? 108 : 84;
+  return (
+    <div className="flex gap-2 justify-center">
+      {shown.map((f) => {
+        const url = f.posterPath ? getTmdbImageUrl(f.posterPath, "w342") : null;
+        return (
+          <div
+            key={`${f.title}-${f.year}`}
+            className="relative rounded-lg overflow-hidden shrink-0 bg-white/5 border border-white/10"
+            style={{ width: w, height: h }}
+          >
+            {url ? (
+              <Image
+                src={url}
+                alt={f.title}
+                fill
+                sizes={`${w}px`}
+                className="object-cover"
+                crossOrigin="anonymous"
+              />
+            ) : (
+              <div className="absolute inset-0 grid place-items-center text-[10px] font-bold px-1 text-center text-neutral-500">
+                {f.title.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const formatReviewWords = (words?: ShareReviewWordStat[]) =>
+  words?.slice(0, 3).map(({ word }) => word).join(" / ") || "";
+
+const StatPill: React.FC<{ icon: React.ReactNode; label: string; value: React.ReactNode; accent?: string }> = ({
   icon,
   label,
   value,
@@ -85,7 +127,7 @@ const PersonCard: React.FC<{
               src={imageUrl}
               alt={name}
               fill
-              className="object-cover object-[50%_10%]"
+              className="object-cover object-center"
               priority
               crossOrigin="anonymous"
               onError={() => setBroken(true)}
@@ -122,6 +164,8 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     mostCommonRating,
     peakDecade,
     peakDecadeCount,
+    topFilms,
+    topReviewWords,
     className = "",
     orientation = "horizontal",
   },
@@ -137,6 +181,8 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     },
     [onScreenCrush.headshotUrl]
   );
+
+  const reviewWordsText = formatReviewWords(topReviewWords);
   const directorUrl = useMemo(
     () => {
       if (!favoriteDirector.headshotUrl) return undefined;
@@ -146,13 +192,13 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     [favoriteDirector.headshotUrl]
   );
 
-  /* ═══════ VERTICAL (630×1200) ═══════ */
+  /* ═══════ VERTICAL (675×1200) ═══════ */
   if (isVertical) {
     return (
       <div
         ref={ref}
-        id="wrapped-export-root"
-        className={cx("w-[630px] h-[1200px] text-white relative overflow-hidden", className)}
+        data-export-root="true"
+        className={cx("w-[675px] h-[1200px] text-white relative overflow-hidden", className)}
         style={{
           background: BG,
           fontFamily: "'Avenir Next', Manrope, 'Segoe UI', system-ui, sans-serif",
@@ -172,7 +218,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
         <div className="relative z-10 h-full flex flex-col px-10 py-12 gap-8">
           {/* Header */}
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-neutral-500">
+            <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-neutral-400">
               Year In Film
             </p>
             <h1 className="mt-3 text-[42px] font-black leading-none">
@@ -238,13 +284,32 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
               value={`${cinemaScale.toFixed(1)} / 100`}
               accent="text-violet-400"
             />
-            <StatPill
-              icon={<Calendar size={18} />}
-              label="Peak Decade"
-              value={`${peakDecade} (${peakDecadeCount})`}
-              accent="text-purple-400"
-            />
+            {reviewWordsText ? (
+              <StatPill
+                icon={<Calendar size={18} />}
+                label="Review words"
+                value={reviewWordsText}
+                accent="text-purple-300"
+              />
+            ) : (
+              <StatPill
+                icon={<Calendar size={18} />}
+                label="Peak Decade"
+                value={`${peakDecade} (${peakDecadeCount})`}
+                accent="text-purple-400"
+              />
+            )}
           </div>
+
+          {/* Top films */}
+          {topFilms && topFilms.length > 0 && (
+            <div>
+              <SectionLabel>Top this year</SectionLabel>
+              <div className="mt-2">
+                <PosterStrip films={topFilms} size="xl" />
+              </div>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="mt-auto pt-4 text-center">
@@ -261,7 +326,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
   return (
     <div
       ref={ref}
-      id="wrapped-export-root"
+      data-export-root="true"
       className={cx("w-[1200px] h-[630px] text-white relative overflow-hidden", className)}
       style={{
         background: BG,
@@ -284,10 +349,10 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
         <div className="col-span-7 flex flex-col justify-between">
           {/* Header */}
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-neutral-500">
+            <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-neutral-400">
               Year In Film
             </p>
-            <h1 className="mt-2 text-[36px] font-black leading-none">
+            <h1 className="mt-2 text-[48px] font-black leading-none">
               Your{" "}
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-purple-400 to-green-400">
                 Letterboxd
@@ -310,8 +375,16 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
             <StatPill icon={<Clock size={16} />} label="Days" value={`${spentDays}`} accent="text-green-400" />
             <StatPill icon={<Star size={16} />} label="Rating" value={`${mostCommonRating}★`} accent="text-yellow-400" />
             <StatPill icon={<Film size={16} />} label="Scale" value={`${cinemaScale.toFixed(1)}`} accent="text-violet-400" />
-            <StatPill icon={<Calendar size={16} />} label="Decade" value={peakDecade} accent="text-purple-400" />
+            {reviewWordsText ? (
+              <StatPill icon={<Calendar size={16} />} label="Review" value={reviewWordsText} accent="text-purple-300" />
+            ) : (
+              <StatPill icon={<Calendar size={16} />} label="Decade" value={peakDecade} accent="text-purple-400" />
+            )}
           </div>
+
+          {topFilms && topFilms.length > 0 && (
+            <PosterStrip films={topFilms} size="lg" />
+          )}
 
           {/* Footer */}
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-neutral-600">

@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 import time
 from collections import deque
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 import unicodedata
 
 import aiofiles
@@ -86,8 +86,13 @@ async def tmdb_get(
 
                 response.raise_for_status()
                 data = await response.json()
-                async with aiofiles.open(cache_file, "w", encoding="utf-8") as f:
-                    await f.write(json.dumps(data, ensure_ascii=False, indent=2))
+                # Don't cache empty search results — a transient miss would otherwise
+                # poison the cache forever. Only persist payloads that returned content.
+                results = data.get("results") if isinstance(data, dict) else None
+                should_cache = (results is None) or bool(results)
+                if should_cache:
+                    async with aiofiles.open(cache_file, "w", encoding="utf-8") as f:
+                        await f.write(json.dumps(data, ensure_ascii=False, indent=2))
                 return data
         except aiohttp.ClientError as e:
             print(f"Error fetching {url}: {e}")
@@ -102,54 +107,93 @@ def _normalize_person_name(name: str) -> str:
     return " ".join(ascii_name.lower().split())
 
 
+_DEPT_PRIORITY = {
+    "director": ["Directing", "Writing", "Production"],
+    "actor": ["Acting"],
+}
+
+
+def _exact_name_matches(results: List[Dict[str, Any]], normalized_name: str) -> List[Dict[str, Any]]:
+    return [
+        r for r in results
+        if _normalize_person_name(str(r.get("name") or "")) == normalized_name
+    ]
+
+
+def _triage_by_role(results: List[Dict[str, Any]], role: Optional[str]) -> List[Dict[str, Any]]:
+    """Stable-sort: candidates whose known_for_department matches the target role come first."""
+    if not role:
+        return results
+    priority = _DEPT_PRIORITY.get(role)
+    if not priority:
+        return results
+    def rank(r: Dict[str, Any]) -> int:
+        dept = r.get("known_for_department") or ""
+        return priority.index(dept) if dept in priority else len(priority)
+    return sorted(results, key=rank)
+
+
 async def search_person_with_fallback(
     session: aiohttp.ClientSession,
     name: str,
+    role: Optional[Literal["director", "actor"]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Search TMDB person by name with a 3-step fallback strategy."""
+    """Search TMDB person by name with a 3-step fallback strategy.
+
+    If ``role`` is provided, exact-name matches are reordered so candidates
+    whose ``known_for_department`` fits the role (e.g. ``"Directing"`` for
+    directors) appear first. Step 2 (``language=en-US``) and step 3
+    (diacritic-stripped query) run whenever step 1 fails to produce any
+    exact-name match — not just when step 1 returned an empty result set.
+    """
     try:
         normalized_name = _normalize_person_name(name)
-        logger.debug("[tmdb-search] '%s' → normalized='%s'", name, normalized_name)
+        logger.debug("[tmdb-search] '%s' → normalized='%s' role=%s", name, normalized_name, role)
 
         # Step 1: search with exact name
         exact_data = await tmdb_get(session, "search/person", {"query": name})
         exact_results = exact_data.get("results", []) if exact_data else []
-        logger.debug("[tmdb-search] step1 exact: %s results, data=%s", len(exact_results), "present" if exact_data else "NONE")
-        if exact_results:
-            exact_matches = [
-                result
-                for result in exact_results
-                if _normalize_person_name(str(result.get("name") or "")) == normalized_name
-            ]
-            if exact_matches:
-                logger.debug("[tmdb-search] step1 exact_matches=%s", len(exact_matches))
-                other_results = [result for result in exact_results if result not in exact_matches]
-                return {**exact_data, "results": exact_matches + other_results}
-            else:
-                logger.debug("[tmdb-search] step1 no exact name match in %s results", len(exact_results))
+        exact_matches = _exact_name_matches(exact_results, normalized_name)
+        logger.debug(
+            "[tmdb-search] step1 exact: %s results, %s exact-name matches",
+            len(exact_results), len(exact_matches),
+        )
+        if exact_matches:
+            triaged = _triage_by_role(exact_matches, role)
+            other_results = [r for r in exact_results if r not in exact_matches]
+            return {**exact_data, "results": triaged + other_results}
 
-        # Step 2: retry with language=en-US
-        if not exact_results and normalized_name != name.lower().strip():
-            en_data = await tmdb_get(session, "search/person", {"query": name, "language": "en-US"})
-            en_results = en_data.get("results", []) if en_data else []
-            logger.debug("[tmdb-search] step2 en-US: %s results", len(en_results))
-            if en_results:
-                en_matches = [
-                    r for r in en_results
-                    if _normalize_person_name(str(r.get("name") or "")) == normalized_name
-                ]
-                if en_matches:
-                    other_results = [r for r in en_results if r not in en_matches]
-                    return {**en_data, "results": en_matches + other_results}
+        # Step 2: retry with language=en-US whenever step 1 produced no exact match
+        en_data = await tmdb_get(session, "search/person", {"query": name, "language": "en-US"})
+        en_results = en_data.get("results", []) if en_data else []
+        en_matches = _exact_name_matches(en_results, normalized_name)
+        logger.debug("[tmdb-search] step2 en-US: %s results, %s exact-name matches", len(en_results), len(en_matches))
+        if en_matches:
+            triaged = _triage_by_role(en_matches, role)
+            other_results = [r for r in en_results if r not in en_matches]
+            return {**en_data, "results": triaged + other_results}
 
-        # Step 3: search with diacritic-stripped name
+        # Step 3: diacritic-stripped query (only when normalization actually changed the name)
         if normalized_name and normalized_name != name.lower().strip():
             normalized_data = await tmdb_get(session, "search/person", {"query": normalized_name})
-            logger.debug("[tmdb-search] step3 normalized: data=%s", "present" if normalized_data else "NONE")
-            if normalized_data and normalized_data.get("results"):
-                return normalized_data
+            n_results = normalized_data.get("results", []) if normalized_data else []
+            n_matches = _exact_name_matches(n_results, normalized_name)
+            logger.debug("[tmdb-search] step3 normalized: %s results, %s exact-name matches", len(n_results), len(n_matches))
+            if n_matches:
+                triaged = _triage_by_role(n_matches, role)
+                other_results = [r for r in n_results if r not in n_matches]
+                return {**normalized_data, "results": triaged + other_results}
+            if n_results:
+                return {**normalized_data, "results": _triage_by_role(n_results, role)}
 
-        logger.debug("[tmdb-search] '%s' returning exact_data (no matches)", name)
+        # No exact-name match anywhere — fall back to role-triaged step-1 results
+        # so the caller still gets the best-guess candidate.
+        if exact_results:
+            return {**exact_data, "results": _triage_by_role(exact_results, role)}
+        if en_results:
+            return {**en_data, "results": _triage_by_role(en_results, role)}
+
+        logger.debug("[tmdb-search] '%s' no candidates anywhere", name)
         return exact_data
     except Exception as exc:
         logger.warning("[tmdb-search] '%s' crashed: %s", name, exc)

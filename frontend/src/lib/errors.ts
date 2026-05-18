@@ -10,6 +10,7 @@ export type ErrorReason =
   | 'tmdb_rate_limited'
   | 'no_username'
   | 'invalid_username'
+  | 'no_films'
   | 'user_not_found'
   | 'scrape_failed'
   | 'unknown_error';
@@ -95,6 +96,26 @@ export function normalizeError(err: unknown): NormalizedError {
         'You have made too many requests in a short period.',
       action: 'Please wait a minute and try again.',
       reason: 'tmdb_rate_limited',
+    };
+  }
+
+  // Scrape blocked by Letterboxd bot detection (cloud IP)
+  if (/scrape_blocked|letterboxd is blocking|rate limit hit/i.test(raw)) {
+    return {
+      title: 'Letterboxd access blocked',
+      message: raw || 'Letterboxd has temporarily blocked automated profile access.',
+      action: 'For the most reliable results, download your Letterboxd export and upload it here.',
+      reason: 'scrape_blocked',
+    };
+  }
+
+  // No public films on this profile
+  if (/no_films|no public films/i.test(raw)) {
+    return {
+      title: 'No public films',
+      message: raw || 'No public films found on this profile.',
+      action: 'Make sure your profile is public and your watched films are visible to everyone (not just followers).',
+      reason: 'no_films',
     };
   }
 
