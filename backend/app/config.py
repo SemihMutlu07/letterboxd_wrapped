@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     frontend_origins: str = ""
     debug_cinema_scale: bool = False
     log_level: str = "INFO"
+    scraper_api_key: str = ""
 
     @property
     def cors_origins(self) -> List[str]:
