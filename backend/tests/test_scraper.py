@@ -13,6 +13,13 @@ class FakeSession:
     def __exit__(self, exc_type, exc, tb):
         self.closed = True
 
+    def close(self):
+        self.closed = True
+
+    def get(self, url, timeout):
+        # Overview fetch in _sync_scrape_profile_sources hits this — empty body skips count parsing
+        return FakeResponse(200, "")
+
 
 def test_scrape_profile_sources_reuses_one_session(monkeypatch):
     sessions: list[FakeSession] = []

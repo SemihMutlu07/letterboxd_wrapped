@@ -19,6 +19,7 @@ from app import task_manager
 from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services.scraper import (
+    ScraperAPIError,
     diary_to_csv_dicts,
     merge_scraped_films,
     scrape_profile_sources,
@@ -175,6 +176,14 @@ async def scrape_profile(request: Request):
 
     try:
         sources = await scrape_profile_sources(username, max_pages=60, include_reviews=True)
+    except ScraperAPIError as exc:
+        # ScraperAPI itself failed (quota, bad key, timeout, upstream 5xx) —
+        # not a Letterboxd / user problem. Surface as service-unavailable.
+        logger.error("ScraperAPI failure for %s: %s", username, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "scraper_unavailable", "message": str(exc)},
+        )
     except ValueError as exc:
         # Re-raise 404s / 403s / rate-limits from scraper as service-unavailable
         # (not 400/404) so the frontend shows the correct guidance message.

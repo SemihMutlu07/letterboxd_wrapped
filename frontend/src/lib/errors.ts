@@ -13,6 +13,8 @@ export type ErrorReason =
   | 'no_films'
   | 'user_not_found'
   | 'scrape_failed'
+  | 'scrape_blocked'
+  | 'scraper_unavailable'
   | 'unknown_error';
 
 export interface NormalizedError {
@@ -96,6 +98,30 @@ export function normalizeError(err: unknown): NormalizedError {
         'You have made too many requests in a short period.',
       action: 'Please wait a minute and try again.',
       reason: 'tmdb_rate_limited',
+    };
+  }
+
+  // ScraperAPI proxy failure (quota, bad key, timeout, upstream 5xx)
+  // Match before scrape_blocked since some messages reference Letterboxd 403 surfaced via proxy.
+  if (
+    /scraper_unavailable|scraper service|scraper quota|too many people are using the scraper/i.test(
+      raw,
+    )
+  ) {
+    const isQuota = /quota|too many people/i.test(raw);
+    const isMisconfigured = /misconfigured/i.test(raw);
+    return {
+      title: isQuota
+        ? 'Scraper at capacity'
+        : isMisconfigured
+          ? 'Service misconfigured'
+          : 'Scraper service unavailable',
+      message:
+        raw ||
+        'The username scraper is temporarily unavailable. This is on our end, not yours.',
+      action:
+        'Please use the export upload option below (30 seconds, no proxy needed), or try again in a few minutes.',
+      reason: 'scraper_unavailable',
     };
   }
 
