@@ -154,7 +154,7 @@ export default function ResultsPage() {
   }, [throttledResize]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('letterboxdStats');
+    const saved = sessionStorage.getItem('letterboxdStats');
     if (saved) {
       try {
         const parsedStats = JSON.parse(saved);

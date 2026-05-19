@@ -206,7 +206,9 @@ export default function LetterboxdLanding() {
       const durationMs = performance.now() - startedAt;
 
       if (detectedUsername) setUsername(detectedUsername);
-      localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+      // Per-tab storage avoids the cross-tab race where a concurrent scrape's
+      // result overwrites this tab's data on a shared localStorage key.
+      sessionStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
 
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, duration_ms: Math.round(durationMs) });
       trackFilmStats({ total_films: result.stats.total_films, total_countries: result.stats.total_countries, average_rating: result.stats.average_rating });
@@ -271,8 +273,12 @@ export default function LetterboxdLanding() {
       startedAt = performance.now();
       const result = await scrapeProfile(username);
       const durationMs = performance.now() - startedAt;
+      const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
+      if (returnedUsername && returnedUsername !== username) {
+        throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
+      }
       setUsername(username);
-      localStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+      sessionStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
 
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method: 'scrape' });
 
