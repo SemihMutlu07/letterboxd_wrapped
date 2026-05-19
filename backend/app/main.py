@@ -29,6 +29,11 @@ logging.basicConfig(
     format="%(levelname)-8s [%(name)s] %(message)s",
 )
 
+# urllib3 DEBUG logs the full request URL, which leaks the ScraperAPI api_key
+# query param into stdout on every fetch. Pin urllib3 at WARNING so the key
+# stays out of logs regardless of the root level.
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 warnings.filterwarnings("ignore")
 
 print("🎬 LETTERBOXD WRAPPED - High-Speed Backend Edition")
