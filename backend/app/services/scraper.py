@@ -30,11 +30,15 @@ SCRAPER_API_TIMEOUT_FLOOR = 30  # residential proxy responses are slower than di
 
 
 def _scraperapi_url(target: str) -> str:
-    """Wrap a Letterboxd URL through ScraperAPI's proxy endpoint."""
+    """Wrap a Letterboxd URL through ScraperAPI's proxy endpoint.
+
+    No `country_code` — that's a premium-credit feature (5-10 credits per
+    request on free tier) and Letterboxd's public profile pages aren't
+    geo-restricted. Keeping the request plain means 1 credit per fetch.
+    """
     params = {
         "api_key": settings.scraper_api_key,
         "url": target,
-        "country_code": "us",
     }
     return f"{SCRAPER_API_ENDPOINT}?{urlencode(params)}"
 
