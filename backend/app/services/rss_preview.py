@@ -21,7 +21,15 @@ from typing import Any, Optional
 
 import aiohttp
 
-from app.services.tmdb_client import fetch_comprehensive_film_details
+from app.services.tmdb_client import (
+    fetch_comprehensive_film_details,
+    find_person_by_film_credit,
+    search_person_with_fallback,
+)
+
+# How many top directors/actors get a TMDB headshot lookup in the preview.
+# Bounded so the preview stays fast; the results grids only render ~5 each.
+PREVIEW_PROFILE_LIMIT = 8
 
 PREVIEW_LIMITATIONS = [
     "Based on recent public RSS activity, not your full Letterboxd history.",
@@ -69,6 +77,9 @@ async def build_preview_stats(
     watched_dates: list[str] = []
     rated_films: list[dict] = []
     all_films: list[dict] = []
+    # name -> [{title, year}] for the TMDB film-credit headshot fallback
+    director_films_map: dict[str, list[dict]] = {}
+    actor_films_map: dict[str, list[dict]] = {}
 
     for it in items:
         rating = it.get("rating")
@@ -90,14 +101,17 @@ async def build_preview_stats(
             lang = detail.get("language")
             if lang:
                 language_counts[lang] += 1
+            film_info = {"title": title, "year": str(it.get("year") or "")}
             director = detail.get("director")
             if director:
                 director_counts[director] += 1
+                director_films_map.setdefault(director, []).append(film_info)
             decade = detail.get("decade")
             if decade:
                 decade_counts[decade] += 1
             for actor in (detail.get("cast") or [])[:5]:
                 cast_counts[actor] += 1
+                actor_films_map.setdefault(actor, []).append(film_info)
             rt = detail.get("runtime")
             if isinstance(rt, (int, float)) and rt > 0:
                 runtimes.append(int(rt))
@@ -160,17 +174,30 @@ async def build_preview_stats(
 
     stats["top_languages"] = [{"language": n, "count": c} for n, c in language_counts.most_common(10)]
 
+    director_images, actor_images = await asyncio.gather(
+        _resolve_person_images(
+            session, [n for n, _ in director_counts.most_common(PREVIEW_PROFILE_LIMIT)], "director", director_films_map
+        ),
+        _resolve_person_images(
+            session, [n for n, _ in cast_counts.most_common(PREVIEW_PROFILE_LIMIT)], "actor", actor_films_map
+        ),
+    )
+
     stats["top_directors"] = [
-        {"name": n, "count": c, "profile_path": None} for n, c in director_counts.most_common(20)
+        {"name": n, "count": c, "profile_path": director_images.get(n)} for n, c in director_counts.most_common(20)
     ]
     stats["total_directors"] = len(director_counts)
     stats["most_watched_director"] = (
-        {"name": director_counts.most_common(1)[0][0], "count": director_counts.most_common(1)[0][1], "profile_path": None}
+        {
+            "name": director_counts.most_common(1)[0][0],
+            "count": director_counts.most_common(1)[0][1],
+            "profile_path": director_images.get(director_counts.most_common(1)[0][0]),
+        }
         if director_counts else None
     )
 
     stats["top_actors"] = [
-        {"name": n, "count": c, "profile_path": None} for n, c in cast_counts.most_common(20)
+        {"name": n, "count": c, "profile_path": actor_images.get(n)} for n, c in cast_counts.most_common(20)
     ]
 
     stats["decades"] = [
@@ -211,6 +238,36 @@ async def build_preview_stats(
     }
 
     return stats
+
+
+async def _resolve_person_images(
+    session: aiohttp.ClientSession,
+    names: list[str],
+    role: str,
+    films_map: dict[str, list[dict]],
+) -> dict[str, Optional[str]]:
+    """Resolve TMDB headshot profile_paths for the given people, concurrently.
+
+    Mirrors the analysis-pipeline strategy: search/person first, then a
+    film-credit reverse lookup. Best-effort — any failure yields None so a
+    missing headshot never breaks the preview.
+    """
+    async def _one(name: str) -> tuple[str, Optional[str]]:
+        try:
+            profile: Optional[str] = None
+            person = await search_person_with_fallback(session, name, role=role)
+            if person and person.get("results"):
+                pp = person["results"][0].get("profile_path")
+                if isinstance(pp, str) and pp:
+                    profile = pp
+            if not profile and films_map.get(name):
+                profile = await find_person_by_film_credit(session, name, films_map[name])
+            return name, profile
+        except Exception:
+            return name, None
+
+    results = await asyncio.gather(*[_one(n) for n in names])
+    return {name: profile for name, profile in results}
 
 
 def _is_iso_date(value: str) -> bool:

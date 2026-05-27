@@ -19,7 +19,7 @@ from app.services.recommender import (
     pick_from_common,
     recommendation_from_film,
 )
-from app.services.scraper import scrape_watchlist
+from app.services.scraper import ScraperAPIError, scrape_watchlist
 
 logger = logging.getLogger("letterboxd_wrapped.watchlist")
 
@@ -131,7 +131,23 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
             scrape_watchlist(first, max_pages=MAX_WATCHLIST_PAGES),
             scrape_watchlist(second, max_pages=MAX_WATCHLIST_PAGES),
         )
+    except ScraperAPIError as exc:
+        # Scraper service itself failed (quota, bad key, upstream 5xx) — NOT a
+        # missing user. ScraperAPIError subclasses ValueError, so it must be
+        # caught first or it would be mislabeled as user_not_found below.
+        logger.error("Watchlist compare scraper unavailable for %s/%s: %s", first, second, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "scraper_unavailable", "message": str(exc)},
+        )
     except ValueError as exc:
+        msg = str(exc)
+        if "Letterboxd is blocking" in msg:
+            logger.warning("Watchlist compare blocked for %s/%s: %s", first, second, msg)
+            raise HTTPException(
+                status_code=503,
+                detail={"error_code": "scrape_blocked", "message": msg},
+            )
         logger.warning("Watchlist compare user lookup failed for %s/%s: %s", first, second, exc)
         raise HTTPException(
             status_code=404,
@@ -173,7 +189,20 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             scrape_watchlist(first, max_pages=MAX_WATCHLIST_PAGES),
             scrape_watchlist(second, max_pages=MAX_WATCHLIST_PAGES),
         )
+    except ScraperAPIError as exc:
+        logger.error("Recommendation scraper unavailable for %s/%s: %s", first, second, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "scraper_unavailable", "message": str(exc)},
+        )
     except ValueError as exc:
+        msg = str(exc)
+        if "Letterboxd is blocking" in msg:
+            logger.warning("Recommendation blocked for %s/%s: %s", first, second, msg)
+            raise HTTPException(
+                status_code=503,
+                detail={"error_code": "scrape_blocked", "message": msg},
+            )
         logger.warning("Recommendation user lookup failed for %s/%s: %s", first, second, exc)
         raise HTTPException(
             status_code=404,

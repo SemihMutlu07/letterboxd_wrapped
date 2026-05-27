@@ -279,6 +279,9 @@ export default function LetterboxdLanding() {
         result = await rssPreview(username);
       } catch (rssErr) {
         method = 'scrape';
+        // Don't swallow the RSS failure — surface why we fell back so it's
+        // diagnosable from the console, not just a silent scraper call.
+        console.warn('[rss-preview] failed, falling back to scraper:', rssErr instanceof Error ? rssErr.message : rssErr);
         trackEvent('rss_preview_failed', { reason: normalizeError(rssErr).reason, username });
         result = await scrapeProfile(username);
       }

@@ -16,7 +16,7 @@ from app.services.recommender import (
     discover_date_night_recommendations,
     enrich_films,
 )
-from app.services.scraper import merge_scraped_films, scrape_profile_sources, scrape_watchlist
+from app.services.scraper import ScraperAPIError, merge_scraped_films, scrape_profile_sources, scrape_watchlist
 
 logger = logging.getLogger("letterboxd_wrapped.recommend")
 
@@ -92,7 +92,20 @@ async def date_night(request: Request, payload: UserPairRequest):
             status_code=504,
             detail={"error_code": "scrape_timeout", "message": "Reading profiles took too long. Try again later."},
         )
+    except ScraperAPIError as exc:
+        logger.error("Date night scraper unavailable for %s/%s: %s", first, second, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "scraper_unavailable", "message": str(exc)},
+        )
     except ValueError as exc:
+        msg = str(exc)
+        if "Letterboxd is blocking" in msg:
+            logger.warning("Date night blocked for %s/%s: %s", first, second, msg)
+            raise HTTPException(
+                status_code=503,
+                detail={"error_code": "scrape_blocked", "message": msg},
+            )
         logger.warning("Date night user lookup failed for %s/%s: %s", first, second, exc)
         raise HTTPException(
             status_code=404,
