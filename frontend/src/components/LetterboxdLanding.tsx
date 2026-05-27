@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import Link from 'next/link';
 import React, { useState, useCallback, useEffect } from 'react';
 import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
-import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } from '@/lib/api';
+import { analyzeFiles, parseLetterboxdUsername, rssPreview, scrapeProfile, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -271,7 +271,17 @@ export default function LetterboxdLanding() {
       } catch { /* analytics failure is non-fatal */ }
 
       startedAt = performance.now();
-      const result = await scrapeProfile(username);
+      // RSS-first: try the fast proxy-free preview, fall back to the HTML
+      // scraper (slower, fuller history) only when RSS fails.
+      let result;
+      let method: 'rss' | 'scrape' = 'rss';
+      try {
+        result = await rssPreview(username);
+      } catch (rssErr) {
+        method = 'scrape';
+        trackEvent('rss_preview_failed', { reason: normalizeError(rssErr).reason, username });
+        result = await scrapeProfile(username);
+      }
       const durationMs = performance.now() - startedAt;
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
@@ -280,7 +290,7 @@ export default function LetterboxdLanding() {
       setUsername(username);
       sessionStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
 
-      trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method: 'scrape' });
+      trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method });
 
       if (analysisRun) {
         try {

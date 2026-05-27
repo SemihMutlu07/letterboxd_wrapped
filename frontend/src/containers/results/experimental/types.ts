@@ -50,6 +50,18 @@ export interface StatsData {
   };
   /** Username when data came from scrape-profile path. */
   scraped_username?: string;
+  /** Data source for this Wrapped. "rss" = fast recent-sample preview. */
+  source?: string;
+  /** Number of films in the recent RSS sample (preview mode). */
+  recent_films_count?: number;
+  /** Exactness metadata; present on the RSS preview so sampled stats are labelled. */
+  data_quality?: {
+    mode?: string;
+    exactness?: string;
+    sample_size?: number;
+    tmdb_id_coverage?: number;
+    limitations?: string[];
+  };
   most_watched_director?: {
     name: string;
     count: number;
