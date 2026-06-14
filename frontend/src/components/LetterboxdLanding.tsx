@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import Link from 'next/link';
 import React, { useState, useCallback, useEffect } from 'react';
 import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
-import { analyzeFiles, parseLetterboxdUsername, rssPreview, scrapeProfile, testBackend } from '@/lib/api';
+import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -271,21 +271,12 @@ export default function LetterboxdLanding() {
       } catch { /* analytics failure is non-fatal */ }
 
       startedAt = performance.now();
-      // RSS-first: try the fast proxy-free preview, fall back to the HTML
-      // scraper (slower, fuller history) only when RSS fails.
-      let result;
-      let method: 'rss' | 'scrape' = 'rss';
-      try {
-        result = await rssPreview(username);
-      } catch (rssErr) {
-        method = 'scrape';
-        // Don't swallow the RSS failure — surface why we fell back so it's
-        // diagnosable from the console, not just a silent scraper call.
-        console.warn('[rss-preview] failed, falling back to scraper:', rssErr instanceof Error ? rssErr.message : rssErr);
-        trackEvent('rss_preview_failed', { reason: normalizeError(rssErr).reason, username });
-        result = await scrapeProfile(username);
-      }
-      const durationMs = performance.now() - startedAt;
+      // RSS-first preview is SUSPENDED on the desktop_server branch. The desktop
+      // worker scrapes the full profile from a residential IP, so we go straight
+      // to the complete scrape like the original flow. rssPreview() is kept in
+      // lib/api.ts and can be re-enabled in one line.
+      const method = 'scrape' as const;
+      const result = await scrapeProfile(username);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);

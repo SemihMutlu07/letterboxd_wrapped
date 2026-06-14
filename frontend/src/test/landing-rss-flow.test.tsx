@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// RSS-first behaviour: the username "Analyze" flow must call rssPreview() first
-// and only fall back to the slower scrapeProfile() when RSS fails.
+// desktop_server branch: RSS-first preview is SUSPENDED. The username "Analyze"
+// flow must call scrapeProfile() directly (full scrape via the desktop worker)
+// and must NOT touch rssPreview().
 
 vi.mock('@/lib/api', () => ({
   analyzeFiles: vi.fn(),
@@ -46,38 +47,33 @@ async function analyzeUsername(name: string) {
   await userEvent.click(screen.getByRole('button', { name: /analyze/i }));
 }
 
-describe('LetterboxdLanding RSS-first flow', () => {
+describe('LetterboxdLanding direct-scrape flow (RSS suspended)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
   });
 
-  it('calls rssPreview first and stores its stats without hitting the scraper', async () => {
-    vi.mocked(rssPreview).mockResolvedValueOnce({
-      status: 'success',
-      source: 'rss',
-      username: 'semihmutsuz',
-      stats: { source: 'rss', total_films: 12, scraped_username: 'semihmutsuz' },
-      data_quality: { mode: 'preview' },
-    });
-
-    await analyzeUsername('semihmutsuz');
-
-    await waitFor(() => expect(rssPreview).toHaveBeenCalledWith('semihmutsuz'));
-    expect(scrapeProfile).not.toHaveBeenCalled();
-    expect(sessionStorage.getItem('letterboxdStats')).toContain('"source":"rss"');
-  });
-
-  it('falls back to scrapeProfile when rssPreview fails', async () => {
-    vi.mocked(rssPreview).mockRejectedValueOnce(new Error('rss down'));
+  it('scrapes the full profile directly and stores its stats', async () => {
     vi.mocked(scrapeProfile).mockResolvedValueOnce({
       status: 'success',
-      stats: { total_films: 300, scraped_username: 'semihmutsuz' },
+      stats: { total_films: 394, scraped_username: 'semihmutsuz' },
     });
 
     await analyzeUsername('semihmutsuz');
 
     await waitFor(() => expect(scrapeProfile).toHaveBeenCalledWith('semihmutsuz'));
-    expect(rssPreview).toHaveBeenCalled();
+    expect(sessionStorage.getItem('letterboxdStats')).toContain('"total_films":394');
+  });
+
+  it('never calls the suspended rssPreview path', async () => {
+    vi.mocked(scrapeProfile).mockResolvedValueOnce({
+      status: 'success',
+      stats: { total_films: 394, scraped_username: 'semihmutsuz' },
+    });
+
+    await analyzeUsername('semihmutsuz');
+
+    await waitFor(() => expect(scrapeProfile).toHaveBeenCalled());
+    expect(rssPreview).not.toHaveBeenCalled();
   });
 });

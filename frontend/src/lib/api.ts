@@ -213,7 +213,11 @@ export async function testBackend(retries = 2, delayMs = 1000) {
   }
 }
 
-// Scrape a Letterboxd profile by username
+// Scrape a Letterboxd profile by username.
+// Handles two backend contracts transparently:
+//   - synchronous (local / no desktop worker): { status, stats }
+//   - desktop-worker mode: 202 { task_id } → poll /api/progress until done
+// Either way the caller receives { status, stats }.
 export async function scrapeProfile(username: string, signal?: AbortSignal) {
   const url = `${API_BASE}/api/scrape-profile`;
 
@@ -241,6 +245,11 @@ export async function scrapeProfile(username: string, signal?: AbortSignal) {
     }
 
     const data = await r.json();
+
+    // Desktop-worker mode: the job was queued — poll until the worker finishes.
+    if (data && data.task_id && !data.stats) {
+      return await pollTask(data.task_id);
+    }
 
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Scraping failed');
