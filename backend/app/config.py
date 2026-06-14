@@ -16,6 +16,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     scraper_api_key: str = ""
 
+    # Desktop-worker mode: when worker_token is set, /api/scrape-profile queues
+    # jobs for an outbound desktop worker instead of scraping inline. The worker
+    # authenticates with this shared secret via the X-Worker-Token header.
+    worker_token: str = ""
+    # A heartbeat older than this many seconds means the desktop worker is offline.
+    worker_heartbeat_max_age_seconds: int = 60
+
+    @property
+    def desktop_worker_enabled(self) -> bool:
+        return bool(self.worker_token)
+
     @property
     def cors_origins(self) -> List[str]:
         base = [

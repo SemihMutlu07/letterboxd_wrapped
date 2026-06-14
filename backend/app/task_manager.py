@@ -18,15 +18,62 @@ class TaskState:
     result: Optional[Any] = None
     error: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.utcnow)
+    kind: str = "analyze"     # analyze | scrape
+    username: Optional[str] = None
+    claimed: bool = False     # scrape jobs: True once a worker has taken it
 
 
 _tasks: Dict[str, TaskState] = {}
+
+# Last time the desktop scrape worker checked in. None until the first heartbeat.
+_last_worker_heartbeat: Optional[datetime] = None
 
 
 def create_task_state() -> str:
     task_id = str(uuid.uuid4())
     _tasks[task_id] = TaskState(task_id=task_id)
     return task_id
+
+
+def create_scrape_job(username: str) -> str:
+    """Queue a username scrape job for the desktop worker to claim."""
+    task_id = str(uuid.uuid4())
+    _tasks[task_id] = TaskState(
+        task_id=task_id,
+        kind="scrape",
+        username=username,
+        stage="queued",
+        message="Queued on desktop scraper",
+    )
+    return task_id
+
+
+def claim_next_scrape_job() -> Optional[TaskState]:
+    """Atomically claim the oldest unclaimed, pending scrape job (single-process,
+    asyncio single-thread — no lock needed). Returns None if the queue is empty."""
+    queued = sorted(
+        [t for t in _tasks.values() if t.kind == "scrape" and t.status == "pending" and not t.claimed],
+        key=lambda t: t.created_at,
+    )
+    if not queued:
+        return None
+    job = queued[0]
+    job.claimed = True
+    job.status = "running"
+    job.stage = "scraping"
+    job.message = "Desktop worker is reading Letterboxd"
+    return job
+
+
+def record_worker_heartbeat() -> None:
+    global _last_worker_heartbeat
+    _last_worker_heartbeat = datetime.utcnow()
+
+
+def is_worker_online(max_age_seconds: int) -> bool:
+    if _last_worker_heartbeat is None:
+        return False
+    return (datetime.utcnow() - _last_worker_heartbeat) <= timedelta(seconds=max_age_seconds)
 
 
 def get_task_state(task_id: str) -> Optional[TaskState]:

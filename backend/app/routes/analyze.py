@@ -16,14 +16,11 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app import task_manager
+from app.config import settings
 from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
-from app.services.scraper import (
-    ScraperAPIError,
-    diary_to_csv_dicts,
-    merge_scraped_films,
-    scrape_profile_sources,
-)
+from app.services.scraper import ScraperAPIError
+from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
 from app.services.rss_source import RssError, fetch_rss_items
 from app.services.rss_preview import build_preview_stats
 
@@ -163,7 +160,11 @@ async def scrape_profile(request: Request):
     path, not the primary username flow. The frontend now calls /api/rss-preview
     first (fast, proxy-free, TMDB-linked) and only falls back to this HTML
     scraper when RSS fails or the user explicitly wants their complete history.
-    This is best-effort and depends on Letterboxd's public HTML remaining accessible.
+
+    When DESKTOP-WORKER mode is enabled (settings.worker_token set), this does
+    NOT scrape inline. It queues a job for the outbound desktop worker and
+    returns 202 {task_id}; the frontend then polls /api/progress/{task_id}.
+    Without a worker token it scrapes synchronously (local dev / fallback).
     """
     try:
         body = await request.json()
@@ -181,8 +182,24 @@ async def scrape_profile(request: Request):
             detail={"error_code": "invalid_username", "message": "Please enter a valid Letterboxd username."},
         )
 
+    # Desktop-worker mode: route the heavy scrape to the always-on desktop worker.
+    if settings.desktop_worker_enabled:
+        if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+            logger.warning("scrape-profile desktop_worker_offline for %s", username)
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "desktop_worker_offline",
+                    "message": "The desktop scraper is offline right now. Upload your Letterboxd export for a full Wrapped, or try again shortly.",
+                },
+            )
+        task_id = task_manager.create_scrape_job(username)
+        logger.info("Queued scrape job %s for @%s", task_id, username)
+        return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending"})
+
+    # Synchronous fallback: no desktop worker configured (local dev).
     try:
-        sources = await scrape_profile_sources(username, max_pages=60, include_reviews=True)
+        stats = await scrape_and_analyze(request.app.state.aiohttp_session, username)
     except ScraperAPIError as exc:
         # ScraperAPI itself failed (quota, bad key, timeout, upstream 5xx) —
         # not a Letterboxd / user problem. Surface as service-unavailable.
@@ -190,6 +207,16 @@ async def scrape_profile(request: Request):
         raise HTTPException(
             status_code=503,
             detail={"error_code": "scraper_unavailable", "message": str(exc)},
+        )
+    except ScrapeAnalysisEmpty as exc:
+        if exc.scraper_ok:
+            raise HTTPException(
+                status_code=500,
+                detail={"error_code": "analysis_failed", "message": f"Scraped @{username} but analysis pipeline returned empty. Please try again."},
+            )
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "no_films", "message": f"No public films found for @{username}. The profile may be private, empty, or temporarily blocked by Letterboxd."},
         )
     except ValueError as exc:
         # Re-raise 404s / 403s / rate-limits from scraper as service-unavailable
@@ -212,90 +239,8 @@ async def scrape_profile(request: Request):
             detail={"error_code": "scrape_failed", "message": f"Letterboxd returned an unexpected response for @{username}. (Debug: {type(exc).__name__}: {exc}) Try again later."},
         )
 
-    request_dir: Optional[Path] = None
-    try:
-        logger.info(
-            "scrape_profile: %s diary=%d grid=%d reviews=%d films=%d scraped_reviews=%d",
-            username, len(sources.diary), len(sources.grid),
-            sources.review_count, sources.film_count, len(sources.reviews),
-        )
-        films = merge_scraped_films(sources.diary, sources.grid)
-        csv_dicts = diary_to_csv_dicts(films)
-        if not films or not csv_dicts["watched"]:
-            # Distinguish "scraper broke" from "profile is actually empty"
-            scraper_ok = sources.film_count > 0 and (len(sources.diary) > 0 or len(sources.grid) > 0)
-            if scraper_ok:
-                raise HTTPException(
-                    status_code=500,
-                    detail={"error_code": "analysis_failed", "message": f"Scraped @{username} but analysis pipeline returned empty. Please try again."},
-                )
-            raise HTTPException(
-                status_code=400,
-                detail={"error_code": "no_films", "message": f"No public films found for @{username}. The profile may be private, empty, or temporarily blocked by Letterboxd."},
-            )
-
-        request_dir = Path("uploads") / str(uuid.uuid4())
-        request_dir.mkdir(parents=True, exist_ok=True)
-        watched_path = request_dir / "watched.csv"
-        ratings_path = request_dir / "ratings.csv"
-        diary_path = request_dir / "diary.csv"
-        reviews_path = request_dir / "reviews.csv"
-
-        import pandas as pd
-
-        pd.DataFrame(csv_dicts["watched"]).to_csv(watched_path, index=False)
-        csv_files = {"watched.csv": str(watched_path)}
-
-        if csv_dicts["ratings"]:
-            pd.DataFrame(csv_dicts["ratings"]).to_csv(ratings_path, index=False)
-            csv_files["ratings.csv"] = str(ratings_path)
-
-        if csv_dicts.get("diary"):
-            pd.DataFrame(csv_dicts["diary"]).to_csv(diary_path, index=False)
-            csv_files["diary.csv"] = str(diary_path)
-
-        # Synthesize reviews.csv from scraped HTML so the existing
-        # compute_review_metrics path is reused for both upload and scrape flows.
-        if sources.reviews:
-            review_rows = [
-                {
-                    "Date": r.get("date", ""),
-                    "Name": r.get("title", ""),
-                    "Year": r.get("year", ""),
-                    "Rating": r.get("rating"),
-                    "Rewatch": "",
-                    "Review": r.get("review_text", ""),
-                    "Tags": "",
-                    "Watched Date": "",
-                    "Likes": r.get("like_count") if r.get("like_count") is not None else "",
-                    "Slug": r.get("slug", ""),
-                }
-                for r in sources.reviews
-            ]
-            pd.DataFrame(review_rows).to_csv(reviews_path, index=False)
-            csv_files["reviews.csv"] = str(reviews_path)
-
-        stats = await process_comprehensive_letterboxd_data(request.app.state.aiohttp_session, csv_files)
-        stats["scraped_username"] = username
-        stats["scraped_film_count"] = len(films)
-        stats["scraped_diary_count"] = len(sources.diary)
-        stats["scraped_grid_only_count"] = len(films) - len(sources.diary)
-        stats["scraped_review_count"] = sources.review_count
-        stats["scraped_film_count_estimated"] = sources.film_count
-        stats["scraped_reviews_with_text"] = sum(1 for r in sources.reviews if r.get("review_text"))
-        _persist_run(username, "scrape", stats, ok=True)
-        return {"status": "success", "stats": stats}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("scrape_profile analysis failed for %s", username)
-        raise HTTPException(
-            status_code=500,
-            detail={"error_code": "analysis_failed", "message": f"Analysis failed after scraping @{username}: {type(exc).__name__}: {exc}"},
-        )
-    finally:
-        if request_dir is not None:
-            shutil.rmtree(request_dir, ignore_errors=True)
+    _persist_run(username, "scrape", stats, ok=True)
+    return {"status": "success", "stats": stats}
 
 
 _RSS_ERROR_STATUS = {
