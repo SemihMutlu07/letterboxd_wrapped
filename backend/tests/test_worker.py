@@ -20,7 +20,7 @@ AUTH = {"X-Worker-Token": WORKER_TOKEN}
 
 
 @pytest.fixture
-async def client():
+async def client(tmp_path):
     """ASGI client with desktop-worker mode ENABLED (worker_token set)."""
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None
@@ -30,6 +30,13 @@ async def client():
     task_manager._last_worker_self_test = None
     original_token = settings.worker_token
     settings.worker_token = WORKER_TOKEN
+    from app.services import run_log  # noqa: PLC0415
+    from app import admin  # noqa: PLC0415
+
+    original_runs_dir = run_log.RUNS_DIR
+    original_admin_runs_dir = admin.RUNS_DIR
+    run_log.RUNS_DIR = tmp_path / "runs"
+    admin.RUNS_DIR = run_log.RUNS_DIR
 
     with patch.dict("os.environ", {"TMDB_API_KEY": "test-key"}):
         from app.main import create_app  # noqa: PLC0415
@@ -41,6 +48,8 @@ async def client():
             yield ac
 
     settings.worker_token = original_token
+    run_log.RUNS_DIR = original_runs_dir
+    admin.RUNS_DIR = original_admin_runs_dir
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None
     task_manager._last_worker_started_at = None
@@ -98,6 +107,7 @@ async def test_worker_endpoints_require_token(client: AsyncClient):
     assert (await client.post("/api/worker/heartbeat")).status_code == 401
     assert (await client.post("/api/worker/startup", json={})).status_code == 401
     assert (await client.post("/api/worker/self-test", json={})).status_code == 401
+    assert (await client.post("/api/worker/scrape/abc/event", json={})).status_code == 401
     assert (await client.get("/api/worker/scrape/next", headers={"X-Worker-Token": "wrong"})).status_code == 401
 
 
@@ -179,10 +189,20 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     await client.get("/api/worker/scrape/next", headers=AUTH)
 
     stats = {"total_films": 394, "scraped_username": "semihmutsuz"}
+    event = await client.post(
+        f"/api/worker/scrape/{task_id}/event",
+        headers=AUTH,
+        json={"stage": "scrape_started", "message": "Scrape started", "elapsed_seconds": 1.0},
+    )
+    assert event.status_code == 200
     done = await client.post(
         f"/api/worker/scrape/{task_id}/complete",
         headers=AUTH,
-        json={"stats": stats, "telemetry": {"duration_seconds": 12.3}},
+        json={
+            "stats": stats,
+            "telemetry": {"duration_seconds": 12.3, "scrape_seconds": 8.1, "analysis_seconds": 3.2},
+            "trace_events": [{"stage": "analysis_done", "message": "Analysis completed", "elapsed_seconds": 12.0}],
+        },
     )
     assert done.status_code == 200
 
@@ -191,7 +211,18 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     assert body["status"] == "done"
     assert body["result"]["status"] == "success"
     assert body["result"]["stats"]["total_films"] == 394
+    assert body["trace_events"][0]["stage"] == "queued"
     assert task_manager.get_task_state(task_id).duration_seconds == 12.3
+    assert task_manager.get_task_state(task_id).scrape_seconds == 8.1
+
+    runs = await client.get("/admin/api/runs?key=mw3169305")
+    assert runs.status_code == 200
+    run = runs.json()["runs"][0]
+    assert run["task_id"] == task_id
+    assert run["source"] == "desktop-worker"
+    assert run["duration_seconds"] == 12.3
+    assert run["scrape_seconds"] == 8.1
+    assert [event["stage"] for event in run["trace_events"]][-1] == "persisted"
 
 
 @pytest.mark.asyncio
@@ -223,6 +254,17 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     assert task.duration_seconds == 7.8
     assert task.error_type == "ValueError"
     assert task.error_stage == "letterboxd_or_scrape"
+
+    runs = await client.get("/admin/api/runs?key=mw3169305")
+    assert runs.status_code == 200
+    run = runs.json()["runs"][0]
+    assert run["ok"] is False
+    assert run["error_stage"] == "letterboxd_or_scrape"
+    assert run["error_message"] == "Letterboxd blocked the desktop worker."
+
+    dashboard = await client.get("/admin/dashboard?key=mw3169305")
+    assert dashboard.status_code == 200
+    assert "letterboxd_or_scrape" in dashboard.text
 
 
 @pytest.mark.asyncio

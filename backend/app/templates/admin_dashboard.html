@@ -112,6 +112,7 @@
             <thead><tr class="text-slate-500 border-b border-slate-800">
               <th class="text-left px-4 py-2 font-medium">Task</th><th class="text-left px-4 py-2 font-medium">User</th>
               <th class="text-left px-4 py-2 font-medium">Status</th><th class="text-left px-4 py-2 font-medium">Message</th>
+              <th class="text-left px-4 py-2 font-medium">Latest Event</th><th class="text-right px-4 py-2 font-medium">Elapsed</th>
               <th class="text-left px-4 py-2 font-medium">Created</th>
             </tr></thead>
             <tbody id="worker-jobs">
@@ -121,11 +122,13 @@
                 <td class="px-4 py-2.5 text-orange-400">@{{ job.username }}</td>
                 <td class="px-4 py-2.5 text-slate-300">{{ job.status }}</td>
                 <td class="px-4 py-2.5 text-slate-400">{{ job.message }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ job.latest_event.stage if job.latest_event else "—" }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ job.elapsed_seconds if job.elapsed_seconds is not none else "—" }}{% if job.elapsed_seconds is not none %}s{% endif %}</td>
                 <td class="px-4 py-2.5 text-slate-500">{{ job.created_at[:16].replace("T", " ") }}</td>
               </tr>
               {% endfor %}
               {% if not worker_status.current_jobs %}
-              <tr><td colspan="5" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>
+              <tr><td colspan="7" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>
               {% endif %}
             </tbody>
           </table>
@@ -181,7 +184,7 @@
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Avg Films</p>
-          <p class="text-2xl font-black text-white">{% set fc = runs | map(attribute="total_films") | list %}{% if fc %}{{ (fc | sum / fc | length) | round(1) }}{% else %}—{% endif %}</p>
+          <p class="text-2xl font-black text-white">{% set ns = namespace(total=0, count=0) %}{% for run in runs %}{% if run.total_films is not none %}{% set ns.total = ns.total + run.total_films %}{% set ns.count = ns.count + 1 %}{% endif %}{% endfor %}{% if ns.count > 0 %}{{ (ns.total / ns.count) | round(1) }}{% else %}—{% endif %}</p>
         </div>
       </div>
 
@@ -194,7 +197,9 @@
             <thead><tr class="text-slate-500 border-b border-slate-800">
               <th class="text-left px-4 py-2 font-medium">User</th><th class="text-left px-4 py-2 font-medium">Source</th>
               <th class="text-right px-4 py-2 font-medium">Films</th><th class="text-right px-4 py-2 font-medium">Score</th>
-              <th class="text-right px-4 py-2 font-medium">Duration</th><th class="text-left px-4 py-2 font-medium">Error</th>
+              <th class="text-right px-4 py-2 font-medium">Duration</th><th class="text-right px-4 py-2 font-medium">Queue</th>
+              <th class="text-right px-4 py-2 font-medium">Scrape</th><th class="text-right px-4 py-2 font-medium">Analysis</th>
+              <th class="text-left px-4 py-2 font-medium">Error Stage</th>
               <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
             </tr></thead>
             <tbody>
@@ -207,6 +212,9 @@
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.total_films or "—" }}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.sinefil_meter.score if run.sinefil_meter else "—" }}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.duration_seconds if run.duration_seconds is not none else "—" }}{% if run.duration_seconds is not none %}s{% endif %}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.queue_wait_seconds if run.queue_wait_seconds is not none else "—" }}{% if run.queue_wait_seconds is not none %}s{% endif %}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.scrape_seconds if run.scrape_seconds is not none else "—" }}{% if run.scrape_seconds is not none %}s{% endif %}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.analysis_seconds if run.analysis_seconds is not none else "—" }}{% if run.analysis_seconds is not none %}s{% endif %}</td>
                 <td class="px-4 py-2.5 text-slate-400">{{ run.error_stage or run.error_type or run.error_message or "—" }}</td>
                 <td class="px-4 py-2.5 text-slate-500">{{ run._mtime[:16].replace("T", " ") }}</td>
                 <td class="px-4 py-2.5 text-center">
@@ -314,7 +322,7 @@
       const tbody = document.getElementById('worker-jobs');
       if (!tbody) return;
       if (!jobs || jobs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>';
         return;
       }
       tbody.innerHTML = jobs.map(job => `
@@ -323,6 +331,8 @@
           <td class="px-4 py-2.5 text-orange-400">@${job.username || '—'}</td>
           <td class="px-4 py-2.5 text-slate-300">${job.status}</td>
           <td class="px-4 py-2.5 text-slate-400">${job.message || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-400">${job.latest_event?.stage || '—'}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${job.elapsed_seconds ?? '—'}${job.elapsed_seconds !== null && job.elapsed_seconds !== undefined ? 's' : ''}</td>
           <td class="px-4 py-2.5 text-slate-500">${shortTime(job.created_at)}</td>
         </tr>
       `).join('');

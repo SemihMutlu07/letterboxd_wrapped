@@ -21,16 +21,18 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+from datetime import datetime, timezone
 import logging
 import os
+from threading import Lock
 from time import monotonic
+from typing import Any
 
 from dotenv import load_dotenv
 load_dotenv()
 
 import aiohttp
 
-from app.routes.analyze import _persist_run
 from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     ScraperAPIError,
@@ -47,6 +49,7 @@ POLL_INTERVAL = float(os.getenv("WORKER_POLL_INTERVAL", "5"))
 HEARTBEAT_INTERVAL = float(os.getenv("WORKER_HEARTBEAT_INTERVAL", "20"))
 # Short timeout for the small control-plane calls; the scrape itself is unbounded.
 CONTROL_TIMEOUT = aiohttp.ClientTimeout(total=15)
+TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
 
 
 class WorkerConfig:
@@ -67,6 +70,62 @@ class WorkerConfig:
         ]
         if missing:
             raise SystemExit(f"Missing required env: {', '.join(missing)}")
+
+
+class TraceBuffer:
+    def __init__(self) -> None:
+        self.started = monotonic()
+        self._events: list[dict[str, Any]] = []
+        self._pending: list[dict[str, Any]] = []
+        self._lock = Lock()
+        self._stage_started: dict[str, float] = {}
+        self._timings: dict[str, float] = {}
+
+    def add(
+        self,
+        stage: str,
+        message: str,
+        metrics: dict[str, Any] | None = None,
+        *,
+        level: str = "info",
+    ) -> None:
+        elapsed = round(monotonic() - self.started, 1)
+        metrics = dict(metrics or {})
+        if stage.endswith("_started"):
+            self._stage_started[stage.removesuffix("_started")] = elapsed
+        if stage.endswith("_done"):
+            key = stage.removesuffix("_done")
+            started = self._stage_started.get(key)
+            if started is not None:
+                self._timings[f"{key}_seconds"] = round(elapsed - started, 1)
+        for timing_key in ("scrape_seconds", "analysis_seconds", "postback_seconds"):
+            if isinstance(metrics.get(timing_key), (int, float)):
+                self._timings[timing_key] = round(float(metrics[timing_key]), 1)
+
+        event = {
+            "stage": stage,
+            "message": message,
+            "elapsed_seconds": elapsed,
+            "level": level,
+            "metrics": metrics,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        with self._lock:
+            self._events.append(event)
+            self._pending.append(event)
+
+    def drain(self) -> list[dict[str, Any]]:
+        with self._lock:
+            events = list(self._pending)
+            self._pending.clear()
+            return events
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return list(self._events)
+
+    def timings(self) -> dict[str, float]:
+        return dict(self._timings)
 
 
 def _failure_message(username: str, exc: Exception) -> str:
@@ -161,36 +220,62 @@ async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict
         return (await r.json()).get("job")
 
 
+async def _flush_trace(session: aiohttp.ClientSession, cfg: WorkerConfig, task_id: str, trace: TraceBuffer) -> None:
+    events = trace.drain()
+    if events:
+        await _post(session, cfg, f"/api/worker/scrape/{task_id}/event", {"events": events})
+
+
+async def _trace_flush_loop(session: aiohttp.ClientSession, cfg: WorkerConfig, task_id: str, trace: TraceBuffer) -> None:
+    while True:
+        await asyncio.sleep(TRACE_FLUSH_INTERVAL)
+        await _flush_trace(session, cfg, task_id, trace)
+
+
 async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
     task_id = job["task_id"]
     username = job["username"]
     started = monotonic()
+    trace = TraceBuffer()
+    trace.add("worker_received", "Worker received scrape job", {"username": username})
+    trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace))
     logger.info("Processing scrape job %s for @%s", task_id, username)
     try:
-        stats = await scrape_and_analyze(session, username)
+        stats = await scrape_and_analyze(session, username, trace_callback=trace.add)
     except Exception as exc:  # noqa: BLE001 — any failure must report back, not crash the loop
         message = _failure_message(username, exc)
         duration_seconds = round(monotonic() - started, 1)
         telemetry = _failure_telemetry(exc, duration_seconds)
+        telemetry["postback_seconds"] = 0.0
+        telemetry.update(trace.timings())
+        trace.add(telemetry["error_stage"], message, {"error_type": telemetry["error_type"]}, level="error")
+        trace.add("postback_started", "Posting failure to backend")
         logger.warning("Scrape job %s for @%s failed: %s", task_id, username, exc)
-        _persist_run(
-            username,
-            "desktop-worker",
-            {},
-            ok=False,
-            error_message=message,
-            duration_seconds=duration_seconds,
-            error_type=telemetry["error_type"],
-            error_stage=telemetry["error_stage"],
-            task_id=task_id,
+        await _flush_trace(session, cfg, task_id, trace)
+        trace_flush.cancel()
+        with suppress(asyncio.CancelledError):
+            await trace_flush
+        await _post(
+            session,
+            cfg,
+            f"/api/worker/scrape/{task_id}/failed",
+            {"message": message, "telemetry": telemetry, "trace_events": trace.snapshot()},
         )
-        await _post(session, cfg, f"/api/worker/scrape/{task_id}/failed", {"message": message, "telemetry": telemetry})
         return
 
     duration_seconds = round(monotonic() - started, 1)
-    telemetry = {"duration_seconds": duration_seconds}
-    _persist_run(username, "desktop-worker", stats, ok=True, duration_seconds=duration_seconds, task_id=task_id)
-    await _post(session, cfg, f"/api/worker/scrape/{task_id}/complete", {"stats": stats, "telemetry": telemetry})
+    trace.add("postback_started", "Posting result to backend")
+    telemetry = {"duration_seconds": duration_seconds, "postback_seconds": 0.0, **trace.timings()}
+    await _flush_trace(session, cfg, task_id, trace)
+    trace_flush.cancel()
+    with suppress(asyncio.CancelledError):
+        await trace_flush
+    await _post(
+        session,
+        cfg,
+        f"/api/worker/scrape/{task_id}/complete",
+        {"stats": stats, "telemetry": telemetry, "trace_events": trace.snapshot()},
+    )
     logger.info(
         "Completed scrape job %s for @%s (films=%s, duration=%ss)",
         task_id,

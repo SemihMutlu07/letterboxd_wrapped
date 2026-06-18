@@ -68,6 +68,61 @@
       </div>
     </div>
 
+    <!-- Timing grid -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Duration</p>
+        <p class="text-xl font-black text-white">{{ run.duration_seconds if run.duration_seconds is not none else "—" }}{% if run.duration_seconds is not none %}s{% endif %}</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Queue</p>
+        <p class="text-xl font-black text-white">{{ run.queue_wait_seconds if run.queue_wait_seconds is not none else "—" }}{% if run.queue_wait_seconds is not none %}s{% endif %}</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Worker</p>
+        <p class="text-xl font-black text-white">{{ run.worker_seconds if run.worker_seconds is not none else "—" }}{% if run.worker_seconds is not none %}s{% endif %}</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Scrape</p>
+        <p class="text-xl font-black text-white">{{ run.scrape_seconds if run.scrape_seconds is not none else "—" }}{% if run.scrape_seconds is not none %}s{% endif %}</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Analysis</p>
+        <p class="text-xl font-black text-white">{{ run.analysis_seconds if run.analysis_seconds is not none else "—" }}{% if run.analysis_seconds is not none %}s{% endif %}</p>
+      </div>
+    </div>
+
+    {% if run.ok is sameas false %}
+    <div class="bg-red-950/30 border border-red-500/20 rounded-xl p-4">
+      <p class="text-[10px] uppercase tracking-wider text-red-300 font-medium mb-1">{{ run.error_stage or "Error" }}</p>
+      <p class="text-sm text-red-100">{{ run.error_message or run.error_type or "Run failed." }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Timeline -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-800">
+        <h3 class="text-xs font-bold text-white">Step Timeline</h3>
+      </div>
+      <div class="divide-y divide-slate-800/70">
+        {% for event in run.trace_events or [] %}
+        <div class="px-4 py-3 grid grid-cols-[80px_140px_1fr] gap-3 items-start text-xs">
+          <div class="text-slate-500 tabular-nums">{{ event.elapsed_seconds if event.elapsed_seconds is not none else "—" }}{% if event.elapsed_seconds is not none %}s{% endif %}</div>
+          <div class="{% if event.level == 'error' %}text-red-300{% else %}text-orange-300{% endif %} font-medium">{{ event.stage }}</div>
+          <div>
+            <p class="text-slate-300">{{ event.message or "—" }}</p>
+            {% if event.metrics %}
+            <p class="text-slate-500 mt-1">{{ event.metrics }}</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        {% if not run.trace_events %}
+        <div class="px-4 py-6 text-center text-xs text-slate-600">No timeline events recorded for this run.</div>
+        {% endif %}
+      </div>
+    </div>
+
     <!-- Top lists -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <!-- Directors -->

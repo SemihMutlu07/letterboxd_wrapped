@@ -12,7 +12,7 @@ import re
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Callable, Optional
 from functools import partial
 from urllib.parse import urlencode
 import time
@@ -129,6 +129,19 @@ class ProfileScrapeSources:
     review_count: int = 0
     film_count: int = 0
     reviews: list[dict] = field(default_factory=list)
+
+
+TraceCallback = Callable[[str, str, Optional[dict[str, Any]]], None]
+
+
+def _trace(
+    trace_callback: Optional[TraceCallback],
+    stage: str,
+    message: str,
+    metrics: Optional[dict[str, Any]] = None,
+) -> None:
+    if trace_callback:
+        trace_callback(stage, message, metrics)
 
 BASE_URL = "https://letterboxd.com"
 HEADERS = {
@@ -374,6 +387,7 @@ def _sync_scrape_films_grid(
     username: str,
     max_pages: int,
     session: Optional[cloudscraper.CloudScraper] = None,
+    trace_callback: Optional[TraceCallback] = None,
 ) -> list[dict]:
     """Synchronous full-watched grid scraper.
 
@@ -417,6 +431,12 @@ def _sync_scrape_films_grid(
             soup = BeautifulSoup(r.text, "html.parser")
             films = _parse_grid_items(soup)
             logger.info("Grid page %d parsed %d films for %s", page, len(films), username)
+            _trace(
+                trace_callback,
+                "grid_page",
+                f"Grid page {page} parsed",
+                {"page": page, "films": len(films), "status_code": r.status_code},
+            )
             if not films:
                 has_griditem = bool(soup.select("li.griditem"))
                 has_poster_container = bool(soup.select("li.poster-container, div.poster-container"))
@@ -434,6 +454,7 @@ def _sync_scrape_films_grid(
             s.close()
 
     logger.info("Grid scrape complete for %s: %d films", username, len(all_films))
+    _trace(trace_callback, "grid_done", "Grid scrape completed", {"films": len(all_films)})
     return all_films
 
 
@@ -490,6 +511,7 @@ def _sync_scrape_diary(
     username: str,
     max_pages: int,
     session: Optional[cloudscraper.CloudScraper] = None,
+    trace_callback: Optional[TraceCallback] = None,
 ) -> list[dict]:
     """Synchronous diary scraper with session cookies."""
     owns_session = session is None
@@ -521,6 +543,12 @@ def _sync_scrape_diary(
             soup = BeautifulSoup(r.text, "html.parser")
             films = _parse_diary_rows(soup)
             logger.info("Diary page %d parsed %d films for %s", page, len(films), username)
+            _trace(
+                trace_callback,
+                "diary_page",
+                f"Diary page {page} parsed",
+                {"page": page, "films": len(films), "status_code": r.status_code},
+            )
 
             if not films:
                 break
@@ -532,6 +560,7 @@ def _sync_scrape_diary(
             s.close()
 
     logger.info("Diary scrape complete for %s: %d films", username, len(all_films))
+    _trace(trace_callback, "diary_done", "Diary scrape completed", {"films": len(all_films)})
     return all_films
 
 
@@ -625,6 +654,7 @@ def _sync_scrape_reviews(
     username: str,
     max_pages: int,
     session: Optional[cloudscraper.CloudScraper] = None,
+    trace_callback: Optional[TraceCallback] = None,
 ) -> list[dict]:
     """Single-pass scraper for /{username}/reviews/films/page/N/.
 
@@ -654,6 +684,12 @@ def _sync_scrape_reviews(
 
             soup = BeautifulSoup(r.text, "html.parser")
             reviews = _parse_review_cards(soup)
+            _trace(
+                trace_callback,
+                "reviews_page",
+                f"Reviews page {page} parsed",
+                {"page": page, "reviews": len(reviews), "status_code": r.status_code},
+            )
             if not reviews:
                 break
             all_reviews.extend(reviews)
@@ -663,6 +699,7 @@ def _sync_scrape_reviews(
             s.close()
 
     logger.info("Review scrape complete for %s: %d reviews", username, len(all_reviews))
+    _trace(trace_callback, "reviews_done", "Reviews scrape completed", {"reviews": len(all_reviews)})
     return all_reviews
 
 
@@ -670,6 +707,7 @@ def _sync_scrape_profile_sources(
     username: str,
     max_pages: int,
     include_reviews: bool = False,
+    trace_callback: Optional[TraceCallback] = None,
 ) -> ProfileScrapeSources:
     """Scrape diary and grid in one warmed requests session.
 
@@ -707,14 +745,27 @@ def _sync_scrape_profile_sources(
                             review_count = int(count_span.get_text(strip=True).replace(",", ""))
                         except ValueError:
                             pass
+                _trace(
+                    trace_callback,
+                    "overview",
+                    "Profile overview parsed",
+                    {"film_count": film_count, "review_count": review_count, "status_code": overview_resp.status_code},
+                )
         except Exception:
             pass  # non-fatal — counts are best-effort
-        diary = _sync_scrape_diary(username, max_pages, session=session)
-        grid = _sync_scrape_films_grid(username, max_pages, session=session)
+        if trace_callback:
+            diary = _sync_scrape_diary(username, max_pages, session=session, trace_callback=trace_callback)
+            grid = _sync_scrape_films_grid(username, max_pages, session=session, trace_callback=trace_callback)
+        else:
+            diary = _sync_scrape_diary(username, max_pages, session=session)
+            grid = _sync_scrape_films_grid(username, max_pages, session=session)
         reviews: list[dict] = []
         if include_reviews:
             try:
-                reviews = _sync_scrape_reviews(username, max_pages, session=session)
+                if trace_callback:
+                    reviews = _sync_scrape_reviews(username, max_pages, session=session, trace_callback=trace_callback)
+                else:
+                    reviews = _sync_scrape_reviews(username, max_pages, session=session)
             except Exception as exc:
                 # Reviews are best-effort — never fail the whole scrape because of them
                 logger.warning("Review scrape failed for %s: %s", username, exc)
@@ -785,11 +836,12 @@ async def scrape_profile_sources(
     username: str,
     max_pages: int = MAX_PAGES,
     include_reviews: bool = False,
+    trace_callback: Optional[TraceCallback] = None,
 ) -> ProfileScrapeSources:
     """Scrape diary and grid (and optionally reviews) with a shared requests session."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        None, partial(_sync_scrape_profile_sources, username, max_pages, include_reviews)
+        None, partial(_sync_scrape_profile_sources, username, max_pages, include_reviews, trace_callback)
     )
 
 

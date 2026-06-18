@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import re
 import shutil
 import uuid
 import zipfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -23,49 +21,11 @@ from app.services.scraper import ScraperAPIError
 from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
 from app.services.rss_source import RssError, fetch_rss_items
 from app.services.rss_preview import build_preview_stats
+from app.services.run_log import persist_run
 
 logger = logging.getLogger("letterboxd_wrapped.analyze")
 
 router = APIRouter()
-
-
-def _persist_run(
-    username: Optional[str],
-    source: str,
-    stats: dict,
-    ok: bool = True,
-    error_message: Optional[str] = None,
-    *,
-    duration_seconds: Optional[float] = None,
-    error_type: Optional[str] = None,
-    error_stage: Optional[str] = None,
-    task_id: Optional[str] = None,
-) -> None:
-    """Best-effort local run log under backend/runs/{username}-{iso-ts}.json."""
-    try:
-        runs_dir = Path("runs")
-        runs_dir.mkdir(parents=True, exist_ok=True)
-        safe_user = re.sub(r"[^a-z0-9_-]", "_", (username or "anon").lower()) or "anon"
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-        path = runs_dir / f"{safe_user}-{ts}.json"
-        payload = {
-            "username": username,
-            "source": source,
-            "timestamp": ts,
-            "ok": ok,
-            "error_message": error_message,
-            "error_type": error_type,
-            "error_stage": error_stage,
-            "duration_seconds": duration_seconds,
-            "task_id": task_id,
-            "total_films": stats.get("total_films"),
-            "sinefil_meter": stats.get("sinefil_meter"),
-            "stats": stats,
-        }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info("Persisted run: %s (source=%s, ok=%s, films=%s)", path, source, ok, payload["total_films"])
-    except Exception as exc:
-        logger.warning("Failed to persist run for %s: %s", username, exc)
 
 _REQUIRED_FILES = [
     "diary.csv", "ratings.csv", "watched.csv", "reviews.csv",
@@ -100,7 +60,7 @@ async def _run_analysis(
         task_manager.set_task_running(task_id)
         stats = await process_comprehensive_letterboxd_data(session, csv_files, task_id)
         task_manager.set_task_done(task_id, {"status": "success", "stats": stats})
-        _persist_run(username, "upload", stats, ok=True)
+        persist_run(username, "upload", stats, ok=True, task_id=task_id)
     except Exception as exc:
         task_manager.set_task_failed(task_id, str(exc))
     finally:
@@ -254,7 +214,7 @@ async def scrape_profile(request: Request):
             detail={"error_code": "scrape_failed", "message": f"Letterboxd returned an unexpected response for @{username}. (Debug: {type(exc).__name__}: {exc}) Try again later."},
         )
 
-    _persist_run(username, "scrape", stats, ok=True)
+    persist_run(username, "scrape", stats, ok=True)
     return {"status": "success", "stats": stats}
 
 
@@ -326,7 +286,7 @@ async def rss_preview(request: Request):
         for it in items
     ]
 
-    _persist_run(username, "rss-preview", stats, ok=True)
+    persist_run(username, "rss-preview", stats, ok=True)
 
     return {
         "status": "success",
@@ -353,6 +313,15 @@ async def get_task_progress(task_id: str):
         "total": task.total,
         "result": task.result,
         "error": task.error,
+        "duration_seconds": task.duration_seconds,
+        "queue_wait_seconds": task.queue_wait_seconds,
+        "worker_seconds": task.worker_seconds,
+        "scrape_seconds": task.scrape_seconds,
+        "analysis_seconds": task.analysis_seconds,
+        "postback_seconds": task.postback_seconds,
+        "error_type": task.error_type,
+        "error_stage": task.error_stage,
+        "trace_events": task.trace_events,
     }
 
 

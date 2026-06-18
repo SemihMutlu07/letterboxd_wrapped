@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import logging
 import shutil
+from time import monotonic
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services.scraper import (
@@ -46,7 +47,16 @@ class ScrapeAnalysisEmpty(Exception):
         )
 
 
-async def scrape_and_analyze(session, username: str, *, max_pages: int = 60) -> dict:
+TraceCallback = Callable[[str, str, Optional[dict[str, Any]]], None]
+
+
+async def scrape_and_analyze(
+    session,
+    username: str,
+    *,
+    max_pages: int = 60,
+    trace_callback: Optional[TraceCallback] = None,
+) -> dict:
     """Scrape a public profile and run the full analysis pipeline.
 
     Returns the stats dict (with scraped_* provenance fields) on success.
@@ -56,7 +66,29 @@ async def scrape_and_analyze(session, username: str, *, max_pages: int = 60) -> 
         ScrapeAnalysisEmpty — no usable films
         Exception          — any other unexpected failure
     """
-    sources = await scrape_profile_sources(username, max_pages=max_pages, include_reviews=True)
+    if trace_callback:
+        trace_callback("scrape_started", "Scrape started", {"username": username, "max_pages": max_pages})
+    scrape_started = monotonic()
+    sources = await scrape_profile_sources(
+        username,
+        max_pages=max_pages,
+        include_reviews=True,
+        trace_callback=trace_callback,
+    )
+    scrape_seconds = round(monotonic() - scrape_started, 1)
+    if trace_callback:
+        trace_callback(
+            "scrape_done",
+            "Scrape completed",
+            {
+                "scrape_seconds": scrape_seconds,
+                "diary": len(sources.diary),
+                "grid": len(sources.grid),
+                "reviews": len(sources.reviews),
+                "film_count": sources.film_count,
+                "review_count": sources.review_count,
+            },
+        )
 
     logger.info(
         "scrape_and_analyze: %s diary=%d grid=%d reviews=%d films=%d scraped_reviews=%d",
@@ -113,7 +145,13 @@ async def scrape_and_analyze(session, username: str, *, max_pages: int = 60) -> 
             pd.DataFrame(review_rows).to_csv(reviews_path, index=False)
             csv_files["reviews.csv"] = str(reviews_path)
 
+        if trace_callback:
+            trace_callback("analysis_started", "Analysis started", {"films": len(films)})
+        analysis_started = monotonic()
         stats = await process_comprehensive_letterboxd_data(session, csv_files)
+        analysis_seconds = round(monotonic() - analysis_started, 1)
+        if trace_callback:
+            trace_callback("analysis_done", "Analysis completed", {"analysis_seconds": analysis_seconds})
         stats["scraped_username"] = username
         stats["scraped_film_count"] = len(films)
         stats["scraped_diary_count"] = len(sources.diary)

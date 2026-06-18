@@ -22,11 +22,17 @@ class TaskState:
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
     duration_seconds: Optional[float] = None
+    queue_wait_seconds: Optional[float] = None
+    worker_seconds: Optional[float] = None
+    scrape_seconds: Optional[float] = None
+    analysis_seconds: Optional[float] = None
+    postback_seconds: Optional[float] = None
     error_type: Optional[str] = None
     error_stage: Optional[str] = None
     kind: str = "analyze"     # analyze | scrape
     username: Optional[str] = None
     claimed: bool = False     # scrape jobs: True once a worker has taken it
+    trace_events: list[Dict[str, Any]] = field(default_factory=list)
 
 
 _tasks: Dict[str, TaskState] = {}
@@ -48,13 +54,15 @@ def create_task_state() -> str:
 def create_scrape_job(username: str) -> str:
     """Queue a username scrape job for the desktop worker to claim."""
     task_id = str(uuid.uuid4())
-    _tasks[task_id] = TaskState(
+    task = TaskState(
         task_id=task_id,
         kind="scrape",
         username=username,
         stage="queued",
         message="Queued on desktop scraper",
     )
+    _tasks[task_id] = task
+    append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
     return task_id
 
 
@@ -73,7 +81,82 @@ def claim_next_scrape_job() -> Optional[TaskState]:
     job.stage = "scraping"
     job.message = "Desktop worker is reading Letterboxd"
     job.claimed_at = datetime.utcnow()
+    append_task_event(job.task_id, "claimed", "Desktop worker claimed the scrape job", level="info")
     return job
+
+
+def _seconds_between(start: Optional[datetime], end: Optional[datetime]) -> Optional[float]:
+    if start is None or end is None:
+        return None
+    return round((end - start).total_seconds(), 1)
+
+
+def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> None:
+    if not telemetry:
+        return
+    for field_name in (
+        "duration_seconds",
+        "queue_wait_seconds",
+        "worker_seconds",
+        "scrape_seconds",
+        "analysis_seconds",
+        "postback_seconds",
+        "error_type",
+        "error_stage",
+    ):
+        if field_name in telemetry:
+            setattr(task, field_name, telemetry.get(field_name))
+
+
+def _event_elapsed(task: TaskState) -> Optional[float]:
+    return _seconds_between(task.created_at, datetime.utcnow())
+
+
+def append_task_event(
+    task_id: str,
+    stage: str,
+    message: str,
+    *,
+    elapsed_seconds: Optional[float] = None,
+    level: str = "info",
+    metrics: Optional[Dict[str, Any]] = None,
+) -> None:
+    task = _tasks.get(task_id)
+    if not task:
+        return
+    task.trace_events.append(
+        {
+            "stage": stage,
+            "message": message,
+            "elapsed_seconds": elapsed_seconds if elapsed_seconds is not None else _event_elapsed(task),
+            "level": level,
+            "metrics": metrics or {},
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    )
+
+
+def append_task_event_payload(task_id: str, event: Dict[str, Any]) -> None:
+    task = _tasks.get(task_id)
+    if not task:
+        return
+    stage = str(event.get("stage") or "event")
+    message = str(event.get("message") or "")
+    elapsed = event.get("elapsed_seconds")
+    key = (stage, message, elapsed)
+    for existing in task.trace_events:
+        if (existing.get("stage"), existing.get("message"), existing.get("elapsed_seconds")) == key:
+            return
+    task.trace_events.append(
+        {
+            "stage": stage,
+            "message": message,
+            "elapsed_seconds": elapsed if isinstance(elapsed, (int, float)) else _event_elapsed(task),
+            "level": str(event.get("level") or "info"),
+            "metrics": event.get("metrics") if isinstance(event.get("metrics"), dict) else {},
+            "timestamp": str(event.get("timestamp") or datetime.utcnow().isoformat()),
+        }
+    )
 
 
 def record_worker_heartbeat() -> None:
@@ -153,9 +236,16 @@ def get_worker_status(max_age_seconds: int) -> Dict[str, Any]:
                 "message": t.message,
                 "created_at": t.created_at.isoformat(),
                 "claimed_at": _iso(t.claimed_at),
+                "elapsed_seconds": _seconds_between(t.created_at, now),
                 "duration_seconds": t.duration_seconds,
+                "queue_wait_seconds": t.queue_wait_seconds,
+                "worker_seconds": t.worker_seconds,
+                "scrape_seconds": t.scrape_seconds,
+                "analysis_seconds": t.analysis_seconds,
+                "postback_seconds": t.postback_seconds,
                 "error_type": t.error_type,
                 "error_stage": t.error_stage,
+                "latest_event": t.trace_events[-1] if t.trace_events else None,
             }
             for t in sorted(queued + running, key=lambda task: task.created_at)
         ][:10],
@@ -167,6 +257,8 @@ def get_worker_status(max_age_seconds: int) -> Dict[str, Any]:
                 "error_type": t.error_type,
                 "error_stage": t.error_stage,
                 "duration_seconds": t.duration_seconds,
+                "queue_wait_seconds": t.queue_wait_seconds,
+                "worker_seconds": t.worker_seconds,
                 "failed_at": _iso(t.failed_at),
             }
             for t in sorted(failed, key=lambda task: task.failed_at or task.created_at, reverse=True)
@@ -191,6 +283,7 @@ def update_task_progress(
         task.message = message
         task.progress = progress
         task.total = total
+        append_task_event(task_id, stage, message, metrics={"progress": progress, "total": total})
     print(f"📊 [{task_id[:8]}] {stage}: {message} ({progress}/{total})")
 
 
@@ -210,8 +303,10 @@ def set_task_done(task_id: str, result: Any, telemetry: Optional[Dict[str, Any]]
         task.progress = 100
         task.total = 100
         task.completed_at = datetime.utcnow()
-        if telemetry:
-            task.duration_seconds = telemetry.get("duration_seconds")
+        task.duration_seconds = _seconds_between(task.created_at, task.completed_at)
+        task.queue_wait_seconds = _seconds_between(task.created_at, task.claimed_at)
+        task.worker_seconds = _seconds_between(task.claimed_at, task.completed_at)
+        _apply_telemetry(task, telemetry)
 
 
 def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]] = None) -> None:
@@ -222,10 +317,10 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
         task.stage = "error"
         task.message = error
         task.failed_at = datetime.utcnow()
-        if telemetry:
-            task.duration_seconds = telemetry.get("duration_seconds")
-            task.error_type = telemetry.get("error_type")
-            task.error_stage = telemetry.get("error_stage")
+        task.duration_seconds = _seconds_between(task.created_at, task.failed_at)
+        task.queue_wait_seconds = _seconds_between(task.created_at, task.claimed_at)
+        task.worker_seconds = _seconds_between(task.claimed_at, task.failed_at)
+        _apply_telemetry(task, telemetry)
 
 
 async def cleanup_loop() -> None:

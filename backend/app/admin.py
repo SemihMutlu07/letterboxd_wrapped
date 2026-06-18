@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import task_manager
 from app.config import settings
+from app.services.run_log import RUNS_DIR
 
 logger = logging.getLogger("letterboxd_wrapped.admin")
 
@@ -26,7 +27,6 @@ templates = Jinja2Templates(directory="app/templates")
 
 ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "mw3169305")
 
-RUNS_DIR = Path("runs")
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 

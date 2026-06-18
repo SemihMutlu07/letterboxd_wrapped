@@ -14,6 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from app import task_manager
 from app.config import settings
+from app.services.run_log import persist_run
 
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
@@ -27,6 +28,27 @@ def _require_worker_token(x_worker_token: str | None) -> None:
             status_code=401,
             detail={"error_code": "unauthorized", "message": "Invalid or missing worker token."},
         )
+
+
+def _merge_worker_trace(task_id: str, body: dict) -> None:
+    events = body.get("trace_events")
+    if isinstance(events, list):
+        for event in events:
+            if isinstance(event, dict):
+                task_manager.append_task_event_payload(task_id, event)
+
+
+def _task_telemetry(task: task_manager.TaskState) -> dict:
+    return {
+        "duration_seconds": task.duration_seconds,
+        "queue_wait_seconds": task.queue_wait_seconds,
+        "worker_seconds": task.worker_seconds,
+        "scrape_seconds": task.scrape_seconds,
+        "analysis_seconds": task.analysis_seconds,
+        "postback_seconds": task.postback_seconds,
+        "error_type": task.error_type,
+        "error_stage": task.error_stage,
+    }
 
 
 @router.post("/heartbeat")
@@ -83,6 +105,37 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     return {"job": {"task_id": job.task_id, "username": job.username}}
 
 
+@router.post("/scrape/{task_id}/event")
+async def record_scrape_event(task_id: str, request: Request, x_worker_token: str | None = Header(default=None)):
+    """Append worker/scraper timeline events to the backend task state."""
+    _require_worker_token(x_worker_token)
+    task = task_manager.get_task_state(task_id)
+    if task is None or task.kind != "scrape":
+        raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Scrape job not found or expired."})
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_body", "message": "Body must be an object."})
+
+    events = body.get("events")
+    if isinstance(events, list):
+        for event in events:
+            if isinstance(event, dict):
+                task_manager.append_task_event_payload(task_id, event)
+    else:
+        stage = str(body.get("stage") or "").strip()
+        if not stage:
+            raise HTTPException(status_code=400, detail={"error_code": "invalid_event", "message": "Body must include a stage."})
+        task_manager.append_task_event(
+            task_id,
+            stage,
+            str(body.get("message") or ""),
+            elapsed_seconds=body.get("elapsed_seconds") if isinstance(body.get("elapsed_seconds"), (int, float)) else None,
+            level=str(body.get("level") or "info"),
+            metrics=body.get("metrics") if isinstance(body.get("metrics"), dict) else None,
+        )
+    return {"ok": True}
+
+
 @router.post("/scrape/{task_id}/complete")
 async def complete_scrape(task_id: str, request: Request, x_worker_token: str | None = Header(default=None)):
     """Store final stats for a scrape job so /api/progress/{task_id} returns done."""
@@ -95,11 +148,25 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
     if not isinstance(stats, dict):
         raise HTTPException(status_code=400, detail={"error_code": "invalid_stats", "message": "Body must include a stats object."})
     telemetry = body.get("telemetry")
+    _merge_worker_trace(task_id, body)
+    task_manager.append_task_event(task_id, "completed", "Worker posted final stats", level="info")
     task_manager.set_task_done(
         task_id,
         {"status": "success", "stats": stats},
         telemetry if isinstance(telemetry, dict) else None,
     )
+    task = task_manager.get_task_state(task_id)
+    if task:
+        task_manager.append_task_event(task_id, "persisted", "Run log persisted on backend", level="info")
+        persist_run(
+            task.username,
+            "desktop-worker",
+            stats,
+            ok=True,
+            task_id=task_id,
+            trace_events=task.trace_events,
+            telemetry=_task_telemetry(task),
+        )
     logger.info("Worker completed scrape job %s", task_id)
     return {"ok": True}
 
@@ -114,6 +181,22 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
     body = await request.json()
     message = str(body.get("message") or "Desktop worker failed to scrape this profile.")
     telemetry = body.get("telemetry")
+    _merge_worker_trace(task_id, body)
+    error_stage = telemetry.get("error_stage") if isinstance(telemetry, dict) else None
+    task_manager.append_task_event(task_id, error_stage or "failed", message, level="error")
     task_manager.set_task_failed(task_id, message, telemetry if isinstance(telemetry, dict) else None)
+    task = task_manager.get_task_state(task_id)
+    if task:
+        task_manager.append_task_event(task_id, "persisted", "Failure run log persisted on backend", level="info")
+        persist_run(
+            task.username,
+            "desktop-worker",
+            {},
+            ok=False,
+            error_message=message,
+            task_id=task_id,
+            trace_events=task.trace_events,
+            telemetry=_task_telemetry(task),
+        )
     logger.warning("Worker reported scrape job %s failed: %s", task_id, message)
     return {"ok": True}

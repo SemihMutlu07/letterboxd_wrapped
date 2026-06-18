@@ -26,16 +26,17 @@ async def test_process_job_posts_success():
 
     with (
         patch.object(worker, "scrape_and_analyze", new=AsyncMock(return_value=stats)),
-        patch.object(worker, "_persist_run"),
         patch.object(worker, "_post", new=AsyncMock()) as mock_post,
     ):
         await worker._process_job(object(), _cfg(), job)
 
-    mock_post.assert_awaited_once()
-    args = mock_post.await_args.args
+    assert mock_post.await_count == 2
+    args = mock_post.await_args_list[-1].args
     assert args[2] == "/api/worker/scrape/abc/complete"
     assert args[3]["stats"] == stats
     assert "duration_seconds" in args[3]["telemetry"]
+    assert args[3]["trace_events"][0]["stage"] == "worker_received"
+    assert args[3]["trace_events"][-1]["stage"] == "postback_started"
 
 
 @pytest.mark.asyncio
@@ -44,17 +45,18 @@ async def test_process_job_posts_failure_on_exception():
 
     with (
         patch.object(worker, "scrape_and_analyze", new=AsyncMock(side_effect=ScrapeAnalysisEmpty("semihmutsuz", scraper_ok=False))),
-        patch.object(worker, "_persist_run"),
         patch.object(worker, "_post", new=AsyncMock()) as mock_post,
     ):
         await worker._process_job(object(), _cfg(), job)
 
-    mock_post.assert_awaited_once()
-    args = mock_post.await_args.args
+    assert mock_post.await_count == 2
+    args = mock_post.await_args_list[-1].args
     assert args[2] == "/api/worker/scrape/abc/failed"
     assert "No public films found" in args[3]["message"]
     assert args[3]["telemetry"]["error_type"] == "ScrapeAnalysisEmpty"
     assert args[3]["telemetry"]["error_stage"] == "scrape_empty"
+    assert args[3]["trace_events"][0]["stage"] == "worker_received"
+    assert args[3]["trace_events"][-1]["stage"] == "postback_started"
 
 
 def test_failure_message_mapping():
