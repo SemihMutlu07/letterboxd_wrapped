@@ -34,7 +34,8 @@ async def test_process_job_posts_success():
     mock_post.assert_awaited_once()
     args = mock_post.await_args.args
     assert args[2] == "/api/worker/scrape/abc/complete"
-    assert args[3] == {"stats": stats}
+    assert args[3]["stats"] == stats
+    assert "duration_seconds" in args[3]["telemetry"]
 
 
 @pytest.mark.asyncio
@@ -52,9 +53,20 @@ async def test_process_job_posts_failure_on_exception():
     args = mock_post.await_args.args
     assert args[2] == "/api/worker/scrape/abc/failed"
     assert "No public films found" in args[3]["message"]
+    assert args[3]["telemetry"]["error_type"] == "ScrapeAnalysisEmpty"
+    assert args[3]["telemetry"]["error_stage"] == "scrape_empty"
 
 
 def test_failure_message_mapping():
     assert "No public films" in worker._failure_message("u", ScrapeAnalysisEmpty("u", scraper_ok=False))
     assert "analysis came back empty" in worker._failure_message("u", ScrapeAnalysisEmpty("u", scraper_ok=True))
     assert worker._failure_message("u", ValueError("Letterboxd is blocking requests")) == "Letterboxd is blocking requests"
+
+
+def test_failure_telemetry_mapping():
+    telemetry = worker._failure_telemetry(ScrapeAnalysisEmpty("u", scraper_ok=True), 1.2)
+    assert telemetry == {
+        "duration_seconds": 1.2,
+        "error_type": "ScrapeAnalysisEmpty",
+        "error_stage": "analysis_empty",
+    }

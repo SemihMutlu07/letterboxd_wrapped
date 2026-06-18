@@ -18,6 +18,12 @@ class TaskState:
     result: Optional[Any] = None
     error: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.utcnow)
+    claimed_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    error_type: Optional[str] = None
+    error_stage: Optional[str] = None
     kind: str = "analyze"     # analyze | scrape
     username: Optional[str] = None
     claimed: bool = False     # scrape jobs: True once a worker has taken it
@@ -66,6 +72,7 @@ def claim_next_scrape_job() -> Optional[TaskState]:
     job.status = "running"
     job.stage = "scraping"
     job.message = "Desktop worker is reading Letterboxd"
+    job.claimed_at = datetime.utcnow()
     return job
 
 
@@ -145,8 +152,24 @@ def get_worker_status(max_age_seconds: int) -> Dict[str, Any]:
                 "stage": t.stage,
                 "message": t.message,
                 "created_at": t.created_at.isoformat(),
+                "claimed_at": _iso(t.claimed_at),
+                "duration_seconds": t.duration_seconds,
+                "error_type": t.error_type,
+                "error_stage": t.error_stage,
             }
             for t in sorted(queued + running, key=lambda task: task.created_at)
+        ][:10],
+        "recent_failures": [
+            {
+                "task_id": t.task_id,
+                "username": t.username,
+                "message": t.error or t.message,
+                "error_type": t.error_type,
+                "error_stage": t.error_stage,
+                "duration_seconds": t.duration_seconds,
+                "failed_at": _iso(t.failed_at),
+            }
+            for t in sorted(failed, key=lambda task: task.failed_at or task.created_at, reverse=True)
         ][:10],
     }
 
@@ -177,7 +200,7 @@ def set_task_running(task_id: str) -> None:
         task.status = "running"
 
 
-def set_task_done(task_id: str, result: Any) -> None:
+def set_task_done(task_id: str, result: Any, telemetry: Optional[Dict[str, Any]] = None) -> None:
     task = _tasks.get(task_id)
     if task:
         task.status = "done"
@@ -186,15 +209,23 @@ def set_task_done(task_id: str, result: Any) -> None:
         task.message = "Analysis complete!"
         task.progress = 100
         task.total = 100
+        task.completed_at = datetime.utcnow()
+        if telemetry:
+            task.duration_seconds = telemetry.get("duration_seconds")
 
 
-def set_task_failed(task_id: str, error: str) -> None:
+def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]] = None) -> None:
     task = _tasks.get(task_id)
     if task:
         task.status = "failed"
         task.error = error
         task.stage = "error"
         task.message = error
+        task.failed_at = datetime.utcnow()
+        if telemetry:
+            task.duration_seconds = telemetry.get("duration_seconds")
+            task.error_type = telemetry.get("error_type")
+            task.error_stage = telemetry.get("error_stage")
 
 
 async def cleanup_loop() -> None:

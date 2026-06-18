@@ -82,6 +82,24 @@ def _failure_message(username: str, exc: Exception) -> str:
     return f"Letterboxd returned an unexpected response for @{username}. Please try again later."
 
 
+def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
+    """Classify failures enough for the admin dashboard and future fix loops."""
+    if isinstance(exc, ScraperAPIError):
+        error_stage = "scraper_api"
+    elif isinstance(exc, ScrapeAnalysisEmpty):
+        error_stage = "analysis_empty" if exc.scraper_ok else "scrape_empty"
+    elif isinstance(exc, ValueError):
+        error_stage = "letterboxd_or_scrape"
+    else:
+        error_stage = "pipeline_unexpected"
+
+    return {
+        "duration_seconds": duration_seconds,
+        "error_type": type(exc).__name__,
+        "error_stage": error_stage,
+    }
+
+
 async def _heartbeat_loop(session: aiohttp.ClientSession, cfg: WorkerConfig) -> None:
     while True:
         try:
@@ -146,19 +164,40 @@ async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict
 async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
     task_id = job["task_id"]
     username = job["username"]
+    started = monotonic()
     logger.info("Processing scrape job %s for @%s", task_id, username)
     try:
         stats = await scrape_and_analyze(session, username)
     except Exception as exc:  # noqa: BLE001 — any failure must report back, not crash the loop
         message = _failure_message(username, exc)
+        duration_seconds = round(monotonic() - started, 1)
+        telemetry = _failure_telemetry(exc, duration_seconds)
         logger.warning("Scrape job %s for @%s failed: %s", task_id, username, exc)
-        _persist_run(username, "desktop-worker", {}, ok=False, error_message=message)
-        await _post(session, cfg, f"/api/worker/scrape/{task_id}/failed", {"message": message})
+        _persist_run(
+            username,
+            "desktop-worker",
+            {},
+            ok=False,
+            error_message=message,
+            duration_seconds=duration_seconds,
+            error_type=telemetry["error_type"],
+            error_stage=telemetry["error_stage"],
+            task_id=task_id,
+        )
+        await _post(session, cfg, f"/api/worker/scrape/{task_id}/failed", {"message": message, "telemetry": telemetry})
         return
 
-    _persist_run(username, "desktop-worker", stats, ok=True)
-    await _post(session, cfg, f"/api/worker/scrape/{task_id}/complete", {"stats": stats})
-    logger.info("Completed scrape job %s for @%s (films=%s)", task_id, username, stats.get("total_films"))
+    duration_seconds = round(monotonic() - started, 1)
+    telemetry = {"duration_seconds": duration_seconds}
+    _persist_run(username, "desktop-worker", stats, ok=True, duration_seconds=duration_seconds, task_id=task_id)
+    await _post(session, cfg, f"/api/worker/scrape/{task_id}/complete", {"stats": stats, "telemetry": telemetry})
+    logger.info(
+        "Completed scrape job %s for @%s (films=%s, duration=%ss)",
+        task_id,
+        username,
+        stats.get("total_films"),
+        duration_seconds,
+    )
 
 
 async def _post(session: aiohttp.ClientSession, cfg: WorkerConfig, path: str, payload: dict) -> None:

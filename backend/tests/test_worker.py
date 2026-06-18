@@ -179,7 +179,11 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     await client.get("/api/worker/scrape/next", headers=AUTH)
 
     stats = {"total_films": 394, "scraped_username": "semihmutsuz"}
-    done = await client.post(f"/api/worker/scrape/{task_id}/complete", headers=AUTH, json={"stats": stats})
+    done = await client.post(
+        f"/api/worker/scrape/{task_id}/complete",
+        headers=AUTH,
+        json={"stats": stats, "telemetry": {"duration_seconds": 12.3}},
+    )
     assert done.status_code == 200
 
     prog = await client.get(f"/api/progress/{task_id}")
@@ -187,6 +191,7 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     assert body["status"] == "done"
     assert body["result"]["status"] == "success"
     assert body["result"]["stats"]["total_films"] == 394
+    assert task_manager.get_task_state(task_id).duration_seconds == 12.3
 
 
 @pytest.mark.asyncio
@@ -198,7 +203,15 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     fail = await client.post(
         f"/api/worker/scrape/{task_id}/failed",
         headers=AUTH,
-        json={"error_code": "scrape_failed", "message": "Letterboxd blocked the desktop worker."},
+        json={
+            "error_code": "scrape_failed",
+            "message": "Letterboxd blocked the desktop worker.",
+            "telemetry": {
+                "duration_seconds": 7.8,
+                "error_type": "ValueError",
+                "error_stage": "letterboxd_or_scrape",
+            },
+        },
     )
     assert fail.status_code == 200
 
@@ -206,6 +219,10 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     body = prog.json()
     assert body["status"] == "failed"
     assert body["error"] == "Letterboxd blocked the desktop worker."
+    task = task_manager.get_task_state(task_id)
+    assert task.duration_seconds == 7.8
+    assert task.error_type == "ValueError"
+    assert task.error_stage == "letterboxd_or_scrape"
 
 
 @pytest.mark.asyncio

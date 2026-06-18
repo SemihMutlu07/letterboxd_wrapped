@@ -46,7 +46,7 @@
 
     <!-- WORKER TAB -->
     <div id="panel-worker" class="space-y-6 hidden">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Desktop Worker</p>
           <p id="worker-online" class="text-2xl font-black {% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-600{% endif %}">
@@ -64,6 +64,14 @@
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Running Jobs</p>
           <p id="worker-running" class="text-2xl font-black text-white">{{ worker_status.queue.running }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Completed</p>
+          <p id="worker-completed" class="text-2xl font-black text-emerald-400">{{ worker_status.queue.completed }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Failed</p>
+          <p id="worker-failed" class="text-2xl font-black {% if worker_status.queue.failed > 0 %}text-red-400{% else %}text-slate-600{% endif %}">{{ worker_status.queue.failed }}</p>
         </div>
       </div>
 
@@ -123,6 +131,37 @@
           </table>
         </div>
       </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Recent Worker Failures</h2>
+          <span class="text-[10px] text-slate-500">In-memory, last 10</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Task</th><th class="text-left px-4 py-2 font-medium">User</th>
+              <th class="text-left px-4 py-2 font-medium">Stage</th><th class="text-left px-4 py-2 font-medium">Type</th>
+              <th class="text-right px-4 py-2 font-medium">Duration</th><th class="text-left px-4 py-2 font-medium">Error</th>
+            </tr></thead>
+            <tbody id="worker-failures">
+              {% for failure in worker_status.recent_failures %}
+              <tr class="border-b border-slate-800/50">
+                <td class="px-4 py-2.5 text-slate-500 font-mono">{{ failure.task_id[:8] }}</td>
+                <td class="px-4 py-2.5 text-orange-400">@{{ failure.username }}</td>
+                <td class="px-4 py-2.5 text-red-300">{{ failure.error_stage or "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ failure.error_type or "—" }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ failure.duration_seconds if failure.duration_seconds is not none else "—" }}s</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ failure.message }}</td>
+              </tr>
+              {% endfor %}
+              {% if not worker_status.recent_failures %}
+              <tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No worker failures in memory.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ANALYSIS TAB -->
@@ -155,6 +194,7 @@
             <thead><tr class="text-slate-500 border-b border-slate-800">
               <th class="text-left px-4 py-2 font-medium">User</th><th class="text-left px-4 py-2 font-medium">Source</th>
               <th class="text-right px-4 py-2 font-medium">Films</th><th class="text-right px-4 py-2 font-medium">Score</th>
+              <th class="text-right px-4 py-2 font-medium">Duration</th><th class="text-left px-4 py-2 font-medium">Error</th>
               <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
             </tr></thead>
             <tbody>
@@ -166,6 +206,8 @@
                 <td class="px-4 py-2.5 text-slate-400">{{ run.source }}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.total_films or "—" }}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.sinefil_meter.score if run.sinefil_meter else "—" }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.duration_seconds if run.duration_seconds is not none else "—" }}{% if run.duration_seconds is not none %}s{% endif %}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ run.error_stage or run.error_type or run.error_message or "—" }}</td>
                 <td class="px-4 py-2.5 text-slate-500">{{ run._mtime[:16].replace("T", " ") }}</td>
                 <td class="px-4 py-2.5 text-center">
                   {% if run.ok is sameas false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
@@ -286,6 +328,25 @@
       `).join('');
     }
 
+    function renderWorkerFailures(failures) {
+      const tbody = document.getElementById('worker-failures');
+      if (!tbody) return;
+      if (!failures || failures.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No worker failures in memory.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = failures.map(failure => `
+        <tr class="border-b border-slate-800/50">
+          <td class="px-4 py-2.5 text-slate-500 font-mono">${failure.task_id.slice(0, 8)}</td>
+          <td class="px-4 py-2.5 text-orange-400">@${failure.username || '—'}</td>
+          <td class="px-4 py-2.5 text-red-300">${failure.error_stage || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-300">${failure.error_type || '—'}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${failure.duration_seconds ?? '—'}${failure.duration_seconds !== null && failure.duration_seconds !== undefined ? 's' : ''}</td>
+          <td class="px-4 py-2.5 text-slate-400">${failure.message || '—'}</td>
+        </tr>
+      `).join('');
+    }
+
     async function refreshWorkerStatus() {
       if (!adminKey) return;
       try {
@@ -306,6 +367,11 @@
           status.heartbeat_age_seconds === null || status.heartbeat_age_seconds === undefined ? '—' : `${status.heartbeat_age_seconds}s`;
         document.getElementById('worker-queued').textContent = status.queue?.queued ?? 0;
         document.getElementById('worker-running').textContent = status.queue?.running ?? 0;
+        document.getElementById('worker-completed').textContent = status.queue?.completed ?? 0;
+        const failedCount = status.queue?.failed ?? 0;
+        const failedNode = document.getElementById('worker-failed');
+        failedNode.textContent = failedCount;
+        failedNode.className = `text-2xl font-black ${failedCount > 0 ? 'text-red-400' : 'text-slate-600'}`;
         document.getElementById('worker-started').textContent = shortTime(status.last_started_at);
         document.getElementById('worker-heartbeat').textContent = shortTime(status.last_heartbeat);
         document.getElementById('worker-shutdown').textContent = shortTime(status.last_shutdown_at);
@@ -318,6 +384,7 @@
         document.getElementById('worker-self-test-time').textContent = shortTime(selfTest?.reported_at);
         document.getElementById('worker-self-test-message').textContent = selfTest?.message || '—';
         renderWorkerJobs(status.current_jobs);
+        renderWorkerFailures(status.recent_failures);
       } catch (error) {
         console.warn('Worker status refresh failed', error);
       }

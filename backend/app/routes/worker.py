@@ -94,7 +94,12 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
     stats = body.get("stats")
     if not isinstance(stats, dict):
         raise HTTPException(status_code=400, detail={"error_code": "invalid_stats", "message": "Body must include a stats object."})
-    task_manager.set_task_done(task_id, {"status": "success", "stats": stats})
+    telemetry = body.get("telemetry")
+    task_manager.set_task_done(
+        task_id,
+        {"status": "success", "stats": stats},
+        telemetry if isinstance(telemetry, dict) else None,
+    )
     logger.info("Worker completed scrape job %s", task_id)
     return {"ok": True}
 
@@ -108,6 +113,7 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Scrape job not found or expired."})
     body = await request.json()
     message = str(body.get("message") or "Desktop worker failed to scrape this profile.")
-    task_manager.set_task_failed(task_id, message)
+    telemetry = body.get("telemetry")
+    task_manager.set_task_failed(task_id, message, telemetry if isinstance(telemetry, dict) else None)
     logger.warning("Worker reported scrape job %s failed: %s", task_id, message)
     return {"ok": True}

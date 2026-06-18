@@ -29,7 +29,18 @@ logger = logging.getLogger("letterboxd_wrapped.analyze")
 router = APIRouter()
 
 
-def _persist_run(username: Optional[str], source: str, stats: dict, ok: bool = True, error_message: Optional[str] = None) -> None:
+def _persist_run(
+    username: Optional[str],
+    source: str,
+    stats: dict,
+    ok: bool = True,
+    error_message: Optional[str] = None,
+    *,
+    duration_seconds: Optional[float] = None,
+    error_type: Optional[str] = None,
+    error_stage: Optional[str] = None,
+    task_id: Optional[str] = None,
+) -> None:
     """Best-effort local run log under backend/runs/{username}-{iso-ts}.json."""
     try:
         runs_dir = Path("runs")
@@ -43,6 +54,10 @@ def _persist_run(username: Optional[str], source: str, stats: dict, ok: bool = T
             "timestamp": ts,
             "ok": ok,
             "error_message": error_message,
+            "error_type": error_type,
+            "error_stage": error_stage,
+            "duration_seconds": duration_seconds,
+            "task_id": task_id,
             "total_films": stats.get("total_films"),
             "sinefil_meter": stats.get("sinefil_meter"),
             "stats": stats,
