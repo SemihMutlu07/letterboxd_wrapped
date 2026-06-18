@@ -159,9 +159,11 @@ def append_task_event_payload(task_id: str, event: Dict[str, Any]) -> None:
     )
 
 
-def record_worker_heartbeat() -> None:
-    global _last_worker_heartbeat
+def record_worker_heartbeat(meta: Optional[Dict[str, Any]] = None) -> None:
+    global _last_worker_heartbeat, _last_worker_meta
     _last_worker_heartbeat = datetime.utcnow()
+    if meta:
+        _last_worker_meta = {**_last_worker_meta, **meta}
 
 
 def record_worker_startup(meta: Optional[Dict[str, Any]] = None) -> None:
@@ -192,7 +194,25 @@ def is_worker_online(max_age_seconds: int) -> bool:
     return (datetime.utcnow() - _last_worker_heartbeat) <= timedelta(seconds=max_age_seconds)
 
 
-def get_worker_status(max_age_seconds: int) -> Dict[str, Any]:
+def get_worker_version_status(expected_protocol_version: int, backend_git_sha: Optional[str] = None) -> Dict[str, Any]:
+    worker_protocol = _last_worker_meta.get("worker_protocol_version")
+    try:
+        worker_protocol_int = int(worker_protocol) if worker_protocol is not None else None
+    except (TypeError, ValueError):
+        worker_protocol_int = None
+    protocol_match = worker_protocol_int == expected_protocol_version
+    return {
+        "expected_protocol_version": expected_protocol_version,
+        "worker_protocol_version": worker_protocol_int,
+        "protocol_match": protocol_match,
+        "worker_git_sha": _last_worker_meta.get("worker_git_sha"),
+        "worker_branch": _last_worker_meta.get("worker_branch"),
+        "backend_git_sha": backend_git_sha,
+        "mismatch": not protocol_match,
+    }
+
+
+def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 1, backend_git_sha: Optional[str] = None) -> Dict[str, Any]:
     now = datetime.utcnow()
     heartbeat_age_seconds = (
         round((now - _last_worker_heartbeat).total_seconds(), 1)
@@ -220,6 +240,7 @@ def get_worker_status(max_age_seconds: int) -> Dict[str, Any]:
         "last_started_at": _iso(_last_worker_started_at),
         "last_shutdown_at": _iso(_last_worker_shutdown_at),
         "meta": dict(_last_worker_meta),
+        "version": get_worker_version_status(expected_protocol_version, backend_git_sha),
         "self_test": self_test,
         "queue": {
             "queued": len(queued),

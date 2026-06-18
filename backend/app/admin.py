@@ -31,6 +31,10 @@ WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 
 
+def _backend_git_sha() -> str | None:
+    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
+
+
 def _require_admin(request: Request) -> None:
     key = request.query_params.get("key") or request.headers.get("x-admin-key")
     if key != ADMIN_SECRET:
@@ -66,7 +70,11 @@ async def admin_dashboard(request: Request):
     runs = _load_json_dir(RUNS_DIR, limit=50)
     watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
     date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
-    worker_status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
+    worker_status = task_manager.get_worker_status(
+        settings.worker_heartbeat_max_age_seconds,
+        expected_protocol_version=settings.worker_protocol_version,
+        backend_git_sha=_backend_git_sha(),
+    )
     return templates.TemplateResponse(
         "admin_dashboard.html",
         {
@@ -112,5 +120,9 @@ async def admin_api_worker(request: Request):
     _require_admin(request)
     return {
         "enabled": settings.desktop_worker_enabled,
-        "status": task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds),
+        "status": task_manager.get_worker_status(
+            settings.worker_heartbeat_max_age_seconds,
+            expected_protocol_version=settings.worker_protocol_version,
+            backend_git_sha=_backend_git_sha(),
+        ),
     }

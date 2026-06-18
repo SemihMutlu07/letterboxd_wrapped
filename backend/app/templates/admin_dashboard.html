@@ -83,6 +83,14 @@
             <dt class="text-slate-500">Heartbeat</dt><dd id="worker-heartbeat" class="text-slate-300">{{ worker_status.last_heartbeat or "—" }}</dd>
             <dt class="text-slate-500">Shutdown</dt><dd id="worker-shutdown" class="text-slate-300">{{ worker_status.last_shutdown_at or "—" }}</dd>
             <dt class="text-slate-500">Backend</dt><dd class="text-slate-300">{% if worker_enabled %}Worker mode enabled{% else %}Worker mode disabled{% endif %}</dd>
+            <dt class="text-slate-500">Version</dt>
+            <dd id="worker-version" class="{% if worker_status.version.mismatch %}text-red-300{% else %}text-slate-300{% endif %}">
+              backend {{ worker_status.version.backend_git_sha or "unknown" }} · worker {{ worker_status.version.worker_git_sha or "unknown" }}
+            </dd>
+            <dt class="text-slate-500">Protocol</dt>
+            <dd id="worker-protocol" class="{% if worker_status.version.mismatch %}text-red-300{% else %}text-emerald-300{% endif %}">
+              {% if worker_status.version.mismatch %}Mismatch{% else %}OK{% endif %} (expected {{ worker_status.version.expected_protocol_version }}, worker {{ worker_status.version.worker_protocol_version or "—" }})
+            </dd>
           </dl>
         </div>
 
@@ -172,19 +180,19 @@
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Analysis Runs</p>
-          <p class="text-2xl font-black text-white">{{ runs|length }}</p>
+          <p id="analysis-count" class="text-2xl font-black text-white">{{ runs|length }}</p>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Success</p>
-          <p class="text-2xl font-black text-emerald-400">{{ runs | selectattr("ok", "sameas", true) | list | length }}</p>
+          <p id="analysis-success-count" class="text-2xl font-black text-emerald-400">{{ runs | selectattr("ok", "sameas", true) | list | length }}</p>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Failed</p>
-          <p class="text-2xl font-black {% if runs | selectattr("ok", "sameas", false) | list | length > 0 %}text-red-400{% else %}text-slate-600{% endif %}">{{ runs | selectattr("ok", "sameas", false) | list | length }}</p>
+          <p id="analysis-failed-count" class="text-2xl font-black {% if runs | selectattr("ok", "sameas", false) | list | length > 0 %}text-red-400{% else %}text-slate-600{% endif %}">{{ runs | selectattr("ok", "sameas", false) | list | length }}</p>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Avg Films</p>
-          <p class="text-2xl font-black text-white">{% set ns = namespace(total=0, count=0) %}{% for run in runs %}{% if run.total_films is not none %}{% set ns.total = ns.total + run.total_films %}{% set ns.count = ns.count + 1 %}{% endif %}{% endfor %}{% if ns.count > 0 %}{{ (ns.total / ns.count) | round(1) }}{% else %}—{% endif %}</p>
+          <p id="analysis-avg-films" class="text-2xl font-black text-white">{% set ns = namespace(total=0, count=0) %}{% for run in runs %}{% if run.total_films is not none %}{% set ns.total = ns.total + run.total_films %}{% set ns.count = ns.count + 1 %}{% endif %}{% endfor %}{% if ns.count > 0 %}{{ (ns.total / ns.count) | round(1) }}{% else %}—{% endif %}</p>
         </div>
       </div>
 
@@ -202,7 +210,7 @@
               <th class="text-left px-4 py-2 font-medium">Error Stage</th>
               <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
             </tr></thead>
-            <tbody>
+            <tbody id="analysis-runs">
               {% for run in runs[:50] %}
               <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
                 <td class="px-4 py-2.5">
@@ -318,6 +326,69 @@
       return value ? value.replace('T', ' ').slice(0, 19) : '—';
     }
 
+    function escapeHtml(value) {
+      return String(value ?? '—')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function fmtSeconds(value) {
+      return value === null || value === undefined ? '—' : `${value}s`;
+    }
+
+    function updateAnalysisCards(runs) {
+      const success = runs.filter(run => run.ok !== false).length;
+      const failed = runs.filter(run => run.ok === false).length;
+      const filmCounts = runs.map(run => run.total_films).filter(value => typeof value === 'number');
+      const avgFilms = filmCounts.length
+        ? (filmCounts.reduce((sum, value) => sum + value, 0) / filmCounts.length).toFixed(1)
+        : '—';
+      document.getElementById('analysis-count').textContent = runs.length;
+      document.getElementById('analysis-success-count').textContent = success;
+      const failedNode = document.getElementById('analysis-failed-count');
+      failedNode.textContent = failed;
+      failedNode.className = `text-2xl font-black ${failed > 0 ? 'text-red-400' : 'text-slate-600'}`;
+      document.getElementById('analysis-avg-films').textContent = avgFilms;
+    }
+
+    function renderAnalysisRuns(runs) {
+      const tbody = document.getElementById('analysis-runs');
+      if (!tbody) return;
+      updateAnalysisCards(runs || []);
+      if (!runs || runs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="px-4 py-6 text-center text-slate-600">No analysis runs recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = runs.slice(0, 50).map(run => {
+        const status = run.ok === false
+          ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>'
+          : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>';
+        const score = run.sinefil_meter?.score ?? '—';
+        const error = run.error_stage || run.error_type || run.error_message || '—';
+        const filename = encodeURIComponent(run._filename || '');
+        return `
+          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+            <td class="px-4 py-2.5">
+              <a href="/admin/run/${filename}?key=${encodeURIComponent(adminKey || '')}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
+            </td>
+            <td class="px-4 py-2.5 text-slate-400">${escapeHtml(run.source)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.total_films ?? '—'}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${escapeHtml(score)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.duration_seconds)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.queue_wait_seconds)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.scrape_seconds)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.analysis_seconds)}</td>
+            <td class="px-4 py-2.5 text-slate-400">${escapeHtml(error)}</td>
+            <td class="px-4 py-2.5 text-slate-500">${shortTime(run._mtime)}</td>
+            <td class="px-4 py-2.5 text-center">${status}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     function renderWorkerJobs(jobs) {
       const tbody = document.getElementById('worker-jobs');
       if (!tbody) return;
@@ -385,6 +456,13 @@
         document.getElementById('worker-started').textContent = shortTime(status.last_started_at);
         document.getElementById('worker-heartbeat').textContent = shortTime(status.last_heartbeat);
         document.getElementById('worker-shutdown').textContent = shortTime(status.last_shutdown_at);
+        const version = status.version || {};
+        const versionNode = document.getElementById('worker-version');
+        const protocolNode = document.getElementById('worker-protocol');
+        versionNode.textContent = `backend ${version.backend_git_sha || 'unknown'} · worker ${version.worker_git_sha || 'unknown'}`;
+        versionNode.className = version.mismatch ? 'text-red-300' : 'text-slate-300';
+        protocolNode.textContent = `${version.mismatch ? 'Mismatch' : 'OK'} (expected ${version.expected_protocol_version ?? '—'}, worker ${version.worker_protocol_version ?? '—'})`;
+        protocolNode.className = version.mismatch ? 'text-red-300' : 'text-emerald-300';
 
         const selfTest = status.self_test;
         document.getElementById('worker-self-test-status').textContent = !selfTest ? 'Not reported' : selfTest.ok ? 'OK' : 'Failed';
@@ -400,8 +478,23 @@
       }
     }
 
+    async function refreshAnalysisRuns() {
+      if (!adminKey) return;
+      try {
+        const response = await fetch(`/admin/api/runs?key=${encodeURIComponent(adminKey)}`);
+        if (!response.ok) return;
+        const body = await response.json();
+        renderAnalysisRuns(body.runs || []);
+      } catch (error) {
+        console.warn('Analysis runs refresh failed', error);
+      }
+    }
+
     if (workerEnabled) {
       setInterval(refreshWorkerStatus, 15000);
+    }
+    if (adminKey) {
+      setInterval(refreshAnalysisRuns, 15000);
     }
   </script>
 </body>

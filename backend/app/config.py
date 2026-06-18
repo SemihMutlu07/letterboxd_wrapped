@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     worker_token: str = ""
     # A heartbeat older than this many seconds means the desktop worker is offline.
     worker_heartbeat_max_age_seconds: int = 60
+    # Increment this when worker/backend control-plane payloads become
+    # incompatible. Older desktop workers will keep heartbeating but will not
+    # receive new jobs until updated.
+    worker_protocol_version: int = 1
     # Optional startup smoke test for the desktop worker. Keep opt-in because it
     # performs a real Letterboxd scrape and should not run on every restart by
     # accident.

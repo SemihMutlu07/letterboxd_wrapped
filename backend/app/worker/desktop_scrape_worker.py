@@ -22,8 +22,11 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from datetime import datetime, timezone
+import json
 import logging
 import os
+from pathlib import Path
+import subprocess
 from threading import Lock
 from time import monotonic
 from typing import Any
@@ -50,6 +53,9 @@ HEARTBEAT_INTERVAL = float(os.getenv("WORKER_HEARTBEAT_INTERVAL", "20"))
 # Short timeout for the small control-plane calls; the scrape itself is unbounded.
 CONTROL_TIMEOUT = aiohttp.ClientTimeout(total=15)
 TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
+WORKER_PROTOCOL_VERSION = 1
+OUTBOX_DIR = Path(os.getenv("WORKER_OUTBOX_DIR", ".worker_outbox"))
+PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
 
 class WorkerConfig:
@@ -70,6 +76,36 @@ class WorkerConfig:
         ]
         if missing:
             raise SystemExit(f"Missing required env: {', '.join(missing)}")
+
+
+def _git_value(*args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=Path(__file__).resolve().parents[3],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def _worker_meta(cfg: WorkerConfig) -> dict[str, Any]:
+    return {
+        "worker_protocol_version": WORKER_PROTOCOL_VERSION,
+        "worker_git_sha": os.getenv("WORKER_GIT_SHA") or _git_value("rev-parse", "--short", "HEAD"),
+        "worker_branch": os.getenv("WORKER_BRANCH") or _git_value("branch", "--show-current"),
+        "worker_started_at": PROCESS_STARTED_AT,
+        "poll_interval": POLL_INTERVAL,
+        "heartbeat_interval": HEARTBEAT_INTERVAL,
+        "trace_flush_interval": TRACE_FLUSH_INTERVAL,
+        "self_test_on_start": cfg.self_test_on_start,
+        "self_test_username": cfg.self_test_username,
+    }
 
 
 class TraceBuffer:
@@ -162,7 +198,7 @@ def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
 async def _heartbeat_loop(session: aiohttp.ClientSession, cfg: WorkerConfig) -> None:
     while True:
         try:
-            async with session.post(f"{cfg.base_url}/api/worker/heartbeat", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
+            async with session.post(f"{cfg.base_url}/api/worker/heartbeat", headers=cfg.headers, json=_worker_meta(cfg), timeout=CONTROL_TIMEOUT) as r:
                 if r.status != 200:
                     logger.warning("Heartbeat rejected: HTTP %s", r.status)
         except Exception as exc:
@@ -214,10 +250,48 @@ async def _run_startup_self_test(session: aiohttp.ClientSession, cfg: WorkerConf
 
 async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
     async with session.get(f"{cfg.base_url}/api/worker/scrape/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
+        if r.status == 409:
+            body = await r.text()
+            logger.warning("Claim blocked by backend: %s", body)
+            return None
         if r.status != 200:
             logger.warning("Claim failed: HTTP %s", r.status)
             return None
         return (await r.json()).get("job")
+
+
+def _outbox_path(task_id: str, kind: str) -> Path:
+    safe_task = "".join(ch for ch in task_id if ch.isalnum() or ch in {"-", "_"}) or "unknown"
+    return OUTBOX_DIR / f"{safe_task}-{kind}.json"
+
+
+def _write_outbox(task_id: str, kind: str, path: str, payload: dict) -> Path:
+    OUTBOX_DIR.mkdir(parents=True, exist_ok=True)
+    outbox_path = _outbox_path(task_id, kind)
+    outbox_path.write_text(json.dumps({"path": path, "payload": payload}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return outbox_path
+
+
+async def _send_outbox_item(session: aiohttp.ClientSession, cfg: WorkerConfig, outbox_path: Path) -> bool:
+    try:
+        item = json.loads(outbox_path.read_text(encoding="utf-8"))
+        path = item["path"]
+        payload = item["payload"]
+    except Exception as exc:
+        logger.error("Outbox item %s is unreadable: %s", outbox_path, exc)
+        return False
+    ok = await _post(session, cfg, path, payload)
+    if ok:
+        with suppress(FileNotFoundError):
+            outbox_path.unlink()
+    return ok
+
+
+async def _flush_outbox(session: aiohttp.ClientSession, cfg: WorkerConfig) -> None:
+    if not OUTBOX_DIR.exists():
+        return
+    for outbox_path in sorted(OUTBOX_DIR.glob("*.json")):
+        await _send_outbox_item(session, cfg, outbox_path)
 
 
 async def _flush_trace(session: aiohttp.ClientSession, cfg: WorkerConfig, task_id: str, trace: TraceBuffer) -> None:
@@ -255,12 +329,10 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
         trace_flush.cancel()
         with suppress(asyncio.CancelledError):
             await trace_flush
-        await _post(
-            session,
-            cfg,
-            f"/api/worker/scrape/{task_id}/failed",
-            {"message": message, "telemetry": telemetry, "trace_events": trace.snapshot()},
-        )
+        payload = {"username": username, "message": message, "telemetry": telemetry, "trace_events": trace.snapshot()}
+        outbox_path = _write_outbox(task_id, "failed", f"/api/worker/scrape/{task_id}/failed", payload)
+        if await _send_outbox_item(session, cfg, outbox_path):
+            logger.info("Failure postback acknowledged for job %s", task_id)
         return
 
     duration_seconds = round(monotonic() - started, 1)
@@ -270,12 +342,10 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     trace_flush.cancel()
     with suppress(asyncio.CancelledError):
         await trace_flush
-    await _post(
-        session,
-        cfg,
-        f"/api/worker/scrape/{task_id}/complete",
-        {"stats": stats, "telemetry": telemetry, "trace_events": trace.snapshot()},
-    )
+    payload = {"username": username, "stats": stats, "telemetry": telemetry, "trace_events": trace.snapshot()}
+    outbox_path = _write_outbox(task_id, "complete", f"/api/worker/scrape/{task_id}/complete", payload)
+    if await _send_outbox_item(session, cfg, outbox_path):
+        logger.info("Completion postback acknowledged for job %s", task_id)
     logger.info(
         "Completed scrape job %s for @%s (films=%s, duration=%ss)",
         task_id,
@@ -285,13 +355,16 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     )
 
 
-async def _post(session: aiohttp.ClientSession, cfg: WorkerConfig, path: str, payload: dict) -> None:
+async def _post(session: aiohttp.ClientSession, cfg: WorkerConfig, path: str, payload: dict) -> bool:
     try:
         async with session.post(f"{cfg.base_url}{path}", headers=cfg.headers, json=payload, timeout=CONTROL_TIMEOUT) as r:
             if r.status != 200:
                 logger.error("POST %s rejected: HTTP %s", path, r.status)
+                return False
+            return True
     except Exception as exc:
         logger.error("POST %s failed: %s", path, exc)
+        return False
 
 
 async def run() -> None:
@@ -304,12 +377,7 @@ async def run() -> None:
             session,
             cfg,
             "startup",
-            {
-                "poll_interval": POLL_INTERVAL,
-                "heartbeat_interval": HEARTBEAT_INTERVAL,
-                "self_test_on_start": cfg.self_test_on_start,
-                "self_test_username": cfg.self_test_username,
-            },
+            _worker_meta(cfg),
         )
         if cfg.self_test_on_start:
             await _run_startup_self_test(session, cfg)
@@ -323,10 +391,12 @@ async def run() -> None:
                     job = None
 
                 if job is None:
+                    await _flush_outbox(session, cfg)
                     await asyncio.sleep(POLL_INTERVAL)
                     continue
 
                 # Process one job at a time (V1 — no concurrency).
+                await _flush_outbox(session, cfg)
                 await _process_job(session, cfg, job)
         finally:
             heartbeat.cancel()

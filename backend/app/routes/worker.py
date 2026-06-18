@@ -9,6 +9,7 @@ in the `X-Worker-Token` header matching settings.worker_token.
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
@@ -19,6 +20,10 @@ from app.services.run_log import persist_run
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
 router = APIRouter(prefix="/api/worker")
+
+
+def _backend_git_sha() -> str | None:
+    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
 
 
 def _require_worker_token(x_worker_token: str | None) -> None:
@@ -51,11 +56,43 @@ def _task_telemetry(task: task_manager.TaskState) -> dict:
     }
 
 
+def _request_telemetry(body: dict) -> dict:
+    telemetry = body.get("telemetry")
+    return telemetry if isinstance(telemetry, dict) else {}
+
+
+def _request_trace_events(body: dict) -> list[dict]:
+    events = body.get("trace_events")
+    return [event for event in events if isinstance(event, dict)] if isinstance(events, list) else []
+
+
+def _request_username(body: dict, stats: dict | None = None) -> str | None:
+    username = body.get("username")
+    if isinstance(username, str) and username.strip():
+        return username.strip().lower()
+    if stats:
+        scraped_username = stats.get("scraped_username")
+        if isinstance(scraped_username, str) and scraped_username.strip():
+            return scraped_username.strip().lower()
+    return None
+
+
+def _worker_version_mismatch() -> dict | None:
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        return None
+    version = task_manager.get_worker_version_status(settings.worker_protocol_version, _backend_git_sha())
+    return version if version.get("mismatch") else None
+
+
 @router.post("/heartbeat")
-async def worker_heartbeat(x_worker_token: str | None = Header(default=None)):
+async def worker_heartbeat(request: Request, x_worker_token: str | None = Header(default=None)):
     """Worker liveness ping — keeps /api/scrape-profile from reporting offline."""
     _require_worker_token(x_worker_token)
-    task_manager.record_worker_heartbeat()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    task_manager.record_worker_heartbeat(body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -98,6 +135,16 @@ async def worker_self_test(request: Request, x_worker_token: str | None = Header
 async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     """Claim the oldest queued scrape job, or return {job: null} if none."""
     _require_worker_token(x_worker_token)
+    mismatch = _worker_version_mismatch()
+    if mismatch:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "worker_version_mismatch",
+                "message": "Desktop worker must be updated before claiming new jobs.",
+                "version": mismatch,
+            },
+        )
     job = task_manager.claim_next_scrape_job()
     if job is None:
         return {"job": None}
@@ -140,20 +187,31 @@ async def record_scrape_event(task_id: str, request: Request, x_worker_token: st
 async def complete_scrape(task_id: str, request: Request, x_worker_token: str | None = Header(default=None)):
     """Store final stats for a scrape job so /api/progress/{task_id} returns done."""
     _require_worker_token(x_worker_token)
-    task = task_manager.get_task_state(task_id)
-    if task is None or task.kind != "scrape":
-        raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Scrape job not found or expired."})
     body = await request.json()
     stats = body.get("stats")
     if not isinstance(stats, dict):
         raise HTTPException(status_code=400, detail={"error_code": "invalid_stats", "message": "Body must include a stats object."})
-    telemetry = body.get("telemetry")
+    telemetry = _request_telemetry(body)
+    task = task_manager.get_task_state(task_id)
+    if task is None or task.kind != "scrape":
+        persist_run(
+            _request_username(body, stats),
+            "desktop-worker",
+            stats,
+            ok=True,
+            task_id=task_id,
+            trace_events=_request_trace_events(body),
+            telemetry=telemetry,
+        )
+        logger.warning("Worker completed orphan scrape job %s; persisted run without task state", task_id)
+        return {"ok": True, "orphan": True}
+
     _merge_worker_trace(task_id, body)
     task_manager.append_task_event(task_id, "completed", "Worker posted final stats", level="info")
     task_manager.set_task_done(
         task_id,
         {"status": "success", "stats": stats},
-        telemetry if isinstance(telemetry, dict) else None,
+        telemetry,
     )
     task = task_manager.get_task_state(task_id)
     if task:
@@ -175,16 +233,28 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
 async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None = Header(default=None)):
     """Mark a scrape job failed with a frontend-readable error message."""
     _require_worker_token(x_worker_token)
-    task = task_manager.get_task_state(task_id)
-    if task is None or task.kind != "scrape":
-        raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Scrape job not found or expired."})
     body = await request.json()
     message = str(body.get("message") or "Desktop worker failed to scrape this profile.")
-    telemetry = body.get("telemetry")
+    telemetry = _request_telemetry(body)
+    task = task_manager.get_task_state(task_id)
+    if task is None or task.kind != "scrape":
+        persist_run(
+            _request_username(body),
+            "desktop-worker",
+            {},
+            ok=False,
+            error_message=message,
+            task_id=task_id,
+            trace_events=_request_trace_events(body),
+            telemetry=telemetry,
+        )
+        logger.warning("Worker failed orphan scrape job %s; persisted run without task state: %s", task_id, message)
+        return {"ok": True, "orphan": True}
+
     _merge_worker_trace(task_id, body)
-    error_stage = telemetry.get("error_stage") if isinstance(telemetry, dict) else None
+    error_stage = telemetry.get("error_stage")
     task_manager.append_task_event(task_id, error_stage or "failed", message, level="error")
-    task_manager.set_task_failed(task_id, message, telemetry if isinstance(telemetry, dict) else None)
+    task_manager.set_task_failed(task_id, message, telemetry)
     task = task_manager.get_task_state(task_id)
     if task:
         task_manager.append_task_event(task_id, "persisted", "Failure run log persisted on backend", level="info")

@@ -59,7 +59,11 @@ async def client(tmp_path):
 
 
 async def _beat(client: AsyncClient):
-    r = await client.post("/api/worker/heartbeat", headers=AUTH)
+    r = await client.post(
+        "/api/worker/heartbeat",
+        headers=AUTH,
+        json={"worker_protocol_version": settings.worker_protocol_version, "worker_git_sha": "test-worker"},
+    )
     assert r.status_code == 200
 
 
@@ -147,6 +151,7 @@ async def test_admin_worker_status_api(client: AsyncClient):
     assert body["enabled"] is True
     assert body["status"]["online"] is True
     assert body["status"]["meta"]["self_test_username"] == "semihmutsuz"
+    assert "version" in body["status"]
 
 
 @pytest.mark.asyncio
@@ -158,6 +163,8 @@ async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     assert "Desktop Worker" in html
     assert "Worker live" in html
     assert "Startup Self-Test" in html
+    assert "refreshAnalysisRuns" in html
+    assert "/admin/api/runs" in html
 
 
 # ---- claiming jobs -----------------------------------------------------------
@@ -178,6 +185,17 @@ async def test_worker_claims_one_job(client: AsyncClient):
     # not re-claim a job it already took.
     r2 = await client.get("/api/worker/scrape/next", headers=AUTH)
     assert r2.json()["job"] is None
+
+
+@pytest.mark.asyncio
+async def test_worker_version_mismatch_blocks_claim(client: AsyncClient):
+    await client.post("/api/worker/heartbeat", headers=AUTH, json={"worker_protocol_version": 0, "worker_git_sha": "old"})
+    submit = await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})
+    assert submit.status_code == 202
+
+    r = await client.get("/api/worker/scrape/next", headers=AUTH)
+    assert r.status_code == 409
+    assert r.json()["detail"]["error_code"] == "worker_version_mismatch"
 
 
 # ---- completion / failure ----------------------------------------------------
@@ -271,4 +289,31 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
 async def test_worker_complete_unknown_task_404(client: AsyncClient):
     await _beat(client)
     r = await client.post("/api/worker/scrape/does-not-exist/complete", headers=AUTH, json={"stats": {}})
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert r.json()["orphan"] is True
+
+    runs = await client.get("/admin/api/runs?key=mw3169305")
+    assert runs.status_code == 200
+    assert runs.json()["runs"][0]["task_id"] == "does-not-exist"
+
+
+@pytest.mark.asyncio
+async def test_worker_fail_unknown_task_persists_orphan_run(client: AsyncClient):
+    await _beat(client)
+    r = await client.post(
+        "/api/worker/scrape/missing-task/failed",
+        headers=AUTH,
+        json={
+            "username": "semihmutsuz",
+            "message": "Lost during redeploy",
+            "telemetry": {"duration_seconds": 3.4, "error_stage": "postback"},
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["orphan"] is True
+
+    runs = await client.get("/admin/api/runs?key=mw3169305")
+    run = runs.json()["runs"][0]
+    assert run["ok"] is False
+    assert run["username"] == "semihmutsuz"
+    assert run["error_stage"] == "postback"
