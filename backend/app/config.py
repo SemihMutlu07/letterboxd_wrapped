@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     worker_token: str = ""
     # A heartbeat older than this many seconds means the desktop worker is offline.
     worker_heartbeat_max_age_seconds: int = 60
+    # Optional startup smoke test for the desktop worker. Keep opt-in because it
+    # performs a real Letterboxd scrape and should not run on every restart by
+    # accident.
+    worker_self_test_on_start: bool = False
+    worker_self_test_username: str = "semihmutsuz"
 
     @property
     def desktop_worker_enabled(self) -> bool:

@@ -26,7 +26,12 @@
           <p class="text-[10px] text-slate-500 uppercase tracking-wider">Local Debug Dashboard</p>
         </div>
       </div>
-      <div class="text-xs text-slate-500">{{ runs|length }} analysis · {{ watchlist_runs|length }} compare · {{ date_night_runs|length }} date</div>
+      <div class="flex items-center gap-3 text-xs">
+        <span id="worker-header-status" class="{% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-500{% endif %}">
+          {% if worker_enabled and worker_status.online %}● Worker live{% elif worker_enabled %}● Worker offline{% else %}● Worker disabled{% endif %}
+        </span>
+        <span class="text-slate-500">{{ runs|length }} analysis · {{ watchlist_runs|length }} compare · {{ date_night_runs|length }} date</span>
+      </div>
     </div>
   </header>
 
@@ -34,8 +39,90 @@
     <!-- Tabs -->
     <div class="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl w-fit">
       <button onclick="switchTab('analysis')" id="tab-analysis" class="tab-active px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Analysis Runs</button>
+      <button onclick="switchTab('worker')" id="tab-worker" class="tab-inactive px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Desktop Worker</button>
       <button onclick="switchTab('watchlist')" id="tab-watchlist" class="tab-inactive px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Watchlist Compare</button>
       <button onclick="switchTab('datenight')" id="tab-datenight" class="tab-inactive px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Date Night</button>
+    </div>
+
+    <!-- WORKER TAB -->
+    <div id="panel-worker" class="space-y-6 hidden">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Desktop Worker</p>
+          <p id="worker-online" class="text-2xl font-black {% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-600{% endif %}">
+            {% if worker_enabled and worker_status.online %}Live{% elif worker_enabled %}Offline{% else %}Disabled{% endif %}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Heartbeat Age</p>
+          <p id="worker-heartbeat-age" class="text-2xl font-black text-white">{{ worker_status.heartbeat_age_seconds if worker_status.heartbeat_age_seconds is not none else "—" }}s</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Queued Jobs</p>
+          <p id="worker-queued" class="text-2xl font-black text-white">{{ worker_status.queue.queued }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Running Jobs</p>
+          <p id="worker-running" class="text-2xl font-black text-white">{{ worker_status.queue.running }}</p>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 class="text-sm font-bold text-white mb-3">Lifecycle</h2>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
+            <dt class="text-slate-500">Started</dt><dd id="worker-started" class="text-slate-300">{{ worker_status.last_started_at or "—" }}</dd>
+            <dt class="text-slate-500">Heartbeat</dt><dd id="worker-heartbeat" class="text-slate-300">{{ worker_status.last_heartbeat or "—" }}</dd>
+            <dt class="text-slate-500">Shutdown</dt><dd id="worker-shutdown" class="text-slate-300">{{ worker_status.last_shutdown_at or "—" }}</dd>
+            <dt class="text-slate-500">Backend</dt><dd class="text-slate-300">{% if worker_enabled %}Worker mode enabled{% else %}Worker mode disabled{% endif %}</dd>
+          </dl>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 class="text-sm font-bold text-white mb-3">Startup Self-Test</h2>
+          {% set self_test = worker_status.self_test %}
+          <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
+            <dt class="text-slate-500">Status</dt>
+            <dd id="worker-self-test-status" class="{% if self_test and self_test.ok %}text-emerald-400{% elif self_test %}text-red-400{% else %}text-slate-300{% endif %}">
+              {% if self_test and self_test.ok %}OK{% elif self_test %}Failed{% else %}Not reported{% endif %}
+            </dd>
+            <dt class="text-slate-500">Username</dt><dd id="worker-self-test-user" class="text-slate-300">@{{ self_test.username if self_test else "—" }}</dd>
+            <dt class="text-slate-500">Films</dt><dd id="worker-self-test-films" class="text-slate-300">{{ self_test.total_films if self_test and self_test.total_films is defined else "—" }}</dd>
+            <dt class="text-slate-500">Reported</dt><dd id="worker-self-test-time" class="text-slate-300">{{ self_test.reported_at if self_test else "—" }}</dd>
+            <dt class="text-slate-500">Message</dt><dd id="worker-self-test-message" class="text-slate-300">{{ self_test.message if self_test and self_test.message is defined else "—" }}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Current Scrape Jobs</h2>
+          <span class="text-[10px] text-slate-500">Auto-refreshes every 15s</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Task</th><th class="text-left px-4 py-2 font-medium">User</th>
+              <th class="text-left px-4 py-2 font-medium">Status</th><th class="text-left px-4 py-2 font-medium">Message</th>
+              <th class="text-left px-4 py-2 font-medium">Created</th>
+            </tr></thead>
+            <tbody id="worker-jobs">
+              {% for job in worker_status.current_jobs %}
+              <tr class="border-b border-slate-800/50">
+                <td class="px-4 py-2.5 text-slate-500 font-mono">{{ job.task_id[:8] }}</td>
+                <td class="px-4 py-2.5 text-orange-400">@{{ job.username }}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ job.status }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ job.message }}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ job.created_at[:16].replace("T", " ") }}</td>
+              </tr>
+              {% endfor %}
+              {% if not worker_status.current_jobs %}
+              <tr><td colspan="5" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ANALYSIS TAB -->
@@ -164,7 +251,7 @@
 
   <script>
     function switchTab(tab) {
-      ['analysis', 'watchlist', 'datenight'].forEach(t => {
+      ['analysis', 'worker', 'watchlist', 'datenight'].forEach(t => {
         document.getElementById('panel-' + t).classList.add('hidden');
         document.getElementById('tab-' + t).classList.remove('tab-active');
         document.getElementById('tab-' + t).classList.add('tab-inactive');
@@ -172,6 +259,72 @@
       document.getElementById('panel-' + tab).classList.remove('hidden');
       document.getElementById('tab-' + tab).classList.remove('tab-inactive');
       document.getElementById('tab-' + tab).classList.add('tab-active');
+    }
+
+    const adminKey = {{ key|tojson }};
+    const workerEnabled = {{ worker_enabled|tojson }};
+
+    function shortTime(value) {
+      return value ? value.replace('T', ' ').slice(0, 19) : '—';
+    }
+
+    function renderWorkerJobs(jobs) {
+      const tbody = document.getElementById('worker-jobs');
+      if (!tbody) return;
+      if (!jobs || jobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = jobs.map(job => `
+        <tr class="border-b border-slate-800/50">
+          <td class="px-4 py-2.5 text-slate-500 font-mono">${job.task_id.slice(0, 8)}</td>
+          <td class="px-4 py-2.5 text-orange-400">@${job.username || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-300">${job.status}</td>
+          <td class="px-4 py-2.5 text-slate-400">${job.message || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-500">${shortTime(job.created_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function refreshWorkerStatus() {
+      if (!adminKey) return;
+      try {
+        const response = await fetch(`/admin/api/worker?key=${encodeURIComponent(adminKey)}`);
+        if (!response.ok) return;
+        const body = await response.json();
+        const status = body.status || {};
+        const online = Boolean(body.enabled && status.online);
+        const label = !body.enabled ? 'Disabled' : online ? 'Live' : 'Offline';
+        const header = document.getElementById('worker-header-status');
+        const onlineNode = document.getElementById('worker-online');
+        const color = !body.enabled ? 'text-slate-500' : online ? 'text-emerald-400' : 'text-red-400';
+        header.textContent = `● Worker ${label.toLowerCase()}`;
+        header.className = color;
+        onlineNode.textContent = label;
+        onlineNode.className = `text-2xl font-black ${color.replace('text-slate-500', 'text-slate-600')}`;
+        document.getElementById('worker-heartbeat-age').textContent =
+          status.heartbeat_age_seconds === null || status.heartbeat_age_seconds === undefined ? '—' : `${status.heartbeat_age_seconds}s`;
+        document.getElementById('worker-queued').textContent = status.queue?.queued ?? 0;
+        document.getElementById('worker-running').textContent = status.queue?.running ?? 0;
+        document.getElementById('worker-started').textContent = shortTime(status.last_started_at);
+        document.getElementById('worker-heartbeat').textContent = shortTime(status.last_heartbeat);
+        document.getElementById('worker-shutdown').textContent = shortTime(status.last_shutdown_at);
+
+        const selfTest = status.self_test;
+        document.getElementById('worker-self-test-status').textContent = !selfTest ? 'Not reported' : selfTest.ok ? 'OK' : 'Failed';
+        document.getElementById('worker-self-test-status').className = !selfTest ? 'text-slate-300' : selfTest.ok ? 'text-emerald-400' : 'text-red-400';
+        document.getElementById('worker-self-test-user').textContent = selfTest?.username ? `@${selfTest.username}` : '@—';
+        document.getElementById('worker-self-test-films').textContent = selfTest?.total_films ?? '—';
+        document.getElementById('worker-self-test-time').textContent = shortTime(selfTest?.reported_at);
+        document.getElementById('worker-self-test-message').textContent = selfTest?.message || '—';
+        renderWorkerJobs(status.current_jobs);
+      } catch (error) {
+        console.warn('Worker status refresh failed', error);
+      }
+    }
+
+    if (workerEnabled) {
+      setInterval(refreshWorkerStatus, 15000);
     }
   </script>
 </body>

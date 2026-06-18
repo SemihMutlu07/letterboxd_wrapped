@@ -27,6 +27,10 @@ _tasks: Dict[str, TaskState] = {}
 
 # Last time the desktop scrape worker checked in. None until the first heartbeat.
 _last_worker_heartbeat: Optional[datetime] = None
+_last_worker_started_at: Optional[datetime] = None
+_last_worker_shutdown_at: Optional[datetime] = None
+_last_worker_meta: Dict[str, Any] = {}
+_last_worker_self_test: Optional[Dict[str, Any]] = None
 
 
 def create_task_state() -> str:
@@ -70,10 +74,81 @@ def record_worker_heartbeat() -> None:
     _last_worker_heartbeat = datetime.utcnow()
 
 
+def record_worker_startup(meta: Optional[Dict[str, Any]] = None) -> None:
+    global _last_worker_started_at, _last_worker_meta
+    _last_worker_started_at = datetime.utcnow()
+    _last_worker_meta = dict(meta or {})
+    record_worker_heartbeat()
+
+
+def record_worker_shutdown(meta: Optional[Dict[str, Any]] = None) -> None:
+    global _last_worker_shutdown_at, _last_worker_meta
+    _last_worker_shutdown_at = datetime.utcnow()
+    if meta:
+        _last_worker_meta = {**_last_worker_meta, **meta}
+
+
+def record_worker_self_test(result: Dict[str, Any]) -> None:
+    global _last_worker_self_test
+    _last_worker_self_test = {
+        **result,
+        "reported_at": datetime.utcnow(),
+    }
+
+
 def is_worker_online(max_age_seconds: int) -> bool:
     if _last_worker_heartbeat is None:
         return False
     return (datetime.utcnow() - _last_worker_heartbeat) <= timedelta(seconds=max_age_seconds)
+
+
+def get_worker_status(max_age_seconds: int) -> Dict[str, Any]:
+    now = datetime.utcnow()
+    heartbeat_age_seconds = (
+        round((now - _last_worker_heartbeat).total_seconds(), 1)
+        if _last_worker_heartbeat is not None
+        else None
+    )
+    scrape_tasks = [t for t in _tasks.values() if t.kind == "scrape"]
+    queued = [t for t in scrape_tasks if t.status == "pending" and not t.claimed]
+    running = [t for t in scrape_tasks if t.status == "running"]
+    completed = [t for t in scrape_tasks if t.status == "done"]
+    failed = [t for t in scrape_tasks if t.status == "failed"]
+
+    def _iso(value: Optional[datetime]) -> Optional[str]:
+        return value.isoformat() if value is not None else None
+
+    self_test = dict(_last_worker_self_test) if _last_worker_self_test else None
+    if self_test and isinstance(self_test.get("reported_at"), datetime):
+        self_test["reported_at"] = self_test["reported_at"].isoformat()
+
+    return {
+        "online": is_worker_online(max_age_seconds),
+        "last_heartbeat": _iso(_last_worker_heartbeat),
+        "heartbeat_age_seconds": heartbeat_age_seconds,
+        "max_age_seconds": max_age_seconds,
+        "last_started_at": _iso(_last_worker_started_at),
+        "last_shutdown_at": _iso(_last_worker_shutdown_at),
+        "meta": dict(_last_worker_meta),
+        "self_test": self_test,
+        "queue": {
+            "queued": len(queued),
+            "running": len(running),
+            "completed": len(completed),
+            "failed": len(failed),
+        },
+        "current_jobs": [
+            {
+                "task_id": t.task_id,
+                "username": t.username,
+                "status": t.status,
+                "stage": t.stage,
+                "message": t.message,
+                "created_at": t.created_at.isoformat(),
+            }
+            for t in sorted(queued + running, key=lambda task: task.created_at)
+        ][:10],
+    }
 
 
 def get_task_state(task_id: str) -> Optional[TaskState]:

@@ -37,6 +37,41 @@ async def worker_heartbeat(x_worker_token: str | None = Header(default=None)):
     return {"ok": True}
 
 
+@router.post("/startup")
+async def worker_startup(request: Request, x_worker_token: str | None = Header(default=None)):
+    """Record a worker process startup so the admin dashboard can show lifecycle."""
+    _require_worker_token(x_worker_token)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    task_manager.record_worker_startup(body if isinstance(body, dict) else {})
+    return {"ok": True}
+
+
+@router.post("/shutdown")
+async def worker_shutdown(request: Request, x_worker_token: str | None = Header(default=None)):
+    """Record graceful worker shutdown. Abrupt power/network loss is inferred by heartbeat expiry."""
+    _require_worker_token(x_worker_token)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    task_manager.record_worker_shutdown(body if isinstance(body, dict) else {})
+    return {"ok": True}
+
+
+@router.post("/self-test")
+async def worker_self_test(request: Request, x_worker_token: str | None = Header(default=None)):
+    """Record the result of an optional desktop-side real scrape smoke test."""
+    _require_worker_token(x_worker_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_body", "message": "Body must be an object."})
+    task_manager.record_worker_self_test(body)
+    return {"ok": True}
+
+
 @router.get("/scrape/next")
 async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     """Claim the oldest queued scrape job, or return {job: null} if none."""

@@ -50,8 +50,12 @@ pip install -r requirements.txt
 
 ```env
 TMDB_API_KEY=BURAYA_TMDB_API_ANAHTARINIZ
-WORKER_TOKEN=6Wx94TugetHURiGobm_8VYsmrBpeEJjzAdBcV71aI27o2br9NraubNqv2cWDAfil
+WORKER_TOKEN=BURAYA_GUCLU_RASTGELE_SECRET
 WORKER_BACKEND_URL=https://wrapped-backend.onrender.com
+# Opsiyonel: worker açıldığında @semihmutsuz ile gerçek scrape smoke test koşturur.
+# Sadece bilinçli test günlerinde açın; her restart Letterboxd'a istek atar.
+WORKER_SELF_TEST_ON_START=0
+WORKER_SELF_TEST_USERNAME=semihmutsuz
 ```
 
 > [!WARNING]
@@ -67,7 +71,7 @@ Masaüstündeki worker'ın backend ile güvenli haberleşebilmesi ve backend'in 
 3. **Environment** sekmesine gidin.
 4. Yeni bir environment variable ekleyin:
    * **Key:** `WORKER_TOKEN`
-   * **Value:** `6Wx94TugetHURiGobm_8VYsmrBpeEJjzAdBcV71aI27o2br9NraubNqv2cWDAfil` *(Masaüstündeki token ile birebir aynı olmalıdır).*
+   * **Value:** Masaüstündeki `WORKER_TOKEN` ile birebir aynı güçlü secret.
 5. Ayarları kaydedin ve servisinizi **Redeploy** edin.
 
 ---
@@ -76,15 +80,34 @@ Masaüstündeki worker'ın backend ile güvenli haberleşebilmesi ve backend'in 
 Hâlâ `backend/` klasöründeyken terminalde şu komutu çalıştırarak worker'ı başlatın:
 
 ```powershell
-set PYTHONUTF8=1
+$env:PYTHONUTF8="1"
 python -m app.worker.desktop_scrape_worker
 ```
 
 **Başarılı Çalışma Belirtileri:**
 * Terminal loglarında `Desktop scrape worker starting — backend=https://wrapped-backend.onrender.com...` görünmelidir.
-* `heartbeat sent` ve `polling jobs` logları gelmelidir.
+* Dashboard'da heartbeat yaşı güncel kalmalı ve worker `Live` görünmelidir.
 * Eğer `401` hatası alıyorsanız, Render'daki `WORKER_TOKEN` ile yerel `.env` içindeki değer uyuşmuyor demektir.
 * Eğer `404` alıyorsanız, Render backend'inize `desktop_server` branch'indeki kodlar henüz başarıyla deploy edilmemiştir.
+
+### Adım 5.1: Admin Dashboard'dan Canlılık Kontrolü
+
+Backend çalışırken şu sayfadan desktop worker durumunu kontrol edin:
+
+```text
+https://wrapped-backend.onrender.com/admin/dashboard?key=ADMIN_SECRETINIZ
+```
+
+Dashboard'daki **Desktop Worker** sekmesi şunları gösterir:
+
+* Worker live/offline/disabled durumu.
+* Son heartbeat yaşı.
+* Kuyruktaki ve çalışan scrape işleri.
+* Worker startup/shutdown zamanı.
+* Opsiyonel startup self-test sonucu (`WORKER_SELF_TEST_ON_START=1` ise @semihmutsuz scrape testi).
+
+> [!NOTE]
+> Worker aniden kapanırsa shutdown bilgisi gelmeyebilir; bu normaldir. Bu durumda dashboard, heartbeat süresi dolunca worker'ı offline gösterir.
 
 ---
 

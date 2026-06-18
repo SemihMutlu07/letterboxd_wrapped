@@ -11,6 +11,7 @@ Run from the backend/ directory (so .env and runs/ resolve correctly):
 
     WORKER_BACKEND_URL=https://your-backend.example.com \
     WORKER_TOKEN=your-shared-secret \
+    WORKER_SELF_TEST_ON_START=1 \
     python -m app.worker.desktop_scrape_worker
 
 TMDB_API_KEY must also be set (via .env or env) — the analysis pipeline enriches
@@ -19,8 +20,10 @@ films through TMDB exactly as the server does.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 import logging
 import os
+from time import monotonic
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -50,6 +53,8 @@ class WorkerConfig:
     def __init__(self) -> None:
         self.base_url = (os.getenv("WORKER_BACKEND_URL") or "").rstrip("/")
         self.token = os.getenv("WORKER_TOKEN") or ""
+        self.self_test_on_start = os.getenv("WORKER_SELF_TEST_ON_START", "").lower() in {"1", "true", "yes", "on"}
+        self.self_test_username = (os.getenv("WORKER_SELF_TEST_USERNAME") or "semihmutsuz").strip().lower()
 
     @property
     def headers(self) -> dict:
@@ -86,6 +91,48 @@ async def _heartbeat_loop(session: aiohttp.ClientSession, cfg: WorkerConfig) -> 
         except Exception as exc:
             logger.warning("Heartbeat failed: %s", exc)
         await asyncio.sleep(HEARTBEAT_INTERVAL)
+
+
+async def _report_lifecycle(session: aiohttp.ClientSession, cfg: WorkerConfig, event: str, payload: dict | None = None) -> None:
+    await _post(session, cfg, f"/api/worker/{event}", payload or {})
+
+
+async def _run_startup_self_test(session: aiohttp.ClientSession, cfg: WorkerConfig) -> None:
+    username = cfg.self_test_username
+    started = monotonic()
+    logger.info("Running startup self-test for @%s", username)
+    try:
+        stats = await scrape_and_analyze(session, username)
+    except Exception as exc:  # noqa: BLE001 - report the failed smoke test and continue polling jobs
+        message = _failure_message(username, exc)
+        await _post(
+            session,
+            cfg,
+            "/api/worker/self-test",
+            {
+                "username": username,
+                "ok": False,
+                "message": message,
+                "duration_seconds": round(monotonic() - started, 1),
+            },
+        )
+        logger.warning("Startup self-test failed for @%s: %s", username, exc)
+        return
+
+    total_films = stats.get("total_films")
+    await _post(
+        session,
+        cfg,
+        "/api/worker/self-test",
+        {
+            "username": username,
+            "ok": True,
+            "message": "Startup scrape self-test passed.",
+            "total_films": total_films,
+            "duration_seconds": round(monotonic() - started, 1),
+        },
+    )
+    logger.info("Startup self-test passed for @%s (films=%s)", username, total_films)
 
 
 async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
@@ -129,6 +176,19 @@ async def run() -> None:
     logger.info("Desktop scrape worker starting — backend=%s poll=%ss", cfg.base_url, POLL_INTERVAL)
 
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=20)) as session:
+        await _report_lifecycle(
+            session,
+            cfg,
+            "startup",
+            {
+                "poll_interval": POLL_INTERVAL,
+                "heartbeat_interval": HEARTBEAT_INTERVAL,
+                "self_test_on_start": cfg.self_test_on_start,
+                "self_test_username": cfg.self_test_username,
+            },
+        )
+        if cfg.self_test_on_start:
+            await _run_startup_self_test(session, cfg)
         heartbeat = asyncio.create_task(_heartbeat_loop(session, cfg))
         try:
             while True:
@@ -146,6 +206,9 @@ async def run() -> None:
                 await _process_job(session, cfg, job)
         finally:
             heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
+            await _report_lifecycle(session, cfg, "shutdown", {"reason": "worker_stopped"})
 
 
 if __name__ == "__main__":

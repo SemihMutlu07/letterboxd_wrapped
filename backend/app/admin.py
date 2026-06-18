@@ -16,6 +16,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app import task_manager
+from app.config import settings
+
 logger = logging.getLogger("letterboxd_wrapped.admin")
 
 router = APIRouter()
@@ -63,6 +66,7 @@ async def admin_dashboard(request: Request):
     runs = _load_json_dir(RUNS_DIR, limit=50)
     watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
     date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
+    worker_status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
     return templates.TemplateResponse(
         "admin_dashboard.html",
         {
@@ -70,6 +74,8 @@ async def admin_dashboard(request: Request):
             "runs": runs,
             "watchlist_runs": watchlist_runs,
             "date_night_runs": date_night_runs,
+            "worker_status": worker_status,
+            "worker_enabled": settings.desktop_worker_enabled,
             "key": request.query_params.get("key"),
         },
     )
@@ -97,4 +103,14 @@ async def admin_api_runs(request: Request, limit: int = 50):
         "runs": _load_json_dir(RUNS_DIR, limit),
         "watchlist_runs": _load_json_dir(WATCHLIST_RUNS_DIR, limit),
         "date_night_runs": _load_json_dir(DATE_NIGHT_RUNS_DIR, limit),
+    }
+
+
+@router.get("/admin/api/worker")
+async def admin_api_worker(request: Request):
+    """JSON API for desktop worker dashboard status."""
+    _require_admin(request)
+    return {
+        "enabled": settings.desktop_worker_enabled,
+        "status": task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds),
     }

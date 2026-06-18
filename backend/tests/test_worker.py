@@ -24,6 +24,10 @@ async def client():
     """ASGI client with desktop-worker mode ENABLED (worker_token set)."""
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None
+    task_manager._last_worker_started_at = None
+    task_manager._last_worker_shutdown_at = None
+    task_manager._last_worker_meta = {}
+    task_manager._last_worker_self_test = None
     original_token = settings.worker_token
     settings.worker_token = WORKER_TOKEN
 
@@ -39,6 +43,10 @@ async def client():
     settings.worker_token = original_token
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None
+    task_manager._last_worker_started_at = None
+    task_manager._last_worker_shutdown_at = None
+    task_manager._last_worker_meta = {}
+    task_manager._last_worker_self_test = None
 
 
 async def _beat(client: AsyncClient):
@@ -88,7 +96,58 @@ async def test_scrape_profile_offline_when_heartbeat_stale(client: AsyncClient):
 async def test_worker_endpoints_require_token(client: AsyncClient):
     assert (await client.get("/api/worker/scrape/next")).status_code == 401
     assert (await client.post("/api/worker/heartbeat")).status_code == 401
+    assert (await client.post("/api/worker/startup", json={})).status_code == 401
+    assert (await client.post("/api/worker/self-test", json={})).status_code == 401
     assert (await client.get("/api/worker/scrape/next", headers={"X-Worker-Token": "wrong"})).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_worker_lifecycle_and_self_test_status(client: AsyncClient):
+    startup = await client.post(
+        "/api/worker/startup",
+        headers=AUTH,
+        json={"self_test_on_start": True, "self_test_username": "semihmutsuz"},
+    )
+    assert startup.status_code == 200
+
+    self_test = await client.post(
+        "/api/worker/self-test",
+        headers=AUTH,
+        json={"username": "semihmutsuz", "ok": True, "total_films": 394, "message": "Startup scrape self-test passed."},
+    )
+    assert self_test.status_code == 200
+
+    status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
+    assert status["online"] is True
+    assert status["meta"]["self_test_username"] == "semihmutsuz"
+    assert status["self_test"]["ok"] is True
+    assert status["self_test"]["total_films"] == 394
+
+    shutdown = await client.post("/api/worker/shutdown", headers=AUTH, json={"reason": "test"})
+    assert shutdown.status_code == 200
+    assert task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)["last_shutdown_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_worker_status_api(client: AsyncClient):
+    await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
+    r = await client.get("/admin/api/worker?key=mw3169305")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is True
+    assert body["status"]["online"] is True
+    assert body["status"]["meta"]["self_test_username"] == "semihmutsuz"
+
+
+@pytest.mark.asyncio
+async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
+    await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
+    r = await client.get("/admin/dashboard?key=mw3169305")
+    assert r.status_code == 200
+    html = r.text
+    assert "Desktop Worker" in html
+    assert "Worker live" in html
+    assert "Startup Self-Test" in html
 
 
 # ---- claiming jobs -----------------------------------------------------------
