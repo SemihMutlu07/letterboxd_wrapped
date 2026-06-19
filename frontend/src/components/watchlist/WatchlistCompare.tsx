@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Clapperboard, Shuffle, Sparkles, X } from 'lucide-react';
 
 import {
@@ -12,6 +12,7 @@ import {
   type WatchlistCompareResult,
   type WatchlistFilm,
 } from '@/lib/api';
+import { readWatchlistUsersFromLocation, watchlistPath } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 
 const COLLAPSED_FILM_LIMIT = 10;
@@ -264,10 +265,14 @@ function RecommendationStrip({ recommendation }: { recommendation: FilmRecommend
 export default function WatchlistCompare() {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
   const [first, setFirst] = useState(() => {
+    const [routeFirst] = readWatchlistUsersFromLocation();
+    if (routeFirst) return routeFirst;
     if (typeof window === 'undefined') return '';
     return sessionStorage.getItem('wc_first') || '';
   });
   const [second, setSecond] = useState(() => {
+    const [, routeSecond] = readWatchlistUsersFromLocation();
+    if (routeSecond) return routeSecond;
     if (typeof window === 'undefined') return '';
     return sessionStorage.getItem('wc_second') || '';
   });
@@ -278,6 +283,7 @@ export default function WatchlistCompare() {
   const [dismissLoading, setDismissLoading] = useState(false);
   const [recommending, setRecommending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoComparedRef = useRef(false);
 
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const validationMessage = useMemo(() => {
@@ -304,7 +310,7 @@ export default function WatchlistCompare() {
     }
   }, [second]);
 
-  const handleCompare = async () => {
+  const handleCompare = useCallback(async () => {
     if (!canSubmit) return;
     setLoading(true);
     setDismissLoading(false);
@@ -314,12 +320,23 @@ export default function WatchlistCompare() {
     try {
       const next = await compareWatchlists(normalized[0], normalized[1]);
       setResult(next);
+      const nextPath = watchlistPath(normalized[0], normalized[1]);
+      if (typeof window !== 'undefined' && `${window.location.pathname}${window.location.search}` !== nextPath) {
+        window.history.pushState(null, '', nextPath);
+      }
     } catch (err) {
       setError(handleApiError(err, 'watchlist comparison').message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [canSubmit, normalized]);
+
+  useEffect(() => {
+    const [routeFirst, routeSecond] = readWatchlistUsersFromLocation();
+    if (!routeFirst || !routeSecond || autoComparedRef.current) return;
+    autoComparedRef.current = true;
+    void handleCompare();
+  }, [handleCompare]);
 
   const handleRecommend = async () => {
     if (!canSubmit) return;

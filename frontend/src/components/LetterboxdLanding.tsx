@@ -8,6 +8,7 @@ import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } fro
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
+import { resultPath } from '@/lib/routes';
 import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
 import { normalizeError, type NormalizedError } from '@/lib/errors';
 import ErrorBanner from '@/components/ErrorBanner';
@@ -226,7 +227,7 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setTimeout(() => { window.location.href = '/results'; }, 100);
+      setTimeout(() => { window.location.href = resultPath(detectedUsername); }, 100);
     } catch (err) {
       const normalized = normalizeError(err);
       if (analysisRun && detectedUsername) {
@@ -299,7 +300,7 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setTimeout(() => { window.location.href = '/results'; }, 100);
+      setTimeout(() => { window.location.href = resultPath(username); }, 100);
     } catch (err) {
       const normalized = normalizeError(err);
       if (analysisRun) {

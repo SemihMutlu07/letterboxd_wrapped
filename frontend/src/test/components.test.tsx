@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -96,6 +96,12 @@ import WatchlistCompare from '@/components/watchlist/WatchlistCompare';
 import { compareWatchlists, recommendFromCompare } from '@/lib/api';
 
 describe('WatchlistCompare', () => {
+  beforeEach(() => {
+    window.history.pushState(null, '', '/');
+    sessionStorage.clear();
+    vi.clearAllMocks();
+  });
+
   it('compares two watchlists and renders buckets', async () => {
     vi.mocked(compareWatchlists).mockResolvedValueOnce({
       status: 'success',
@@ -120,6 +126,8 @@ describe('WatchlistCompare', () => {
 
     expect(await screen.findByText('50%')).toBeInTheDocument();
     expect(screen.getByText('Aftersun')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /only @alice/i }));
+    await userEvent.click(screen.getByRole('button', { name: /only @bob/i }));
     expect(screen.getByText('Heat')).toBeInTheDocument();
     expect(screen.getByText('Past Lives')).toBeInTheDocument();
   });

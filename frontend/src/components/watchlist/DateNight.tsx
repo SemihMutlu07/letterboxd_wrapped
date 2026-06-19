@@ -5,6 +5,7 @@ import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
+import { readWatchlistUsersFromLocation } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 
 function cleanUsername(value: string) {
@@ -13,8 +14,8 @@ function cleanUsername(value: string) {
 
 export default function DateNight() {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
-  const [first, setFirst] = useState('');
-  const [second, setSecond] = useState('');
+  const [first, setFirst] = useState(() => readWatchlistUsersFromLocation()[0]);
+  const [second, setSecond] = useState(() => readWatchlistUsersFromLocation()[1]);
   const [result, setResult] = useState<DateNightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

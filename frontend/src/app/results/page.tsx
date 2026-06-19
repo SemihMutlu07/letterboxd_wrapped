@@ -19,6 +19,7 @@ import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
 import { getTmdbImageUrl, trackEvent, trackConsentedEvent } from '@/lib/analytics';
 import { getUsername } from '@/lib/session-id';
+import { readResultUsernameFromLocation, resultPath } from '@/lib/routes';
 import { initPostHog, flushQueue } from '@/lib/posthog';
 import { saveConsentDecisionToDb } from '@/lib/consentFlow';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
@@ -154,20 +155,32 @@ export default function ResultsPage() {
   }, [throttledResize]);
 
   useEffect(() => {
+    const routedUsername = readResultUsernameFromLocation();
+    let nextUsername = routedUsername;
     const saved = sessionStorage.getItem('letterboxdStats');
     if (saved) {
       try {
         const parsedStats = JSON.parse(saved);
-        setStats(parsedStats);
-        // Track that results were successfully loaded
-        trackEvent('results_viewed', {
-          total_films: parsedStats.total_films,
-          average_rating: parsedStats.average_rating,
-        });
-        trackConsentedEvent('results_viewed_detailed', {
-          total_countries: parsedStats.total_countries,
-          average_runtime: parsedStats.average_runtime,
-        });
+        const storedUsername = getUsername();
+        const statsUsername = String(parsedStats?.scraped_username || storedUsername || '').toLowerCase();
+        const routeMatchesStats = !routedUsername || (!!statsUsername && routedUsername === statsUsername);
+
+        if (routeMatchesStats) {
+          setStats(parsedStats);
+          nextUsername = routedUsername || statsUsername;
+          if (!routedUsername && nextUsername) {
+            window.history.replaceState(null, '', resultPath(nextUsername));
+          }
+          // Track that results were successfully loaded
+          trackEvent('results_viewed', {
+            total_films: parsedStats.total_films,
+            average_rating: parsedStats.average_rating,
+          });
+          trackConsentedEvent('results_viewed_detailed', {
+            total_countries: parsedStats.total_countries,
+            average_runtime: parsedStats.average_runtime,
+          });
+        }
       } catch {
         // silent: stale localStorage data
       }
@@ -175,7 +188,7 @@ export default function ResultsPage() {
     setLoading(false);
 
     // Get username from shared session helper
-    const storedUsername = getUsername();
+    const storedUsername = nextUsername || getUsername();
     if (storedUsername) {
       setUsername(storedUsername);
     }
@@ -461,7 +474,9 @@ export default function ResultsPage() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">No data found</h2>
-          <p className="text-gray-400">Please upload your Letterboxd data first.</p>
+          <p className="text-gray-400">
+            {username ? `No local result data found for @${username}.` : 'Please upload your Letterboxd data first.'}
+          </p>
           <Link href="/" className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors">Go Back</Link>
         </div>
       </div>
