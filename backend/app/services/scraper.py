@@ -11,6 +11,7 @@ proper cookie/session handling that aiohttp doesn't replicate well.
 import re
 import asyncio
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from functools import partial
@@ -153,7 +154,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://letterboxd.com/",
 }
-PAGE_DELAY = 0.8  # seconds between requests (was 0.2 — increased for Cloudflare bot tolerance)
+PAGE_DELAY = float(os.getenv("LETTERBOXD_PAGE_DELAY", "0.25"))
 MAX_PAGES = 60    # safety cap (~3000 films)
 
 
