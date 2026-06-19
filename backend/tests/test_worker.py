@@ -240,6 +240,9 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     assert run["source"] == "desktop-worker"
     assert run["duration_seconds"] == 12.3
     assert run["scrape_seconds"] == 8.1
+    assert run["bottleneck_stage"] == "scrape"
+    assert run["bottleneck_seconds"] == 8.1
+    assert run["duration_seconds_per_film"] == 0.031
     assert [event["stage"] for event in run["trace_events"]][-1] == "persisted"
 
 

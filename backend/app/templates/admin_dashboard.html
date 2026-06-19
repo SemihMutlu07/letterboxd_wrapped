@@ -207,6 +207,7 @@
               <th class="text-right px-4 py-2 font-medium">Films</th><th class="text-right px-4 py-2 font-medium">Score</th>
               <th class="text-right px-4 py-2 font-medium">Duration</th><th class="text-right px-4 py-2 font-medium">Queue</th>
               <th class="text-right px-4 py-2 font-medium">Scrape</th><th class="text-right px-4 py-2 font-medium">Analysis</th>
+              <th class="text-left px-4 py-2 font-medium">Bottleneck</th><th class="text-right px-4 py-2 font-medium">Sec/Film</th>
               <th class="text-left px-4 py-2 font-medium">Error Stage</th>
               <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
             </tr></thead>
@@ -223,6 +224,8 @@
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.queue_wait_seconds if run.queue_wait_seconds is not none else "—" }}{% if run.queue_wait_seconds is not none %}s{% endif %}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.scrape_seconds if run.scrape_seconds is not none else "—" }}{% if run.scrape_seconds is not none %}s{% endif %}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.analysis_seconds if run.analysis_seconds is not none else "—" }}{% if run.analysis_seconds is not none %}s{% endif %}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ run.bottleneck_stage or "—" }}{% if run.bottleneck_seconds is not none %} <span class="text-slate-500">({{ run.bottleneck_seconds }}s)</span>{% endif %}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.duration_seconds_per_film if run.duration_seconds_per_film is defined else "—" }}</td>
                 <td class="px-4 py-2.5 text-slate-400">{{ run.error_stage or run.error_type or run.error_message or "—" }}</td>
                 <td class="px-4 py-2.5 text-slate-500">{{ run._mtime[:16].replace("T", " ") }}</td>
                 <td class="px-4 py-2.5 text-center">
@@ -339,6 +342,12 @@
       return value === null || value === undefined ? '—' : `${value}s`;
     }
 
+    function fmtBottleneck(run) {
+      if (!run.bottleneck_stage) return '—';
+      const seconds = run.bottleneck_seconds === null || run.bottleneck_seconds === undefined ? '' : ` <span class="text-slate-500">(${run.bottleneck_seconds}s)</span>`;
+      return `${escapeHtml(run.bottleneck_stage)}${seconds}`;
+    }
+
     function updateAnalysisCards(runs) {
       const success = runs.filter(run => run.ok !== false).length;
       const failed = runs.filter(run => run.ok === false).length;
@@ -359,7 +368,7 @@
       if (!tbody) return;
       updateAnalysisCards(runs || []);
       if (!runs || runs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="px-4 py-6 text-center text-slate-600">No analysis runs recorded yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="px-4 py-6 text-center text-slate-600">No analysis runs recorded yet.</td></tr>';
         return;
       }
       tbody.innerHTML = runs.slice(0, 50).map(run => {
@@ -381,6 +390,8 @@
             <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.queue_wait_seconds)}</td>
             <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.scrape_seconds)}</td>
             <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.analysis_seconds)}</td>
+            <td class="px-4 py-2.5 text-slate-300">${fmtBottleneck(run)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.duration_seconds_per_film ?? '—'}</td>
             <td class="px-4 py-2.5 text-slate-400">${escapeHtml(error)}</td>
             <td class="px-4 py-2.5 text-slate-500">${shortTime(run._mtime)}</td>
             <td class="px-4 py-2.5 text-center">${status}</td>

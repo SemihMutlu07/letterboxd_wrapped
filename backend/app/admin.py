@@ -31,6 +31,39 @@ WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 
 
+def _num(value: Any) -> float | None:
+    return value if isinstance(value, (int, float)) else None
+
+
+def _annotate_analysis_run(data: dict[str, Any]) -> None:
+    timings = {
+        "queue": _num(data.get("queue_wait_seconds")),
+        "scrape": _num(data.get("scrape_seconds")),
+        "analysis": _num(data.get("analysis_seconds")),
+        "postback": _num(data.get("postback_seconds")),
+    }
+    known_timings = {key: value for key, value in timings.items() if value is not None}
+    if known_timings:
+        bottleneck, seconds = max(known_timings.items(), key=lambda item: item[1])
+        data["bottleneck_stage"] = bottleneck
+        data["bottleneck_seconds"] = round(seconds, 1)
+    else:
+        data["bottleneck_stage"] = None
+        data["bottleneck_seconds"] = None
+
+    total_films = _num(data.get("total_films"))
+    duration = _num(data.get("duration_seconds"))
+    scrape = _num(data.get("scrape_seconds"))
+    analysis = _num(data.get("analysis_seconds"))
+    if total_films and total_films > 0:
+        if duration is not None:
+            data["duration_seconds_per_film"] = round(duration / total_films, 3)
+        if scrape is not None:
+            data["scrape_seconds_per_film"] = round(scrape / total_films, 3)
+        if analysis is not None:
+            data["analysis_seconds_per_film"] = round(analysis / total_films, 3)
+
+
 def _backend_git_sha() -> str | None:
     return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
 
@@ -53,6 +86,8 @@ def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
             data["_filename"] = f.name
             data["_mtime"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
             data["_size_kb"] = round(stat.st_size / 1024, 1)
+            if directory == RUNS_DIR:
+                _annotate_analysis_run(data)
             items.append(data)
         except Exception as exc:
             logger.warning("Failed to parse %s: %s", f.name, exc)
