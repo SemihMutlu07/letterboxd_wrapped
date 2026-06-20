@@ -27,6 +27,7 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+import sys
 from threading import Lock
 from time import monotonic
 from typing import Any
@@ -56,6 +57,31 @@ TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
 WORKER_PROTOCOL_VERSION = 1
 OUTBOX_DIR = Path(os.getenv("WORKER_OUTBOX_DIR", ".worker_outbox"))
 PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
+def _set_windows_wakelock(enable: bool) -> None:
+    """Keep Windows from idle-sleeping while the worker runs.
+
+    The desktop worker only earns its keep if the always-on machine stays awake
+    to poll for jobs; ES_SYSTEM_REQUIRED blocks *automatic* idle sleep for the
+    life of this process. No-op off Windows so the same code runs on the Fedora
+    dev box and on Render.
+
+    ponytail: idle-sleep only — a user/lid-forced sleep still sleeps; switch to a
+    powercfg override if that ever becomes the problem.
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+    flags = ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if enable else 0)
+    try:
+        ctypes.windll.kernel32.SetThreadExecutionState(flags)  # type: ignore[attr-defined]
+        logger.info("Windows wakelock %s", "enabled" if enable else "released")
+    except Exception as exc:  # noqa: BLE001 — wakelock is best-effort, never fatal
+        logger.warning("Windows wakelock call failed: %s", exc)
 
 
 class WorkerConfig:
@@ -370,6 +396,7 @@ async def _post(session: aiohttp.ClientSession, cfg: WorkerConfig, path: str, pa
 async def run() -> None:
     cfg = WorkerConfig()
     cfg.validate()
+    _set_windows_wakelock(True)
     logger.info("Desktop scrape worker starting — backend=%s poll=%ss", cfg.base_url, POLL_INTERVAL)
 
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=20)) as session:
@@ -403,6 +430,7 @@ async def run() -> None:
             with suppress(asyncio.CancelledError):
                 await heartbeat
             await _report_lifecycle(session, cfg, "shutdown", {"reason": "worker_stopped"})
+            _set_windows_wakelock(False)
 
 
 if __name__ == "__main__":

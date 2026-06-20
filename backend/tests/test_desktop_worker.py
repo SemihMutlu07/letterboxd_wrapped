@@ -19,6 +19,13 @@ def _cfg():
     return cfg
 
 
+def test_wakelock_noop_off_windows(monkeypatch):
+    """Off Windows the wakelock must be a silent no-op (runs on Fedora/Render)."""
+    monkeypatch.setattr(worker.sys, "platform", "linux")
+    worker._set_windows_wakelock(True)
+    worker._set_windows_wakelock(False)  # no exception == pass
+
+
 @pytest.mark.asyncio
 async def test_process_job_posts_success(tmp_path, monkeypatch):
     monkeypatch.setattr(worker, "OUTBOX_DIR", tmp_path / "outbox")
