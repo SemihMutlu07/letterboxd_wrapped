@@ -1,3 +1,4 @@
+import pytest
 from bs4 import BeautifulSoup
 
 from app.services import scraper
@@ -234,3 +235,46 @@ def test_sync_scrape_profile_sources_includes_reviews_when_flagged(monkeypatch):
 
     result = scraper._sync_scrape_profile_sources("semihmutsuz", 5, include_reviews=True)
     assert result.reviews == [{"title": "X", "like_count": 7, "review_text": "ok"}]
+
+
+async def test_scrape_profile_sources_runs_sources_in_parallel(monkeypatch):
+    """Async orchestrator merges diary/grid/overview (each its own thread+session)."""
+    monkeypatch.setattr(scraper, "_sync_scrape_diary",
+                        lambda u, p, s=None, t=None: [{"title": "D", "year": "2024", "rating": None, "watch_date": "2024-01-01"}])
+    monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
+                        lambda u, p, s=None, t=None: [{"title": "G", "year": "2024", "rating": 4.0, "watch_date": ""}])
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (42, 7))
+
+    result = await scraper.scrape_profile_sources("semihmutsuz", 5)
+
+    assert result.diary[0]["title"] == "D"
+    assert result.grid[0]["title"] == "G"
+    assert result.film_count == 42
+    assert result.review_count == 7
+    assert result.reviews == []  # include_reviews defaults False
+
+
+async def test_scrape_profile_sources_raises_when_both_film_sources_fail(monkeypatch):
+    """If diary AND grid both fail, the real error (e.g. 'not found') must surface."""
+    def boom(u, p, s=None, t=None):
+        raise ValueError(f"User '{u}' not found")
+    monkeypatch.setattr(scraper, "_sync_scrape_diary", boom)
+    monkeypatch.setattr(scraper, "_sync_scrape_films_grid", boom)
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (0, 0))
+
+    with pytest.raises(ValueError, match="not found"):
+        await scraper.scrape_profile_sources("ghost", 5)
+
+
+async def test_scrape_profile_sources_survives_one_source_failing(monkeypatch):
+    """One film source failing is tolerated — the other still produces results."""
+    monkeypatch.setattr(scraper, "_sync_scrape_diary",
+                        lambda u, p, s=None, t=None: (_ for _ in ()).throw(ValueError("rate limit")))
+    monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
+                        lambda u, p, s=None, t=None: [{"title": "G", "year": "2024", "rating": 4.0, "watch_date": ""}])
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (10, 0))
+
+    result = await scraper.scrape_profile_sources("semihmutsuz", 5)
+
+    assert result.diary == []
+    assert result.grid[0]["title"] == "G"

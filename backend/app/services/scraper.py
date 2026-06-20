@@ -704,6 +704,56 @@ def _sync_scrape_reviews(
     return all_reviews
 
 
+def _sync_scrape_overview(
+    username: str,
+    session: Optional[cloudscraper.CloudScraper] = None,
+    trace_callback: Optional[TraceCallback] = None,
+) -> tuple[int, int]:
+    """Fetch the profile overview; return (film_count, review_count).
+
+    Best-effort: returns (0, 0) on any failure — counts are provenance/UX only
+    and must never fail the scrape.
+    """
+    owns_session = session is None
+    s = session or _new_session()
+    if owns_session:
+        _warm_session(s)
+    film_count = 0
+    review_count = 0
+    try:
+        overview_resp = _fetch(s, f"{BASE_URL}/{username}/", timeout=10)
+        if overview_resp.status_code == 200:
+            soup = BeautifulSoup(overview_resp.text, "html.parser")
+            films_link = soup.select_one('a[href$="/films/"]')
+            if films_link:
+                count_span = films_link.select_one(".value")
+                if count_span:
+                    try:
+                        film_count = int(count_span.get_text(strip=True).replace(",", ""))
+                    except ValueError:
+                        pass
+            reviews_link = soup.select_one('a[href$="/reviews/"]')
+            if reviews_link:
+                count_span = reviews_link.select_one(".value")
+                if count_span:
+                    try:
+                        review_count = int(count_span.get_text(strip=True).replace(",", ""))
+                    except ValueError:
+                        pass
+            _trace(
+                trace_callback,
+                "overview",
+                "Profile overview parsed",
+                {"film_count": film_count, "review_count": review_count, "status_code": overview_resp.status_code},
+            )
+    except Exception:
+        pass  # non-fatal — counts are best-effort
+    finally:
+        if owns_session:
+            s.close()
+    return film_count, review_count
+
+
 def _sync_scrape_profile_sources(
     username: str,
     max_pages: int,
@@ -723,37 +773,9 @@ def _sync_scrape_profile_sources(
     session = _new_session()
     _warm_session(session)
     try:
-        # Profile overview — extract film count + review count from the stats bar
-        film_count = 0
-        review_count = 0
-        try:
-            overview_resp = _fetch(session, f"{BASE_URL}/{username}/", timeout=10)
-            if overview_resp.status_code == 200:
-                soup = BeautifulSoup(overview_resp.text, "html.parser")
-                films_link = soup.select_one('a[href$="/films/"]')
-                if films_link:
-                    count_span = films_link.select_one(".value")
-                    if count_span:
-                        try:
-                            film_count = int(count_span.get_text(strip=True).replace(",", ""))
-                        except ValueError:
-                            pass
-                reviews_link = soup.select_one('a[href$="/reviews/"]')
-                if reviews_link:
-                    count_span = reviews_link.select_one(".value")
-                    if count_span:
-                        try:
-                            review_count = int(count_span.get_text(strip=True).replace(",", ""))
-                        except ValueError:
-                            pass
-                _trace(
-                    trace_callback,
-                    "overview",
-                    "Profile overview parsed",
-                    {"film_count": film_count, "review_count": review_count, "status_code": overview_resp.status_code},
-                )
-        except Exception:
-            pass  # non-fatal — counts are best-effort
+        film_count, review_count = _sync_scrape_overview(
+            username, session=session, trace_callback=trace_callback
+        )
         if trace_callback:
             diary = _sync_scrape_diary(username, max_pages, session=session, trace_callback=trace_callback)
             grid = _sync_scrape_films_grid(username, max_pages, session=session, trace_callback=trace_callback)
@@ -839,10 +861,57 @@ async def scrape_profile_sources(
     include_reviews: bool = False,
     trace_callback: Optional[TraceCallback] = None,
 ) -> ProfileScrapeSources:
-    """Scrape diary and grid (and optionally reviews) with a shared requests session."""
+    """Scrape diary, grid, overview (and optionally reviews) concurrently.
+
+    Each source runs in its own thread + session so the page families fetch in
+    parallel instead of back-to-back. ponytail: concurrent residential requests
+    raise Letterboxd's 429/block odds vs. the old single-session serial scan — an
+    accepted speed tradeoff. Revert to `_sync_scrape_profile_sources` (serial,
+    shared session) if blocks reappear.
+    """
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, partial(_sync_scrape_profile_sources, username, max_pages, include_reviews, trace_callback)
+    diary_fut = loop.run_in_executor(None, partial(_sync_scrape_diary, username, max_pages, None, trace_callback))
+    grid_fut = loop.run_in_executor(None, partial(_sync_scrape_films_grid, username, max_pages, None, trace_callback))
+    overview_fut = loop.run_in_executor(None, partial(_sync_scrape_overview, username, None, trace_callback))
+    futures = [diary_fut, grid_fut, overview_fut]
+    if include_reviews:
+        futures.append(loop.run_in_executor(None, partial(_sync_scrape_reviews, username, max_pages, None, trace_callback)))
+
+    results = await asyncio.gather(*futures, return_exceptions=True)
+    diary_res, grid_res, overview_res = results[0], results[1], results[2]
+    reviews_res = results[3] if include_reviews else []
+
+    # Diary + grid are the required film sources. If BOTH failed, surface the
+    # error so "user not found" / "blocked" / "rate limit" still reaches callers.
+    diary_failed = isinstance(diary_res, BaseException)
+    grid_failed = isinstance(grid_res, BaseException)
+    if diary_failed and grid_failed:
+        raise grid_res if isinstance(grid_res, ValueError) else diary_res
+    if diary_failed:
+        logger.warning("Diary scrape failed for %s (using grid only): %s", username, diary_res)
+    if grid_failed:
+        logger.warning("Grid scrape failed for %s (using diary only): %s", username, grid_res)
+    diary = [] if diary_failed else diary_res
+    grid = [] if grid_failed else grid_res
+
+    film_count, review_count = (0, 0)
+    if not isinstance(overview_res, BaseException):
+        film_count, review_count = overview_res
+
+    if isinstance(reviews_res, BaseException):
+        logger.warning("Review scrape failed for %s: %s", username, reviews_res)
+        reviews_res = []
+
+    logger.info(
+        "Parallel profile scrape complete for %s: diary=%d grid=%d films=%d reviews=%d scraped_reviews=%d",
+        username, len(diary), len(grid), film_count, review_count, len(reviews_res),
+    )
+    return ProfileScrapeSources(
+        diary=diary,
+        grid=grid,
+        review_count=review_count,
+        film_count=film_count,
+        reviews=reviews_res,
     )
 
 
