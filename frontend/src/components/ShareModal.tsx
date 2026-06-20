@@ -275,7 +275,7 @@ export default function ShareModal({
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
 
       {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className="relative h-full md:h-auto md:min-h-[520px] md:max-h-[95vh] md:max-w-[480px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
+      <div className="relative h-full md:h-[85vh] md:max-h-[820px] md:max-w-[540px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           <span className="text-sm font-semibold text-white/90">Share</span>
