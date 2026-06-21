@@ -31,11 +31,11 @@ export default function RootLayout({
     <html lang="en">
       <head>
       <link
-          rel="icon"
-          type="image/svg+xml"
-          href="/assets/Web Header - Dark.svg"
-          media="(prefers-color-scheme: dark)"
-        />
+        rel="icon"
+        type="image/svg+xml"
+        href="/assets/favicon-16x16-Dark.svg"
+        media="(prefers-color-scheme: dark)"
+      />
       <link
           rel="icon"
           type="image/svg+xml"

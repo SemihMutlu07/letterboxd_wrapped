@@ -76,24 +76,37 @@ export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8
 
 // Enhanced error handling utility
 export function handleApiError(error: unknown, context: string): Error {
+  const code = error instanceof Error && 'code' in error ? (error as { code?: string }).code : undefined;
+  const rawMessage = error instanceof Error ? error.message : String(error);
+
   if (error instanceof Error) {
+    console.error(`[API Error] ${context}:`, rawMessage, { code, error });
     if (error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
-      return new Error(`Network error: Unable to connect to ${context}. The server may still be starting or your internet connection may be down.`);
+      const err = new Error(`Network error: Unable to connect to ${context}. The server may still be starting or your internet connection may be down.`);
+      if (code) (err as { code?: string }).code = code;
+      return err;
     }
     if (error.message.includes('analyze') || error.message.includes('test')) {
       const statusMatch = error.message.match(/(\d+)/);
       const status = statusMatch ? statusMatch[1] : 'unknown';
+      let msg = '';
       switch (status) {
-        case '404': return new Error(`${context} not found. The service may be temporarily unavailable.`);
-        case '500': return new Error(`Server error in ${context}. Please try again later.`);
-        case '413': return new Error(`File too large for ${context}. Please try with smaller files.`);
-        case '429': return new Error(`Too many requests to ${context}. Please wait a moment and try again.`);
-        default:    return new Error(`${context} failed (${status}). Please try again.`);
+        case '404': msg = `${context} not found. The service may be temporarily unavailable.`; break;
+        case '500': msg = `Server error in ${context}. Please try again later.`; break;
+        case '413': msg = `File too large for ${context}. Please try with smaller files.`; break;
+        case '429': msg = `Too many requests to ${context}. Please wait a moment and try again.`; break;
+        default:    msg = `${context} failed (${status}). Please try again.`; break;
       }
+      const err = new Error(msg);
+      if (code) (err as { code?: string }).code = code;
+      return err;
     }
     return error;
   }
-  return new Error(`Unexpected error in ${context}: ${String(error)}`);
+  console.error(`[API Error] ${context}:`, error);
+  const err = new Error(`Unexpected error in ${context}: ${rawMessage}`);
+  if (code) (err as { code?: string }).code = code;
+  return err;
 }
 
 // Search for person (director/actor) in TMDB
@@ -324,17 +337,22 @@ export async function compareWatchlists(
 
     if (!r.ok) {
       let detail = '';
+      let code: string | undefined;
       try {
         const body = await r.json();
         if (typeof body.detail === 'string') {
           detail = body.detail;
         } else if (body.detail && typeof body.detail === 'object') {
           detail = body.detail.message || body.detail.error_code || '';
+          code = body.detail.error_code;
         }
       } catch {
         // body wasn't JSON
       }
-      throw new Error(detail || `watchlist compare ${r.status}`);
+      const err = new Error(detail || `watchlist compare ${r.status}`) as Error & { code?: string };
+      if (code) err.code = code;
+      console.error(`[API Error] watchlist comparison failed:`, { status: r.status, code, detail });
+      throw err;
     }
 
     const data = await r.json();
@@ -366,17 +384,22 @@ export async function recommendFromCompare(
 
     if (!r.ok) {
       let detail = '';
+      let code: string | undefined;
       try {
         const body = await r.json();
         if (typeof body.detail === 'string') {
           detail = body.detail;
         } else if (body.detail && typeof body.detail === 'object') {
           detail = body.detail.message || body.detail.error_code || '';
+          code = body.detail.error_code;
         }
       } catch {
         // body wasn't JSON
       }
-      throw new Error(detail || `watchlist recommendation ${r.status}`);
+      const err = new Error(detail || `watchlist recommendation ${r.status}`) as Error & { code?: string };
+      if (code) err.code = code;
+      console.error(`[API Error] watchlist recommendation failed:`, { status: r.status, code, detail });
+      throw err;
     }
 
     return await r.json() as RecommendFromCompareResult;
@@ -401,17 +424,22 @@ export async function dateNight(
 
     if (!r.ok) {
       let detail = '';
+      let code: string | undefined;
       try {
         const body = await r.json();
         if (typeof body.detail === 'string') {
           detail = body.detail;
         } else if (body.detail && typeof body.detail === 'object') {
           detail = body.detail.message || body.detail.error_code || '';
+          code = body.detail.error_code;
         }
       } catch {
         // body wasn't JSON
       }
-      throw new Error(detail || `date night ${r.status}`);
+      const err = new Error(detail || `date night ${r.status}`) as Error & { code?: string };
+      if (code) err.code = code;
+      console.error(`[API Error] date night failed:`, { status: r.status, code, detail });
+      throw err;
     }
 
     return await r.json() as DateNightResult;

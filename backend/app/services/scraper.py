@@ -240,6 +240,18 @@ def _sync_check_profile(username: str) -> bool:
         return False
 
 
+def _normalize_poster_url(url: str) -> str:
+    """Ensure a poster URL is absolute and browser-safe."""
+    if not url:
+        return url
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/"):
+        return "https://letterboxd.com" + url
+    return url
+
 def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
     """Parse film grid items from Letterboxd grid pages.
 
@@ -272,7 +284,7 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
             img = poster.find("img") or li.find("img")
             if img:
                 poster_url = str(img.get("data-src") or img.get("src") or "")
-
+        poster_url = _normalize_poster_url(poster_url)
         if title:
             films.append({
                 "title": title,
@@ -301,6 +313,7 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
             else:
                 title = alt
             poster_url = str(img.get("src") or img.get("data-src") or "")
+        poster_url = _normalize_poster_url(poster_url)
 
         if not slug:
             poster_div = container.select_one("[data-film-slug]")
@@ -356,13 +369,16 @@ def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
                 slug = str(data_slug)
                 break
 
+        poster_url = str(img.get("src") or img.get("data-src") or "")
+        poster_url = _normalize_poster_url(poster_url)
+
         films.append({
             "title": title_raw,
             "year": year,
             "rating": None,
             "watch_date": "",
             "slug": slug,
-            "poster_url": str(img.get("src") or img.get("data-src") or ""),
+            "poster_url": poster_url,
         })
 
     return films

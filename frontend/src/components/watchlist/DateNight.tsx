@@ -27,7 +27,6 @@ export default function DateNight() {
     if (!canSubmit) return;
     setLoading(true);
     setError(null);
-    setResult(null);
     try {
       setResult(await dateNight(normalized[0], normalized[1]));
     } catch (err) {

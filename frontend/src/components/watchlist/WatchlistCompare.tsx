@@ -97,7 +97,11 @@ function FilmRows({ films }: { films: WatchlistFilm[] }) {
                   width={40}
                   height={60}
                   loading="lazy"
+                  referrerPolicy="no-referrer"
                   className="h-full w-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
                 />
               ) : null}
             </div>
@@ -315,11 +319,10 @@ export default function WatchlistCompare() {
     setLoading(true);
     setDismissLoading(false);
     setError(null);
-    setRecommendation(null);
-    setResult(null);
     try {
       const next = await compareWatchlists(normalized[0], normalized[1]);
       setResult(next);
+      setRecommendation(null);
       const nextPath = watchlistPath(normalized[0], normalized[1]);
       if (typeof window !== 'undefined' && `${window.location.pathname}${window.location.search}` !== nextPath) {
         window.history.pushState(null, '', nextPath);
@@ -341,7 +344,6 @@ export default function WatchlistCompare() {
   const handleRecommend = async () => {
     if (!canSubmit) return;
     setRecommending(true);
-    setRecommendation(null);
     setError(null);
     try {
       const next = await recommendFromCompare(normalized[0], normalized[1], strategy);
