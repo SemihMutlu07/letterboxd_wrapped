@@ -109,6 +109,20 @@ Dashboard'daki **Desktop Worker** sekmesi şunları gösterir:
 > [!NOTE]
 > Worker aniden kapanırsa shutdown bilgisi gelmeyebilir; bu normaldir. Bu durumda dashboard, heartbeat süresi dolunca worker'ı offline gösterir.
 
+### Adım 5.2: Direkt Scrape Kabul Testi
+
+Render ve desktop worker aynı commit'e güncellendikten, worker
+`WORKER_SELF_TEST_ON_START=1` ile başlatıldıktan sonra `backend/` dizininde:
+
+```powershell
+python scripts/verify_desktop_direct_scrape.py --username semihmutsuz
+```
+
+Script `ADMIN_SECRET` değerini güvenli prompt ile ister ve şu koşulların tamamı
+sağlanmazsa hata koduyla çıkar: worker online, startup self-test films > 0,
+transport `direct_cloudscraper`, scrape isteği HTTP 202, poll sonucu `done` ve
+`total_films > 0`.
+
 ---
 
 ### Adım 6: Çalıştırma Betiği (BAT) Oluşturma

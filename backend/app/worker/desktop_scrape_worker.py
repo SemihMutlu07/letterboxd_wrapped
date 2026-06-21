@@ -411,7 +411,15 @@ async def run() -> None:
         POLL_INTERVAL,
     )
 
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=20)) as session:
+    # Set process-wide default ThreadPoolExecutor limit to prevent connection spikes from concurrent scraping threads.
+    # ponytail: limit thread count to 10 to keep concurrent scraping connections minimal.
+    import concurrent.futures
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(max_workers=10))
+
+    async with aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(limit=100, limit_per_host=20)
+    ) as session:
         await _report_lifecycle(
             session,
             cfg,
