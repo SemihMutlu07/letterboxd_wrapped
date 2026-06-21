@@ -14,9 +14,29 @@ from unittest.mock import patch
 
 from app import task_manager
 from app.config import settings
+from app.worker.desktop_scrape_worker import WorkerConfig, _worker_meta
 
 WORKER_TOKEN = "test-worker-secret"
 AUTH = {"X-Worker-Token": WORKER_TOKEN}
+
+
+def test_worker_rejects_scraperapi_key(monkeypatch):
+    monkeypatch.setenv("WORKER_BACKEND_URL", "https://backend.example.com")
+    monkeypatch.setenv("WORKER_TOKEN", WORKER_TOKEN)
+    original_key = settings.scraper_api_key
+    settings.scraper_api_key = "must-not-be-used"
+    try:
+        with pytest.raises(SystemExit, match="SCRAPER_API_KEY must be unset"):
+            WorkerConfig().validate()
+    finally:
+        settings.scraper_api_key = original_key
+
+
+def test_worker_reports_direct_cloudscraper_transport(monkeypatch):
+    monkeypatch.setenv("WORKER_BACKEND_URL", "https://backend.example.com")
+    monkeypatch.setenv("WORKER_TOKEN", WORKER_TOKEN)
+    cfg = WorkerConfig()
+    assert _worker_meta(cfg)["scrape_transport"] == "direct_cloudscraper"
 
 
 @pytest.fixture

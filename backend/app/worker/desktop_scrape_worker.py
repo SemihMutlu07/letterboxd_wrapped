@@ -37,6 +37,7 @@ load_dotenv()
 
 import aiohttp
 
+from app.config import settings
 from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     ScraperAPIError,
@@ -102,6 +103,8 @@ class WorkerConfig:
         ]
         if missing:
             raise SystemExit(f"Missing required env: {', '.join(missing)}")
+        if settings.scraper_api_key:
+            raise SystemExit("SCRAPER_API_KEY must be unset for the direct-cloudscraper desktop worker")
 
 
 def _git_value(*args: str) -> str | None:
@@ -131,6 +134,7 @@ def _worker_meta(cfg: WorkerConfig) -> dict[str, Any]:
         "trace_flush_interval": TRACE_FLUSH_INTERVAL,
         "self_test_on_start": cfg.self_test_on_start,
         "self_test_username": cfg.self_test_username,
+        "scrape_transport": "direct_cloudscraper",
     }
 
 
@@ -337,7 +341,11 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     username = job["username"]
     started = monotonic()
     trace = TraceBuffer()
-    trace.add("worker_received", "Worker received scrape job", {"username": username})
+    trace.add(
+        "worker_received",
+        "Worker received scrape job",
+        {"username": username, "scrape_transport": "direct_cloudscraper"},
+    )
     trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace))
     logger.info("Processing scrape job %s for @%s", task_id, username)
     try:
@@ -397,7 +405,11 @@ async def run() -> None:
     cfg = WorkerConfig()
     cfg.validate()
     _set_windows_wakelock(True)
-    logger.info("Desktop scrape worker starting — backend=%s poll=%ss", cfg.base_url, POLL_INTERVAL)
+    logger.info(
+        "Desktop scrape worker starting — backend=%s poll=%ss transport=direct_cloudscraper",
+        cfg.base_url,
+        POLL_INTERVAL,
+    )
 
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit_per_host=20)) as session:
         await _report_lifecycle(
