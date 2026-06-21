@@ -1,6 +1,7 @@
 'use client';
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { X, Download, Sliders } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
 import EditorialShareCard from '@/components/share/variants/EditorialShareCard';
@@ -148,6 +149,8 @@ export default function ShareModal({
   const [actorIdx, setActorIdx] = useState(0);
   const [directorIdx, setDirectorIdx] = useState(0);
   const [swapOpen, setSwapOpen] = useState(false);
+  const [showSwapHint, setShowSwapHint] = useState(false);
+  const [hintFading, setHintFading] = useState(false);
 
   const variantKey = VARIANTS[Math.max(0, Math.min(VARIANTS.length - 1, activeIdx))].key;
 
@@ -169,6 +172,37 @@ export default function ShareModal({
     onScreenCrush: cardProps.topActors?.[actorIdx] ?? cardProps.onScreenCrush,
     favoriteDirector: cardProps.topDirectors?.[directorIdx] ?? cardProps.favoriteDirector,
   }), [cardProps, actorIdx, directorIdx]);
+
+  // Swap hint — show once, persist to localStorage
+  const dismissSwapHint = useCallback(() => {
+    setHintFading(true);
+    setTimeout(() => {
+      setShowSwapHint(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lbw_swap_hint_seen', '1');
+      }
+    }, 300);
+  }, []);
+
+  // Show swap hint on first open if swapTrigger is available
+  useEffect(() => {
+    if (!open) return;
+    const hasActors = (cardProps.topActors?.length ?? 0) >= 2;
+    const hasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
+    const swapTrigger = hasActors || hasDirectors;
+    if (!swapTrigger) return;
+    if (typeof window !== 'undefined' && localStorage.getItem('lbw_swap_hint_seen')) return;
+    setShowSwapHint(true);
+    setHintFading(false);
+    const t = setTimeout(() => setHintFading(true), 4500);
+    const t2 = setTimeout(() => {
+      setShowSwapHint(false);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lbw_swap_hint_seen', '1');
+      }
+    }, 5000);
+    return () => { clearTimeout(t); clearTimeout(t2); };
+  }, [open, cardProps]);
 
   const adaptivePixelRatio = useAdaptivePixelRatio();
   const target = useMemo(() =>
@@ -275,7 +309,7 @@ export default function ShareModal({
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
 
       {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className="relative h-full md:h-[85vh] md:max-h-[820px] md:max-w-[540px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
+      <div className="relative h-full md:h-[88vh] md:max-h-[920px] md:max-w-[600px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           <span className="text-sm font-semibold text-white/90">Share</span>
@@ -386,7 +420,7 @@ export default function ShareModal({
           )}
 
           {/* Orientation + swap trigger */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between relative">
             <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
               <button
                 onClick={() => setOrientation('vertical')}
@@ -406,15 +440,44 @@ export default function ShareModal({
               </button>
             </div>
             {showSwapTrigger && (
-              <button
-                onClick={() => setSwapOpen((s) => !s)}
-                aria-label="Tune actor and director"
-                className={`grid place-items-center w-9 h-9 rounded-full transition ${
-                  swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Sliders size={16} />
-              </button>
+              <div className="relative">
+                {/* Swap hint bubble */}
+                <AnimatePresence>
+                  {showSwapHint && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: 4 }}
+                      animate={{ opacity: hintFading ? 0 : 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.2 }}
+                      className="absolute right-0 bottom-full mb-2 z-20 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/10 backdrop-blur shadow-lg whitespace-nowrap"
+                    >
+                      <span className="text-xs text-slate-300">Swap actor & director</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); dismissSwapHint(); }}
+                        className="text-slate-500 hover:text-white transition-colors leading-none"
+                        aria-label="Dismiss hint"
+                      >
+                        <X size={12} strokeWidth={2.5} />
+                      </button>
+                      {/* Downward caret */}
+                      <div className="absolute -bottom-1.5 right-3 w-3 h-3 rotate-45 bg-[#1a1a1a] border-r border-b border-white/10" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <button
+                  onClick={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
+                  aria-label="Tune actor and director"
+                  className={`relative grid place-items-center w-9 h-9 rounded-full transition ${
+                    swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {/* Pulse ring when hint is active */}
+                  {showSwapHint && !hintFading && (
+                    <span className="absolute inset-0 rounded-full border border-white/20 animate-ping" />
+                  )}
+                  <Sliders size={16} />
+                </button>
+              </div>
             )}
           </div>
 

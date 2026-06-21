@@ -127,7 +127,7 @@ function RatingDeviationInner({ stats }: { stats: StatsData }) {
 
       {/* Film grid */}
       {shown.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
           {shown.map((film) => (
             <FilmPosterCard
               key={`${film.title}-${film.year}`}
