@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -94,6 +95,41 @@ def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
     return items
 
 
+async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
+    """Read analysis runs from Supabase ops_runs (durable across Render restarts).
+    Falls back to [] on any error so the dashboard still renders."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.supabase_url}/rest/v1/ops_runs",
+                headers={
+                    "apikey": settings.supabase_anon_key,
+                    "Authorization": f"Bearer {settings.supabase_anon_key}",
+                },
+                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception as exc:
+        logger.warning("Failed to load runs from Supabase: %s", exc)
+        return []
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        data = row.get("payload")
+        if not isinstance(data, dict):
+            continue
+        data["_mtime"] = row.get("created_at")
+        _annotate_analysis_run(data)
+        items.append(data)
+    return items
+
+
+async def _load_analysis_runs(limit: int = 50) -> list[dict[str, Any]]:
+    if settings.supabase_enabled:
+        return await _load_runs_supabase(limit)
+    return _load_json_dir(RUNS_DIR, limit=limit)
+
+
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_login(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request": request})
@@ -102,7 +138,7 @@ async def admin_login(request: Request):
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request):
     _require_admin(request)
-    runs = _load_json_dir(RUNS_DIR, limit=50)
+    runs = await _load_analysis_runs(limit=50)
     watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
     date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
     worker_status = task_manager.get_worker_status(
@@ -143,7 +179,7 @@ async def admin_api_runs(request: Request, limit: int = 50):
     """JSON API for the admin dashboard."""
     _require_admin(request)
     return {
-        "runs": _load_json_dir(RUNS_DIR, limit),
+        "runs": await _load_analysis_runs(limit),
         "watchlist_runs": _load_json_dir(WATCHLIST_RUNS_DIR, limit),
         "date_night_runs": _load_json_dir(DATE_NIGHT_RUNS_DIR, limit),
     }

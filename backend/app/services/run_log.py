@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -8,9 +9,45 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
+
+from app.config import settings
+
 logger = logging.getLogger("letterboxd_wrapped.run_log")
 
 RUNS_DIR = Path("runs")
+
+# Bulky fields kept in the local file but stripped before mirroring to Supabase.
+_HEAVY_KEYS = ("stats", "trace_events")
+
+
+def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Trim bulky fields before mirroring; the dashboard list only needs scalars."""
+    return {k: v for k, v in payload.items() if k not in _HEAVY_KEYS}
+
+
+def _mirror_to_supabase(payload: dict[str, Any]) -> None:
+    """Best-effort copy of the run log to Supabase ops_runs so the admin dashboard
+    survives Render restarts (local runs/ is ephemeral there). No-op without env."""
+    try:
+        httpx.post(
+            f"{settings.supabase_url}/rest/v1/ops_runs",
+            headers={
+                "apikey": settings.supabase_anon_key,
+                "Authorization": f"Bearer {settings.supabase_anon_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json={
+                "username": payload.get("username"),
+                "ok": payload.get("ok"),
+                "total_films": payload.get("total_films"),
+                "payload": _remote_payload(payload),
+            },
+            timeout=5.0,
+        )
+    except Exception as exc:
+        logger.warning("Failed to mirror run to Supabase: %s", exc)
 
 TIMING_FIELDS = (
     "duration_seconds",
@@ -95,6 +132,13 @@ def persist_run(
             ok,
             payload["total_films"],
         )
+        # Durable mirror so the admin dashboard survives Render restarts. Offloaded
+        # to a thread so the 5s network call never blocks the event loop.
+        if settings.supabase_enabled:
+            try:
+                asyncio.get_running_loop().run_in_executor(None, _mirror_to_supabase, payload)
+            except RuntimeError:
+                _mirror_to_supabase(payload)
         return path
     except Exception as exc:
         logger.warning("Failed to persist run for %s: %s", username, exc)

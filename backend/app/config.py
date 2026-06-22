@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     scraper_api_key: str = ""
 
+    # Optional: mirror run logs to Supabase so the admin dashboard survives Render
+    # restarts (local runs/ is ephemeral there). Anon key only — never service_role.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+
     # Desktop-worker mode: when worker_token is set, /api/scrape-profile queues
     # jobs for an outbound desktop worker instead of scraping inline. The worker
     # authenticates with this shared secret via the X-Worker-Token header.
@@ -35,6 +40,10 @@ class Settings(BaseSettings):
     @property
     def desktop_worker_enabled(self) -> bool:
         return bool(self.worker_token)
+
+    @property
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_anon_key)
 
     @property
     def cors_origins(self) -> List[str]:
