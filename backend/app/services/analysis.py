@@ -991,6 +991,31 @@ async def process_comprehensive_letterboxd_data(
 
     stats["directors_with_ratings"] = _rated_entity_rows("director", director_counts, min_rated=3)
 
+    # Highest-rated rows carry no profile_path from _rated_entity_rows; backfill the few
+    # the UI actually shows by reusing the most-watched TMDB lookup (existing maps = cache).
+    # ponytail: limit 4 — frontend shows top 4 (PAGE_SIZE=4, show-more off). Raise if it shows more.
+    async def _resolve_profile_path(name, role, films, cache):
+        if name in cache:
+            return cache[name]
+        pp = None
+        try:
+            data = await search_person_with_fallback(session, name, role=role)
+            if data and data.get("results"):
+                cand = data["results"][0].get("profile_path")
+                if isinstance(cand, str) and cand:
+                    pp = cand
+            if not pp and films:
+                pp = await find_person_by_film_credit(session, name, films)
+        except Exception as exc:
+            logger.warning("[profile-debug] rated %s '%s' lookup failed: %s", role, name, exc)
+        cache[name] = pp
+        return pp
+
+    for row in stats["directors_with_ratings"][:4]:
+        row["profile_path"] = await _resolve_profile_path(
+            row["name"], "director", director_films_map.get(row["name"], []), director_profile_map
+        )
+
     actor_rated: dict[str, list[float]] = {}
     if "cast" in analysis_df.columns and "rating" in analysis_df.columns:
         for _, row in analysis_df.iterrows():
@@ -1017,6 +1042,12 @@ async def process_comprehensive_letterboxd_data(
         key=lambda row: (row["avg_rating"], row["rated_count"]),
         reverse=True,
     )
+
+    for row in stats["actors_with_ratings"][:4]:
+        if not row.get("profile_path"):
+            row["profile_path"] = await _resolve_profile_path(
+                row["name"], "actor", actor_films_map.get(row["name"], []), actor_profile_map
+            )
 
     country_iso_counts: Counter = Counter()
     country_iso_names: dict[str, str] = {}
