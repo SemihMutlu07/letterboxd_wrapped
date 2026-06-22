@@ -127,7 +127,7 @@ function RatingDeviationInner({ stats }: { stats: StatsData }) {
 
       {/* Film grid */}
       {shown.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
           {shown.map((film) => (
             <FilmPosterCard
               key={`${film.title}-${film.year}`}
@@ -278,7 +278,7 @@ function SubtabButton({
       style={
         active
           ? { background: accent + '26', color: accent, border: `1px solid ${accent}4d` }
-          : { color: '#94a3b8' }
+          : { color: '#cbd5e1' }
       }
     >
       {children}

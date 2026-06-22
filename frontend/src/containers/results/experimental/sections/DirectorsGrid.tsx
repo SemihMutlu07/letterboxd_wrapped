@@ -106,7 +106,7 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
       ratedTabTooltip="Your average rating across films you&apos;ve rated for each director (minimum 3 rated films)"
     >
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {shown.map((d) => (
           <PersonCard
             key={d.name}
