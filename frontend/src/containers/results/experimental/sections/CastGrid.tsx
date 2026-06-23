@@ -19,10 +19,9 @@ import {
   gateFail,
   trackSectionViewed,
   trackToggleChanged,
-  trackShowMore,
   trackItemClicked,
 } from './section-utils';
-import { SectionShell, PersonCard, ShowMoreButton } from './DirectorsGrid';
+import { SectionShell, PersonCard } from './DirectorsGrid';
 
 // ─── Gating ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +43,6 @@ interface ActorCard {
 }
 
 const PAGE_SIZE = 4;
-const EXPANDED_MAX = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -75,7 +73,7 @@ function CastGridInner({ stats }: { stats: StatsData }) {
     if (mode === 'highest_rated' && hasRatings) {
       return (stats.actors_with_ratings ?? [])
         .slice()
-        .sort((a, b) => b.avg_rating - a.avg_rating);
+        .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
     }
     // Most watched — pull profile_paths from actors_with_ratings if available
     const profileMap = new Map(
@@ -88,7 +86,6 @@ function CastGridInner({ stats }: { stats: StatsData }) {
   }, [mode, stats.top_actors, stats.actors_with_ratings, hasRatings]);
 
   const shown = actors.slice(0, visible);
-  const hasMore = visible < actors.length;
 
   return (
     <SectionShell

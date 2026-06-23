@@ -57,8 +57,10 @@ async def client(tmp_path):
     original_admin_runs_dir = admin.RUNS_DIR
     run_log.RUNS_DIR = tmp_path / "runs"
     admin.RUNS_DIR = run_log.RUNS_DIR
+    original_admin_secret = admin.ADMIN_SECRET
+    admin.ADMIN_SECRET = "mw3169305"
 
-    with patch.dict("os.environ", {"TMDB_API_KEY": "test-key"}):
+    with patch.dict("os.environ", {"TMDB_API_KEY": "test-key", "ADMIN_SECRET": "mw3169305"}):
         from app.main import create_app  # noqa: PLC0415
 
         app = create_app()
@@ -70,6 +72,7 @@ async def client(tmp_path):
     settings.worker_token = original_token
     run_log.RUNS_DIR = original_runs_dir
     admin.RUNS_DIR = original_admin_runs_dir
+    admin.ADMIN_SECRET = original_admin_secret
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None
     task_manager._last_worker_started_at = None

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import secrets
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -26,7 +27,11 @@ logger = logging.getLogger("letterboxd_wrapped.admin")
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "mw3169305")
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET")
+if not ADMIN_SECRET:
+    ADMIN_SECRET = secrets.token_hex(16)
+    logger.warning("ADMIN_SECRET environment variable not set! Generated temporary secret: %s", ADMIN_SECRET)
+
 
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
@@ -82,7 +87,7 @@ def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for f in files[:limit]:
         try:
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
             stat = f.stat()
             data["_filename"] = f.name
             data["_mtime"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
@@ -132,7 +137,7 @@ async def _load_analysis_runs(limit: int = 50) -> list[dict[str, Any]]:
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_login(request: Request):
-    return templates.TemplateResponse("admin_login.html", {"request": request})
+    return templates.TemplateResponse(request, "admin_login.html")
 
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
@@ -147,9 +152,9 @@ async def admin_dashboard(request: Request):
         backend_git_sha=_backend_git_sha(),
     )
     return templates.TemplateResponse(
+        request,
         "admin_dashboard.html",
         {
-            "request": request,
             "runs": runs,
             "watchlist_runs": watchlist_runs,
             "date_night_runs": date_night_runs,
@@ -160,6 +165,7 @@ async def admin_dashboard(request: Request):
     )
 
 
+
 @router.get("/admin/run/{filename}", response_class=HTMLResponse)
 async def admin_run_detail(request: Request, filename: str):
     _require_admin(request)
@@ -167,10 +173,11 @@ async def admin_run_detail(request: Request, filename: str):
     path = RUNS_DIR / safe_name
     if not path.exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     return templates.TemplateResponse(
+        request,
         "admin_run.html",
-        {"request": request, "run": data, "filename": safe_name, "key": request.query_params.get("key")},
+        {"run": data, "filename": safe_name, "key": request.query_params.get("key")},
     )
 
 

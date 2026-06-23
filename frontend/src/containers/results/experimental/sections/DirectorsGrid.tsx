@@ -22,7 +22,6 @@ import {
   gateFail,
   trackSectionViewed,
   trackToggleChanged,
-  trackShowMore,
   trackItemClicked,
   toggleClass,
 } from './section-utils';
@@ -47,7 +46,6 @@ interface DirectorCard {
 }
 
 const PAGE_SIZE = 4;
-const EXPANDED_MAX = 8;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -82,7 +80,7 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
     if (mode === 'highest_rated' && hasRatings) {
       return (stats.directors_with_ratings ?? [])
         .slice()
-        .sort((a, b) => b.avg_rating - a.avg_rating);
+        .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
     }
     // Most watched — merge profile_path from directors_with_ratings if present
     const profileMap = new Map(
@@ -95,7 +93,6 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
   }, [mode, stats.top_directors, stats.directors_with_ratings, hasRatings]);
 
   const shown = directors.slice(0, visible);
-  const hasMore = visible < directors.length;
 
   return (
     <SectionShell
