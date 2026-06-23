@@ -124,6 +124,60 @@ async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
     return items
 
 
+async def _load_watchlist_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
+    """Read watchlist comparison runs from Supabase ops_watchlist_runs."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.supabase_url}/rest/v1/ops_watchlist_runs",
+                headers={
+                    "apikey": settings.supabase_anon_key,
+                    "Authorization": f"Bearer {settings.supabase_anon_key}",
+                },
+                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception as exc:
+        logger.warning("Failed to load watchlist runs from Supabase: %s", exc)
+        return []
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        data = row.get("payload")
+        if not isinstance(data, dict):
+            continue
+        data["_mtime"] = row.get("created_at")
+        items.append(data)
+    return items
+
+
+async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
+    """Read date night recommendation runs from Supabase ops_date_night_runs."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.supabase_url}/rest/v1/ops_date_night_runs",
+                headers={
+                    "apikey": settings.supabase_anon_key,
+                    "Authorization": f"Bearer {settings.supabase_anon_key}",
+                },
+                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception as exc:
+        logger.warning("Failed to load date night runs from Supabase: %s", exc)
+        return []
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        data = row.get("payload")
+        if not isinstance(data, dict):
+            continue
+        data["_mtime"] = row.get("created_at")
+        items.append(data)
+    return items
+
+
 async def _load_analysis_runs(limit: int = 50) -> list[dict[str, Any]]:
     if settings.supabase_enabled:
         return await _load_runs_supabase(limit)
@@ -139,8 +193,12 @@ async def admin_login(request: Request):
 async def admin_dashboard(request: Request):
     _require_admin(request)
     runs = await _load_analysis_runs(limit=50)
-    watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
-    date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
+    if settings.supabase_enabled:
+        watchlist_runs = await _load_watchlist_runs_supabase(limit=50)
+        date_night_runs = await _load_date_night_runs_supabase(limit=50)
+    else:
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
     worker_status = task_manager.get_worker_status(
         settings.worker_heartbeat_max_age_seconds,
         expected_protocol_version=settings.worker_protocol_version,
@@ -178,10 +236,16 @@ async def admin_run_detail(request: Request, filename: str):
 async def admin_api_runs(request: Request, limit: int = 50):
     """JSON API for the admin dashboard."""
     _require_admin(request)
+    if settings.supabase_enabled:
+        watchlist_runs = await _load_watchlist_runs_supabase(limit)
+        date_night_runs = await _load_date_night_runs_supabase(limit)
+    else:
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit)
     return {
         "runs": await _load_analysis_runs(limit),
-        "watchlist_runs": _load_json_dir(WATCHLIST_RUNS_DIR, limit),
-        "date_night_runs": _load_json_dir(DATE_NIGHT_RUNS_DIR, limit),
+        "watchlist_runs": watchlist_runs,
+        "date_night_runs": date_night_runs,
     }
 
 

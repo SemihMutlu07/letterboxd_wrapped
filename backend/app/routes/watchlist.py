@@ -8,7 +8,9 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -20,6 +22,7 @@ from app.services.recommender import (
     recommendation_from_film,
 )
 from app.services.scraper import ScraperAPIError, scrape_watchlist
+from app.config import settings
 
 logger = logging.getLogger("letterboxd_wrapped.watchlist")
 
@@ -29,6 +32,29 @@ USERNAME_RE = re.compile(r"^[a-z0-9_]+$")
 MAX_WATCHLIST_PAGES = 40
 
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
+
+
+def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
+    """Best-effort mirror of watchlist comparison run to Supabase."""
+    try:
+        httpx.post(
+            f"{settings.supabase_url}/rest/v1/ops_watchlist_runs",
+            headers={
+                "apikey": settings.supabase_anon_key,
+                "Authorization": f"Bearer {settings.supabase_anon_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json={
+                "usernames": payload.get("usernames"),
+                "ok": payload.get("ok"),
+                "match_score": payload.get("match_score"),
+                "payload": payload,
+            },
+            timeout=5.0,
+        )
+    except Exception as exc:
+        logger.warning("Failed to mirror watchlist run to Supabase: %s", exc)
 
 
 def _persist_watchlist_run(
@@ -58,6 +84,11 @@ def _persist_watchlist_run(
             },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if settings.supabase_enabled:
+            try:
+                asyncio.get_running_loop().run_in_executor(None, _mirror_watchlist_to_supabase, payload)
+            except RuntimeError:
+                _mirror_watchlist_to_supabase(payload)
     except Exception as exc:
         logger.warning("Failed to persist watchlist run: %s", exc)
 

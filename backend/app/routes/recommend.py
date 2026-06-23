@@ -6,9 +6,12 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 
+from app.config import settings
 from app.models.recommend import DateNightResponse, MutualProfile, UserPairRequest
 from app.routes.watchlist import _check_rate_limit, _client_key, _rate_limit_exception, _validate_username
 from app.services.recommender import (
@@ -28,6 +31,28 @@ SCRAPE_TIMEOUT = 90  # seconds per scrape operation
 ENRICH_TIMEOUT = 90  # seconds per enrich operation
 
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
+
+
+def _mirror_date_night_to_supabase(payload: dict[str, Any]) -> None:
+    """Best-effort mirror of date night recommendation run to Supabase."""
+    try:
+        httpx.post(
+            f"{settings.supabase_url}/rest/v1/ops_date_night_runs",
+            headers={
+                "apikey": settings.supabase_anon_key,
+                "Authorization": f"Bearer {settings.supabase_anon_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            json={
+                "usernames": payload.get("usernames"),
+                "ok": payload.get("ok"),
+                "payload": payload,
+            },
+            timeout=5.0,
+        )
+    except Exception as exc:
+        logger.warning("Failed to mirror date night run to Supabase: %s", exc)
 
 
 def _persist_date_night_run(
@@ -61,6 +86,11 @@ def _persist_date_night_run(
             },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if settings.supabase_enabled:
+            try:
+                asyncio.get_running_loop().run_in_executor(None, _mirror_date_night_to_supabase, payload)
+            except RuntimeError:
+                _mirror_date_night_to_supabase(payload)
     except Exception as exc:
         logger.warning("Failed to persist date night run: %s", exc)
 
