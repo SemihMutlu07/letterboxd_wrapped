@@ -18,7 +18,8 @@ logger = logging.getLogger("letterboxd_wrapped.run_log")
 RUNS_DIR = Path("runs")
 
 # Bulky fields kept in the local file but stripped before mirroring to Supabase.
-_HEAVY_KEYS = ("stats", "trace_events")
+# trace_events is lightweight (list of small dicts) and needed by the admin dashboard.
+_HEAVY_KEYS = ("stats",)
 
 
 def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:

@@ -12,10 +12,11 @@ def test_remote_payload_drops_bulky_keeps_scalars():
         "analysis_seconds": 2.1,
         "sinefil_meter": {"score": 73},
         "stats": {"all_films": [1, 2, 3]},  # bulky
-        "trace_events": [{"stage": "scrape"}],  # bulky
+        "trace_events": [{"stage": "scrape"}],  # lightweight, kept for dashboard
     }
     out = _remote_payload(payload)
-    assert "stats" not in out and "trace_events" not in out
+    assert "stats" not in out  # only stats is truly bulky
+    assert "trace_events" in out  # kept for admin dashboard
     # dashboard needs these
-    for key in ("username", "ok", "total_films", "scrape_seconds", "analysis_seconds", "sinefil_meter"):
+    for key in ("username", "ok", "total_films", "scrape_seconds", "analysis_seconds", "sinefil_meter", "trace_events"):
         assert key in out, key
