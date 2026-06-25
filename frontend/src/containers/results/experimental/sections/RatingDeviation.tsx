@@ -3,12 +3,12 @@
 /**
  * SECTION 3 — RATED HIGHER / LOWER THAN YOUR AVERAGE
  *
- * Computes delta = filmRating - userAvgRating for each rated film.
+ * Computes delta = yourRating - userAvgRating for each rated film.
  * A) Rated Higher: largest positive delta first
  * B) Rated Lower:  most negative delta first
  *
  * Data requirements:
- *   stats.rated_films  — individual film records with rating + poster_path
+ *   stats.rated_films  — individual film records with your_rating + average_rating + poster_path
  *   stats.average_rating — user's global average
  *
  * Gating: if rated_films is absent or has < 5 entries, hide section.
@@ -85,21 +85,11 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   }, []);
 
   const { higher, lower } = useMemo<{ higher: EnrichedFilm[]; lower: EnrichedFilm[] }>(() => {
-    // Compare each film to ITS OWN community rating, not the user's global average,
-    // so every card has an individual delta. Films without a community score
-    // (no TMDB votes) can't form an outlier and are skipped.
-    const films: EnrichedFilm[] = (stats.rated_films ?? [])
-      .filter((f): f is typeof f & { community_rating: number } =>
-        typeof f.community_rating === 'number' && Number.isFinite(f.community_rating),
-      )
-      .map((f) => ({
-        title: f.title,
-        year: f.year,
-        rating: f.rating,
-        communityRating: f.community_rating,
-        poster_path: f.poster_path,
-        delta: Math.round((f.rating - f.community_rating) * 10) / 10,
-      }));
+    const films: EnrichedFilm[] = (stats.rated_films ?? []).map((f) => ({
+      ...f,
+      rating: f.your_rating ?? 0,
+      delta: Math.round(((f.your_rating ?? 0) - userAvg) * 10) / 10,
+    }));
     return {
       higher: films.filter((f) => f.delta > 0).sort((a, b) => b.delta - a.delta),
       lower: films.filter((f) => f.delta < 0).sort((a, b) => a.delta - b.delta),
