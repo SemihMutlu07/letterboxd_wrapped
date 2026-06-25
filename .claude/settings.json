@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(curl -s http://localhost:3001/brutal)",
+      "Bash(npm list *)",
+      "Bash(npx tsc *)",
+      "PowerShell($response = Invoke-WebRequest -Uri 'http://localhost:3000/' -ErrorAction SilentlyContinue ; $response.Content | Select-String -Pattern 'Film Wrapped' -CaseSensitive)",
+      "Bash(curl -s -w \"\\\\nStatus: %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(node C:\\\\Users\\\\berda\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-berda-movie-wrapped-letterboxd-wrapped\\\\6ac283c5-fcac-4822-9ad7-2cce5a975f45\\\\scratchpad\\\\test-hover.js)",
+      "PowerShell(node \"C:\\\\Users\\\\berda\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-berda-movie-wrapped-letterboxd-wrapped\\\\6ac283c5-fcac-4822-9ad7-2cce5a975f45\\\\scratchpad\\\\test-hover.js\")",
+      "PowerShell(node \"C:\\\\Users\\\\berda\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-berda-movie-wrapped-letterboxd-wrapped\\\\6ac283c5-fcac-4822-9ad7-2cce5a975f45\\\\scratchpad\\\\verify-implementation.js\")"
+    ]
+  }
+}
