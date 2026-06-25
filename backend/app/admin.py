@@ -106,7 +106,7 @@ async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
                     "apikey": settings.supabase_anon_key,
                     "Authorization": f"Bearer {settings.supabase_anon_key}",
                 },
-                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
+                params={"select": "id,created_at,payload", "order": "created_at.desc", "limit": str(limit)},
             )
             resp.raise_for_status()
             rows = resp.json()
@@ -119,9 +119,37 @@ async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
         if not isinstance(data, dict):
             continue
         data["_mtime"] = row.get("created_at")
+        data["_filename"] = row.get("id")  # detail-view link key (UUID, path-safe)
         _annotate_analysis_run(data)
         items.append(data)
     return items
+
+
+async def _load_run_supabase(run_id: str) -> dict[str, Any] | None:
+    """Fetch a single analysis run payload from ops_runs by id (UUID)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.supabase_url}/rest/v1/ops_runs",
+                headers={
+                    "apikey": settings.supabase_anon_key,
+                    "Authorization": f"Bearer {settings.supabase_anon_key}",
+                },
+                params={"id": f"eq.{run_id}", "select": "created_at,payload", "limit": "1"},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception as exc:
+        logger.warning("Failed to load run %s from Supabase: %s", run_id, exc)
+        return None
+    if not rows:
+        return None
+    data = rows[0].get("payload")
+    if not isinstance(data, dict):
+        return None
+    data["_mtime"] = rows[0].get("created_at")
+    _annotate_analysis_run(data)
+    return data
 
 
 async def _load_watchlist_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
@@ -222,10 +250,15 @@ async def admin_dashboard(request: Request):
 async def admin_run_detail(request: Request, filename: str):
     _require_admin(request)
     safe_name = Path(filename).name
-    path = RUNS_DIR / safe_name
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Run not found")
-    data = json.loads(path.read_text())
+    if settings.supabase_enabled:
+        data = await _load_run_supabase(safe_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+    else:
+        path = RUNS_DIR / safe_name
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Run not found")
+        data = json.loads(path.read_text())
     return templates.TemplateResponse(
         "admin_run.html",
         {"request": request, "run": data, "filename": safe_name, "key": request.query_params.get("key")},
