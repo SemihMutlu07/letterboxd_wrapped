@@ -206,6 +206,50 @@ function CardHoverInfo({ cardType, data, stats }) {
   );
 }
 
+function DirectorProfileModal({ director, onClose }) {
+  const [closeHover, setCloseHover] = useState(false);
+  const profileUrl = director?.profile_path ? `https://image.tmdb.org/t/p/h632${director.profile_path}` : null;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,15,12,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 24 }}>
+      <Box onClick={(e) => e.stopPropagation()} sh={8} style={{ maxWidth: 320, width: "100%", padding: 0, overflow: "hidden" }}>
+        {profileUrl && (
+          <img src={profileUrl} alt={director.name} style={{ width: "100%", aspectRatio: "9/12", objectFit: "cover", borderBottom: `2.5px solid ${T.ink}` }} onError={(e) => e.target.style.display = "none"} />
+        )}
+        <div style={{ padding: "20px 22px 24px", background: T.card }}>
+          <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 28, color: T.ink, marginBottom: 12, lineHeight: 1.2 }}>{director.name || "—"}</div>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 20 }}>
+            {director.count} film{director.count !== 1 ? "s" : ""} · {director.avg_rating ? `★ ${(director.avg_rating ?? 0).toFixed(1)} avg` : ""}
+          </div>
+          <button
+            onClick={onClose}
+            onMouseEnter={() => setCloseHover(true)}
+            onMouseLeave={() => setCloseHover(false)}
+            style={{
+              width: "100%",
+              fontFamily: MONO,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              padding: "8px 11px",
+              border: `2px solid ${T.ink}`,
+              background: closeHover ? T.amber : T.lime,
+              color: T.ink,
+              cursor: "pointer",
+              boxShadow: closeHover ? shadow(3) : shadow(2),
+              transform: closeHover ? "translate(-1px,-1px)" : "none",
+              transition: "all 90ms",
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </Box>
+    </div>
+  );
+}
+
 function CardModal({ cardInfo, onClose, stats }) {
   if (!cardInfo) return null;
 
@@ -309,6 +353,7 @@ function WrappedCards({ stats }) {
   ];
   const [h, setH] = useState(null);
   const [sel, setSel] = useState(null);
+  const [directorProfile, setDirectorProfile] = useState(null);
 
   return (
     <section style={{ marginBottom: 28 }}>
@@ -316,10 +361,18 @@ function WrappedCards({ stats }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
         {cards.map(([l, v, c, col, cardType, data], i) => {
           const isActive = sel && sel[0] === cardType && sel[1] === data;
+          const handleCardClick = () => {
+            if (!cardType) return;
+            if (cardType === "director") {
+              setDirectorProfile(data);
+            } else {
+              setSel([cardType, data, l, v]);
+            }
+          };
           return (
           <div key={l} className="relative" onMouseEnter={() => setH(i)} onMouseLeave={() => setH(null)} style={{ display: "flex", zIndex: h === i ? 10 : 1, position: "relative" }}>
             <Box bg={h === i && !isActive ? T.paper : col} sh={isActive ? 4 : (h === i ? 3 : 2)}
-              onClick={() => cardType && setSel([cardType, data, l, v])}
+              onClick={handleCardClick}
               style={{
                 width: "100%",
                 padding: "24px 22px 26px",
@@ -341,7 +394,7 @@ function WrappedCards({ stats }) {
                 <div style={{ fontFamily: MONO, fontSize: 10.5, color: T.ink, opacity: h === i || isActive ? 1 : 0.75, transition: "opacity 110ms" }}>{c}</div>
                 {cardType && (h === i || isActive) && (
                   <div style={{ fontFamily: MONO, fontSize: 9, color: T.lime, marginTop: 10, fontWeight: 700, opacity: 0, animation: "fadeIn 200ms 80ms forwards" }}>
-                    {isActive ? "✓ ACTIVE · CLICK AGAIN TO VIEW ALL" : "▸ CLICK TO VIEW ALL"}
+                    {cardType === "director" ? "▸ VIEW PROFILE" : (isActive ? "✓ ACTIVE · CLICK AGAIN TO VIEW ALL" : "▸ CLICK TO VIEW ALL")}
                   </div>
                 )}
               </div>
@@ -365,6 +418,7 @@ function WrappedCards({ stats }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      {directorProfile && <DirectorProfileModal director={directorProfile} onClose={() => setDirectorProfile(null)} />}
       {sel && <CardModal cardInfo={sel} onClose={() => setSel(null)} stats={stats} />}
     </section>
   );
