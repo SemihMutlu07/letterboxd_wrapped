@@ -87,6 +87,13 @@ beforeEach(() => {
   // off these, so without a mock variants never enter the mount budget.
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 400 });
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 700 });
+  // The rail measures pageW/pageH via getBoundingClientRect (jsdom returns all
+  // zeros). pageW has no clientWidth fallback, so without this the export cards
+  // never mount and exportRoot() is null.
+  Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ width: 400, height: 700, top: 0, left: 0, right: 400, bottom: 700, x: 0, y: 0, toJSON: () => ({}) }),
+  });
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     cb(0);
