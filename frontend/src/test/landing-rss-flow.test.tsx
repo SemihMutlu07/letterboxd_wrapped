@@ -61,7 +61,7 @@ describe('LetterboxdLanding direct-scrape flow (RSS suspended)', () => {
 
     await analyzeUsername('semihmutsuz');
 
-    await waitFor(() => expect(scrapeProfile).toHaveBeenCalledWith('semihmutsuz'));
+    await waitFor(() => expect(scrapeProfile).toHaveBeenCalledWith('semihmutsuz', undefined, expect.any(Function)));
     expect(sessionStorage.getItem('letterboxdStats')).toContain('"total_films":394');
   });
 

@@ -18,6 +18,8 @@ type Props = {
   estimatedFilms?: number;
   /** Typical total duration in seconds (hardcoded or from historical data). */
   typicalSeconds?: number;
+  /** Live scrape trace events from /api/progress — real discovery feed. */
+  events?: { stage?: string; message?: string; metrics?: Record<string, unknown>; elapsed_seconds?: number }[];
 };
 
 const FUN_MESSAGES = [
@@ -56,6 +58,7 @@ export default function LoadingScreen({
   mode = 'upload',
   estimatedFilms,
   typicalSeconds,
+  events,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [funMessageIndex, setFunMessageIndex] = useState(0);
@@ -78,6 +81,13 @@ export default function LoadingScreen({
   const typical = typicalSeconds ?? defaultTypical;
   const remaining = Math.max(0, typical - elapsed);
   const pct = Math.min(100, Math.round((elapsed / typical) * 100));
+
+  // Live discovery feed from the real scrape trace (films climb as pages load).
+  const liveFilms = (events ?? []).reduce((max, e) => {
+    const f = e.metrics?.films;
+    return typeof f === 'number' && f > max ? f : max;
+  }, 0);
+  const recentEvents = (events ?? []).filter((e) => e.message).slice(-3);
 
   const displayTitle = isScrape ? 'Scanning Your Profile' : title;
   const displayMessage = isScrape
@@ -119,6 +129,23 @@ export default function LoadingScreen({
         </div>
         <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">{displayTitle}</h1>
         <p className="text-slate-300 mb-2">{displayMessage}</p>
+
+        {/* Live discovery feed — real counts/stages streamed from the scrape */}
+        {isScrape && (liveFilms > 0 || recentEvents.length > 0) && (
+          <div className="mb-4 space-y-1.5">
+            {liveFilms > 0 && (
+              <p className="text-2xl font-black tabular-nums text-orange-300">
+                {liveFilms.toLocaleString()}{' '}
+                <span className="text-sm font-medium text-slate-400">films found</span>
+              </p>
+            )}
+            <ul className="space-y-0.5 text-xs text-slate-400">
+              {recentEvents.map((e, i) => (
+                <li key={i} className="transition-opacity duration-500">{e.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {isScrape && (
           <p className="mb-5 text-sm text-slate-400 italic transition-opacity duration-500">
