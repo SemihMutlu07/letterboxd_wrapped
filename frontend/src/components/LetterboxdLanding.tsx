@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import Link from 'next/link';
 import React, { useState, useCallback, useEffect } from 'react';
 import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
-import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } from '@/lib/api';
+import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend, type ScrapeProgress } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -19,6 +19,7 @@ import ExportInstructions from '@/components/landing/ExportInstructions';
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
@@ -259,6 +260,7 @@ export default function LetterboxdLanding() {
     }
 
     setIsScraping(true);
+    setScrapeProgress(null);
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape' });
 
@@ -277,7 +279,7 @@ export default function LetterboxdLanding() {
       // to the complete scrape like the original flow. rssPreview() is kept in
       // lib/api.ts and can be re-enabled in one line.
       const method = 'scrape' as const;
-      const result = await scrapeProfile(username);
+      const result = await scrapeProfile(username, undefined, setScrapeProgress);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
@@ -342,6 +344,7 @@ export default function LetterboxdLanding() {
   const handleCancel = useCallback(() => {
     setIsUploading(false);
     setIsScraping(false);
+    setScrapeProgress(null);
     setError(null);
   }, []);
 
@@ -352,6 +355,7 @@ export default function LetterboxdLanding() {
         onCancel={handleCancel}
         mode="scrape"
         typicalSeconds={30}
+        events={scrapeProgress?.trace_events}
       />
     );
   }

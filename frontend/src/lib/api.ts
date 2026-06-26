@@ -124,10 +124,23 @@ export async function searchPerson(name: string, role: 'director' | 'actor' = 'd
   }
 }
 
+export type ScrapeTraceEvent = {
+  stage?: string;
+  message?: string;
+  metrics?: Record<string, unknown>;
+  elapsed_seconds?: number;
+};
+
+export type ScrapeProgress = {
+  stage?: string;
+  message?: string;
+  trace_events?: ScrapeTraceEvent[];
+};
+
 // Poll a task until it reaches a terminal state (done | failed).
 async function pollTask(
   taskId: string,
-  opts: { intervalMs?: number; timeoutMs?: number } = {},
+  opts: { intervalMs?: number; timeoutMs?: number; onProgress?: (p: ScrapeProgress) => void } = {},
 ): Promise<{ status: string; stats: LetterboxdStats }> {
   const intervalMs = opts.intervalMs ?? 2000;
   const timeoutMs  = opts.timeoutMs  ?? 600_000; // 10 min max
@@ -157,7 +170,8 @@ async function pollTask(
       throw new Error(task.error || 'Analysis failed on the server');
     }
 
-    // pending | running — wait and retry
+    // pending | running — surface live progress, then wait and retry
+    opts.onProgress?.({ stage: task.stage, message: task.message, trace_events: task.trace_events });
     await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
   }
 
@@ -231,7 +245,11 @@ export async function testBackend(retries = 2, delayMs = 1000) {
 //   - synchronous (local / no desktop worker): { status, stats }
 //   - desktop-worker mode: 202 { task_id } → poll /api/progress until done
 // Either way the caller receives { status, stats }.
-export async function scrapeProfile(username: string, signal?: AbortSignal) {
+export async function scrapeProfile(
+  username: string,
+  signal?: AbortSignal,
+  onProgress?: (p: ScrapeProgress) => void,
+) {
   const url = `${API_BASE}/api/scrape-profile`;
 
   try {
@@ -261,7 +279,7 @@ export async function scrapeProfile(username: string, signal?: AbortSignal) {
 
     // Desktop-worker mode: the job was queued — poll until the worker finishes.
     if (data && data.task_id && !data.stats) {
-      return await pollTask(data.task_id);
+      return await pollTask(data.task_id, { onProgress });
     }
 
     if (!data || data.status === 'error') {
