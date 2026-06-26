@@ -9,21 +9,16 @@ in the `X-Worker-Token` header matching settings.worker_token.
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app import task_manager
-from app.config import settings
+from app.config import backend_git_sha, settings
 from app.services.run_log import persist_run
 
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
 router = APIRouter(prefix="/api/worker")
-
-
-def _backend_git_sha() -> str | None:
-    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
 
 
 def _require_worker_token(x_worker_token: str | None) -> None:
@@ -80,7 +75,7 @@ def _request_username(body: dict, stats: dict | None = None) -> str | None:
 def _worker_version_mismatch() -> dict | None:
     if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
         return None
-    version = task_manager.get_worker_version_status(settings.worker_protocol_version, _backend_git_sha())
+    version = task_manager.get_worker_version_status(settings.worker_protocol_version, backend_git_sha())
     return version if version.get("mismatch") else None
 
 
