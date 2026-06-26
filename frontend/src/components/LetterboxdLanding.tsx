@@ -2,7 +2,7 @@
 
 import JSZip from 'jszip';
 import Link from 'next/link';
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
 import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend, type ScrapeProgress } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
@@ -20,6 +20,12 @@ export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
+  // Guess-your-stat game (wait UX B). Ref so the in-flight scrape handler reads the
+  // latest guess (it's submitted mid-scrape, after the handler's closure is fixed).
+  const [guess, setGuessState] = useState<number | null>(null);
+  const [reveal, setReveal] = useState<{ guess: number; actual: number } | null>(null);
+  const guessRef = useRef<number | null>(null);
+  const setGuess = useCallback((n: number) => { guessRef.current = n; setGuessState(n); }, []);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
@@ -261,6 +267,9 @@ export default function LetterboxdLanding() {
 
     setIsScraping(true);
     setScrapeProgress(null);
+    setGuessState(null);
+    setReveal(null);
+    guessRef.current = null;
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape' });
 
@@ -302,7 +311,15 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setTimeout(() => { window.location.href = resultPath(username); }, 100);
+      // If the user played the guess game, show the reveal briefly before redirect.
+      const actualFilms = result.stats.total_films ?? 0;
+      const playedGuess = guessRef.current;
+      if (playedGuess != null && actualFilms > 0) {
+        setReveal({ guess: playedGuess, actual: actualFilms });
+        setTimeout(() => { window.location.href = resultPath(username); }, 3500);
+      } else {
+        setTimeout(() => { window.location.href = resultPath(username); }, 100);
+      }
     } catch (err) {
       const normalized = normalizeError(err);
       if (analysisRun) {
@@ -345,6 +362,9 @@ export default function LetterboxdLanding() {
     setIsUploading(false);
     setIsScraping(false);
     setScrapeProgress(null);
+    setGuessState(null);
+    setReveal(null);
+    guessRef.current = null;
     setError(null);
   }, []);
 
@@ -356,6 +376,9 @@ export default function LetterboxdLanding() {
         mode="scrape"
         typicalSeconds={30}
         events={scrapeProgress?.trace_events}
+        onGuess={setGuess}
+        guess={guess}
+        reveal={reveal}
       />
     );
   }
