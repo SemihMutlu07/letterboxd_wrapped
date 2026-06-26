@@ -9,10 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app import supabase_ops
 from app.models.recommend import RecommendFromCompareRequest, RecommendFromCompareResponse
 from app.services.recommender import (
     compare_watchlist_sets,
@@ -35,25 +35,12 @@ WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 
 def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort mirror of watchlist comparison run to Supabase."""
-    try:
-        httpx.post(
-            f"{settings.supabase_url}/rest/v1/ops_watchlist_runs",
-            headers={
-                "apikey": settings.supabase_anon_key,
-                "Authorization": f"Bearer {settings.supabase_anon_key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
-            json={
-                "usernames": payload.get("usernames"),
-                "ok": payload.get("ok"),
-                "match_score": payload.get("match_score"),
-                "payload": payload,
-            },
-            timeout=5.0,
-        )
-    except Exception as exc:
-        logger.warning("Failed to mirror watchlist run to Supabase: %s", exc)
+    supabase_ops.insert("ops_watchlist_runs", {
+        "usernames": payload.get("usernames"),
+        "ok": payload.get("ok"),
+        "match_score": payload.get("match_score"),
+        "payload": payload,
+    })
 
 
 def _persist_watchlist_run(
