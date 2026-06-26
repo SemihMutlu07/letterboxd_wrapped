@@ -39,6 +39,27 @@ def test_worker_reports_direct_cloudscraper_transport(monkeypatch):
     assert _worker_meta(cfg)["scrape_transport"] == "direct_cloudscraper"
 
 
+def test_requeue_stale_claims_recovers_dead_worker_jobs():
+    """A job claimed then abandoned (desktop offline mid-scrape) must be re-queued,
+    not left stuck 'running' until it 404s on the user."""
+    from datetime import datetime, timedelta
+
+    task_manager._tasks.clear()
+    tid = task_manager.create_scrape_job("ghost")
+    job = task_manager.claim_next_scrape_job()
+    assert job.task_id == tid and job.status == "running"
+
+    # Worker died mid-scrape: backdate the claim past the stale threshold.
+    job.claimed_at = datetime.utcnow() - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 60)
+    assert task_manager.requeue_stale_claims() == 1
+    assert job.status == "pending" and job.claimed is False and job.claimed_at is None
+
+    # A freshly claimed job is NOT reaped.
+    task_manager.claim_next_scrape_job()
+    assert task_manager.requeue_stale_claims() == 0
+    task_manager._tasks.clear()
+
+
 @pytest.fixture
 async def client(tmp_path):
     """ASGI client with desktop-worker mode ENABLED (worker_token set)."""
