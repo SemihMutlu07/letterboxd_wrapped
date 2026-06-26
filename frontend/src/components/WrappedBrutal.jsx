@@ -206,27 +206,63 @@ function CardHoverInfo({ cardType, data, stats }) {
   );
 }
 
-function DirectorProfileModal({ director, onClose }) {
+function DirectorProfileModal({ director, onClose, stats }) {
   const [closeHover, setCloseHover] = useState(false);
   const profileUrl = director?.profile_path ? `https://image.tmdb.org/t/p/h632${director.profile_path}` : null;
 
+  const films = (stats?.all_films || [])
+    .filter(f => f.director && f.director.toLowerCase() === director.name.toLowerCase() && f.rating !== null)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,15,12,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 24 }}>
-      <Box onClick={(e) => e.stopPropagation()} sh={8} style={{ maxWidth: 320, width: "100%", padding: 0, overflow: "hidden" }}>
-        {profileUrl && (
-          <img src={profileUrl} alt={director.name} style={{ width: "100%", aspectRatio: "9/12", objectFit: "cover", borderBottom: `2.5px solid ${T.ink}` }} onError={(e) => e.target.style.display = "none"} />
-        )}
-        <div style={{ padding: "20px 22px 24px", background: T.card }}>
-          <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 28, color: T.ink, marginBottom: 12, lineHeight: 1.2 }}>{director.name || "—"}</div>
-          <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 20 }}>
-            {director.count} film{director.count !== 1 ? "s" : ""} · {director.avg_rating ? `★ ${(director.avg_rating ?? 0).toFixed(1)} avg` : ""}
+      <Box onClick={(e) => e.stopPropagation()} sh={8} style={{ maxWidth: 900, width: "100%", maxHeight: "90vh", padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", gap: 24, padding: "26px", overflowY: "auto", flex: 1 }}>
+          <div style={{ flexShrink: 0 }}>
+            {profileUrl && (
+              <img src={profileUrl} alt={director.name} style={{ width: 280, aspectRatio: "9/12", objectFit: "cover", border: `2.5px solid ${T.ink}`, boxShadow: shadow(4) }} onError={(e) => e.target.style.display = "none"} />
+            )}
           </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 36, color: T.ink, marginBottom: 12, lineHeight: 1.2 }}>{director.name || "—"}</div>
+            <div style={{ fontFamily: MONO, fontSize: 12, color: T.muted, marginBottom: 24 }}>
+              {director.count} film{director.count !== 1 ? "s" : ""} · {director.avg_rating ? `★ ${(director.avg_rating ?? 0).toFixed(1)} avg` : ""}
+            </div>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 20 }}>{films.length} films in your diary</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, flex: 1 }}>
+              {films.slice(0, 12).map((f, i) => {
+                const [posterHover, setPosterHover] = useState(false);
+                return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column" }}>
+                    {f.poster_path ? (
+                      <div onMouseEnter={() => setPosterHover(true)} onMouseLeave={() => setPosterHover(false)} style={{ position: "relative", aspectRatio: "2/3", background: getColor(i), border: `2.5px solid ${T.ink}`, overflow: "hidden", marginBottom: 8 }}>
+                        <img src={`https://image.tmdb.org/t/p/w342${f.poster_path}`} alt={f.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => e.target.style.display = "none"} />
+                        <div style={{ position: "absolute", top: 4, right: 4, background: T.lime, border: `1.5px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 11, padding: "2px 6px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right" }}>
+                          ★ {(f.rating ?? 0).toFixed(1)}
+                        </div>
+                      </div>
+                    ) : (
+                      <Box bg={getColor(i)} sh={2} style={{ height: "100%", aspectRatio: "2/3", display: "flex", alignItems: "flex-end", padding: 10, marginBottom: 8 }}>
+                        <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 11, color: T.ink, lineHeight: 1.2 }}>{f.title || "—"}</div>
+                      </Box>
+                    )}
+                    <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 11, color: T.ink, lineHeight: 1.2, marginBottom: 3 }}>{f.title || "—"}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 8.5, color: T.muted }}>{f.year || "—"}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {films.length > 12 && (
+              <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, marginTop: 10 }}>+ {films.length - 12} more films</div>
+            )}
+          </div>
+        </div>
+        <div style={{ padding: "16px 26px", borderTop: `2.5px solid ${T.ink}`, background: T.paper }}>
           <button
             onClick={onClose}
             onMouseEnter={() => setCloseHover(true)}
             onMouseLeave={() => setCloseHover(false)}
             style={{
-              width: "100%",
               fontFamily: MONO,
               fontSize: 11,
               fontWeight: 700,
@@ -418,7 +454,7 @@ function WrappedCards({ stats }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      {directorProfile && <DirectorProfileModal director={directorProfile} onClose={() => setDirectorProfile(null)} />}
+      {directorProfile && <DirectorProfileModal director={directorProfile} onClose={() => setDirectorProfile(null)} stats={stats} />}
       {sel && <CardModal cardInfo={sel} onClose={() => setSel(null)} stats={stats} />}
     </section>
   );
