@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app import supabase_ops, task_manager
-from app.config import settings
+from app.config import backend_git_sha, settings
 from app.services.run_log import RUNS_DIR
 
 logger = logging.getLogger("letterboxd_wrapped.admin")
@@ -62,10 +62,6 @@ def _annotate_analysis_run(data: dict[str, Any]) -> None:
             data["scrape_seconds_per_film"] = round(scrape / total_films, 3)
         if analysis is not None:
             data["analysis_seconds_per_film"] = round(analysis / total_films, 3)
-
-
-def _backend_git_sha() -> str | None:
-    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
 
 
 def _require_admin(request: Request) -> None:
@@ -175,7 +171,7 @@ async def admin_dashboard(request: Request):
     worker_status = task_manager.get_worker_status(
         settings.worker_heartbeat_max_age_seconds,
         expected_protocol_version=settings.worker_protocol_version,
-        backend_git_sha=_backend_git_sha(),
+        backend_git_sha=backend_git_sha(),
     )
     return templates.TemplateResponse(
         "admin_dashboard.html",
@@ -236,6 +232,6 @@ async def admin_api_worker(request: Request):
         "status": task_manager.get_worker_status(
             settings.worker_heartbeat_max_age_seconds,
             expected_protocol_version=settings.worker_protocol_version,
-            backend_git_sha=_backend_git_sha(),
+            backend_git_sha=backend_git_sha(),
         ),
     }
