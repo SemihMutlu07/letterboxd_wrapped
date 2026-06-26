@@ -344,11 +344,38 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
         _apply_telemetry(task, telemetry)
 
 
+# ponytail: a scrape running longer than this is treated as a dead worker and
+# re-queued; raise it if real scrapes ever legitimately exceed it.
+STALE_CLAIM_SECONDS = 900
+
+
+def requeue_stale_claims(now: Optional[datetime] = None) -> int:
+    """Reset scrape jobs stuck 'running' past STALE_CLAIM_SECONDS back to 'pending'
+    so a single-worker outage (desktop offline mid-scrape) re-queues the job
+    instead of stranding the user on a job that will never complete. Idempotent —
+    a late postback is keyed by task_id. Returns how many were re-queued."""
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
+    count = 0
+    for t in _tasks.values():
+        if t.kind == "scrape" and t.status == "running" and t.claimed_at and t.claimed_at < cutoff:
+            t.claimed = False
+            t.status = "pending"
+            t.stage = "queued"
+            t.message = "Re-queued after the worker went away mid-scrape"
+            t.claimed_at = None
+            append_task_event(t.task_id, "requeued", "Worker went away mid-scrape; re-queued", level="warning")
+            count += 1
+    return count
+
+
 async def cleanup_loop() -> None:
-    """Remove tasks older than 1 hour; runs every 5 minutes."""
+    """Re-queue stale claims, then remove tasks older than 1 hour; every 5 minutes."""
     while True:
         await asyncio.sleep(300)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        now = datetime.utcnow()
+        requeue_stale_claims(now)
+        cutoff = now - timedelta(hours=1)
         stale = [tid for tid, t in list(_tasks.items()) if t.created_at < cutoff]
         for tid in stale:
             _tasks.pop(tid, None)
