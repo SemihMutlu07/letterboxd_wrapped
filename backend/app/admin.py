@@ -12,12 +12,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app import task_manager
+from app import supabase_ops, task_manager
 from app.config import settings
 from app.services.run_log import RUNS_DIR
 
@@ -95,24 +94,26 @@ def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
     return items
 
 
+def _list_params(limit: int) -> dict[str, str]:
+    return {"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)}
+
+
+def _payload_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract `payload` dicts and stamp _mtime (watchlist / date-night lists)."""
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        data = row.get("payload")
+        if isinstance(data, dict):
+            data["_mtime"] = row.get("created_at")
+            items.append(data)
+    return items
+
+
 async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
-    """Read analysis runs from Supabase ops_runs (durable across Render restarts).
-    Falls back to [] on any error so the dashboard still renders."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{settings.supabase_url}/rest/v1/ops_runs",
-                headers={
-                    "apikey": settings.supabase_anon_key,
-                    "Authorization": f"Bearer {settings.supabase_anon_key}",
-                },
-                params={"select": "id,created_at,payload", "order": "created_at.desc", "limit": str(limit)},
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-    except Exception as exc:
-        logger.warning("Failed to load runs from Supabase: %s", exc)
-        return []
+    """Read analysis runs from Supabase ops_runs (durable across Render restarts)."""
+    rows = await supabase_ops.select(
+        "ops_runs", {"select": "id,created_at,payload", "order": "created_at.desc", "limit": str(limit)}
+    )
     items: list[dict[str, Any]] = []
     for row in rows:
         data = row.get("payload")
@@ -127,21 +128,9 @@ async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
 
 async def _load_run_supabase(run_id: str) -> dict[str, Any] | None:
     """Fetch a single analysis run payload from ops_runs by id (UUID)."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{settings.supabase_url}/rest/v1/ops_runs",
-                headers={
-                    "apikey": settings.supabase_anon_key,
-                    "Authorization": f"Bearer {settings.supabase_anon_key}",
-                },
-                params={"id": f"eq.{run_id}", "select": "created_at,payload", "limit": "1"},
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-    except Exception as exc:
-        logger.warning("Failed to load run %s from Supabase: %s", run_id, exc)
-        return None
+    rows = await supabase_ops.select(
+        "ops_runs", {"id": f"eq.{run_id}", "select": "created_at,payload", "limit": "1"}
+    )
     if not rows:
         return None
     data = rows[0].get("payload")
@@ -154,56 +143,12 @@ async def _load_run_supabase(run_id: str) -> dict[str, Any] | None:
 
 async def _load_watchlist_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
     """Read watchlist comparison runs from Supabase ops_watchlist_runs."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{settings.supabase_url}/rest/v1/ops_watchlist_runs",
-                headers={
-                    "apikey": settings.supabase_anon_key,
-                    "Authorization": f"Bearer {settings.supabase_anon_key}",
-                },
-                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-    except Exception as exc:
-        logger.warning("Failed to load watchlist runs from Supabase: %s", exc)
-        return []
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        data = row.get("payload")
-        if not isinstance(data, dict):
-            continue
-        data["_mtime"] = row.get("created_at")
-        items.append(data)
-    return items
+    return _payload_rows(await supabase_ops.select("ops_watchlist_runs", _list_params(limit)))
 
 
 async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
     """Read date night recommendation runs from Supabase ops_date_night_runs."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{settings.supabase_url}/rest/v1/ops_date_night_runs",
-                headers={
-                    "apikey": settings.supabase_anon_key,
-                    "Authorization": f"Bearer {settings.supabase_anon_key}",
-                },
-                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-    except Exception as exc:
-        logger.warning("Failed to load date night runs from Supabase: %s", exc)
-        return []
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        data = row.get("payload")
-        if not isinstance(data, dict):
-            continue
-        data["_mtime"] = row.get("created_at")
-        items.append(data)
-    return items
+    return _payload_rows(await supabase_ops.select("ops_date_night_runs", _list_params(limit)))
 
 
 async def _load_analysis_runs(limit: int = 50) -> list[dict[str, Any]]:

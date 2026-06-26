@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 
+from app import supabase_ops
 from app.config import settings
 from app.models.recommend import DateNightResponse, MutualProfile, UserPairRequest
 from app.routes.watchlist import _check_rate_limit, _client_key, _rate_limit_exception, _validate_username
@@ -34,24 +34,11 @@ DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 
 def _mirror_date_night_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort mirror of date night recommendation run to Supabase."""
-    try:
-        httpx.post(
-            f"{settings.supabase_url}/rest/v1/ops_date_night_runs",
-            headers={
-                "apikey": settings.supabase_anon_key,
-                "Authorization": f"Bearer {settings.supabase_anon_key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
-            json={
-                "usernames": payload.get("usernames"),
-                "ok": payload.get("ok"),
-                "payload": payload,
-            },
-            timeout=5.0,
-        )
-    except Exception as exc:
-        logger.warning("Failed to mirror date night run to Supabase: %s", exc)
+    supabase_ops.insert("ops_date_night_runs", {
+        "usernames": payload.get("usernames"),
+        "ok": payload.get("ok"),
+        "payload": payload,
+    })
 
 
 def _persist_date_night_run(
