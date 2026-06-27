@@ -212,6 +212,7 @@ export function PersonCard({
   const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [retried, setRetried] = useState(false);
 
   const initials = name
     .split(' ')
@@ -259,10 +260,15 @@ export function PersonCard({
               setImageError(false);
             }}
             onError={(e) => {
-              console.error(`[PersonCard] Image failed for ${name}:`, imageUrl);
-              setImageError(true);
-              setImageLoaded(true);
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
+              const img = e.currentTarget as HTMLImageElement;
+              if (!retried && imageUrl) {
+                setRetried(true);
+                img.src = `${imageUrl}?retry=1`;
+              } else {
+                setImageError(true);
+                setImageLoaded(true);
+                img.style.display = 'none';
+              }
             }}
           />
         )}
