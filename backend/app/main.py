@@ -22,6 +22,7 @@ from app.config import settings
 from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist, worker
 from app import admin
+from app.services.worker_monitor import start_worker_monitor
 
 logger = logging.getLogger("letterboxd_wrapped")
 logging.basicConfig(
@@ -49,8 +50,10 @@ async def lifespan(app: FastAPI):
         connector=aiohttp.TCPConnector(limit_per_host=20)
     )
     _cleanup = asyncio.create_task(cleanup_loop())
+    _monitor = await start_worker_monitor()
     print("🚀 FastAPI app startup: aiohttp session created.")
     yield
+    _monitor.cancel()
     _cleanup.cancel()
     await app.state.aiohttp_session.close()
     print("🌙 FastAPI app shutdown: aiohttp session closed.")

@@ -16,6 +16,7 @@ from app import task_manager
 from app.task_manager import claim_next_watchlist_job
 from app.config import backend_git_sha, settings
 from app.services.run_log import persist_run
+from app.services.worker_monitor import log_worker_event
 
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
@@ -101,6 +102,7 @@ async def worker_startup(request: Request, x_worker_token: str | None = Header(d
     except Exception:
         body = {}
     task_manager.record_worker_startup(body if isinstance(body, dict) else {})
+    log_worker_event("startup", body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -113,6 +115,7 @@ async def worker_shutdown(request: Request, x_worker_token: str | None = Header(
     except Exception:
         body = {}
     task_manager.record_worker_shutdown(body if isinstance(body, dict) else {})
+    log_worker_event("shutdown", body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -222,6 +225,12 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
             telemetry=_task_telemetry(task),
         )
     logger.info("Worker completed scrape job %s", task_id)
+    log_worker_event("job_completed", {
+        "task_id": task_id,
+        "username": task.username if task else _request_username(body, stats),
+        "total_films": stats.get("total_films"),
+        "duration_seconds": telemetry.get("duration_seconds"),
+    })
     return {"ok": True}
 
 
@@ -265,6 +274,14 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
             telemetry=_task_telemetry(task),
         )
     logger.warning("Worker reported scrape job %s failed: %s", task_id, message)
+    log_worker_event("job_failed", {
+        "task_id": task_id,
+        "username": task.username if task else _request_username(body),
+        "error_message": message,
+        "error_type": telemetry.get("error_type"),
+        "error_stage": telemetry.get("error_stage"),
+        "duration_seconds": telemetry.get("duration_seconds"),
+    })
     return {"ok": True}
 
 
