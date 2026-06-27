@@ -9,24 +9,29 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app import supabase_ops
+from app import supabase_ops, task_manager
 from app.config import settings
 from app.models.recommend import DateNightResponse, MutualProfile, UserPairRequest
-from app.routes.watchlist import _check_rate_limit, _client_key, _rate_limit_exception, _validate_username
+from app.routes.watchlist import (
+    _await_worker_job,
+    _check_rate_limit,
+    _client_key,
+    _rate_limit_exception,
+    _validate_username,
+    _worker_failure_exception,
+)
 from app.services.recommender import (
     build_mutual_profile,
     discover_date_night_recommendations,
     enrich_films,
 )
-from app.services.scraper import ScraperAPIError, merge_scraped_films, scrape_profile_sources, scrape_watchlist
+from app.services.scraper import merge_scraped_films
 
 logger = logging.getLogger("letterboxd_wrapped.recommend")
 
 router = APIRouter()
 
-MAX_PROFILE_PAGES = 25
 MAX_ENRICHED_FILMS = 80
-SCRAPE_TIMEOUT = 90  # seconds per scrape operation
 ENRICH_TIMEOUT = 90  # seconds per enrich operation
 
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
@@ -95,47 +100,31 @@ async def date_night(request: Request, payload: UserPairRequest):
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
-    try:
-        first_sources, second_sources, first_watchlist, second_watchlist = await asyncio.gather(
-            asyncio.wait_for(scrape_profile_sources(first, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
-            asyncio.wait_for(scrape_profile_sources(second, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
-            asyncio.wait_for(scrape_watchlist(first, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
-            asyncio.wait_for(scrape_watchlist(second, max_pages=MAX_PROFILE_PAGES), timeout=SCRAPE_TIMEOUT),
-        )
-    except asyncio.TimeoutError:
-        logger.exception("Date night scrape timed out for %s/%s", first, second)
-        raise HTTPException(
-            status_code=504,
-            detail={"error_code": "scrape_timeout", "message": "Reading profiles took too long. Try again later."},
-        )
-    except ScraperAPIError as exc:
-        logger.error("Date night scraper unavailable for %s/%s: %s", first, second, exc)
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="worker_offline")
         raise HTTPException(
             status_code=503,
-            detail={"error_code": "scraper_unavailable", "message": str(exc)},
-        )
-    except ValueError as exc:
-        msg = str(exc)
-        if "Letterboxd is blocking" in msg:
-            logger.warning("Date night blocked for %s/%s: %s", first, second, msg)
-            raise HTTPException(
-                status_code=503,
-                detail={"error_code": "scrape_blocked", "message": msg},
-            )
-        logger.warning("Date night user lookup failed for %s/%s: %s", first, second, exc)
-        raise HTTPException(
-            status_code=404,
-            detail={"error_code": "user_not_found", "message": "One of those Letterboxd users could not be found."},
-        )
-    except Exception:
-        logger.exception("Date night scrape failed for %s/%s", first, second)
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "profile_scrape_failed", "message": "Could not read one of the public profiles. Try again later."},
+            detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    first_films = merge_scraped_films(first_sources.diary, first_sources.grid)
-    second_films = merge_scraped_films(second_sources.diary, second_sources.grid)
+    task_id = task_manager.create_date_night_job([first, second])
+    # date-night scrapes 4 sources — allow more time than watchlist compare
+    outcome, scraped = await _await_worker_job(task_id, 180)
+
+    if outcome == "failed":
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message=scraped)
+        raise _worker_failure_exception(scraped)
+    if outcome == "timeout":
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="worker_timeout")
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
+        )
+
+    first_films = merge_scraped_films(scraped.get("first_diary", []), scraped.get("first_grid", []))
+    second_films = merge_scraped_films(scraped.get("second_diary", []), scraped.get("second_grid", []))
+    first_watchlist = scraped.get("first_watchlist", [])
+    second_watchlist = scraped.get("second_watchlist", [])
 
     session = request.app.state.aiohttp_session
 
@@ -148,12 +137,14 @@ async def date_night(request: Request, payload: UserPairRequest):
         )
     except asyncio.TimeoutError:
         logger.exception("Date night TMDB enrich timed out for %s/%s", first, second)
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="enrich_timeout")
         raise HTTPException(
             status_code=504,
             detail={"error_code": "enrich_timeout", "message": "Film enrichment took too long. Try again later."},
         )
     except Exception:
         logger.exception("Date night TMDB enrich failed for %s/%s", first, second)
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="enrichment_failed")
         raise HTTPException(
             status_code=502,
             detail={"error_code": "enrichment_failed", "message": "Could not look up film details. Try again later."},
@@ -166,12 +157,14 @@ async def date_night(request: Request, payload: UserPairRequest):
         )
     except asyncio.TimeoutError:
         logger.exception("Date night mutual profile timed out for %s/%s", first, second)
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="profile_timeout")
         raise HTTPException(
             status_code=504,
             detail={"error_code": "profile_timeout", "message": "Building taste profile took too long. Try again later."},
         )
     except Exception:
         logger.exception("Date night mutual profile failed for %s/%s", first, second)
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="profile_failed")
         raise HTTPException(
             status_code=502,
             detail={"error_code": "profile_failed", "message": "Could not build taste profile. Try again later."},
