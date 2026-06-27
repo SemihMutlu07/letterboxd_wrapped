@@ -249,6 +249,12 @@ async def process_comprehensive_letterboxd_data(
     _progress("analyzing", "Basic stats complete", 1, 10)
 
     # === RATING ANALYSIS ===
+    # Always set keys so frontend never encounters missing-key errors.
+    stats["average_rating"] = None
+    stats["median_rating"] = None
+    stats["rating_distribution"] = {}
+    stats["total_rated_films"] = 0
+    stats["most_common_rating"] = None
     if "rating" in films_df.columns and films_df["rating"].notna().any():
         ratings = films_df["rating"].dropna()
         stats["average_rating"] = round(ratings.mean(), 2)

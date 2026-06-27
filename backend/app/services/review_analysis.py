@@ -111,6 +111,9 @@ _URL_RE = re.compile(r"https?://\S+|www\.\S+")
 # Regex to split into words (keep Turkish chars + apostrophes for possessives)
 _WORD_RE = re.compile(r"[a-zA-ZğüşıöçĞÜŞİÖÇ']+(?:'[a-zA-ZğüşıöçĞÜŞİÖÇ]+)?")
 
+# Letterboxd boilerplate injected before spoiler-flagged reviews — strip before word analysis
+_SPOILER_DISCLAIMER = "This review may contain spoilers. I can handle the truth."
+
 
 def _strip_html(text: str) -> str:
     """Remove HTML tags from review text."""
@@ -124,7 +127,7 @@ def _strip_urls(text: str) -> str:
 
 def _tokenize(text: str) -> list[str]:
     """Tokenize text into lowercase words, filtering stopwords and short tokens."""
-    cleaned = _strip_html(_strip_urls(text))
+    cleaned = _strip_html(_strip_urls(text.replace(_SPOILER_DISCLAIMER, "")))
     words = _WORD_RE.findall(cleaned)
     return [
         w.lower() for w in words
