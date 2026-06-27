@@ -313,7 +313,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           {/* Top films */}
           {topFilms && topFilms.length > 0 && (
             <div>
-              <SectionLabel>Films I loved</SectionLabel>
+              <SectionLabel>Favorite films</SectionLabel>
               <div className="mt-2">
                 <PosterStrip films={topFilms} size="xl" />
               </div>
