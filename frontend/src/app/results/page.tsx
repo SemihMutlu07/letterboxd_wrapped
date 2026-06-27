@@ -431,8 +431,9 @@ export default function ResultsPage() {
       topFilms,
       topReviewWords,
       ratingOutlierFilm,
+      username: username || undefined,
     };
-  }, [stats, topActors, topDirectors, cineScore, timePct]);
+  }, [stats, topActors, topDirectors, cineScore, timePct, username]);
 
   // Load director headshot with lazy loading
   const loadDirectorImage = useCallback(async () => {
@@ -656,6 +657,21 @@ function ResultsContent({
         <div className="grid grid-cols-1 gap-6">
           <DirectorsGrid stats={stats} />
           <CastGrid stats={stats} />
+        </div>
+
+        {/* Share teaser — visible after directors/cast while users are engaged */}
+        <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+          <div>
+            <p className="text-sm font-semibold text-white">Ready to share your year?</p>
+            <p className="text-xs text-slate-500 mt-0.5">Turn your stats into a shareable card.</p>
+          </div>
+          <button
+            onClick={() => { setShowShareModal(true); trackEvent('share_export_started'); }}
+            className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:scale-105"
+            style={{ background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`, color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614' }}
+          >
+            Share your Wrapped →
+          </button>
         </div>
 
         {/* 3. Rating Outliers */}
