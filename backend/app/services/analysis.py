@@ -757,6 +757,24 @@ async def process_comprehensive_letterboxd_data(
     stats["story_analytics"] = story_analytics
 
     # === DETAILED ANALYSIS ===
+    # title+year → user rating. films_enriched was reduced to unique title/year
+    # pairs for TMDB matching and lost the CSV rating column, so rebuild a lookup.
+    # ponytail: keyed by title+year like the existing rating merges (line ~419);
+    # if the TMDB title differs from the CSV title the rating is None (modal hides
+    # the star) — same graceful limitation the rest of the file already accepts.
+    rating_by_film: dict[tuple[str, str], Optional[float]] = {}
+    if "rating" in films_df.columns:
+        for _, _r in films_df.iterrows():
+            _y = _r.get("year", "")
+            _ys = ""
+            if pd.notna(_y):
+                try:
+                    _ys = str(int(_y))
+                except (ValueError, TypeError):
+                    _ys = str(_y)
+            _rv = _r.get("rating")
+            rating_by_film[(str(_r.get("title", "")), _ys)] = float(_rv) if pd.notna(_rv) else None
+
     # Build director→films map for reverse credit lookup fallback
     director_films_map: dict[str, list[dict]] = {}
     for _, row in films_enriched.iterrows():
@@ -772,6 +790,8 @@ async def process_comprehensive_letterboxd_data(
             director_films_map.setdefault(d, []).append({
                 "title": str(row.get("title", "")),
                 "year": year_str,
+                "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
+                "user_rating": rating_by_film.get((str(row.get("title", "")), year_str)),
             })
 
     director_counts = Counter(films_enriched["director"].dropna())
@@ -802,7 +822,8 @@ async def process_comprehensive_letterboxd_data(
             logger.info("[profile-debug] director '%s' NO IMAGE (source=%s)", name, search_source or "none")
 
     stats["top_directors"] = [
-        {"name": n, "count": c, "profile_path": director_profile_map.get(n)}
+        {"name": n, "count": c, "profile_path": director_profile_map.get(n),
+         "films": director_films_map.get(n, [])}
         for n, c in director_counts.most_common(20)
     ]
     stats["total_directors"] = len(director_counts)
@@ -883,7 +904,12 @@ async def process_comprehensive_letterboxd_data(
                     year_str = str(int(year_val))
                 except (ValueError, TypeError):
                     pass
-            film_info = {"title": str(row.get("title", "")), "year": year_str}
+            film_info = {
+                "title": str(row.get("title", "")),
+                "year": year_str,
+                "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
+                "user_rating": rating_by_film.get((str(row.get("title", "")), year_str)),
+            }
             for actor in cast_list:
                 actor_films_map.setdefault(actor, []).append(film_info)
 
@@ -909,11 +935,15 @@ async def process_comprehensive_letterboxd_data(
                         search_source = "film_credit"
         except Exception as exc:
             logger.warning("[profile-debug] actor '%s' lookup failed: %s", name, exc)
-        top_actors_with_profiles.append({"name": name, "count": count, "profile_path": profile_path})
+        top_actors_with_profiles.append({"name": name, "count": count, "profile_path": profile_path,
+                                         "films": actor_films_map.get(name, [])})
         if not profile_path:
             logger.info("[profile-debug] actor '%s' NO IMAGE (source=%s)", name, search_source or "none")
 
-    remaining_actors = [{"name": n, "count": c} for n, c in cast_counts.most_common(20)[4:]]
+    remaining_actors = [
+        {"name": n, "count": c, "films": actor_films_map.get(n, [])}
+        for n, c in cast_counts.most_common(20)[4:]
+    ]
     stats["top_actors"] = top_actors_with_profiles + remaining_actors
     _progress("analyzing", "Cast analysis complete", 9, 10)
 
