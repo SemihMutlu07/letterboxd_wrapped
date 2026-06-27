@@ -19,6 +19,7 @@ export type ShareCardProps = {
   peakDecadeCount: number;
   topFilms?: ShareFilmStat[];
   topReviewWords?: ShareReviewWordStat[];
+  username?: string;
   className?: string;
   orientation?: "horizontal" | "vertical";
 };
@@ -166,6 +167,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     peakDecadeCount,
     topFilms,
     topReviewWords,
+    username,
     className = "",
     orientation = "horizontal",
   },
@@ -233,9 +235,16 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           {/* Hero stat */}
           <div>
             <SectionLabel>You watched</SectionLabel>
-            <GiantNumber className="text-[120px] mt-1">
-              {watchedFilms.toLocaleString()}
-            </GiantNumber>
+            <div className="flex items-start justify-between">
+              <GiantNumber className="text-[120px] mt-1">
+                {watchedFilms.toLocaleString()}
+              </GiantNumber>
+              {username && (
+                <span className="mt-4 text-[15px] font-bold text-neutral-400 tracking-wide">
+                  @{username}
+                </span>
+              )}
+            </div>
             <p className="mt-2 text-xl font-bold text-neutral-400">films this year</p>
           </div>
 
@@ -304,7 +313,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           {/* Top films */}
           {topFilms && topFilms.length > 0 && (
             <div>
-              <SectionLabel>Top this year</SectionLabel>
+              <SectionLabel>Favorite films</SectionLabel>
               <div className="mt-2">
                 <PosterStrip films={topFilms} size="xl" />
               </div>
@@ -364,9 +373,16 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           {/* Hero number */}
           <div>
             <SectionLabel>You watched</SectionLabel>
-            <GiantNumber className="text-[110px] mt-1">
-              {watchedFilms.toLocaleString()}
-            </GiantNumber>
+            <div className="flex items-start justify-between">
+              <GiantNumber className="text-[110px] mt-1">
+                {watchedFilms.toLocaleString()}
+              </GiantNumber>
+              {username && (
+                <span className="mt-4 text-[14px] font-bold text-neutral-400 tracking-wide">
+                  @{username}
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-lg font-bold text-neutral-400">films this year</p>
           </div>
 

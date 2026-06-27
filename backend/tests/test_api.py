@@ -251,20 +251,45 @@ def _reset_watchlist_rate_limiter():
     watchlist._rate_limiter.clear()
 
 
+def _done_task(result: dict, kind: str = "watchlist"):
+    """Minimal task stub that looks done to the poll loop."""
+    from types import SimpleNamespace
+    return SimpleNamespace(status="done", result=result, error=None, kind=kind)
+
+
+def _failed_task(message: str):
+    from types import SimpleNamespace
+    return SimpleNamespace(status="failed", result=None, error=message, kind="watchlist")
+
+
+def _watchlist_patches(first_wl, second_wl):
+    """Return context managers that simulate a worker completing a watchlist-compare job."""
+    task = _done_task({"first_watchlist": first_wl, "second_watchlist": second_wl})
+    return (
+        patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
+        patch("app.routes.watchlist.task_manager.get_task_state", return_value=task),
+        patch("app.routes.watchlist.asyncio.sleep"),
+    )
+
+
 @pytest.mark.asyncio
 async def test_watchlist_compare_success(client: AsyncClient):
-    async def fake_scrape_watchlist(username, max_pages=40):
-        if username == "alice":
-            return [
-                {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/", "poster_url": "https://img/aftersun.jpg"},
-                {"title": "Inception", "year": "2010", "slug": "/film/inception/", "poster_url": ""},
-            ]
-        return [
-            {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/", "poster_url": "https://img/aftersun.jpg"},
-            {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/", "poster_url": ""},
-        ]
+    alice_wl = [
+        {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/", "poster_url": "https://img/aftersun.jpg"},
+        {"title": "Inception", "year": "2010", "slug": "/film/inception/", "poster_url": ""},
+    ]
+    bob_wl = [
+        {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/", "poster_url": "https://img/aftersun.jpg"},
+        {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/", "poster_url": ""},
+    ]
 
-    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+    with (
+        patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
+        patch("app.routes.watchlist.task_manager.get_task_state", return_value=_done_task({"first_watchlist": alice_wl, "second_watchlist": bob_wl})),
+        patch("app.routes.watchlist.asyncio.sleep"),
+    ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
 
     assert r.status_code == 200
@@ -304,36 +329,47 @@ async def test_watchlist_compare_rejects_invalid_username(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_watchlist_compare_user_not_found(client: AsyncClient):
-    async def fake_scrape_watchlist(username, max_pages=40):
-        raise ValueError(f"User '{username}' not found")
-
-    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+async def test_watchlist_compare_worker_offline(client: AsyncClient):
+    with patch("app.routes.watchlist.task_manager.is_worker_online", return_value=False):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["ghost", "bob"]})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error_code"] == "worker_offline"
 
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_worker_failure(client: AsyncClient):
+    with (
+        patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
+        patch("app.routes.watchlist.task_manager.get_task_state", return_value=_failed_task("Scraper service is unreachable.")),
+        patch("app.routes.watchlist.asyncio.sleep"),
+    ):
+        r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error_code"] == "scraper_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_worker_user_not_found(client: AsyncClient):
+    # A worker scrape that raised ValueError("User 'ghost' not found") must map
+    # back to 404 user_not_found, not collapse into a generic 503.
+    with (
+        patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
+        patch("app.routes.watchlist.task_manager.get_task_state", return_value=_failed_task("User 'ghost' not found")),
+        patch("app.routes.watchlist.asyncio.sleep"),
+    ):
+        r = await client.post("/api/watchlist-compare", json={"usernames": ["ghost", "bob"]})
     assert r.status_code == 404
     assert r.json()["detail"]["error_code"] == "user_not_found"
 
 
 @pytest.mark.asyncio
-async def test_watchlist_compare_scrape_failure(client: AsyncClient):
-    async def fake_scrape_watchlist(username, max_pages=40):
-        raise RuntimeError("network down")
-
-    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
-        r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
-
-    assert r.status_code == 502
-    assert r.json()["detail"]["error_code"] == "watchlist_scrape_failed"
-
-
-@pytest.mark.asyncio
 async def test_recommend_from_compare_highest_rated(client: AsyncClient):
-    async def fake_scrape_watchlist(username, max_pages=40):
-        return [
-            {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
-            {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"},
-        ]
+    common_films = [
+        {"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"},
+        {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"},
+    ]
 
     async def fake_enrich(session, films, limit=30):
         return [
@@ -342,7 +378,10 @@ async def test_recommend_from_compare_highest_rated(client: AsyncClient):
         ]
 
     with (
-        patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist),
+        patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
+        patch("app.routes.watchlist.task_manager.get_task_state", return_value=_done_task({"first_watchlist": common_films, "second_watchlist": common_films})),
+        patch("app.routes.watchlist.asyncio.sleep"),
         patch("app.routes.watchlist.enrich_films", side_effect=fake_enrich),
     ):
         r = await client.post(
@@ -358,12 +397,15 @@ async def test_recommend_from_compare_highest_rated(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_recommend_from_compare_no_overlap(client: AsyncClient):
-    async def fake_scrape_watchlist(username, max_pages=40):
-        if username == "alice":
-            return [{"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"}]
-        return [{"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"}]
+    alice_wl = [{"title": "Aftersun", "year": "2022", "slug": "/film/aftersun/"}]
+    bob_wl = [{"title": "Heat", "year": "1995", "slug": "/film/heat-1995/"}]
 
-    with patch("app.routes.watchlist.scrape_watchlist", side_effect=fake_scrape_watchlist):
+    with (
+        patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
+        patch("app.routes.watchlist.task_manager.get_task_state", return_value=_done_task({"first_watchlist": alice_wl, "second_watchlist": bob_wl})),
+        patch("app.routes.watchlist.asyncio.sleep"),
+    ):
         r = await client.post("/api/recommend-from-compare", json={"usernames": ["alice", "bob"]})
 
     assert r.status_code == 404
@@ -372,45 +414,30 @@ async def test_recommend_from_compare_no_overlap(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_date_night_success(client: AsyncClient):
-    from app.services.scraper import ProfileScrapeSources
-
-    async def fake_scrape_profile_sources(username, max_pages=25, include_reviews=False):
-        return ProfileScrapeSources(
-            diary=[{"title": "Before Sunrise", "year": "1995", "rating": 4.5, "watch_date": "2024-01-01"}],
-            grid=[{"title": "Heat", "year": "1995", "rating": 4.0, "watch_date": ""}],
-            review_count=0,
-            film_count=2,
-        )
-
-    async def fake_scrape_watchlist(username, max_pages=25):
-        return [{"title": "Past Lives", "year": "2023", "slug": "/film/past-lives/"}]
+    scraped_data = {
+        "first_diary": [{"title": "Before Sunrise", "year": "1995", "rating": 4.5, "watch_date": "2024-01-01"}],
+        "first_grid": [{"title": "Heat", "year": "1995", "rating": 4.0, "watch_date": ""}],
+        "second_diary": [{"title": "Before Sunrise", "year": "1995", "rating": 4.0, "watch_date": "2024-02-01"}],
+        "second_grid": [],
+        "first_watchlist": [{"title": "Past Lives", "year": "2023", "slug": "/film/past-lives/"}],
+        "second_watchlist": [{"title": "Past Lives", "year": "2023", "slug": "/film/past-lives/"}],
+    }
 
     async def fake_enrich(session, films, limit=80):
         return [
-            {
-                **film,
-                "genres": ["Romance", "Drama"],
-                "directors": ["Richard Linklater"],
-                "decade": "1990s",
-            }
+            {**film, "genres": ["Romance", "Drama"], "directors": ["Richard Linklater"], "decade": "1990s"}
             for film in films
         ]
 
-    async def fake_discover(session, mutual_profile, watched_keys):
+    async def fake_discover(first_wl, second_wl, mutual_profile):
         from app.models.recommend import FilmRecommendation
-
-        return [
-            FilmRecommendation(
-                title="Past Lives",
-                year="2023",
-                reason="Matched because you both lean toward Romance",
-                poster_path="/past.jpg",
-            )
-        ]
+        return [FilmRecommendation(title="Past Lives", year="2023", reason="Matched because you both lean toward Romance", poster_path="/past.jpg")]
 
     with (
-        patch("app.routes.recommend.scrape_profile_sources", side_effect=fake_scrape_profile_sources),
-        patch("app.routes.recommend.scrape_watchlist", side_effect=fake_scrape_watchlist),
+        patch("app.routes.recommend.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.recommend.task_manager.create_date_night_job", return_value="test-id"),
+        patch("app.routes.recommend.task_manager.get_task_state", return_value=_done_task(scraped_data)),
+        patch("app.routes.recommend.asyncio.sleep"),
         patch("app.routes.recommend.enrich_films", side_effect=fake_enrich),
         patch("app.routes.recommend.discover_date_night_recommendations", side_effect=fake_discover),
     ):

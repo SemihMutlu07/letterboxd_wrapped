@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -58,3 +59,8 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def backend_git_sha() -> str | None:
+    """Commit SHA of the running backend, from whichever env var the platform sets."""
+    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")

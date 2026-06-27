@@ -29,9 +29,11 @@ class TaskState:
     postback_seconds: Optional[float] = None
     error_type: Optional[str] = None
     error_stage: Optional[str] = None
-    kind: str = "analyze"     # analyze | scrape
+    kind: str = "analyze"     # analyze | scrape | watchlist
     username: Optional[str] = None
-    claimed: bool = False     # scrape jobs: True once a worker has taken it
+    usernames: list = field(default_factory=list)  # watchlist jobs
+    job_type: str = ""  # watchlist_compare | date_night
+    claimed: bool = False     # scrape/watchlist jobs: True once a worker has taken it
     trace_events: list[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -64,6 +66,53 @@ def create_scrape_job(username: str) -> str:
     _tasks[task_id] = task
     append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
     return task_id
+
+
+def create_watchlist_compare_job(usernames: list) -> str:
+    """Queue a watchlist comparison job for the desktop worker to claim."""
+    task_id = str(uuid.uuid4())
+    task = TaskState(
+        task_id=task_id,
+        kind="watchlist",
+        job_type="watchlist_compare",
+        usernames=list(usernames),
+        stage="queued",
+        message="Queued on desktop scraper",
+    )
+    _tasks[task_id] = task
+    return task_id
+
+
+def create_date_night_job(usernames: list) -> str:
+    """Queue a date-night scrape job for the desktop worker to claim."""
+    task_id = str(uuid.uuid4())
+    task = TaskState(
+        task_id=task_id,
+        kind="watchlist",
+        job_type="date_night",
+        usernames=list(usernames),
+        stage="queued",
+        message="Queued on desktop scraper",
+    )
+    _tasks[task_id] = task
+    return task_id
+
+
+def claim_next_watchlist_job() -> Optional[TaskState]:
+    """Atomically claim the oldest unclaimed watchlist/date-night job."""
+    queued = sorted(
+        [t for t in _tasks.values() if t.kind == "watchlist" and t.status == "pending" and not t.claimed],
+        key=lambda t: t.created_at,
+    )
+    if not queued:
+        return None
+    job = queued[0]
+    job.claimed = True
+    job.status = "running"
+    job.stage = "scraping"
+    job.message = "Desktop worker is reading Letterboxd"
+    job.claimed_at = datetime.utcnow()
+    return job
 
 
 def claim_next_scrape_job() -> Optional[TaskState]:
@@ -344,11 +393,38 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
         _apply_telemetry(task, telemetry)
 
 
+# ponytail: a scrape running longer than this is treated as a dead worker and
+# re-queued; raise it if real scrapes ever legitimately exceed it.
+STALE_CLAIM_SECONDS = 900
+
+
+def requeue_stale_claims(now: Optional[datetime] = None) -> int:
+    """Reset scrape jobs stuck 'running' past STALE_CLAIM_SECONDS back to 'pending'
+    so a single-worker outage (desktop offline mid-scrape) re-queues the job
+    instead of stranding the user on a job that will never complete. Idempotent —
+    a late postback is keyed by task_id. Returns how many were re-queued."""
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
+    count = 0
+    for t in _tasks.values():
+        if t.kind == "scrape" and t.status == "running" and t.claimed_at and t.claimed_at < cutoff:
+            t.claimed = False
+            t.status = "pending"
+            t.stage = "queued"
+            t.message = "Re-queued after the worker went away mid-scrape"
+            t.claimed_at = None
+            append_task_event(t.task_id, "requeued", "Worker went away mid-scrape; re-queued", level="warning")
+            count += 1
+    return count
+
+
 async def cleanup_loop() -> None:
-    """Remove tasks older than 1 hour; runs every 5 minutes."""
+    """Re-queue stale claims, then remove tasks older than 1 hour; every 5 minutes."""
     while True:
         await asyncio.sleep(300)
-        cutoff = datetime.utcnow() - timedelta(hours=1)
+        now = datetime.utcnow()
+        requeue_stale_claims(now)
+        cutoff = now - timedelta(hours=1)
         stale = [tid for tid, t in list(_tasks.items()) if t.created_at < cutoff]
         for tid in stale:
             _tasks.pop(tid, None)

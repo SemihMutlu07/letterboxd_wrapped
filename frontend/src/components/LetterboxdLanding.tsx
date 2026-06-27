@@ -2,9 +2,9 @@
 
 import JSZip from 'jszip';
 import Link from 'next/link';
-import React, { useState, useCallback, useEffect } from 'react';
-import { Film, Star, Clock, Globe, Upload, Users, Bug, X, Bold } from 'lucide-react';
-import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend } from '@/lib/api';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
+import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend, type ScrapeProgress } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -37,6 +37,13 @@ const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
+  // Guess-your-stat game (wait UX B). Ref so the in-flight scrape handler reads the
+  // latest guess (it's submitted mid-scrape, after the handler's closure is fixed).
+  const [guess, setGuessState] = useState<number | null>(null);
+  const [reveal, setReveal] = useState<{ guess: number; actual: number } | null>(null);
+  const guessRef = useRef<number | null>(null);
+  const setGuess = useCallback((n: number) => { guessRef.current = n; setGuessState(n); }, []);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
@@ -278,6 +285,10 @@ export default function LetterboxdLanding() {
     }
 
     setIsScraping(true);
+    setScrapeProgress(null);
+    setGuessState(null);
+    setReveal(null);
+    guessRef.current = null;
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape' });
 
@@ -296,7 +307,7 @@ export default function LetterboxdLanding() {
       // to the complete scrape like the original flow. rssPreview() is kept in
       // lib/api.ts and can be re-enabled in one line.
       const method = 'scrape' as const;
-      const result = await scrapeProfile(username);
+      const result = await scrapeProfile(username, undefined, setScrapeProgress);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
@@ -319,7 +330,15 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setTimeout(() => { window.location.href = resultPath(username); }, 100);
+      // If the user played the guess game, show the reveal briefly before redirect.
+      const actualFilms = result.stats.total_films ?? 0;
+      const playedGuess = guessRef.current;
+      if (playedGuess != null && actualFilms > 0) {
+        setReveal({ guess: playedGuess, actual: actualFilms });
+        setTimeout(() => { window.location.href = resultPath(username); }, 3500);
+      } else {
+        setTimeout(() => { window.location.href = resultPath(username); }, 100);
+      }
     } catch (err) {
       const normalized = normalizeError(err);
       if (analysisRun) {
@@ -361,6 +380,10 @@ export default function LetterboxdLanding() {
   const handleCancel = useCallback(() => {
     setIsUploading(false);
     setIsScraping(false);
+    setScrapeProgress(null);
+    setGuessState(null);
+    setReveal(null);
+    guessRef.current = null;
     setError(null);
   }, []);
 
@@ -371,6 +394,10 @@ export default function LetterboxdLanding() {
         onCancel={handleCancel}
         mode="scrape"
         typicalSeconds={30}
+        events={scrapeProgress?.trace_events}
+        onGuess={setGuess}
+        guess={guess}
+        reveal={reveal}
       />
     );
   }

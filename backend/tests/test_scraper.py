@@ -243,7 +243,7 @@ async def test_scrape_profile_sources_runs_sources_in_parallel(monkeypatch):
                         lambda u, p, s=None, t=None: [{"title": "D", "year": "2024", "rating": None, "watch_date": "2024-01-01"}])
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
                         lambda u, p, s=None, t=None: [{"title": "G", "year": "2024", "rating": 4.0, "watch_date": ""}])
-    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (42, 7))
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (42, 7, []))
 
     result = await scraper.scrape_profile_sources("semihmutsuz", 5)
 
@@ -260,7 +260,7 @@ async def test_scrape_profile_sources_raises_when_both_film_sources_fail(monkeyp
         raise ValueError(f"User '{u}' not found")
     monkeypatch.setattr(scraper, "_sync_scrape_diary", boom)
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid", boom)
-    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (0, 0))
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (0, 0, []))
 
     with pytest.raises(ValueError, match="not found"):
         await scraper.scrape_profile_sources("ghost", 5)
@@ -272,7 +272,7 @@ async def test_scrape_profile_sources_survives_one_source_failing(monkeypatch):
                         lambda u, p, s=None, t=None: (_ for _ in ()).throw(ValueError("rate limit")))
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
                         lambda u, p, s=None, t=None: [{"title": "G", "year": "2024", "rating": 4.0, "watch_date": ""}])
-    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (10, 0))
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (10, 0, []))
 
     result = await scraper.scrape_profile_sources("semihmutsuz", 5)
 

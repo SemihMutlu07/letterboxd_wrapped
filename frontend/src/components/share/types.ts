@@ -58,4 +58,6 @@ export type ShareCardData = {
   topReviewWords?: ShareReviewWordStat[];
   /** Single film where user rating diverges most from TMDB community average. */
   ratingOutlierFilm?: ShareOutlierFilm;
+  /** Letterboxd username shown on the card so viewers know whose Wrapped it is. */
+  username?: string;
 };

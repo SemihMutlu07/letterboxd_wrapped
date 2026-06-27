@@ -32,17 +32,27 @@ Frontend is a static Next.js export; backend is FastAPI that processes uploads/s
 Backend:
 - `TMDB_API_KEY` (required)
 - `ALLOW_ALL_NETLIFY` (CORS allow `*.netlify.app`)
+- `SUPABASE_URL` (new project: `https://ghumergebwwrwlykwjsu.supabase.co`)
+- `SUPABASE_ANON_KEY` (publishable key only — never service_role)
 
 Frontend:
 - `NEXT_PUBLIC_API_BASE` (base URL for backend API calls)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_POSTHOG_KEY`
+- `NEXT_PUBLIC_POSTHOG_KEY` (PostHog Project API Key, public client key)
+- `NEXT_PUBLIC_POSTHOG_HOST` (e.g. `https://us.i.posthog.com`; required alongside KEY — analytics silently stays off if missing)
+
+Desktop worker (Windows):
+- `TMDB_API_KEY` (same key as backend)
+- `WORKER_BACKEND_URL` (backend URL to poll for jobs)
+- `WORKER_TOKEN` (shared secret for X-Worker-Token header)
+- Worker does NOT need Supabase keys — backend mirrors run logs to Supabase.
 
 Rules:
 - Never write `.env` values into files.
 - Never commit secrets.
 - Prefer documenting required env keys in README/CLAUDE only.
+- **Supabase service_role key was leaked in git history and the old project is decommissioned. New project uses publishable (anon) key only. If the Windows desktop has an old `backend/.env` with `SUPABASE_SERVICE_ROLE=...`, delete that line and replace with the new `SUPABASE_URL` + `SUPABASE_ANON_KEY` above.**
 
 ## Local development
 Frontend:

@@ -12,13 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app import task_manager
-from app.config import settings
+from app import supabase_ops, task_manager
+from app.config import backend_git_sha, settings
 from app.services.run_log import RUNS_DIR
 
 logger = logging.getLogger("letterboxd_wrapped.admin")
@@ -65,10 +64,6 @@ def _annotate_analysis_run(data: dict[str, Any]) -> None:
             data["analysis_seconds_per_film"] = round(analysis / total_films, 3)
 
 
-def _backend_git_sha() -> str | None:
-    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
-
-
 def _require_admin(request: Request) -> None:
     key = request.query_params.get("key") or request.headers.get("x-admin-key")
     if key != ADMIN_SECRET:
@@ -95,33 +90,61 @@ def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
     return items
 
 
+def _list_params(limit: int) -> dict[str, str]:
+    return {"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)}
+
+
+def _payload_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Extract `payload` dicts and stamp _mtime (watchlist / date-night lists)."""
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        data = row.get("payload")
+        if isinstance(data, dict):
+            data["_mtime"] = row.get("created_at")
+            items.append(data)
+    return items
+
+
 async def _load_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
-    """Read analysis runs from Supabase ops_runs (durable across Render restarts).
-    Falls back to [] on any error so the dashboard still renders."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                f"{settings.supabase_url}/rest/v1/ops_runs",
-                headers={
-                    "apikey": settings.supabase_anon_key,
-                    "Authorization": f"Bearer {settings.supabase_anon_key}",
-                },
-                params={"select": "created_at,payload", "order": "created_at.desc", "limit": str(limit)},
-            )
-            resp.raise_for_status()
-            rows = resp.json()
-    except Exception as exc:
-        logger.warning("Failed to load runs from Supabase: %s", exc)
-        return []
+    """Read analysis runs from Supabase ops_runs (durable across Render restarts)."""
+    rows = await supabase_ops.select(
+        "ops_runs", {"select": "id,created_at,payload", "order": "created_at.desc", "limit": str(limit)}
+    )
     items: list[dict[str, Any]] = []
     for row in rows:
         data = row.get("payload")
         if not isinstance(data, dict):
             continue
         data["_mtime"] = row.get("created_at")
+        data["_filename"] = row.get("id")  # detail-view link key (UUID, path-safe)
         _annotate_analysis_run(data)
         items.append(data)
     return items
+
+
+async def _load_run_supabase(run_id: str) -> dict[str, Any] | None:
+    """Fetch a single analysis run payload from ops_runs by id (UUID)."""
+    rows = await supabase_ops.select(
+        "ops_runs", {"id": f"eq.{run_id}", "select": "created_at,payload", "limit": "1"}
+    )
+    if not rows:
+        return None
+    data = rows[0].get("payload")
+    if not isinstance(data, dict):
+        return None
+    data["_mtime"] = rows[0].get("created_at")
+    _annotate_analysis_run(data)
+    return data
+
+
+async def _load_watchlist_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
+    """Read watchlist comparison runs from Supabase ops_watchlist_runs."""
+    return _payload_rows(await supabase_ops.select("ops_watchlist_runs", _list_params(limit)))
+
+
+async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]]:
+    """Read date night recommendation runs from Supabase ops_date_night_runs."""
+    return _payload_rows(await supabase_ops.select("ops_date_night_runs", _list_params(limit)))
 
 
 async def _load_analysis_runs(limit: int = 50) -> list[dict[str, Any]]:
@@ -139,12 +162,16 @@ async def admin_login(request: Request):
 async def admin_dashboard(request: Request):
     _require_admin(request)
     runs = await _load_analysis_runs(limit=50)
-    watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
-    date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
+    if settings.supabase_enabled:
+        watchlist_runs = await _load_watchlist_runs_supabase(limit=50)
+        date_night_runs = await _load_date_night_runs_supabase(limit=50)
+    else:
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
     worker_status = task_manager.get_worker_status(
         settings.worker_heartbeat_max_age_seconds,
         expected_protocol_version=settings.worker_protocol_version,
-        backend_git_sha=_backend_git_sha(),
+        backend_git_sha=backend_git_sha(),
     )
     return templates.TemplateResponse(
         "admin_dashboard.html",
@@ -164,10 +191,15 @@ async def admin_dashboard(request: Request):
 async def admin_run_detail(request: Request, filename: str):
     _require_admin(request)
     safe_name = Path(filename).name
-    path = RUNS_DIR / safe_name
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Run not found")
-    data = json.loads(path.read_text())
+    if settings.supabase_enabled:
+        data = await _load_run_supabase(safe_name)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+    else:
+        path = RUNS_DIR / safe_name
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Run not found")
+        data = json.loads(path.read_text())
     return templates.TemplateResponse(
         "admin_run.html",
         {"request": request, "run": data, "filename": safe_name, "key": request.query_params.get("key")},
@@ -178,10 +210,16 @@ async def admin_run_detail(request: Request, filename: str):
 async def admin_api_runs(request: Request, limit: int = 50):
     """JSON API for the admin dashboard."""
     _require_admin(request)
+    if settings.supabase_enabled:
+        watchlist_runs = await _load_watchlist_runs_supabase(limit)
+        date_night_runs = await _load_date_night_runs_supabase(limit)
+    else:
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit)
     return {
         "runs": await _load_analysis_runs(limit),
-        "watchlist_runs": _load_json_dir(WATCHLIST_RUNS_DIR, limit),
-        "date_night_runs": _load_json_dir(DATE_NIGHT_RUNS_DIR, limit),
+        "watchlist_runs": watchlist_runs,
+        "date_night_runs": date_night_runs,
     }
 
 
@@ -194,6 +232,6 @@ async def admin_api_worker(request: Request):
         "status": task_manager.get_worker_status(
             settings.worker_heartbeat_max_age_seconds,
             expected_protocol_version=settings.worker_protocol_version,
-            backend_git_sha=_backend_git_sha(),
+            backend_git_sha=backend_git_sha(),
         ),
     }

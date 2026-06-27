@@ -9,21 +9,18 @@ in the `X-Worker-Token` header matching settings.worker_token.
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app import task_manager
-from app.config import settings
+from app.task_manager import claim_next_watchlist_job
+from app.config import backend_git_sha, settings
 from app.services.run_log import persist_run
+from app.services.worker_monitor import log_worker_event
 
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
 router = APIRouter(prefix="/api/worker")
-
-
-def _backend_git_sha() -> str | None:
-    return os.getenv("BACKEND_GIT_SHA") or os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT")
 
 
 def _require_worker_token(x_worker_token: str | None) -> None:
@@ -80,7 +77,7 @@ def _request_username(body: dict, stats: dict | None = None) -> str | None:
 def _worker_version_mismatch() -> dict | None:
     if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
         return None
-    version = task_manager.get_worker_version_status(settings.worker_protocol_version, _backend_git_sha())
+    version = task_manager.get_worker_version_status(settings.worker_protocol_version, backend_git_sha())
     return version if version.get("mismatch") else None
 
 
@@ -105,6 +102,7 @@ async def worker_startup(request: Request, x_worker_token: str | None = Header(d
     except Exception:
         body = {}
     task_manager.record_worker_startup(body if isinstance(body, dict) else {})
+    log_worker_event("startup", body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -117,6 +115,7 @@ async def worker_shutdown(request: Request, x_worker_token: str | None = Header(
     except Exception:
         body = {}
     task_manager.record_worker_shutdown(body if isinstance(body, dict) else {})
+    log_worker_event("shutdown", body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -226,6 +225,12 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
             telemetry=_task_telemetry(task),
         )
     logger.info("Worker completed scrape job %s", task_id)
+    log_worker_event("job_completed", {
+        "task_id": task_id,
+        "username": task.username if task else _request_username(body, stats),
+        "total_films": stats.get("total_films"),
+        "duration_seconds": telemetry.get("duration_seconds"),
+    })
     return {"ok": True}
 
 
@@ -269,4 +274,62 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
             telemetry=_task_telemetry(task),
         )
     logger.warning("Worker reported scrape job %s failed: %s", task_id, message)
+    log_worker_event("job_failed", {
+        "task_id": task_id,
+        "username": task.username if task else _request_username(body),
+        "error_message": message,
+        "error_type": telemetry.get("error_type"),
+        "error_stage": telemetry.get("error_stage"),
+        "duration_seconds": telemetry.get("duration_seconds"),
+    })
+    return {"ok": True}
+
+
+@router.get("/watchlist/next")
+async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)):
+    """Claim the oldest queued watchlist/date-night scrape job, or return {job: null}."""
+    _require_worker_token(x_worker_token)
+    mismatch = _worker_version_mismatch()
+    if mismatch:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "worker_version_mismatch",
+                "message": "Desktop worker must be updated before claiming new jobs.",
+                "version": mismatch,
+            },
+        )
+    job = claim_next_watchlist_job()
+    if job is None:
+        return {"job": None}
+    logger.info("Worker claimed watchlist job %s type=%s users=%s", job.task_id, job.job_type, job.usernames)
+    return {"job": {"task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+
+
+@router.post("/watchlist/{task_id}/complete")
+async def complete_watchlist(task_id: str, request: Request, x_worker_token: str | None = Header(default=None)):
+    """Receive raw scraped film lists from the worker so the backend can finish processing."""
+    _require_worker_token(x_worker_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_body", "message": "Body must be an object."})
+    task = task_manager.get_task_state(task_id)
+    if task is None or task.kind != "watchlist":
+        raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
+    task_manager.set_task_done(task_id, body)
+    logger.info("Worker completed watchlist job %s", task_id)
+    return {"ok": True}
+
+
+@router.post("/watchlist/{task_id}/failed")
+async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | None = Header(default=None)):
+    """Mark a watchlist scrape job as failed."""
+    _require_worker_token(x_worker_token)
+    body = await request.json()
+    message = str(body.get("message") or "Desktop worker failed to scrape watchlist.")
+    task = task_manager.get_task_state(task_id)
+    if task is None or task.kind != "watchlist":
+        raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
+    task_manager.set_task_failed(task_id, message)
+    logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)
     return {"ok": True}

@@ -130,6 +130,7 @@ class ProfileScrapeSources:
     review_count: int = 0
     film_count: int = 0
     reviews: list[dict] = field(default_factory=list)
+    favorite_films: list[dict] = field(default_factory=list)  # up to 4 pinned profile favorites
 
 
 TraceCallback = Callable[[str, str, Optional[dict[str, Any]]], None]
@@ -724,10 +725,10 @@ def _sync_scrape_overview(
     username: str,
     session: Optional[cloudscraper.CloudScraper] = None,
     trace_callback: Optional[TraceCallback] = None,
-) -> tuple[int, int]:
-    """Fetch the profile overview; return (film_count, review_count).
+) -> tuple[int, int, list[dict]]:
+    """Fetch the profile overview; return (film_count, review_count, favorite_films).
 
-    Best-effort: returns (0, 0) on any failure — counts are provenance/UX only
+    Best-effort: returns (0, 0, []) on any failure — counts are provenance/UX only
     and must never fail the scrape.
     """
     owns_session = session is None
@@ -736,6 +737,7 @@ def _sync_scrape_overview(
         _warm_session(s)
     film_count = 0
     review_count = 0
+    favorite_films: list[dict] = []
     try:
         overview_resp = _fetch(s, f"{BASE_URL}/{username}/", timeout=10)
         if overview_resp.status_code == 200:
@@ -756,18 +758,33 @@ def _sync_scrape_overview(
                         review_count = int(count_span.get_text(strip=True).replace(",", ""))
                     except ValueError:
                         pass
+            # Parse up to 4 pinned favorite films from the profile page
+            for item in soup.select("#favourites .poster-list li")[:4]:
+                poster_div = item.select_one("[data-film-slug]")
+                if not poster_div:
+                    continue
+                slug = str(poster_div.get("data-film-slug") or "")
+                title = str(poster_div.get("data-film-name") or "")
+                if not title:
+                    img = item.select_one("img")
+                    title = str(img.get("alt") or "") if img else ""
+                year_raw = poster_div.get("data-film-release-year")
+                year = int(year_raw) if year_raw and str(year_raw).isdigit() else None
+                if slug:
+                    favorite_films.append({"slug": slug, "title": title, "year": year})
             _trace(
                 trace_callback,
                 "overview",
                 "Profile overview parsed",
-                {"film_count": film_count, "review_count": review_count, "status_code": overview_resp.status_code},
+                {"film_count": film_count, "review_count": review_count,
+                 "favorite_films": len(favorite_films), "status_code": overview_resp.status_code},
             )
     except Exception:
         pass  # non-fatal — counts are best-effort
     finally:
         if owns_session:
             s.close()
-    return film_count, review_count
+    return film_count, review_count, favorite_films
 
 
 def _sync_scrape_profile_sources(
@@ -789,7 +806,7 @@ def _sync_scrape_profile_sources(
     session = _new_session()
     _warm_session(session)
     try:
-        film_count, review_count = _sync_scrape_overview(
+        film_count, review_count, favorite_films = _sync_scrape_overview(
             username, session=session, trace_callback=trace_callback
         )
         if trace_callback:
@@ -818,6 +835,7 @@ def _sync_scrape_profile_sources(
             review_count=review_count,
             film_count=film_count,
             reviews=reviews,
+            favorite_films=favorite_films,
         )
     finally:
         session.close()
@@ -910,9 +928,9 @@ async def scrape_profile_sources(
     diary = [] if diary_failed else diary_res
     grid = [] if grid_failed else grid_res
 
-    film_count, review_count = (0, 0)
+    film_count, review_count, favorite_films = (0, 0, [])
     if not isinstance(overview_res, BaseException):
-        film_count, review_count = overview_res
+        film_count, review_count, favorite_films = overview_res
 
     if isinstance(reviews_res, BaseException):
         logger.warning("Review scrape failed for %s: %s", username, reviews_res)
@@ -928,6 +946,7 @@ async def scrape_profile_sources(
         review_count=review_count,
         film_count=film_count,
         reviews=reviews_res,
+        favorite_films=favorite_films,
     )
 
 
@@ -965,6 +984,12 @@ def diary_to_csv_dicts(films: list[dict]) -> dict[str, list[dict]]:
             continue
         seen.add(key)
 
+        watch_date = f.get("watch_date") or ""
+        # ponytail: only dated diary entries count as watched; undated grid entries
+        # are IMDB bulk-imports with no known watch date — exclude from analysis.
+        if not watch_date:
+            continue
+
         watched_rows.append({
             "Name": f["title"],
             "Year": f["year"],
@@ -977,14 +1002,12 @@ def diary_to_csv_dicts(films: list[dict]) -> dict[str, list[dict]]:
                 "Rating": f["rating"],
             })
 
-        watch_date = f.get("watch_date") or ""
-        if watch_date:
-            diary_rows.append({
-                "Date": watch_date,
-                "Name": f["title"],
-                "Year": f["year"],
-                "Rating": f["rating"] if f["rating"] is not None else "",
-                "Watched Date": watch_date,
-            })
+        diary_rows.append({
+            "Date": watch_date,
+            "Name": f["title"],
+            "Year": f["year"],
+            "Rating": f["rating"] if f["rating"] is not None else "",
+            "Watched Date": watch_date,
+        })
 
     return {"watched": watched_rows, "ratings": ratings_rows, "diary": diary_rows}

@@ -43,6 +43,7 @@ from app.services.scrape_pipeline import (
     ScraperAPIError,
     scrape_and_analyze,
 )
+from app.services.scraper import scrape_watchlist, scrape_profile_sources
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -278,6 +279,54 @@ async def _run_startup_self_test(session: aiohttp.ClientSession, cfg: WorkerConf
     logger.info("Startup self-test passed for @%s (films=%s)", username, total_films)
 
 
+async def _claim_next_watchlist(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
+    async with session.get(f"{cfg.base_url}/api/worker/watchlist/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
+        if r.status != 200:
+            logger.warning("Watchlist claim failed: HTTP %s", r.status)
+            return None
+        return (await r.json()).get("job")
+
+
+async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
+    task_id = job["task_id"]
+    job_type = job["job_type"]
+    usernames = job["usernames"]
+    first, second = usernames[0], usernames[1]
+    logger.info("Processing watchlist job %s type=%s users=%s/%s", task_id, job_type, first, second)
+
+    try:
+        if job_type == "watchlist_compare":
+            first_wl, second_wl = await asyncio.gather(
+                scrape_watchlist(first, max_pages=40),
+                scrape_watchlist(second, max_pages=40),
+            )
+            payload = {"first_watchlist": first_wl, "second_watchlist": second_wl}
+        else:  # date_night
+            first_src, second_src, first_wl, second_wl = await asyncio.gather(
+                scrape_profile_sources(first, max_pages=25),
+                scrape_profile_sources(second, max_pages=25),
+                scrape_watchlist(first, max_pages=25),
+                scrape_watchlist(second, max_pages=25),
+            )
+            payload = {
+                "first_diary": first_src.diary,
+                "first_grid": first_src.grid,
+                "second_diary": second_src.diary,
+                "second_grid": second_src.grid,
+                "first_watchlist": first_wl,
+                "second_watchlist": second_wl,
+            }
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc) if isinstance(exc, ValueError) else f"Scrape failed for {first}/{second}."
+        logger.warning("Watchlist job %s failed: %s", task_id, exc)
+        await _post(session, cfg, f"/api/worker/watchlist/{task_id}/failed", {"message": message})
+        return
+
+    ok = await _post(session, cfg, f"/api/worker/watchlist/{task_id}/complete", payload)
+    if ok:
+        logger.info("Watchlist job %s complete", task_id)
+
+
 async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
     async with session.get(f"{cfg.base_url}/api/worker/scrape/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
         if r.status == 409:
@@ -438,6 +487,18 @@ async def run() -> None:
                     job = None
 
                 if job is None:
+                    # Also check for watchlist/date-night jobs
+                    try:
+                        wl_job = await _claim_next_watchlist(session, cfg)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Watchlist poll error: %s", exc)
+                        wl_job = None
+
+                    if wl_job is not None:
+                        await _flush_outbox(session, cfg)
+                        await _process_watchlist_job(session, cfg, wl_job)
+                        continue
+
                     await _flush_outbox(session, cfg)
                     await asyncio.sleep(POLL_INTERVAL)
                     continue

@@ -3,14 +3,25 @@
  * Intentionally a permissive superset so the registry doesn't need to import
  * from the page-level LetterboxdStats type.
  */
+/** One film a director/actor appears in, for the "see their films" modal. */
+export interface PersonFilm {
+  title: string;
+  year?: string;
+  poster_path?: string;
+  user_rating?: number | null;
+}
+
 export interface StatsData {
   total_films: number;
-  average_rating: number;
+  average_rating: number | null;
+  total_runtime?: number;
+  hours_watched?: number;
   days_watched: number;
   average_runtime: number;
+  median_runtime?: number;
   top_genres: { name: string; count: number }[];
-  top_directors: { name: string; count: number; profile_path?: string; person_id?: number }[];
-  top_actors: { name: string; count: number; profile_path?: string; person_id?: number }[];
+  top_directors: { name: string; count: number; profile_path?: string; person_id?: number; films?: PersonFilm[] }[];
+  top_actors: { name: string; count: number; profile_path?: string; person_id?: number; films?: PersonFilm[] }[];
   top_countries: { name: string; count: number }[];
   top_languages: { language: string; count: number }[];
   decades: { decade: string; count: number }[];
@@ -100,6 +111,12 @@ export interface StatsData {
     title: string;
     year?: number;
     rating: number;
+    poster_path?: string;
+  }[];
+  /** Up to 4 films pinned as favorites on the user's Letterboxd profile page. */
+  favorite_films?: {
+    title: string;
+    year?: number;
     poster_path?: string;
   }[];
   /** Total number of rated films in the upload. */

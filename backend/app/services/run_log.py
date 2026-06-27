@@ -9,8 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import httpx
-
+from app import supabase_ops
 from app.config import settings
 
 logger = logging.getLogger("letterboxd_wrapped.run_log")
@@ -18,7 +17,8 @@ logger = logging.getLogger("letterboxd_wrapped.run_log")
 RUNS_DIR = Path("runs")
 
 # Bulky fields kept in the local file but stripped before mirroring to Supabase.
-_HEAVY_KEYS = ("stats", "trace_events")
+# trace_events is lightweight (list of small dicts) and needed by the admin dashboard.
+_HEAVY_KEYS = ("stats",)
 
 
 def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -29,25 +29,12 @@ def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _mirror_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort copy of the run log to Supabase ops_runs so the admin dashboard
     survives Render restarts (local runs/ is ephemeral there). No-op without env."""
-    try:
-        httpx.post(
-            f"{settings.supabase_url}/rest/v1/ops_runs",
-            headers={
-                "apikey": settings.supabase_anon_key,
-                "Authorization": f"Bearer {settings.supabase_anon_key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
-            json={
-                "username": payload.get("username"),
-                "ok": payload.get("ok"),
-                "total_films": payload.get("total_films"),
-                "payload": _remote_payload(payload),
-            },
-            timeout=5.0,
-        )
-    except Exception as exc:
-        logger.warning("Failed to mirror run to Supabase: %s", exc)
+    supabase_ops.insert("ops_runs", {
+        "username": payload.get("username"),
+        "ok": payload.get("ok"),
+        "total_films": payload.get("total_films"),
+        "payload": _remote_payload(payload),
+    })
 
 TIMING_FIELDS = (
     "duration_seconds",

@@ -3,15 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app import supabase_ops, task_manager
 from app.models.recommend import RecommendFromCompareRequest, RecommendFromCompareResponse
 from app.services.recommender import (
     compare_watchlist_sets,
@@ -19,16 +20,65 @@ from app.services.recommender import (
     pick_from_common,
     recommendation_from_film,
 )
-from app.services.scraper import ScraperAPIError, scrape_watchlist
+from app.config import settings
 
 logger = logging.getLogger("letterboxd_wrapped.watchlist")
 
 router = APIRouter()
 
 USERNAME_RE = re.compile(r"^[a-z0-9_]+$")
-MAX_WATCHLIST_PAGES = 40
 
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
+
+
+async def _await_worker_job(task_id: str, max_seconds: int) -> tuple[str, Any]:
+    """Poll a worker job to a terminal state.
+
+    Returns ('done', result_dict) | ('failed', error_message) | ('timeout', None).
+    Shared by all three worker-routed endpoints so they stay consistent — a task
+    vanishing (purged by cleanup_loop) is treated as a timeout, not a success.
+    """
+    for _ in range(max_seconds):
+        await asyncio.sleep(1)
+        task = task_manager.get_task_state(task_id)
+        if task is None:
+            return ("timeout", None)
+        if task.status == "done":
+            return ("done", task.result or {})
+        if task.status == "failed":
+            return ("failed", task.error)
+    return ("timeout", None)
+
+
+def _worker_failure_exception(error_message: str | None) -> HTTPException:
+    """Map a worker scrape failure message back to the original HTTP semantics.
+
+    The worker forwards the raw scraper exception text; preserve the 404/503
+    distinction (and clean user-facing messages) the direct-scrape path used to
+    return, instead of collapsing everything into a generic 503.
+    """
+    msg = error_message or ""
+    if "Letterboxd is blocking" in msg or "blocking" in msg.lower():
+        return HTTPException(status_code=503, detail={"error_code": "scrape_blocked", "message": msg})
+    if "not found" in msg.lower():
+        return HTTPException(
+            status_code=404,
+            detail={"error_code": "user_not_found", "message": "One of those Letterboxd users could not be found."},
+        )
+    return HTTPException(
+        status_code=503,
+        detail={"error_code": "scraper_unavailable", "message": msg or "Worker failed to scrape Letterboxd."},
+    )
+
+
+def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
+    """Best-effort mirror of watchlist comparison run to Supabase."""
+    supabase_ops.insert("ops_watchlist_runs", {
+        "usernames": payload.get("usernames"),
+        "ok": payload.get("ok"),
+        "match_score": payload.get("match_score"),
+        "payload": payload,
+    })
 
 
 def _persist_watchlist_run(
@@ -58,6 +108,11 @@ def _persist_watchlist_run(
             },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if settings.supabase_enabled:
+            try:
+                asyncio.get_running_loop().run_in_executor(None, _mirror_watchlist_to_supabase, payload)
+            except RuntimeError:
+                _mirror_watchlist_to_supabase(payload)
     except Exception as exc:
         logger.warning("Failed to persist watchlist run: %s", exc)
 
@@ -126,48 +181,29 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
-    try:
-        first_watchlist, second_watchlist = await asyncio.gather(
-            scrape_watchlist(first, max_pages=MAX_WATCHLIST_PAGES),
-            scrape_watchlist(second, max_pages=MAX_WATCHLIST_PAGES),
-        )
-    except ScraperAPIError as exc:
-        # Scraper service itself failed (quota, bad key, upstream 5xx) — NOT a
-        # missing user. ScraperAPIError subclasses ValueError, so it must be
-        # caught first or it would be mislabeled as user_not_found below.
-        logger.error("Watchlist compare scraper unavailable for %s/%s: %s", first, second, exc)
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_offline")
         raise HTTPException(
             status_code=503,
-            detail={"error_code": "scraper_unavailable", "message": str(exc)},
-        )
-    except ValueError as exc:
-        msg = str(exc)
-        if "Letterboxd is blocking" in msg:
-            logger.warning("Watchlist compare blocked for %s/%s: %s", first, second, msg)
-            raise HTTPException(
-                status_code=503,
-                detail={"error_code": "scrape_blocked", "message": msg},
-            )
-        logger.warning("Watchlist compare user lookup failed for %s/%s: %s", first, second, exc)
-        raise HTTPException(
-            status_code=404,
-            detail={"error_code": "user_not_found", "message": "One of those Letterboxd users could not be found."},
-        )
-    except Exception:
-        logger.exception("Watchlist compare scrape failed for %s/%s", first, second)
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "watchlist_scrape_failed", "message": "Could not read one of the public watchlists. Try again later."},
+            detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    comparison = compare_watchlist_sets(first_watchlist, second_watchlist)
+    task_id = task_manager.create_watchlist_compare_job([first, second])
+    outcome, data = await _await_worker_job(task_id, 120)
+
+    if outcome == "failed":
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message=data)
+        raise _worker_failure_exception(data)
+    if outcome == "timeout":
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_timeout")
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
+        )
+
+    comparison = compare_watchlist_sets(data.get("first_watchlist", []), data.get("second_watchlist", []))
     _persist_watchlist_run([first, second], comparison, request, ok=True)
-
-    return {
-        "status": "success",
-        "users": [first, second],
-        **comparison,
-    }
+    return {"status": "success", "users": [first, second], **comparison}
 
 
 @router.post("/api/recommend-from-compare", response_model=RecommendFromCompareResponse)
@@ -184,38 +220,27 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
-    try:
-        first_watchlist, second_watchlist = await asyncio.gather(
-            scrape_watchlist(first, max_pages=MAX_WATCHLIST_PAGES),
-            scrape_watchlist(second, max_pages=MAX_WATCHLIST_PAGES),
-        )
-    except ScraperAPIError as exc:
-        logger.error("Recommendation scraper unavailable for %s/%s: %s", first, second, exc)
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_offline")
         raise HTTPException(
             status_code=503,
-            detail={"error_code": "scraper_unavailable", "message": str(exc)},
-        )
-    except ValueError as exc:
-        msg = str(exc)
-        if "Letterboxd is blocking" in msg:
-            logger.warning("Recommendation blocked for %s/%s: %s", first, second, msg)
-            raise HTTPException(
-                status_code=503,
-                detail={"error_code": "scrape_blocked", "message": msg},
-            )
-        logger.warning("Recommendation user lookup failed for %s/%s: %s", first, second, exc)
-        raise HTTPException(
-            status_code=404,
-            detail={"error_code": "user_not_found", "message": "One of those Letterboxd users could not be found."},
-        )
-    except Exception:
-        logger.exception("Recommendation scrape failed for %s/%s", first, second)
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "watchlist_scrape_failed", "message": "Could not read one of the public watchlists. Try again later."},
+            detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    common = compare_watchlist_sets(first_watchlist, second_watchlist)["common"]
+    task_id = task_manager.create_watchlist_compare_job([first, second])
+    outcome, data = await _await_worker_job(task_id, 120)
+
+    if outcome == "failed":
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message=data)
+        raise _worker_failure_exception(data)
+    if outcome == "timeout":
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_timeout")
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
+        )
+
+    common = compare_watchlist_sets(data.get("first_watchlist", []), data.get("second_watchlist", []))["common"]
     if not common:
         _persist_watchlist_run([first, second], None, request, ok=False, error_message="no_common_watchlist")
         raise HTTPException(
@@ -223,8 +248,17 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             detail={"error_code": "no_common_watchlist", "message": "Those watchlists do not overlap yet."},
         )
 
-    enriched = await enrich_films(request.app.state.aiohttp_session, common, limit=30)
-    selected, alternatives = pick_from_common(enriched, payload.strategy)
+    try:
+        enriched = await enrich_films(request.app.state.aiohttp_session, common, limit=30)
+        selected, alternatives = pick_from_common(enriched, payload.strategy)
+    except Exception:
+        logger.exception("Recommend-from-compare enrichment failed for %s/%s", first, second)
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="enrichment_failed")
+        raise HTTPException(
+            status_code=502,
+            detail={"error_code": "enrichment_failed", "message": "Could not look up film details. Try again later."},
+        )
+
     reason = "Both of you have it on your watchlist."
     response = RecommendFromCompareResponse(
         recommendation=recommendation_from_film(selected, reason),

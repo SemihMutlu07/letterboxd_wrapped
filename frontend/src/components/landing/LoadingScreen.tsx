@@ -36,6 +36,12 @@ type Props = {
   estimatedFilms?: number;
   /** Typical total duration in seconds (hardcoded or from historical data). */
   typicalSeconds?: number;
+  /** Live scrape trace events from /api/progress — real discovery feed. */
+  events?: { stage?: string; message?: string; metrics?: Record<string, unknown>; elapsed_seconds?: number }[];
+  /** Guess-your-stat game (wait UX B). */
+  onGuess?: (n: number) => void;
+  guess?: number | null;
+  reveal?: { guess: number; actual: number } | null;
 };
 
 const FUN_MESSAGES = [
@@ -74,9 +80,14 @@ export default function LoadingScreen({
   mode = 'upload',
   estimatedFilms,
   typicalSeconds,
+  events,
+  onGuess,
+  guess,
+  reveal,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [funMessageIndex, setFunMessageIndex] = useState(0);
+  const [guessInput, setGuessInput] = useState('');
   const isScrape = mode === 'scrape';
 
   useEffect(() => {
@@ -96,6 +107,13 @@ export default function LoadingScreen({
   const typical = typicalSeconds ?? defaultTypical;
   const remaining = Math.max(0, typical - elapsed);
   const pct = Math.min(100, Math.round((elapsed / typical) * 100));
+
+  // Live discovery feed from the real scrape trace (films climb as pages load).
+  const liveFilms = (events ?? []).reduce((max, e) => {
+    const f = e.metrics?.films;
+    return typeof f === 'number' && f > max ? f : max;
+  }, 0);
+  const recentEvents = (events ?? []).filter((e) => e.message).slice(-3);
 
   const displayTitle = isScrape ? 'Scanning Your Profile' : title;
   const displayMessage = isScrape
@@ -175,7 +193,72 @@ export default function LoadingScreen({
         <h1 style={{ fontSize: 36, fontFamily: SERIF, fontWeight: 900, color: T.ink, marginBottom: 12 }}>{displayTitle}</h1>
         <p style={{ fontSize: 16, color: T.ink, marginBottom: 8 }}>{displayMessage}</p>
 
-        {isScrape && (
+        {/* Live discovery feed — real counts/stages streamed from the scrape */}
+        {isScrape && (liveFilms > 0 || recentEvents.length > 0) && (
+          <div style={{ marginBottom: 16 }}>
+            {liveFilms > 0 && (
+              <p style={{ fontSize: 28, fontWeight: 900, fontFamily: MONO, color: T.darkamber, marginBottom: 4 }}>
+                {liveFilms.toLocaleString()}{' '}
+                <span style={{ fontSize: 13, fontWeight: 500, color: T.muted }}>films found</span>
+              </p>
+            )}
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {recentEvents.map((e, i) => (
+                <li key={i} style={{ fontSize: 12, color: T.muted, transition: 'opacity 500ms' }}>{e.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Guess-your-stat game (wait UX B) */}
+        {isScrape && reveal && (
+          <div style={{ marginBottom: 20, border: `2.5px solid ${T.ink}`, background: T.amber + '20', boxShadow: shadow(3), padding: 16 }}>
+            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', fontFamily: MONO, color: T.darkamber, marginBottom: 4 }}>Tahmin vs gerçek</p>
+            <p style={{ fontSize: 18, fontWeight: 700, color: T.ink }}>
+              Sen <span style={{ fontFamily: MONO }}>{reveal.guess.toLocaleString()}</span> · Gerçek{' '}
+              <span style={{ fontFamily: MONO, color: T.darkamber }}>{reveal.actual.toLocaleString()}</span>
+            </p>
+            <p style={{ marginTop: 4, fontSize: 14, color: T.muted }}>
+              {reveal.actual === reveal.guess
+                ? 'Tam isabet. 🎯'
+                : `${Math.abs(reveal.actual - reveal.guess).toLocaleString()} film ${reveal.actual > reveal.guess ? 'fazla çıktı' : 'az çıktı'}.`}
+            </p>
+          </div>
+        )}
+
+        {isScrape && !reveal && guess == null && onGuess && (
+          <form
+            style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const n = parseInt(guessInput, 10);
+              if (Number.isFinite(n) && n >= 0) onGuess(n);
+            }}
+          >
+            <label htmlFor="film-guess" style={{ fontSize: 14, color: T.ink }}>Kaç film logladın dersin?</label>
+            <input
+              id="film-guess"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={guessInput}
+              onChange={(e) => setGuessInput(e.target.value)}
+              placeholder="?"
+              style={{ width: 96, border: `2.5px solid ${T.ink}`, background: T.card, padding: '6px 12px', textAlign: 'center', color: T.ink, outline: 'none', fontFamily: MONO }}
+            />
+            <button type="submit" style={{ border: `2.5px solid ${T.ink}`, background: T.amber, boxShadow: shadow(2), padding: '6px 12px', fontSize: 14, fontWeight: 700, color: T.ink, cursor: 'pointer' }}>
+              Tahmin et
+            </button>
+          </form>
+        )}
+
+        {isScrape && !reveal && guess != null && (
+          <p style={{ marginBottom: 20, fontSize: 14, color: T.darkamber }}>
+            Tahminin: <span style={{ fontWeight: 700, fontFamily: MONO }}>{guess.toLocaleString()}</span> — birazdan görürüz.
+          </p>
+        )}
+
+        {isScrape && !reveal && (
           <p style={{ marginBottom: 20, fontSize: 14, color: T.muted, fontStyle: 'italic', transition: 'opacity 500ms' }}>
             {FUN_MESSAGES[funMessageIndex]}
           </p>
