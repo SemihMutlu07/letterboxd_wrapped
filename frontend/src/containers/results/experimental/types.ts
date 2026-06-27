@@ -102,6 +102,12 @@ export interface StatsData {
     rating: number;
     poster_path?: string;
   }[];
+  /** Up to 4 films pinned as favorites on the user's Letterboxd profile page. */
+  favorite_films?: {
+    title: string;
+    year?: number;
+    poster_path?: string;
+  }[];
   /** Total number of rated films in the upload. */
   total_rated_films?: number;
   /** The film whose user rating diverges most from TMDB community average. */
