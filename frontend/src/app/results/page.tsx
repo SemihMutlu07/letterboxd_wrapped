@@ -389,8 +389,11 @@ export default function ResultsPage() {
       directorIdx = topDirectors.length > 1 ? 1 : 0;
     }
 
-    const topFilms = (stats?.rated_films ?? [])
-      .slice(0, 6)
+    const filmSource = stats?.favorite_films?.length
+      ? stats.favorite_films
+      : (stats?.rated_films ?? []);
+    const topFilms = filmSource
+      .slice(0, 4)
       .map((f) => ({
         title: f.title,
         year: f.year ? String(f.year) : '',

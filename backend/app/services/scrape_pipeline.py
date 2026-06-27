@@ -159,6 +159,25 @@ async def scrape_and_analyze(
         stats["scraped_review_count"] = sources.review_count
         stats["scraped_film_count_estimated"] = sources.film_count
         stats["scraped_reviews_with_text"] = sum(1 for r in sources.reviews if r.get("review_text"))
+
+        # Enrich profile favorite films with poster_path via title match against enriched data
+        if sources.favorite_films:
+            poster_by_title = {
+                f["title"].lower(): f.get("poster_path", "")
+                for f in stats.get("all_films", [])
+                if f.get("title")
+            }
+            stats["favorite_films"] = [
+                {
+                    "title": f["title"],
+                    "year": f.get("year"),
+                    "poster_path": poster_by_title.get(f["title"].lower(), ""),
+                }
+                for f in sources.favorite_films
+            ]
+        else:
+            stats["favorite_films"] = []
+
         return stats
     finally:
         if request_dir is not None:
