@@ -43,7 +43,7 @@ import { rssPreview, scrapeProfile } from '@/lib/api';
 
 async function analyzeUsername(name: string) {
   render(<LetterboxdLanding />);
-  await userEvent.type(screen.getByPlaceholderText('your_username'), name);
+  await userEvent.type(screen.getByPlaceholderText('username'), name);
   await userEvent.click(screen.getByRole('button', { name: /analyze/i }));
 }
 
