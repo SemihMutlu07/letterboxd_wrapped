@@ -750,6 +750,22 @@ function ResultsContent({
             Your raw files are never stored. With consent, only anonymous viewing stats are kept to improve the product.
           </p>
         </div>
+
+        {/* Beta credits + contact */}
+        <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
+          <p className="text-xs text-slate-600">
+            Thanks to our beta testers — A., M., C. and friends — for the invaluable feedback.
+          </p>
+          <p className="text-xs text-slate-600">
+            Questions or feedback?{' '}
+            <a
+              href="mailto:semihmutlu220@gmail.com"
+              className="underline underline-offset-2 hover:text-slate-400 transition-colors"
+            >
+              Get in touch
+            </a>
+          </p>
+        </div>
       </main>
 
       <ShareModal
