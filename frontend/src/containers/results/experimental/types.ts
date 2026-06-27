@@ -13,9 +13,12 @@ export interface PersonFilm {
 
 export interface StatsData {
   total_films: number;
-  average_rating: number;
+  average_rating: number | null;
+  total_runtime?: number;
+  hours_watched?: number;
   days_watched: number;
   average_runtime: number;
+  median_runtime?: number;
   top_genres: { name: string; count: number }[];
   top_directors: { name: string; count: number; profile_path?: string; person_id?: number; films?: PersonFilm[] }[];
   top_actors: { name: string; count: number; profile_path?: string; person_id?: number; films?: PersonFilm[] }[];

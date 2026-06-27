@@ -175,6 +175,7 @@ describe('WatchlistCompare', () => {
 
 import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
 import type { StatsData } from '@/containers/results/experimental/types';
+import HeroStats from '@/containers/results/HeroStats';
 
 const ratingDeviationStats: StatsData = {
   total_films: 6,
@@ -210,5 +211,24 @@ describe('RatingDeviation', () => {
     const caption = screen.getByText(/5\.0 vs avg 3\.2/i);
     expect(caption.className).toContain('whitespace-nowrap');
     expect(caption.className).toContain('text-ellipsis');
+  });
+});
+
+describe('HeroStats', () => {
+  it('renders watched runtime as real hours, not rounded days', () => {
+    render(
+      <HeroStats
+        totalFilms={494}
+        avgRating={3.8}
+        hoursWatched={1228.4}
+        topGenre="Drama"
+        timePct="14%"
+        favoriteDirector={{ name: 'Agnes Varda', count: 12 }}
+        favoriteDecade={{ name: '2010s', count: 88 }}
+      />,
+    );
+
+    expect(screen.getByText('1,228h')).toBeInTheDocument();
+    expect(screen.getByText('Hours watched')).toBeInTheDocument();
   });
 });
