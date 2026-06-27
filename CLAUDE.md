@@ -39,7 +39,8 @@ Frontend:
 - `NEXT_PUBLIC_API_BASE` (base URL for backend API calls)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_POSTHOG_KEY`
+- `NEXT_PUBLIC_POSTHOG_KEY` (PostHog Project API Key, public client key)
+- `NEXT_PUBLIC_POSTHOG_HOST` (e.g. `https://us.i.posthog.com`; required alongside KEY — analytics silently stays off if missing)
 
 Desktop worker (Windows):
 - `TMDB_API_KEY` (same key as backend)
