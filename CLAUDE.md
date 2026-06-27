@@ -123,3 +123,48 @@ will otherwise raise during render and surface as a CORS-shaped 500 in the brows
 - Supabase: use ANON/public key only in frontend. Never introduce service_role keys.
 - PostHog: client key only in frontend; keep consent gating consistent and default-safe.
 - TMDB: key lives on backend; do not proxy it to the frontend.
+
+## Data model & Supabase guidelines
+
+### Two zones, separate responsibilities
+
+| Zone | Tables | Written by | Purpose |
+|------|--------|------------|---------|
+| **Frontend** | `user_sessions`, `analysis_runs`, `feedback` | Browser (client-side) | User-facing flow: consent, analysis results, feedback |
+| **Backend** | `ops_runs`, `ops_watchlist_runs`, `ops_date_night_runs` | Server (best-effort mirror) | Admin dashboard durability across restarts |
+
+- Both zones use the **anon (publishable) key only** — no service_role key anywhere.
+- Backend ops tables are best-effort mirrors that swallow errors; an outage never breaks the request path.
+- `analysis_runs.summary` is a full JSONB blob (`{details: {...}, preview: {...}, schema_version, saved_at}`).
+  Since migration 001, 5 key metrics are also extracted to queryable INT/FLOAT/TEXT columns:
+  `total_films`, `sinefil_meter`, `cinematic_persona`, `average_rating`, `total_countries`
+
+### PostHog ↔ DB split
+
+PostHog (consent-gated) handles **behavioral analytics** — page views, button clicks, funnels, timing,
+error rates, feature usage patterns. No PII or film titles.
+
+Supabase stores **structured application data** — analysis results, sessions, feedback messages,
+operational logs. Cross-user queries (`"average sinefil_meter"`, `"top genres across all users"`)
+use the extracted columns in `analysis_runs`.
+
+### Writing to tables
+
+**Frontend tables** are written from `@/lib/supabase/*.ts` helpers:
+- `sessions.ts` → `upsertUserSession()` on consent decision
+- `analysis_runs.ts` → `startAnalysis()` + `finishAnalysis()` around each analysis
+- `feedback.ts` → `insertFeedback()` on user submission
+
+When adding new columns to `analysis_runs`, update both:
+1. The Supabase table schema (via migration SQL in `backend/migrations/`)
+2. `extractMetrics()` in `analysis_runs.ts` to populates the new column from the summary
+
+**Backend ops tables** are written via `supabase_ops.insert()` from services. They're pure REST
+calls (no Supabase JS SDK), always wrapped in try/except that logs warnings instead of crashing.
+
+### Migrations
+
+- Migration SQL lives in `backend/migrations/` with sequential naming: `001_*.sql`, `002_*.sql`, etc.
+- Run migrations in Supabase Dashboard → SQL Editor.
+- Backwards-compatible only — new columns must have defaults or be nullable.
+
