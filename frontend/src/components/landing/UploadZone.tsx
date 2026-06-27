@@ -2,6 +2,23 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { FolderOpen, Upload } from 'lucide-react';
 
+const T = {
+  darkblue: "#2776F5",
+  paper: "#F1ECDE",
+  card: "#FBF8EF",
+  ink: "#100F0C",
+  lime: "#AEE63E",
+  amber: "#F2B33D",
+  cyan: "#53CFE6",
+  purple: "#A98BEA",
+  red: "#E8463A",
+  muted: "#6F6E63",
+  darkamber: "#e16517",
+  lines: "#cdcdcd"
+};
+const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
+const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
+
 type Props = {
   onFiles: (files: FileList | File[] | null) => void;
 };
@@ -201,11 +218,21 @@ export default function UploadZone({ onFiles }: Props) {
     <section aria-label="Upload your Letterboxd data">
       <div
         data-testid="upload-drop-zone"
-        className={`group flex min-h-[220px] items-center justify-center rounded-2xl border p-8 text-center transition-all duration-300 sm:min-h-[260px] md:p-10 max-w-3xl mx-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 ${
-          isDragging
-            ? 'border-orange-300 bg-orange-400/10 shadow-[0_0_60px_-16px_rgba(251,146,60,0.45)]'
-            : 'border-slate-700/50 bg-slate-800/50 hover:border-orange-400/40 hover:shadow-[0_0_40px_-12px_rgba(251,146,60,0.15)]'
-        }`}
+        style={{
+          display: 'flex',
+          minHeight: 220,
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          border: `2.5px solid ${T.ink}`,
+          background: isDragging ? T.lime : T.card,
+          padding: 24,
+          transition: 'all 90ms',
+          maxWidth: 720,
+          margin: '0 auto',
+          boxShadow: isDragging ? shadow(3) : shadow(2),
+          color: T.ink,
+        }}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
@@ -229,19 +256,48 @@ export default function UploadZone({ onFiles }: Props) {
           onChange={(e) => onFiles(e.target.files)}
           className="hidden"
         />
-        <div className="flex flex-col items-center">
-          <div className="mb-5 h-14 w-14 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center transition-colors group-hover:bg-orange-500/20">
-            <Upload className="w-7 h-7 text-orange-300" />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ marginBottom: 20, width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2.5px solid ${T.ink}`, background: T.amber, boxShadow: shadow(2) }}>
+            <Upload className="w-7 h-7" style={{ color: T.ink }} />
           </div>
-          <p className="text-xl sm:text-2xl font-bold tracking-tight">Begin Your Cinema Reveal</p>
-          <p className="mt-2 text-sm text-slate-400">
+          <p style={{ fontSize: 24, fontWeight: 700, marginBottom: 12, fontFamily: 'Georgia, serif' }}>Begin Your Cinema Reveal</p>
+          <p style={{ marginTop: 8, fontSize: 14, color: T.muted, fontFamily: MONO }}>
             {isDragging ? 'Drop to upload your export.' : 'Drag a ZIP, CSV files, or an extracted export folder here.'}
           </p>
-          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
             <button
               type="button"
               onClick={openFilePicker}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                padding: '10px 14px',
+                border: `2.5px solid ${T.ink}`,
+                background: T.lime,
+                color: T.ink,
+                cursor: 'pointer',
+                boxShadow: shadow(2),
+                transition: 'all 90ms',
+              }}
+              onMouseEnter={(e) => {
+                const btn = e.currentTarget;
+                btn.style.background = T.amber;
+                btn.style.boxShadow = shadow(3);
+                btn.style.transform = 'translate(-1px, -1px)';
+              }}
+              onMouseLeave={(e) => {
+                const btn = e.currentTarget;
+                btn.style.background = T.lime;
+                btn.style.boxShadow = shadow(2);
+                btn.style.transform = 'none';
+              }}
             >
               <Upload className="h-4 w-4" />
               Choose ZIP or CSV
@@ -249,13 +305,42 @@ export default function UploadZone({ onFiles }: Props) {
             <button
               type="button"
               onClick={openFolderPicker}
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:border-orange-300/70 hover:text-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                fontFamily: MONO,
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                padding: '10px 14px',
+                border: `2.5px solid ${T.ink}`,
+                background: T.purple,
+                color: T.ink,
+                cursor: 'pointer',
+                boxShadow: shadow(2),
+                transition: 'all 90ms',
+              }}
+              onMouseEnter={(e) => {
+                const btn = e.currentTarget;
+                btn.style.background = T.red;
+                btn.style.boxShadow = shadow(3);
+                btn.style.transform = 'translate(-1px, -1px)';
+              }}
+              onMouseLeave={(e) => {
+                const btn = e.currentTarget;
+                btn.style.background = T.purple;
+                btn.style.boxShadow = shadow(2);
+                btn.style.transform = 'none';
+              }}
             >
               <FolderOpen className="h-4 w-4" />
               Choose Export Folder
             </button>
           </div>
-          <p className="mt-3 text-xs text-slate-500">Use the folder button if your browser blocks folder drag-and-drop.</p>
+          <p style={{ marginTop: 12, fontSize: 11, color: T.muted, fontFamily: MONO }}>Use the folder button if your browser blocks folder drag-and-drop.</p>
         </div>
       </div>
     </section>

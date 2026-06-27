@@ -2,6 +2,24 @@
 import { useEffect, useState } from 'react';
 import { Film, X } from 'lucide-react';
 
+const T = {
+  darkblue: "#2776F5",
+  paper: "#F1ECDE",
+  card: "#FBF8EF",
+  ink: "#100F0C",
+  lime: "#AEE63E",
+  amber: "#F2B33D",
+  cyan: "#53CFE6",
+  purple: "#A98BEA",
+  red: "#E8463A",
+  muted: "#6F6E63",
+  darkamber: "#e16517",
+  lines: "#cdcdcd"
+};
+const SERIF = 'Georgia, "Times New Roman", serif';
+const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
+const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
+
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
@@ -90,71 +108,112 @@ export default function LoadingScreen({
     : `Elapsed ${formatElapsed(elapsed)}. Most exports finish in under a minute.`;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
+    <div style={{ minHeight: '100vh', background: T.card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       {/* Giant rotating fun message — big, unexpected, attention-grabbing */}
       {isScrape && (
-        <div className="mb-5 text-center">
+        <div style={{ marginBottom: 20, textAlign: 'center' }}>
           <p
             key={funMessageIndex}
-            className="text-lg md:text-xl font-semibold italic leading-snug tracking-tight text-white/80 transition-opacity duration-500"
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              fontStyle: 'italic',
+              lineHeight: 1.4,
+              letterSpacing: '0.02em',
+              color: T.muted,
+              transition: 'opacity 500ms'
+            }}
           >
             {FUN_MESSAGES[funMessageIndex]}
           </p>
         </div>
       )}
 
-      <div className="relative w-full max-w-xl text-center rounded-3xl border border-slate-700/70 bg-slate-800/55 p-8 md:p-10 backdrop-blur-sm">
+      <div style={{ position: 'relative', width: '100%', maxWidth: 600, textAlign: 'center', border: `2.5px solid ${T.ink}`, background: T.card, padding: 32, boxShadow: shadow(4) }}>
         {onCancel && (
           <button
             onClick={onCancel}
-            className="group absolute right-4 top-4 flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white/85 shadow-sm shadow-black/20 transition-all duration-200 hover:border-rose-400/40 hover:bg-rose-500/15 hover:text-white hover:shadow-rose-500/15 active:scale-[0.96]"
+            style={{
+              position: 'absolute',
+              right: 16,
+              top: 16,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              border: `2.5px solid ${T.ink}`,
+              background: T.red,
+              padding: '8px 12px',
+              fontFamily: MONO,
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              color: T.ink,
+              cursor: 'pointer',
+              transition: 'all 90ms',
+              boxShadow: shadow(2)
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = T.darkamber;
+              e.currentTarget.style.boxShadow = shadow(3);
+              e.currentTarget.style.transform = 'translate(-1px, -1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = T.red;
+              e.currentTarget.style.boxShadow = shadow(2);
+              e.currentTarget.style.transform = 'none';
+            }}
           >
-            <X className="h-3.5 w-3.5 transition-transform duration-200 group-hover:rotate-90" />
+            <X className="h-4 w-4" />
             Cancel
           </button>
         )}
 
-        <div className="mx-auto mb-6 h-14 w-14 rounded-2xl bg-orange-500/15 border border-orange-400/35 flex items-center justify-center">
-          <Film className="h-7 w-7 text-orange-300 animate-pulse" />
+        <div style={{ margin: '0 auto 24px', height: 56, width: 56, border: `2.5px solid ${T.amber}`, background: T.amber + '20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Film style={{ height: 28, width: 28, color: T.amber, animation: 'pulse 2s ease-in-out infinite' }} />
         </div>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">{displayTitle}</h1>
-        <p className="text-slate-300 mb-2">{displayMessage}</p>
+        <h1 style={{ fontSize: 36, fontFamily: SERIF, fontWeight: 900, color: T.ink, marginBottom: 12 }}>{displayTitle}</h1>
+        <p style={{ fontSize: 16, color: T.ink, marginBottom: 8 }}>{displayMessage}</p>
 
         {isScrape && (
-          <p className="mb-5 text-sm text-slate-400 italic transition-opacity duration-500">
+          <p style={{ marginBottom: 20, fontSize: 14, color: T.muted, fontStyle: 'italic', transition: 'opacity 500ms' }}>
             {FUN_MESSAGES[funMessageIndex]}
           </p>
         )}
 
         {/* Progress + remaining time */}
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Typical</span>
-            <span className="text-slate-400">{formatElapsed(typical)}</span>
+        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+            <span style={{ color: T.muted }}>Typical</span>
+            <span style={{ color: T.ink }}>{formatElapsed(typical)}</span>
           </div>
-          <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
+          <div style={{ height: 8, border: `2.5px solid ${T.ink}`, background: T.paper, overflow: 'hidden', boxShadow: shadow(1) }}>
             <div
-              className="h-full bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400 transition-all duration-1000"
-              style={{ width: `${pct}%` }}
+              style={{
+                height: '100%',
+                background: `linear-gradient(to right, ${T.amber}, ${T.darkamber}, ${T.amber})`,
+                transition: 'width 1000ms',
+                width: `${pct}%`
+              }}
             />
           </div>
           {remaining > 0 && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Remaining (est.)</span>
-              <span className="text-orange-300 font-medium">{formatElapsed(remaining)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+              <span style={{ color: T.muted }}>Remaining (est.)</span>
+              <span style={{ color: T.amber, fontWeight: 700 }}>{formatElapsed(remaining)}</span>
             </div>
           )}
           {remaining <= 0 && (
-            <div className="text-xs text-center text-orange-300 font-medium">
+            <div style={{ fontSize: 11, textAlign: 'center', color: T.amber, fontWeight: 700, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
               Almost there... wrapping up
             </div>
           )}
         </div>
 
-        <p className="text-sm text-slate-400">{displayDetail}</p>
+        <p style={{ fontSize: 14, color: T.muted, marginTop: 16 }}>{displayDetail}</p>
 
         {elapsed > typical && (
-          <p className="mt-3 text-xs text-amber-300/90 animate-pulse">
+          <p style={{ marginTop: 12, fontSize: 11, color: T.amber, animation: 'pulse 2s ease-in-out infinite', fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
             Having a little trouble — bigger libraries can take a bit longer. Hang tight.
           </p>
         )}

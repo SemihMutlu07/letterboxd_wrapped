@@ -1,7 +1,5 @@
-'use client';
-
 import WrappedBrutal from '@/components/WrappedBrutal';
 
-export default function ResultsPage() {
+export default function BrutalPage() {
   return <WrappedBrutal />;
 }
