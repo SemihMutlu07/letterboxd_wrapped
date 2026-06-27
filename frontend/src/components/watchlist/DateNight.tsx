@@ -186,7 +186,7 @@ export default function DateNight() {
           <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', alignItems: 'center' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ height: 32, width: 32, shrinkFlexShrink: 0, animation: 'spin 1s linear infinite', borderRadius: '50%', border: `2px solid ${T.muted}`, borderTopColor: T.red }} />
+                <span style={{ height: 32, width: 32, flexShrink: 0, animation: 'spin 1s linear infinite', borderRadius: '50%', border: `2px solid ${T.muted}`, borderTopColor: T.red }} />
                 <div>
                   <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.red }}>Building mutual profile</p>
                   <p style={{ marginTop: 4, fontSize: 14, color: T.muted }}>Scanning both public profiles, finding shared taste signals, then looking for unwatched recommendations.</p>

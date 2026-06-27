@@ -65,7 +65,7 @@ function LoadingPanel({
       <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'auto 1fr' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span style={{ height: 36, width: 36, shrinkFlex: 0, animation: 'spin 1s linear infinite', borderRadius: '50%', border: `2px solid ${T.ink}20`, borderTopColor: T.amber }} />
+            <span style={{ height: 36, width: 36, flexShrink: 0, animation: 'spin 1s linear infinite', borderRadius: '50%', border: `2px solid ${T.ink}20`, borderTopColor: T.amber }} />
             <div>
               <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.lime }}>{title}</p>
               <p style={{ marginTop: 4, fontSize: 14, color: T.muted }}>{message}</p>

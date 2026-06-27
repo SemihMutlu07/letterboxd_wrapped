@@ -1,0 +1,4 @@
+interface:
+  display_name: "State Truth Audit"
+  short_description: "Surface broken or unknown repo state first"
+  default_prompt: "Use $state-truth-audit before starting repo work to report unpushed commits, tests, deploy health, and stale docs."
