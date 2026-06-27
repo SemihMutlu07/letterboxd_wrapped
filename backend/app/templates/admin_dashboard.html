@@ -215,7 +215,19 @@
               {% for run in runs[:50] %}
               <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
                 <td class="px-4 py-2.5">
-                  <a href="/admin/run/{{ run._filename }}?key={{ key }}" class="text-orange-400 hover:text-orange-300 font-medium">@{{ run.username or "anon" }}</a>
+                  <div class="flex items-center gap-2">
+                    <a href="/admin/run/{{ run._filename }}?key={{ key }}" class="text-orange-400 hover:text-orange-300 font-medium">@{{ run.username or "anon" }}</a>
+                    {% if run.username %}
+                    <a
+                      href="https://letterboxd.com/{{ run.username | urlencode }}/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 bg-slate-800/70 text-xs hover:border-orange-400/60 hover:bg-orange-500/10"
+                      title="Open Letterboxd profile"
+                      aria-label="Open @{{ run.username }} on Letterboxd"
+                    >🤠</a>
+                    {% endif %}
+                  </div>
                 </td>
                 <td class="px-4 py-2.5 text-slate-400">{{ run.source }}</td>
                 <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ run.total_films or "—" }}</td>
@@ -348,6 +360,21 @@
       return `${escapeHtml(run.bottleneck_stage)}${seconds}`;
     }
 
+    function letterboxdProfileLink(username) {
+      if (!username) return '';
+      const escapedUsername = escapeHtml(username);
+      return `
+        <a
+          href="https://letterboxd.com/${encodeURIComponent(username)}/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-700 bg-slate-800/70 text-xs hover:border-orange-400/60 hover:bg-orange-500/10"
+          title="Open Letterboxd profile"
+          aria-label="Open @${escapedUsername} on Letterboxd"
+        >🤠</a>
+      `;
+    }
+
     function updateAnalysisCards(runs) {
       const success = runs.filter(run => run.ok !== false).length;
       const failed = runs.filter(run => run.ok === false).length;
@@ -381,7 +408,10 @@
         return `
           <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
             <td class="px-4 py-2.5">
-              <a href="/admin/run/${filename}?key=${encodeURIComponent(adminKey || '')}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
+              <div class="flex items-center gap-2">
+                <a href="/admin/run/${filename}?key=${encodeURIComponent(adminKey || '')}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
+                ${letterboxdProfileLink(run.username)}
+              </div>
             </td>
             <td class="px-4 py-2.5 text-slate-400">${escapeHtml(run.source)}</td>
             <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.total_films ?? '—'}</td>
