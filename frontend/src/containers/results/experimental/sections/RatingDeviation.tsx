@@ -37,10 +37,16 @@ export function requiresRatingDeviation(stats: StatsData): GateResult {
       ['rated_films'],
     );
   }
-  if (!stats.average_rating) {
+  if (!hasAverageRating(stats)) {
     return gateFail('average_rating missing.', ['average_rating']);
   }
   return gateOk();
+}
+
+type StatsWithAverageRating = StatsData & { average_rating: number };
+
+function hasAverageRating(stats: StatsData): stats is StatsWithAverageRating {
+  return typeof stats.average_rating === 'number' && Number.isFinite(stats.average_rating);
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,10 +68,10 @@ export default function RatingDeviation({ stats }: { stats: StatsData }) {
   const gate = requiresRatingDeviation(stats);
   if (!gate.ok) return null;
 
-  return <RatingDeviationInner stats={stats} />;
+  return <RatingDeviationInner stats={stats as StatsWithAverageRating} />;
 }
 
-function RatingDeviationInner({ stats }: { stats: StatsData }) {
+function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   const [tab, setTab] = useState<SubTab>('higher');
   const [visible, setVisible] = useState(PAGE_SIZE);
 

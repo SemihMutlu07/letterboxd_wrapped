@@ -95,6 +95,7 @@ cd frontend && npm run dev
 | `NEXT_PUBLIC_SUPABASE_URL` | ✓ | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✓ | Publishable anon key |
 | `NEXT_PUBLIC_POSTHOG_KEY` | | PostHog analytics key |
+| `NEXT_PUBLIC_POSTHOG_HOST` | | PostHog ingest host, e.g. `https://us.i.posthog.com`; required when `NEXT_PUBLIC_POSTHOG_KEY` is set |
 
 ---
 

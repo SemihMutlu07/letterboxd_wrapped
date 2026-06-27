@@ -7,27 +7,32 @@ import { StatCard } from '@/components/results/Cards';
 export default function HeroStats({
   totalFilms,
   avgRating,
-  days,
+  hoursWatched,
   topGenre,
   timePct,
   favoriteDirector,
   favoriteDecade,
 }: {
   totalFilms: number;
-  avgRating: number;
-  days: number;
+  avgRating?: number | null;
+  hoursWatched: number;
   topGenre: string;
   timePct: string;
   favoriteDirector: { name: string; count: number };
   favoriteDecade: { name: string; count: number };
 }) {
+  const hoursLabel = `${Math.round(Math.max(0, hoursWatched)).toLocaleString()}h`;
+  const avgRatingLabel = typeof avgRating === 'number' && Number.isFinite(avgRating)
+    ? `${avgRating.toFixed(1)}★`
+    : 'N/A';
+
   return (
     <section className="flex items-center justify-center py-4 md:py-6">
       <div className="text-center space-y-4 md:space-y-6 max-w-4xl mx-auto w-full">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 items-stretch" style={{ gridAutoRows: '1fr' }}>
           <StatCard value={totalFilms} label="Films" size="large" color="text-white" />
-          <StatCard value={`${avgRating.toFixed(1)}★`} label="Avg Rating" size="large" color="text-yellow-500" />
-          <StatCard value={Math.round(days)} label="Days" size="large" color="text-blue-500" />
+          <StatCard value={avgRatingLabel} label="Avg Rating" size="large" color="text-yellow-500" />
+          <StatCard value={hoursLabel} label="Hours watched" size="large" color="text-blue-500" />
           <StatCard value={topGenre} label="Top Genre" color="text-purple-500" />
         </div>
 
@@ -57,5 +62,3 @@ export default function HeroStats({
     </section>
   );
 }
-
-

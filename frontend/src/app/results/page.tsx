@@ -302,25 +302,36 @@ export default function ResultsPage() {
     };
   }, [stats?.data_timeline, stats?.monthly_viewing_habits]);
 
+  const runtimeHours = useMemo(() => {
+    if (stats?.total_runtime && Number.isFinite(stats.total_runtime)) {
+      return stats.total_runtime / 60;
+    }
+    if (stats?.hours_watched && Number.isFinite(stats.hours_watched)) {
+      return stats.hours_watched;
+    }
+    if (stats?.days_watched && Number.isFinite(stats.days_watched)) {
+      return stats.days_watched * 24;
+    }
+    return 0;
+  }, [stats?.total_runtime, stats?.hours_watched, stats?.days_watched]);
+
   const timePct = useMemo(() => {
-    const daysWatched = stats?.days_watched ?? 0;
     const safeRangeDays = Math.max(1, actualRangeDays);
 
     // Calculate based on waking hours
     const wakingHoursPerDay = 16;
     const totalWakingHours = safeRangeDays * wakingHoursPerDay;
-    const hoursWatched = daysWatched * 24;
 
-    let percentage = Math.round((hoursWatched / totalWakingHours) * 100);
+    let percentage = Math.round((runtimeHours / totalWakingHours) * 100);
 
     // Adjust for short periods
     if (safeRangeDays <= 30) {
       const totalAvailableHours = safeRangeDays * 24;
-      percentage = Math.round((hoursWatched / totalAvailableHours) * 100);
+      percentage = Math.round((runtimeHours / totalAvailableHours) * 100);
     }
 
     return `${Math.min(percentage, 100)}%`;
-  }, [stats?.days_watched, actualRangeDays]);
+  }, [runtimeHours, actualRangeDays]);
 
   const cineScore = useMemo(() => Math.max(0, Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats))), [stats]);
   const quickMetrics = useMemo(() => {
@@ -421,7 +432,7 @@ export default function ResultsPage() {
       onScreenCrush: topActors[actorIdx] || { name: 'Unknown Actor', headshotUrl: '', count: 0 },
       favoriteDirector: topDirectors[directorIdx] || { name: 'Unknown Director', headshotUrl: '', count: 0 },
       watchedFilms: stats?.total_films || 0,
-      spentDays: Math.round(stats?.days_watched || 0),
+      spentDays: Math.round(runtimeHours / 24),
       timePercent: Number.parseInt(timePct, 10) || 0,
       cinemaScale: cineScore,
       personaLabel: stats?.cinematic_persona?.persona || '',
@@ -436,7 +447,7 @@ export default function ResultsPage() {
       ratingOutlierFilm,
       username: username || undefined,
     };
-  }, [stats, topActors, topDirectors, cineScore, timePct, username]);
+  }, [stats, topActors, topDirectors, cineScore, timePct, username, runtimeHours]);
 
   // Load director headshot with lazy loading
   const loadDirectorImage = useCallback(async () => {
@@ -496,6 +507,7 @@ export default function ResultsPage() {
           username={username}
           dateRangeText={dateRangeText}
           timePct={timePct}
+          runtimeHours={runtimeHours}
           decadeData={decadeData}
           decadeMax={decadeMax}
           isMobile={isMobile}
@@ -525,6 +537,7 @@ function ResultsContent({
   username,
   dateRangeText,
   timePct,
+  runtimeHours,
   decadeData,
   decadeMax,
   isMobile,
@@ -648,7 +661,7 @@ function ResultsContent({
           <HeroStats
             totalFilms={stats.total_films}
             avgRating={stats.average_rating}
-            days={stats.days_watched}
+            hoursWatched={runtimeHours}
             topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
             timePct={timePct}
             favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
