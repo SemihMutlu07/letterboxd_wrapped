@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import Section from '@/components/results/Section';
 import { motion } from 'framer-motion';
+import LangModal from '@/containers/results/experimental/sections/LangModal';
 
 const COLORS = ['#f97316', '#a855f7', '#3b82f6', '#10b981', '#eab308', '#059669', '#ec4899'];
 
@@ -14,11 +15,38 @@ const LANGUAGE_LABEL: Record<string, string> = {
 
 type Row = { language: string; count: number };
 
-export default function LanguagesLeaderboard({ data }: { data: Row[] }) {
+interface Film {
+  title: string;
+  year?: number;
+  language?: string;
+  rating?: number | null;
+}
+
+export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; allFilms: any[] }) {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+
   // 1. Sanitize and sort data from highest to lowest
   const sortedData = (Array.isArray(data) ? data : [])
     .filter(d => d && Number.isFinite(d.count) && d.count > 0)
     .sort((a, b) => b.count - a.count);
+
+  // Filter films by selected language
+  const selectedFilms = useMemo(() => {
+    if (!selectedLanguage) return [];
+    return (allFilms ?? [])
+      .filter((f: any) => f.language === selectedLanguage)
+      .map((f: any) => ({
+        title: f.title,
+        year: f.year ? Number(f.year) : undefined,
+        your_rating: f.rating ?? null,
+      }));
+  }, [selectedLanguage, allFilms]);
+
+  const handleLanguageClick = (lang: string) => {
+    setSelectedLanguage(lang);
+    setModalOpen(true);
+  };
 
   // 2. Find the count of the top language to create proportional bars
   const maxCount = sortedData.length > 0 ? sortedData[0].count : 1;
@@ -35,10 +63,11 @@ export default function LanguagesLeaderboard({ data }: { data: Row[] }) {
           return (
             <motion.div
               key={d.language}
-              className="relative flex items-center justify-between gap-4 p-4 overflow-hidden rounded-lg bg-slate-800/50"
+              className="relative flex items-center justify-between gap-4 p-4 overflow-hidden rounded-lg bg-slate-800/50 cursor-pointer hover:bg-slate-800/70 transition-colors"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.3 }}
+              onClick={() => handleLanguageClick(d.language)}
             >
               {/* Background Bar */}
               <div
@@ -63,6 +92,20 @@ export default function LanguagesLeaderboard({ data }: { data: Row[] }) {
           );
         })}
       </div>
+
+      {/* Language Modal */}
+      {selectedLanguage && (
+        <LangModal
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setSelectedLanguage(null);
+          }}
+          language={selectedLanguage}
+          count={sortedData.find(d => d.language === selectedLanguage)?.count ?? 0}
+          films={selectedFilms}
+        />
+      )}
     </Section>
   );
 }
