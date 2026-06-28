@@ -159,6 +159,24 @@ async def scrape_profile(request: Request):
 
     # Desktop-worker mode: route the heavy scrape to the always-on desktop worker.
     if settings.desktop_worker_enabled:
+        if task_manager.is_worker_paused():
+            logger.warning("scrape-profile desktop_worker_paused for %s", username)
+            persist_run(
+                username,
+                "scrape",
+                {},
+                ok=False,
+                error_message="The desktop scraper was paused; scrape was not attempted.",
+                error_type="desktop_worker_paused",
+                error_stage="desktop_worker_paused",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error_code": "desktop_worker_paused",
+                    "message": "The desktop scraper is paused for maintenance. Upload your Letterboxd export for a full Wrapped, or try again shortly.",
+                },
+            )
         if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
             logger.warning("scrape-profile desktop_worker_offline for %s", username)
             # Record the rejected attempt so the dashboard shows offline outages,

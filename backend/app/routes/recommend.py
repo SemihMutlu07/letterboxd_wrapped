@@ -19,6 +19,7 @@ from app.routes.watchlist import (
     _rate_limit_exception,
     _validate_username,
     _worker_failure_exception,
+    _worker_paused_exception,
 )
 from app.services.recommender import (
     build_mutual_profile,
@@ -99,6 +100,10 @@ async def date_night(request: Request, payload: UserPairRequest):
             status_code=400,
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
+
+    if task_manager.is_worker_paused():
+        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="worker_paused")
+        raise _worker_paused_exception()
 
     if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
         _persist_date_night_run([first, second], None, [], request, ok=False, error_message="worker_offline")

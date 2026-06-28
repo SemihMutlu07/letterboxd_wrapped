@@ -69,6 +69,13 @@ async def client(tmp_path):
     task_manager._last_worker_shutdown_at = None
     task_manager._last_worker_meta = {}
     task_manager._last_worker_self_test = None
+    task_manager._worker_desired_state = "run"
+    task_manager._worker_restart_token = 0
+    task_manager._worker_restart_requested_at = None
+    task_manager._last_supervisor_poll_at = None
+    task_manager._last_supervisor_report_at = None
+    task_manager._last_supervisor_status = {}
+    task_manager._supervisor_log_tail = []
     original_token = settings.worker_token
     settings.worker_token = WORKER_TOKEN
     from app.services import run_log  # noqa: PLC0415
@@ -97,6 +104,13 @@ async def client(tmp_path):
     task_manager._last_worker_shutdown_at = None
     task_manager._last_worker_meta = {}
     task_manager._last_worker_self_test = None
+    task_manager._worker_desired_state = "run"
+    task_manager._worker_restart_token = 0
+    task_manager._worker_restart_requested_at = None
+    task_manager._last_supervisor_poll_at = None
+    task_manager._last_supervisor_report_at = None
+    task_manager._last_supervisor_status = {}
+    task_manager._supervisor_log_tail = []
 
 
 async def _beat(client: AsyncClient):
@@ -144,16 +158,37 @@ async def test_scrape_profile_offline_when_heartbeat_stale(client: AsyncClient):
     assert r.json()["detail"]["error_code"] == "desktop_worker_offline"
 
 
+@pytest.mark.asyncio
+async def test_scrape_profile_paused_blocks_new_job_even_when_worker_online(client: AsyncClient):
+    await _beat(client)
+    pause = await client.post("/admin/api/worker/control?key=mw3169305", json={"desired_state": "pause"})
+    assert pause.status_code == 200
+    assert pause.json()["control"]["desired_state"] == "pause"
+
+    r = await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error_code"] == "desktop_worker_paused"
+    assert task_manager._tasks == {}
+
+
 # ---- worker auth -------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_worker_endpoints_require_token(client: AsyncClient):
     assert (await client.get("/api/worker/scrape/next")).status_code == 401
+    assert (await client.get("/api/worker/control")).status_code == 401
+    assert (await client.post("/api/worker/supervisor", json={})).status_code == 401
     assert (await client.post("/api/worker/heartbeat")).status_code == 401
     assert (await client.post("/api/worker/startup", json={})).status_code == 401
     assert (await client.post("/api/worker/self-test", json={})).status_code == 401
     assert (await client.post("/api/worker/scrape/abc/event", json={})).status_code == 401
     assert (await client.get("/api/worker/scrape/next", headers={"X-Worker-Token": "wrong"})).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_worker_control_requires_admin_key(client: AsyncClient):
+    assert (await client.post("/admin/api/worker/control", json={"desired_state": "pause"})).status_code == 403
+    assert (await client.post("/admin/api/worker/restart")).status_code == 403
 
 
 @pytest.mark.asyncio
@@ -193,6 +228,66 @@ async def test_admin_worker_status_api(client: AsyncClient):
     assert body["status"]["online"] is True
     assert body["status"]["meta"]["self_test_username"] == "semihmutsuz"
     assert "version" in body["status"]
+    assert body["status"]["control"]["desired_state"] == "run"
+    assert body["status"]["supervisor"]["child_status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_worker_control_defaults_to_run_and_records_supervisor_poll(client: AsyncClient):
+    r = await client.get("/api/worker/control", headers=AUTH)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["desired_state"] == "run"
+    assert body["restart_token"] == 0
+    assert body["should_restart"] is False
+
+    status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
+    assert status["control"]["desired_state"] == "run"
+    assert status["supervisor"]["last_poll_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_restart_token_comparison(client: AsyncClient):
+    initial = await client.get("/api/worker/control", headers=AUTH)
+    assert initial.json()["restart_token"] == 0
+
+    restart = await client.post("/admin/api/worker/restart?key=mw3169305")
+    assert restart.status_code == 200
+    new_token = restart.json()["control"]["restart_token"]
+    assert new_token == 1
+
+    pending = await client.get("/api/worker/control?last_seen_restart_token=0", headers=AUTH)
+    assert pending.status_code == 200
+    assert pending.json()["should_restart"] is True
+
+    seen = await client.get(f"/api/worker/control?last_seen_restart_token={new_token}", headers=AUTH)
+    assert seen.status_code == 200
+    assert seen.json()["should_restart"] is False
+
+
+@pytest.mark.asyncio
+async def test_supervisor_report_does_not_pollute_worker_heartbeat(client: AsyncClient):
+    lines = [f"line {i}" for i in range(100)]
+    report = await client.post(
+        "/api/worker/supervisor",
+        headers=AUTH,
+        json={
+            "child_status": "running",
+            "child_pid": 4242,
+            "child_started_at": "2026-06-28T10:00:00Z",
+            "last_restart_token_seen": 0,
+            "log_tail": lines,
+        },
+    )
+    assert report.status_code == 200
+
+    status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
+    assert status["online"] is False
+    assert status["last_heartbeat"] is None
+    assert status["supervisor"]["child_status"] == "running"
+    assert status["supervisor"]["child_pid"] == 4242
+    assert status["supervisor"]["log_tail"][0] == "line 20"
+    assert len(status["supervisor"]["log_tail"]) == task_manager.SUPERVISOR_LOG_TAIL_MAX_LINES
 
 
 @pytest.mark.asyncio
@@ -204,6 +299,9 @@ async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     assert "Desktop Worker" in html
     assert "Worker live" in html
     assert "Startup Self-Test" in html
+    assert "Pause Jobs" in html
+    assert "Restart Worker" in html
+    assert "Supervisor Log Tail" in html
     assert "refreshAnalysisRuns" in html
     assert "/admin/api/runs" in html
 
@@ -226,6 +324,25 @@ async def test_worker_claims_one_job(client: AsyncClient):
     # not re-claim a job it already took.
     r2 = await client.get("/api/worker/scrape/next", headers=AUTH)
     assert r2.json()["job"] is None
+
+
+@pytest.mark.asyncio
+async def test_paused_worker_claims_no_new_jobs(client: AsyncClient):
+    await _beat(client)
+    task_id = task_manager.create_scrape_job("semihmutsuz")
+    task_manager.create_watchlist_compare_job(["semihmutsuz", "mertefesenturk"])
+    await client.post("/admin/api/worker/control?key=mw3169305", json={"desired_state": "pause"})
+
+    scrape = await client.get("/api/worker/scrape/next", headers=AUTH)
+    assert scrape.status_code == 200
+    assert scrape.json()["job"] is None
+    assert scrape.json()["paused"] is True
+    assert task_manager.get_task_state(task_id).status == "pending"
+
+    watchlist = await client.get("/api/worker/watchlist/next", headers=AUTH)
+    assert watchlist.status_code == 200
+    assert watchlist.json()["job"] is None
+    assert watchlist.json()["paused"] is True
 
 
 @pytest.mark.asyncio

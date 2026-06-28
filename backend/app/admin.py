@@ -235,3 +235,27 @@ async def admin_api_worker(request: Request):
             backend_git_sha=backend_git_sha(),
         ),
     }
+
+
+@router.post("/admin/api/worker/control")
+async def admin_api_worker_control(request: Request):
+    """Set desired worker state. Pause blocks new jobs/claims; it does not kill active work."""
+    _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_body", "message": "Body must be an object."})
+    try:
+        control = task_manager.set_worker_desired_state(str(body.get("desired_state") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_desired_state", "message": str(exc)}) from exc
+    return {"ok": True, "control": control}
+
+
+@router.post("/admin/api/worker/restart")
+async def admin_api_worker_restart(request: Request):
+    """Request a supervisor-managed child restart by bumping the restart token."""
+    _require_admin(request)
+    return {"ok": True, "control": task_manager.request_worker_restart()}

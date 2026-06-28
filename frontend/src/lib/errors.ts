@@ -15,6 +15,7 @@ export type ErrorReason =
   | 'scrape_failed'
   | 'scrape_blocked'
   | 'scraper_unavailable'
+  | 'desktop_worker_paused'
   | 'unknown_error';
 
 export interface NormalizedError {
@@ -122,6 +123,19 @@ export function normalizeError(err: unknown): NormalizedError {
       action:
         'Please use the export upload option below (30 seconds, no proxy needed), or try again in a few minutes.',
       reason: 'scraper_unavailable',
+    };
+  }
+
+  // Admin-paused desktop worker path
+  if (/desktop_worker_paused|desktop scraper is paused/i.test(raw)) {
+    return {
+      title: 'Desktop scraper paused',
+      message:
+        raw ||
+        'The desktop scraper is paused for maintenance.',
+      action:
+        'Use the export upload option for a complete Wrapped, or try again shortly.',
+      reason: 'desktop_worker_paused',
     };
   }
 

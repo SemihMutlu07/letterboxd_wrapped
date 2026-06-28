@@ -71,6 +71,16 @@ def _worker_failure_exception(error_message: str | None) -> HTTPException:
     )
 
 
+def _worker_paused_exception() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={
+            "error_code": "desktop_worker_paused",
+            "message": "The desktop scraper is paused for maintenance. Please try again shortly.",
+        },
+    )
+
+
 def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort mirror of watchlist comparison run to Supabase."""
     supabase_ops.insert("ops_watchlist_runs", {
@@ -181,6 +191,10 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
+    if task_manager.is_worker_paused():
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_paused")
+        raise _worker_paused_exception()
+
     if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
         _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_offline")
         raise HTTPException(
@@ -219,6 +233,10 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             status_code=400,
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
+
+    if task_manager.is_worker_paused():
+        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_paused")
+        raise _worker_paused_exception()
 
     if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
         _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_offline")
