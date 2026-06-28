@@ -27,6 +27,7 @@ function scaledWordSize(count: number, max: number): string {
 
 export default function ReviewAnalysisSection({ stats }: Props) {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState(false);
 
   const ra = stats.review_analysis;
   if (!ra || ra.reviews_with_text === 0) return null;
@@ -112,12 +113,20 @@ export default function ReviewAnalysisSection({ stats }: Props) {
               <p className="text-sm font-semibold text-orange-200">
                 Filtering: "<span className="font-mono">{selectedWord}</span>" · {filteredReviews.length} review{filteredReviews.length === 1 ? '' : 's'}
               </p>
-              <button
-                onClick={() => setSelectedWord(null)}
-                className="text-xs font-bold px-3 py-1 rounded-full bg-orange-400 text-slate-900 hover:bg-orange-300 transition-colors"
-              >
-                Clear
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setRevealed(!revealed)}
+                  className="text-xs font-bold px-3 py-1 rounded-full bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
+                >
+                  {revealed ? 'HIDE' : 'REVEAL'}
+                </button>
+                <button
+                  onClick={() => setSelectedWord(null)}
+                  className="text-xs font-bold px-3 py-1 rounded-full bg-orange-400 text-slate-900 hover:bg-orange-300 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredReviews.slice(0, 6).map((review, idx) => (
@@ -130,7 +139,15 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                     <span className="shrink-0 text-xs font-mono text-slate-400">♥ {review.likes || 0}</span>
                   </div>
                   <p className="text-xs text-slate-400 mb-2">{review.year || '—'}</p>
-                  <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">{review.text}</p>
+                  <p
+                    className="text-xs text-slate-300 line-clamp-3 leading-relaxed"
+                    style={{ filter: revealed ? 'none' : 'blur(4px)', transition: 'filter 200ms' }}
+                  >
+                    {review.text}
+                  </p>
+                  {!revealed && (
+                    <p className="text-[10px] text-slate-500 mt-1">Review text hidden · hit REVEAL to show it</p>
+                  )}
                 </li>
               ))}
             </ul>
