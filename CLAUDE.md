@@ -165,9 +165,10 @@ Before opening a PR, verify:
    - Details: Added `revealed` state to ReviewAnalysisSection. When a word is selected and reviews are filtered, a REVEAL/HIDE toggle button appears in the filter header. Review text displays with `filter: blur(4px)` when hidden, revealing on toggle with 200ms transition. Shows hint text "Review text hidden · hit REVEAL to show it" when blurred. Button styling matches modern theme (slate-700 with slate-200 text).
 
 5. **RatingDeviation → use FilmPosterCard data for modal** (HIGH PRIORITY)
-   - [ ] Expand EnrichedFilm interface to carry: director, runtime, language, review_text, your_rating, average_rating
-   - [ ] Create and wire FilmModal component
-   - Status: Not started
+   - [x] Expand EnrichedFilm interface to carry: director, runtime, language, review_text, your_rating, average_rating
+   - [x] Create and wire FilmModal component
+   - Status: ✓ Done (implemented as Feature 1)
+   - Details: FilmModal.tsx displays film title, year, director, runtime, language, your rating, and community rating with delta comparison. EnrichedFilm interface extended with director/runtime/language fields. RatingDeviation enriches rated_films from all_films data. FilmPosterCard "View Details" button opens modal with full film info. Works with both "Rated Higher" and "Rated Lower" tabs.
 
 **Design constraints:**
 - Do NOT modify landing page or Watchlist pages
@@ -176,10 +177,10 @@ Before opening a PR, verify:
 - Modern theme: dark bg (#1a1a1a), white text, border-white/8, rounded-2xl, orange-400 accents
 
 **Verification checklist:**
-- [ ] `cd frontend && npx tsc --noEmit` passes with 0 errors
-- [ ] Visual check: components match dark theme
-- [ ] Data flow: clicking opens modal with correct details
-- [ ] `git rebase origin/main` before PR
+- [x] `cd frontend && npx tsc --noEmit` passes with 0 errors (verified: 0 errors)
+- [x] Visual check: components match dark theme (all 5 features use #1a1a1a, border-white/8, rounded-2xl, orange-400 accents)
+- [x] Data flow: clicking opens modals with correct details (FilmModal, LangModal, PersonFilmsModal all wired correctly)
+- [ ] `git rebase origin/main` before PR (pending)
 
 ## AI workflow (how to work in this repo)
 When asked to implement a change:
