@@ -114,6 +114,38 @@ export async function startAnalysis(input: AnalysisStartInput & { id?: string })
     return { id: payload.id };
 }
 
+/**
+ * Extract queryable metrics from the summary payload for the extracted columns
+ * (total_films, sinefil_meter, cinematic_persona, average_rating, total_countries).
+ * Falls back to available values; missing fields become null.
+ */
+function extractMetrics(summaryPayload: Record<string, unknown> | null): {
+    total_films: number | null;
+    sinefil_meter: number | null;
+    cinematic_persona: string | null;
+    average_rating: number | null;
+    total_countries: number | null;
+} {
+    // Reuse the shared details accessor (handles null + legacy-flat summaries).
+    // Producers always emit sinefil_meter/cinematic_persona as objects, so a single
+    // typed cast + optional chaining is enough — no bare-scalar fallbacks needed.
+    const details = getDetailsFromSummary(summaryPayload) as {
+        total_films?: number | null;
+        sinefil_meter?: { score?: number | null } | null;
+        cinematic_persona?: { persona?: string | null } | null;
+        average_rating?: number | null;
+        total_countries?: number | null;
+    } | null;
+
+    return {
+        total_films: details?.total_films ?? null,
+        sinefil_meter: details?.sinefil_meter?.score ?? null,
+        cinematic_persona: details?.cinematic_persona?.persona ?? null,
+        average_rating: details?.average_rating ?? null,
+        total_countries: details?.total_countries ?? null,
+    };
+}
+
 export async function finishAnalysis(input: AnalysisFinishInput) {
     const supabase = getSupabase();
     const summaryPayload = (() => {
@@ -123,6 +155,9 @@ export async function finishAnalysis(input: AnalysisFinishInput) {
         }
         return buildSummaryForPersistence(input.summary);
     })();
+
+    // Extract queryable metric columns from the summary (for cross-user SQL queries)
+    const metrics = extractMetrics(summaryPayload);
     
     
     const { error } = await supabase
@@ -132,6 +167,11 @@ export async function finishAnalysis(input: AnalysisFinishInput) {
             error_message: input.error_message ?? null,
             summary: summaryPayload,
             finished_at: input.finished_at ?? new Date().toISOString(),
+            total_films: metrics.total_films,
+            sinefil_meter: metrics.sinefil_meter,
+            cinematic_persona: metrics.cinematic_persona,
+            average_rating: metrics.average_rating,
+            total_countries: metrics.total_countries,
         })
         .eq("id", input.id)
         .select('id');
