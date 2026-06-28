@@ -12,8 +12,9 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import type { StatsData } from '../types';
+import type { StatsData, PersonFilm } from '../types';
 import type { GateResult, SectionToggle } from './section-utils';
+import PersonFilmsModal from './PersonFilmsModal';
 import {
   gateOk,
   gateFail,
@@ -40,6 +41,7 @@ interface ActorCard {
   avg_rating?: number;
   rated_count?: number;
   profile_path?: string;
+  films?: PersonFilm[];
 }
 
 const PAGE_SIZE = 4;
@@ -56,8 +58,14 @@ export default function CastGrid({ stats, onActorClick }: { stats: StatsData; on
 function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick?: (name: string) => void }) {
   const [mode, setMode] = useState<SectionToggle>('most_watched');
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [selected, setSelected] = useState<ActorCard | null>(null);
 
   const hasRatings = (stats.actors_with_ratings?.length ?? 0) > 0;
+
+  const filmsByName = useMemo(
+    () => new Map((stats.top_actors ?? []).map((a) => [a.name, a.films ?? []])),
+    [stats.top_actors],
+  );
 
   useEffect(() => {
     trackSectionViewed('cast_grid');
@@ -73,7 +81,8 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
     if (mode === 'highest_rated' && hasRatings) {
       return (stats.actors_with_ratings ?? [])
         .slice()
-        .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
+        .sort((a, b) => b.avg_rating - a.avg_rating)
+        .map((a) => ({ ...a, films: filmsByName.get(a.name) ?? [] }));
     }
     // Most watched — pull profile_paths from actors_with_ratings if available
     const profileMap = new Map(
@@ -83,7 +92,7 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
       ...a,
       profile_path: a.profile_path ?? profileMap.get(a.name),
     }));
-  }, [mode, stats.top_actors, stats.actors_with_ratings, hasRatings]);
+  }, [mode, stats.top_actors, stats.actors_with_ratings, hasRatings, filmsByName]);
 
   const shown = actors.slice(0, visible);
 
@@ -94,7 +103,7 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
       onToggle={handleToggle}
       ratedTabDisabled={!hasRatings}
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
-  ratedTabTooltip="Your average rating across films you&apos;ve rated for each actor (minimum 3 rated films)"
+      ratedTabTooltip="Your average rating across films you&apos;ve rated for each actor (minimum 3 rated films)"
     >
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {shown.map((a) => (
@@ -112,6 +121,14 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
                 ? `${a.count} film${a.count !== 1 ? 's' : ''}`
                 : a.avg_rating != null ? `★ ${a.avg_rating.toFixed(1)} avg` : undefined
             }
+            onShowFilms={
+              a.films && a.films.length > 0
+                ? () => {
+                    setSelected(a);
+                    trackItemClicked('cast_grid', 'actor');
+                  }
+                : undefined
+            }
             onClick={() => {
               onActorClick?.(a.name);
               trackItemClicked('cast_grid', 'actor');
@@ -119,6 +136,14 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
           />
         ))}
       </div>
+
+      <PersonFilmsModal
+        open={selected != null}
+        onClose={() => setSelected(null)}
+        name={selected?.name ?? ''}
+        films={selected?.films ?? []}
+        profilePath={selected?.profile_path}
+      />
 
       {/* Show more disabled — showing exactly 4 per user request */}
 

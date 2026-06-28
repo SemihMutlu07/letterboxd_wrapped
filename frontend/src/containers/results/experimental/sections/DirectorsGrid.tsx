@@ -15,8 +15,9 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { getProfileUrl } from '@/lib/analytics';
-import type { StatsData } from '../types';
+import type { StatsData, PersonFilm } from '../types';
 import type { GateResult, SectionToggle } from './section-utils';
+import PersonFilmsModal from './PersonFilmsModal';
 import {
   gateOk,
   gateFail,
@@ -43,6 +44,7 @@ interface DirectorCard {
   avg_rating?: number;
   rated_count?: number;
   profile_path?: string;
+  films?: PersonFilm[];
 }
 
 const PAGE_SIZE = 4;
@@ -59,8 +61,15 @@ export default function DirectorsGrid({ stats, onDirectorClick }: { stats: Stats
 function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDirectorClick?: (name: string) => void }) {
   const [mode, setMode] = useState<SectionToggle>('most_watched');
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [selected, setSelected] = useState<DirectorCard | null>(null);
 
   const hasRatings = (stats.directors_with_ratings?.length ?? 0) > 0;
+
+  // films come from top_directors; carry them into highest_rated rows too
+  const filmsByName = useMemo(
+    () => new Map((stats.top_directors ?? []).map((d) => [d.name, d.films ?? []])),
+    [stats.top_directors],
+  );
 
   // Track section viewed once on mount
   useEffect(() => {
@@ -80,7 +89,8 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
     if (mode === 'highest_rated' && hasRatings) {
       return (stats.directors_with_ratings ?? [])
         .slice()
-        .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
+        .sort((a, b) => b.avg_rating - a.avg_rating)
+        .map((d) => ({ ...d, films: filmsByName.get(d.name) ?? [] }));
     }
     // Most watched — merge profile_path from directors_with_ratings if present
     const profileMap = new Map(
@@ -90,7 +100,7 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
       ...d,
       profile_path: d.profile_path ?? profileMap.get(d.name),
     }));
-  }, [mode, stats.top_directors, stats.directors_with_ratings, hasRatings]);
+  }, [mode, stats.top_directors, stats.directors_with_ratings, hasRatings, filmsByName]);
 
   const shown = directors.slice(0, visible);
 
@@ -119,6 +129,14 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
                 ? `${d.count} film${d.count !== 1 ? 's' : ''}`
                 : d.avg_rating != null ? `★ ${d.avg_rating.toFixed(1)} avg` : undefined
             }
+            onShowFilms={
+              d.films && d.films.length > 0
+                ? () => {
+                    setSelected(d);
+                    trackItemClicked('directors_grid', 'director');
+                  }
+                : undefined
+            }
             onClick={() => {
               onDirectorClick?.(d.name);
               trackItemClicked('directors_grid', 'director');
@@ -126,6 +144,14 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
           />
         ))}
       </div>
+
+      <PersonFilmsModal
+        open={selected != null}
+        onClose={() => setSelected(null)}
+        name={selected?.name ?? ''}
+        films={selected?.films ?? []}
+        profilePath={selected?.profile_path}
+      />
 
       {/* Show more disabled — showing exactly 4 per user request */}
 
@@ -201,17 +227,21 @@ export function PersonCard({
   profilePath,
   primaryStat,
   secondaryStat,
+  onShowFilms,
   onClick,
 }: {
   name: string;
   profilePath?: string;
   primaryStat: string;
   secondaryStat?: string;
+  /** When provided, renders a "+" button that opens this person's films modal. */
+  onShowFilms?: () => void;
   onClick?: () => void;
 }) {
   const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [retried, setRetried] = useState(false);
 
   const initials = name
     .split(' ')
@@ -236,13 +266,10 @@ export function PersonCard({
   }, [profilePath, imageUrl, name]);
 
   return (
-    <button
-      onClick={onClick}
-      className="flex flex-col items-center gap-2 group cursor-pointer text-center hover:scale-105 active:scale-95 transition-all duration-150"
-    >
+    <div className="relative flex flex-col items-center gap-2 group text-center">
       {/* Avatar */}
       <div
-        className="relative w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
+        className="relative w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
         style={{ background: gradient }}
       >
         {showImage && (
@@ -259,10 +286,15 @@ export function PersonCard({
               setImageError(false);
             }}
             onError={(e) => {
-              console.error(`[PersonCard] Image failed for ${name}:`, imageUrl);
-              setImageError(true);
-              setImageLoaded(true);
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
+              const img = e.currentTarget as HTMLImageElement;
+              if (!retried && imageUrl) {
+                setRetried(true);
+                img.src = `${imageUrl}?retry=1`;
+              } else {
+                setImageError(true);
+                setImageLoaded(true);
+                img.style.display = 'none';
+              }
             }}
           />
         )}
@@ -271,16 +303,32 @@ export function PersonCard({
             {initials}
           </span>
         )}
+        {/* "+" button — opens this person's films modal */}
+        {onShowFilms && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onShowFilms();
+            }}
+            aria-label={`Show films with ${name}`}
+            className="absolute bottom-0 right-0 w-8 h-8 grid place-items-center rounded-full bg-[#00c030] text-black text-lg font-bold leading-none shadow-lg ring-2 ring-[#1a1a1a] hover:scale-110 transition-transform"
+          >
+            +
+          </button>
+        )}
       </div>
       {/* Name + stat */}
-      <div className="space-y-0.5">
+      <button
+        onClick={onClick}
+        className="space-y-0.5 text-center hover:scale-105 active:scale-95 transition-all duration-150"
+      >
         <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2">{name}</p>
         <p className="text-sm md:text-base text-slate-200">{primaryStat}</p>
         {secondaryStat && (
           <p className="text-xs md:text-sm text-slate-300">{secondaryStat}</p>
         )}
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 

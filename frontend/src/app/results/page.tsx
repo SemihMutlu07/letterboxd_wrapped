@@ -825,7 +825,7 @@ function ResultsContent({
         )}
 
         {/* Languages — moved lower; supporting info, not headline */}
-        <LazyLanguages data={stats.top_languages ?? []} />
+        <LazyLanguages data={stats.top_languages ?? []} allFilms={stats.all_films ?? []} />
 
         {/* Cinema Scale */}
         <SectionContainer theme={theme}>
@@ -929,16 +929,18 @@ function SectionContainer({ theme, children }: { theme: string; children: React.
 
 // Lazy wrapper for Languages
 function LazyLanguages({
-  data
+  data,
+  allFilms,
 }: {
   data: any[];
+  allFilms: any[];
 }) {
   const { ref, shouldMount } = useLazyMount(100);
 
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <LanguagesLeaderboard data={data.slice(0,7)} />
+        <LanguagesLeaderboard data={data.slice(0,7)} allFilms={allFilms} />
       ) : (
         <div className="h-64 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}

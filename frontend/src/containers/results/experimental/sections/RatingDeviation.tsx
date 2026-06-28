@@ -16,6 +16,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPosterUrl } from '@/lib/analytics';
+import FilmModal from './FilmModal';
 import type { StatsData } from '../types';
 import type { GateResult } from './section-utils';
 import {
@@ -56,10 +57,14 @@ interface EnrichedFilm {
   year?: number;
   rating: number;
   /** TMDB community rating on the 0–5 scale. */
-  communityRating?: number | null;
+  communityRating: number;
   poster_path?: string;
   /** rating − communityRating: how far your score diverges from the crowd. */
   delta: number;
+  director?: string;
+  runtime?: number;
+  language?: string;
+  review_text?: string;
 }
 
 type SubTab = 'higher' | 'lower';
@@ -77,6 +82,7 @@ export default function RatingDeviation({ stats }: { stats: StatsData }) {
 function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   const [tab, setTab] = useState<SubTab>('higher');
   const [visible, setVisible] = useState(PAGE_SIZE);
+  const [selectedFilm, setSelectedFilm] = useState<EnrichedFilm | null>(null);
 
   const userAvg = stats.average_rating;
 
@@ -85,21 +91,33 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   }, []);
 
   const { higher, lower } = useMemo<{ higher: EnrichedFilm[]; lower: EnrichedFilm[] }>(() => {
+    // Build lookup of all_films by title for enrichment
+    const allFilmsLookup = new Map<string, NonNullable<typeof stats.all_films>[0]>();
+    (stats.all_films ?? []).forEach((f) => {
+      allFilmsLookup.set(f.title, f);
+    });
+
     const films: EnrichedFilm[] = (stats.rated_films ?? [])
       .filter((f) => typeof f.average_rating === 'number' && Number.isFinite(f.average_rating))
-      .map((f) => ({
-        title: f.title,
-        year: f.year,
-        rating: f.your_rating ?? 0,
-        communityRating: f.average_rating,
-        poster_path: f.poster_path,
-        delta: Math.round(((f.your_rating ?? 0) - (f.average_rating ?? 0)) * 10) / 10,
-      }));
+      .map((f) => {
+        const enrichedData = allFilmsLookup.get(f.title);
+        return {
+          title: f.title,
+          year: f.year,
+          poster_path: f.poster_path,
+          rating: f.your_rating ?? 0,
+          communityRating: f.average_rating ?? 0,
+          delta: Math.round(((f.your_rating ?? 0) - (f.average_rating ?? 0)) * 10) / 10,
+          director: enrichedData?.director,
+          runtime: enrichedData?.runtime,
+          language: enrichedData?.language,
+        };
+      });
     return {
       higher: films.filter((f) => f.delta > 0).sort((a, b) => b.delta - a.delta),
       lower: films.filter((f) => f.delta < 0).sort((a, b) => a.delta - b.delta),
     };
-  }, [stats.rated_films]);
+  }, [stats.rated_films, stats.all_films]);
 
   const list = tab === 'higher' ? higher : lower;
   const shown = list.slice(0, visible);
@@ -111,62 +129,77 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   };
 
   return (
-    <div className="bg-[#1a1a1a]/80 border border-white/8 rounded-2xl p-5 md:p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h3 className="text-base font-bold text-white">Your Rating Outliers</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
+    <>
+      <FilmModal
+        open={selectedFilm !== null}
+        onClose={() => setSelectedFilm(null)}
+        film={selectedFilm || {
+          title: '',
+          rating: 0,
+          communityRating: 0,
+        }}
+        userAvg={userAvg}
+      />
+      <div className="bg-[#1a1a1a]/80 border border-white/8 rounded-2xl p-5 md:p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h3 className="text-base font-bold text-white">Your Rating Outliers</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
+            <SubtabButton active={tab === 'higher'} color="green" onClick={() => handleTabChange('higher')}>
+              Rated Higher
+            </SubtabButton>
+            <SubtabButton active={tab === 'lower'} color="red" onClick={() => handleTabChange('lower')}>
+              Rated Lower
+            </SubtabButton>
+          </div>
+        </div>
+
+        {/* Empty state */}
+        {shown.length === 0 && (
+          <p className="text-sm text-slate-500 italic text-center py-8">
+            {tab === 'higher'
+              ? 'No films rated above your average.'
+              : 'No films rated below your average.'}
           </p>
-        </div>
-        <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
-          <SubtabButton active={tab === 'higher'} color="green" onClick={() => handleTabChange('higher')}>
-            Rated Higher
-          </SubtabButton>
-          <SubtabButton active={tab === 'lower'} color="red" onClick={() => handleTabChange('lower')}>
-            Rated Lower
-          </SubtabButton>
-        </div>
+        )}
+
+        {/* Film grid */}
+        {shown.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
+            {shown.map((film) => (
+              <FilmPosterCard
+                key={`${film.title}-${film.year}`}
+                film={film}
+                polarity={tab}
+                onOpenModal={(f) => {
+                  setSelectedFilm(f);
+                  trackItemClicked('rating_deviation', 'film');
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        {hasMore && (
+          <div className="flex justify-center pt-1">
+            <button
+              onClick={() => {
+                setVisible((v) => v + PAGE_SIZE);
+                trackShowMore('rating_deviation');
+              }}
+              className="text-xs font-semibold px-4 py-2 rounded-full border border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
+            >
+              Show {Math.min(list.length - visible, PAGE_SIZE)} more
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* Empty state */}
-      {shown.length === 0 && (
-        <p className="text-sm text-slate-500 italic text-center py-8">
-          {tab === 'higher'
-            ? 'No films rated above your average.'
-            : 'No films rated below your average.'}
-        </p>
-      )}
-
-      {/* Film grid */}
-      {shown.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-          {shown.map((film) => (
-            <FilmPosterCard
-              key={`${film.title}-${film.year}`}
-              film={film}
-              polarity={tab}
-              onClick={() => trackItemClicked('rating_deviation', 'film')}
-            />
-          ))}
-        </div>
-      )}
-
-      {hasMore && (
-        <div className="flex justify-center pt-1">
-          <button
-            onClick={() => {
-              setVisible((v) => v + PAGE_SIZE);
-              trackShowMore('rating_deviation');
-            }}
-            className="text-xs font-semibold px-4 py-2 rounded-full border border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
-          >
-            Show {Math.min(list.length - visible, PAGE_SIZE)} more
-          </button>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -175,11 +208,11 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
 function FilmPosterCard({
   film,
   polarity,
-  onClick,
+  onOpenModal,
 }: {
   film: EnrichedFilm;
   polarity: SubTab;
-  onClick?: () => void;
+  onOpenModal?: (film: EnrichedFilm) => void;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -191,11 +224,10 @@ function FilmPosterCard({
 
   const handleClick = () => {
     setRevealed((prev) => !prev);
-    onClick?.();
   };
 
   return (
-    <button
+    <div
       onClick={handleClick}
       className="flex min-w-0 flex-col gap-1.5 text-left group cursor-default"
     >
@@ -245,15 +277,15 @@ function FilmPosterCard({
           {film.year && (
             <p className="text-xs text-slate-300">{film.year}</p>
           )}
-          <a
-            href={`https://letterboxd.com/search/${encodeURIComponent(film.title)}/`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenModal?.(film);
+            }}
             className="mt-1 text-[11px] font-semibold px-4 py-2 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors text-center"
           >
-            View on Letterboxd
-          </a>
+            View Details
+          </button>
         </div>
       </div>
 
@@ -261,10 +293,10 @@ function FilmPosterCard({
       <div className="min-w-0 px-0.5 space-y-0.5">
         <p className="text-xs font-medium text-white leading-tight line-clamp-1">{film.title}</p>
         <p className="text-[10px] sm:text-[11px] text-slate-400 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-          ★ {film.rating.toFixed(1)} vs avg {film.communityRating?.toFixed(1) ?? '—'}
+          ★ {film.rating.toFixed(1)} vs avg {film.communityRating.toFixed(1)}
         </p>
       </div>
-    </button>
+    </div>
   );
 }
 
