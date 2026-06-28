@@ -39,6 +39,7 @@ python-multipart==0.0.20
 pytz==2025.2
 requests==2.32.4
 beautifulsoup4==4.13.4
+soupsieve
 lxml==5.4.0
 six==1.17.0
 sniffio==1.3.1

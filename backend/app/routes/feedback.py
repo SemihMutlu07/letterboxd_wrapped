@@ -4,7 +4,7 @@ import json
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -116,7 +116,7 @@ async def submit_feedback(
         "kind": kind,
         "message": message[:4000],
         "include_names": include_names,
-        "received_at": datetime.utcnow().isoformat(),
+        "received_at": datetime.now(timezone.utc).isoformat(),
         "client": _client_key(request),
     }
     (reports_dir / f"feedback-{issue_id}.json").write_text(
@@ -151,7 +151,7 @@ async def submit_report(
         "issue_id": issue_id,
         "sessionId": sessionId,
         "include_names": include_names,
-        "received_at": datetime.utcnow().isoformat(),
+        "received_at": datetime.now(timezone.utc).isoformat(),
         "client": _client_key(request),
     }
     (reports_dir / f"report-{issue_id}.meta.json").write_text(

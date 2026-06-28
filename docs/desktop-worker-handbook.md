@@ -116,18 +116,19 @@ Backend side (`config.py`): `worker_heartbeat_max_age_seconds=60`,
 ### The product decision (so we stop iterating)
 The desktop exists only for **deep HTML history**. Two already-built, zero-block,
 zero-cost paths cover most of the need and are currently underused:
-- **RSS preview** (`/api/rss-preview`, `rss_source.py`) — instant recent-sample Wrapped, fetched directly from Render (no proxy). **Currently suspended in the UI** (`frontend/src/components/LetterboxdLanding.tsx:279` hardcodes `method='scrape'`). This was a deliberate past choice to go full-direct-scrape.
 - **CSV/ZIP export upload** (`/api/analyze`) — production-complete, exact lifetime stats, no scrape at all.
+
+**Note:** The **RSS preview** subsystem (`/api/rss-preview`, `rss_source.py`) — which previously offered instant recent-sample Wrapped — was **removed in c2eae18** as dead code. It was never invoked in production (the UI hardcoded `method='scrape'`). If an instant-preview path is wanted in the future, it should be rebuilt from scratch, not resurrected.
 
 **Recommended target ("production level") — tiered cascade, desktop demoted to an optimization:**
 ```
-Username → 1. RSS preview (instant, no proxy) → show Wrapped
+Username → (no RSS preview — removed) → Upload export (exact, $0, zero block)
                 └─ optional background upgrade to full history:
                       ├─ desktop worker if online (free, residential)
                       └─ ScraperAPI inline if offline ($49 Hobby) — no hard 503
         → co-primary CTA: Upload export (exact, $0, zero block)
 Cross-cutting: per-username result cache (TTL ~12h, in ops_runs) + persistent TMDB cache
 ```
-**Do-first (all S-effort):** re-enable RSS-first default · default `include_reviews=False` · per-username result cache + persistent TMDB cache. These reverse the prior "full direct scrape" stance, so they are **product decisions to confirm**, not silent flips.
+**Do-first (all S-effort):** default `include_reviews=False` · per-username result cache + persistent TMDB cache.
 
 > Sources: ScraperAPI Hobby $49/100K credits (~1 credit/Letterboxd page); Bright Data residential ~$3–8.4/GB; browserless not needed (pages are server-rendered HTML).

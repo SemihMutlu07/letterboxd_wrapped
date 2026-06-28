@@ -18,6 +18,8 @@ from app.worker.desktop_scrape_worker import WorkerConfig, _worker_meta
 
 WORKER_TOKEN = "test-worker-secret"
 AUTH = {"X-Worker-Token": WORKER_TOKEN}
+ADMIN_KEY = "test-admin-secret-rotated"
+ADMIN_AUTH = {"Authorization": f"Bearer {ADMIN_KEY}"}
 
 
 def test_worker_rejects_scraperapi_key(monkeypatch):
@@ -42,7 +44,7 @@ def test_worker_reports_direct_cloudscraper_transport(monkeypatch):
 def test_requeue_stale_claims_recovers_dead_worker_jobs():
     """A job claimed then abandoned (desktop offline mid-scrape) must be re-queued,
     not left stuck 'running' until it 404s on the user."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     task_manager._tasks.clear()
     tid = task_manager.create_scrape_job("ghost")
@@ -50,7 +52,7 @@ def test_requeue_stale_claims_recovers_dead_worker_jobs():
     assert job.task_id == tid and job.status == "running"
 
     # Worker died mid-scrape: backdate the claim past the stale threshold.
-    job.claimed_at = datetime.utcnow() - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 60)
+    job.claimed_at = datetime.now(timezone.utc) - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 60)
     assert task_manager.requeue_stale_claims() == 1
     assert job.status == "pending" and job.claimed is False and job.claimed_at is None
 
@@ -85,10 +87,8 @@ async def client(tmp_path):
     original_admin_runs_dir = admin.RUNS_DIR
     run_log.RUNS_DIR = tmp_path / "runs"
     admin.RUNS_DIR = run_log.RUNS_DIR
-    original_admin_secret = admin.ADMIN_SECRET
-    admin.ADMIN_SECRET = "mw3169305"
 
-    with patch.dict("os.environ", {"TMDB_API_KEY": "test-key", "ADMIN_SECRET": "mw3169305"}):
+    with patch.dict("os.environ", {"TMDB_API_KEY": "test-key", "ADMIN_SECRET": ADMIN_KEY}):
         from app.main import create_app  # noqa: PLC0415
 
         app = create_app()
@@ -100,7 +100,6 @@ async def client(tmp_path):
     settings.worker_token = original_token
     run_log.RUNS_DIR = original_runs_dir
     admin.RUNS_DIR = original_admin_runs_dir
-    admin.ADMIN_SECRET = original_admin_secret
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None
     task_manager._last_worker_started_at = None
@@ -152,8 +151,8 @@ async def test_scrape_profile_offline_when_no_heartbeat(client: AsyncClient):
 async def test_scrape_profile_offline_when_heartbeat_stale(client: AsyncClient):
     await _beat(client)
     # Force the heartbeat to look older than the staleness window.
-    from datetime import datetime, timedelta
-    task_manager._last_worker_heartbeat = datetime.utcnow() - timedelta(
+    from datetime import datetime, timedelta, timezone
+    task_manager._last_worker_heartbeat = datetime.now(timezone.utc) - timedelta(
         seconds=settings.worker_heartbeat_max_age_seconds + 5
     )
     r = await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})
@@ -164,7 +163,7 @@ async def test_scrape_profile_offline_when_heartbeat_stale(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_scrape_profile_paused_blocks_new_job_even_when_worker_online(client: AsyncClient):
     await _beat(client)
-    pause = await client.post("/admin/api/worker/control?key=mw3169305", json={"desired_state": "pause"})
+    pause = await client.post("/admin/api/worker/control", headers=ADMIN_AUTH, json={"desired_state": "pause"})
     assert pause.status_code == 200
     assert pause.json()["control"]["desired_state"] == "pause"
 
@@ -224,7 +223,7 @@ async def test_worker_lifecycle_and_self_test_status(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_admin_worker_status_api(client: AsyncClient):
     await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
-    r = await client.get("/admin/api/worker?key=mw3169305")
+    r = await client.get("/admin/api/worker", headers=ADMIN_AUTH)
     assert r.status_code == 200
     body = r.json()
     assert body["enabled"] is True
@@ -254,7 +253,7 @@ async def test_worker_restart_token_comparison(client: AsyncClient):
     initial = await client.get("/api/worker/control", headers=AUTH)
     assert initial.json()["restart_token"] == 0
 
-    restart = await client.post("/admin/api/worker/restart?key=mw3169305")
+    restart = await client.post("/admin/api/worker/restart", headers=ADMIN_AUTH)
     assert restart.status_code == 200
     new_token = restart.json()["control"]["restart_token"]
     assert new_token == 1
@@ -303,7 +302,7 @@ async def test_supervisor_report_does_not_pollute_worker_heartbeat(client: Async
 @pytest.mark.asyncio
 async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
-    r = await client.get("/admin/dashboard?key=mw3169305")
+    r = await client.get("/admin/dashboard?key=test-admin-secret-rotated")
     assert r.status_code == 200
     html = r.text
     assert "Desktop Worker" in html
@@ -341,7 +340,7 @@ async def test_paused_worker_claims_no_new_jobs(client: AsyncClient):
     await _beat(client)
     task_id = task_manager.create_scrape_job("semihmutsuz")
     task_manager.create_watchlist_compare_job(["semihmutsuz", "mertefesenturk"])
-    await client.post("/admin/api/worker/control?key=mw3169305", json={"desired_state": "pause"})
+    await client.post("/admin/api/worker/control", headers=ADMIN_AUTH, json={"desired_state": "pause"})
 
     scrape = await client.get("/api/worker/scrape/next", headers=AUTH)
     assert scrape.status_code == 200
@@ -401,7 +400,7 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     assert task_manager.get_task_state(task_id).duration_seconds == 12.3
     assert task_manager.get_task_state(task_id).scrape_seconds == 8.1
 
-    runs = await client.get("/admin/api/runs?key=mw3169305")
+    runs = await client.get("/admin/api/runs", headers=ADMIN_AUTH)
     assert runs.status_code == 200
     run = runs.json()["runs"][0]
     assert run["task_id"] == task_id
@@ -444,14 +443,14 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     assert task.error_type == "ValueError"
     assert task.error_stage == "letterboxd_or_scrape"
 
-    runs = await client.get("/admin/api/runs?key=mw3169305")
+    runs = await client.get("/admin/api/runs", headers=ADMIN_AUTH)
     assert runs.status_code == 200
     run = runs.json()["runs"][0]
     assert run["ok"] is False
     assert run["error_stage"] == "letterboxd_or_scrape"
     assert run["error_message"] == "Letterboxd blocked the desktop worker."
 
-    dashboard = await client.get("/admin/dashboard?key=mw3169305")
+    dashboard = await client.get("/admin/dashboard?key=test-admin-secret-rotated")
     assert dashboard.status_code == 200
     assert "letterboxd_or_scrape" in dashboard.text
 
@@ -463,7 +462,7 @@ async def test_worker_complete_unknown_task_404(client: AsyncClient):
     assert r.status_code == 200
     assert r.json()["orphan"] is True
 
-    runs = await client.get("/admin/api/runs?key=mw3169305")
+    runs = await client.get("/admin/api/runs", headers=ADMIN_AUTH)
     assert runs.status_code == 200
     assert runs.json()["runs"][0]["task_id"] == "does-not-exist"
 
@@ -483,7 +482,7 @@ async def test_worker_fail_unknown_task_persists_orphan_run(client: AsyncClient)
     assert r.status_code == 200
     assert r.json()["orphan"] is True
 
-    runs = await client.get("/admin/api/runs?key=mw3169305")
+    runs = await client.get("/admin/api/runs", headers=ADMIN_AUTH)
     run = runs.json()["runs"][0]
     assert run["ok"] is False
     assert run["username"] == "semihmutsuz"
