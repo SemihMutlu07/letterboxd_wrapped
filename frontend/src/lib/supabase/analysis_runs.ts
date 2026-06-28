@@ -126,31 +126,23 @@ function extractMetrics(summaryPayload: Record<string, unknown> | null): {
     average_rating: number | null;
     total_countries: number | null;
 } {
-    if (!summaryPayload || typeof summaryPayload !== "object") {
-        return { total_films: null, sinefil_meter: null, cinematic_persona: null, average_rating: null, total_countries: null };
-    }
-
-    // summaryPayload is always {details: {...}, preview: {...}} after buildSummaryForPersistence
-    const details = "details" in summaryPayload && summaryPayload.details
-        ? (summaryPayload.details as Record<string, unknown>)
-        : summaryPayload as Record<string, unknown>;
-
-    const sinefilMeterObj = details.sinefil_meter;
-    const sinefilScore = sinefilMeterObj && typeof sinefilMeterObj === "object" && "score" in (sinefilMeterObj as Record<string, unknown>)
-        ? ((sinefilMeterObj as Record<string, unknown>).score as number | null)
-        : (typeof sinefilMeterObj === "number" ? sinefilMeterObj : null);
-
-    const personaObj = details.cinematic_persona;
-    const persona = personaObj && typeof personaObj === "object" && "persona" in (personaObj as Record<string, unknown>)
-        ? ((personaObj as Record<string, unknown>).persona as string | null)
-        : (typeof personaObj === "string" ? personaObj : null);
+    // Reuse the shared details accessor (handles null + legacy-flat summaries).
+    // Producers always emit sinefil_meter/cinematic_persona as objects, so a single
+    // typed cast + optional chaining is enough — no bare-scalar fallbacks needed.
+    const details = getDetailsFromSummary(summaryPayload) as {
+        total_films?: number | null;
+        sinefil_meter?: { score?: number | null } | null;
+        cinematic_persona?: { persona?: string | null } | null;
+        average_rating?: number | null;
+        total_countries?: number | null;
+    } | null;
 
     return {
-        total_films: (details.total_films as number | null) ?? null,
-        sinefil_meter: sinefilScore,
-        cinematic_persona: persona ?? null,
-        average_rating: (details.average_rating as number | null) ?? null,
-        total_countries: (details.total_countries as number | null) ?? null,
+        total_films: details?.total_films ?? null,
+        sinefil_meter: details?.sinefil_meter?.score ?? null,
+        cinematic_persona: details?.cinematic_persona?.persona ?? null,
+        average_rating: details?.average_rating ?? null,
+        total_countries: details?.total_countries ?? null,
     };
 }
 
