@@ -583,7 +583,9 @@ async def process_comprehensive_letterboxd_data(
                 "title": str(row.get("title") or ""),
                 "year": _clean_year(row.get("year")),
                 "rating": float(row.get("rating")),
+                "your_rating": float(row.get("rating")),
                 "community_rating": _community_rating(row.get("vote_average")),
+                "average_rating": float(row.get("vote_average", 0)) / 2.0 if pd.notna(row.get("vote_average")) else None,
                 "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
             }
             for _, row in rated_rows.sort_values("rating", ascending=False).iterrows()
@@ -603,6 +605,8 @@ async def process_comprehensive_letterboxd_data(
             "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
             "decade": row.get("decade") if pd.notna(row.get("decade")) else None,
             "rating": _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None,
+            "cast": row.get("cast") if isinstance(row.get("cast"), list) else [],
+            "average_rating": float(row.get("vote_average", 0)) / 2.0 if pd.notna(row.get("vote_average")) else None,
         }
         for _, row in analysis_df.iterrows()
     ]

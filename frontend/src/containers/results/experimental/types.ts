@@ -110,9 +110,11 @@ export interface StatsData {
   rated_films?: {
     title: string;
     year?: number;
-    rating: number;
+    rating?: number;
+    your_rating?: number;
     /** TMDB community rating, normalized to the 0–5 scale. null when no votes. */
     community_rating?: number | null;
+    average_rating?: number | null;
     poster_path?: string;
   }[];
   /** Up to 4 films pinned as favorites on the user's Letterboxd profile page. */
@@ -165,6 +167,8 @@ export interface StatsData {
     poster_path?: string;
     decade?: string;
     rating?: number;
+    cast?: string[];
+    average_rating?: number | null;
   }[];
 
   /** Review text metrics from compute_review_metrics (review_analysis.py). */
