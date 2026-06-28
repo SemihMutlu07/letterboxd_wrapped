@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Section from '@/components/results/Section';
 import type { StatsData } from '../types';
 
@@ -26,6 +26,8 @@ function scaledWordSize(count: number, max: number): string {
 }
 
 export default function ReviewAnalysisSection({ stats }: Props) {
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+
   const ra = stats.review_analysis;
   if (!ra || ra.reviews_with_text === 0) return null;
 
@@ -35,6 +37,11 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   const topLiked = (ra.top_liked_reviews ?? []).filter((r) => r.like_count > 0).slice(0, 3);
   const totalLikes = ra.total_review_likes ?? null;
   const reviewsWithLikesData = ra.reviews_with_likes_data ?? null;
+
+  const allReviews = (ra.reviews ?? []);
+  const filteredReviews = selectedWord
+    ? allReviews.filter((r) => r.text?.toLowerCase().includes(selectedWord.toLowerCase()))
+    : [];
 
   const subtitleParts = [`${ra.reviews_with_text} reviews with text`];
   if (totalLikes !== null && totalLikes > 0) {
@@ -73,21 +80,79 @@ export default function ReviewAnalysisSection({ stats }: Props) {
 
         {topWords.length > 0 && (
           <div className="w-full">
-            <p className="text-xs uppercase tracking-widest text-slate-500 mb-3">Most used words</p>
+            <p className="text-xs uppercase tracking-widest text-slate-500 mb-3">Most used words · tap to filter</p>
             <div className="flex flex-wrap gap-x-3 gap-y-2 items-baseline">
-              {topWords.map(({ word, count }, idx) => (
-                <span
-                  key={word}
-                  className={`inline-flex items-baseline gap-1.5 rounded-full px-3 py-1 ${WORD_PALETTE[idx % WORD_PALETTE.length]} ${scaledWordSize(count, topWordsMax)}`}
-                >
-                  <span>{word}</span>
-                  <span className="text-[10px] font-mono opacity-70">×{count}</span>
-                </span>
-              ))}
+              {topWords.map(({ word, count }, idx) => {
+                const isSelected = selectedWord === word;
+                return (
+                  <button
+                    key={word}
+                    onClick={() => setSelectedWord(isSelected ? null : word)}
+                    className={`inline-flex items-baseline gap-1.5 rounded-full px-3 py-1 transition-all duration-150 cursor-pointer ${
+                      isSelected
+                        ? 'ring-2 ring-orange-400 bg-orange-500/40 text-orange-100 font-bold'
+                        : `${WORD_PALETTE[idx % WORD_PALETTE.length]} hover:opacity-80`
+                    } ${scaledWordSize(count, topWordsMax)}`}
+                  >
+                    <span>{word}</span>
+                    <span className="text-[10px] font-mono opacity-70">×{count}</span>
+                  </button>
+                );
+              })}
             </div>
             <p className="mt-2 text-[11px] text-slate-500">
               Generic review words (film, izledim, güzel…) are filtered so distinctive vocabulary surfaces.
             </p>
+          </div>
+        )}
+
+        {selectedWord && filteredReviews.length > 0 && (
+          <div className="w-full mt-4">
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-orange-500/20 px-4 py-3 mb-3">
+              <p className="text-sm font-semibold text-orange-200">
+                Filtering: "<span className="font-mono">{selectedWord}</span>" · {filteredReviews.length} review{filteredReviews.length === 1 ? '' : 's'}
+              </p>
+              <button
+                onClick={() => setSelectedWord(null)}
+                className="text-xs font-bold px-3 py-1 rounded-full bg-orange-400 text-slate-900 hover:bg-orange-300 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {filteredReviews.slice(0, 6).map((review, idx) => (
+                <li
+                  key={`${review.title}-${review.year}-${idx}`}
+                  className="rounded-lg bg-slate-800/50 p-3 hover:bg-slate-800/80 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <p className="font-semibold text-orange-100 text-sm truncate">{review.title}</p>
+                    <span className="shrink-0 text-xs font-mono text-slate-400">♥ {review.likes || 0}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-2">{review.year || '—'}</p>
+                  <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed">{review.text}</p>
+                </li>
+              ))}
+            </ul>
+            {filteredReviews.length > 6 && (
+              <p className="mt-2 text-[11px] text-slate-500">
+                Showing 6 of {filteredReviews.length} reviews
+              </p>
+            )}
+          </div>
+        )}
+
+        {selectedWord && filteredReviews.length === 0 && (
+          <div className="w-full mt-4 text-center py-4">
+            <p className="text-sm text-slate-400">
+              No reviews found containing "<span className="font-mono">{selectedWord}</span>"
+            </p>
+            <button
+              onClick={() => setSelectedWord(null)}
+              className="mt-2 text-xs font-bold px-3 py-1 rounded-full bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
+            >
+              Clear filter
+            </button>
           </div>
         )}
 

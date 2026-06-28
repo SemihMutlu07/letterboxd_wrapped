@@ -133,6 +133,51 @@ Before opening a PR, verify:
 2) **WrappedBrutal orphan gap**: `FeedbackFab`, `ShareModal`, and `PageViewTracker` (PostHog) exist in the codebase but are NOT imported by `WrappedBrutal.jsx`. They must be re-integrated into the neo-brutalist shell.
 3) **desktop_server branch out of sync**: Local `desktop_server` branch has no upstream and is behind `origin/desktop_server`, which is itself 3 commits behind `main`. Needs reset + sync before next Windows worker deploy.
 
+## WIP: Feature Extraction from WrappedBrutal.jsx (berdan branch)
+**Objective:** Extract functional features from neo-brutal design (`WrappedBrutal.jsx`) and integrate them into the modern results page (`results/page.tsx` + sub-components).
+
+**Design baseline:** Modern Letterboxd-dark theme (dark bg, white text hierarchy, subtle white borders, rounded corners, orange/slate accents) — NO neo-brutal styling.
+
+**Features to extract & integrate:**
+1. **FilmModal** (lines 527–560 in WrappedBrutal.jsx)
+   - [x] Extract as standalone component `FilmModal.tsx`
+   - [x] Shows: title, release_year, director, runtime, language, your_rating, average_rating, community rating comparison
+   - [x] Wire into RatingDeviation.tsx: clicking a FilmPosterCard opens modal
+   - Status: ✓ Done
+   - Details: Created FilmModal.tsx with modern dark theme (bg-[#1a1a1a], border-white/8, rounded-2xl). Enhanced EnrichedFilm interface with director, runtime, language fields. RatingDeviation enriches films with all_films data. FilmPosterCard "View Details" button opens modal with film info and rating comparison.
+
+2. **Director portrait in PersonFilmsModal** (lines 216–294 in WrappedBrutal.jsx)
+   - [ ] Add `profilePath?: string` prop to PersonFilmsModal.tsx
+   - [ ] Show TMDB portrait image (h632 size) alongside film grid when available
+   - Status: Not started
+
+3. **Language → film list modal** (lines 721–750 in WrappedBrutal.jsx)
+   - [ ] Extract LangModal pattern
+   - [ ] Integrate into LanguagesLeaderboard.tsx: clicking a language row opens modal
+   - Status: Not started
+
+4. **Reviews word filter + reveal toggle** (lines 785–841 in WrappedBrutal.jsx)
+   - [ ] ReviewAnalysisSection already has word filter (✓ done)
+   - [ ] Add blur reveal toggle (filter: blur(4px) when revealed=false)
+   - Status: Filter exists, needs reveal toggle
+
+5. **RatingDeviation → use FilmPosterCard data for modal** (HIGH PRIORITY)
+   - [ ] Expand EnrichedFilm interface to carry: director, runtime, language, review_text, your_rating, average_rating
+   - [ ] Create and wire FilmModal component
+   - Status: Not started
+
+**Design constraints:**
+- Do NOT modify landing page or Watchlist pages
+- Do NOT modify neo-brutal route (`WrappedBrutal.jsx`)
+- Do NOT add neo-brutal styling anywhere in modern theme
+- Modern theme: dark bg (#1a1a1a), white text, border-white/8, rounded-2xl, orange-400 accents
+
+**Verification checklist:**
+- [ ] `cd frontend && npx tsc --noEmit` passes with 0 errors
+- [ ] Visual check: components match dark theme
+- [ ] Data flow: clicking opens modal with correct details
+- [ ] `git rebase origin/main` before PR
+
 ## AI workflow (how to work in this repo)
 When asked to implement a change:
 1) Locate and open the relevant file(s) first.
