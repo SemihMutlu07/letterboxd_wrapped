@@ -12,6 +12,7 @@ import CastGrid from '@/containers/results/experimental/sections/CastGrid';
 import DirectorsGrid from '@/containers/results/experimental/sections/DirectorsGrid';
 import type { StatsData } from '@/containers/results/experimental/types';
 
+import Wrapped from '@/components/WrappedBrutal';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import ThemeWrapper from '@/components/ThemeWrapper';
@@ -131,6 +132,11 @@ export default function ResultsPage() {
   // feedback
   const feedbackRef = useRef<FeedbackFabRef>(null);
   const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
+
+  // design switcher — testing only
+  const [designMode, setDesignMode] = useState<'default' | 'brutal'>(() =>
+    typeof window !== 'undefined' && sessionStorage.getItem('lbw_design_mode') === 'brutal' ? 'brutal' : 'default'
+  );
 
 
   // session helpers
@@ -498,34 +504,52 @@ export default function ResultsPage() {
     );
   }
 
+  const toggleDesign = () => {
+    const next = designMode === 'brutal' ? 'default' : 'brutal';
+    setDesignMode(next);
+    sessionStorage.setItem('lbw_design_mode', next);
+  };
+
   return (
-    <ThemeProvider>
-      <ThemeWrapper>
-        <ResultsContent
-          stats={stats}
-          sessionId={sessionId}
-          username={username}
-          dateRangeText={dateRangeText}
-          timePct={timePct}
-          runtimeHours={runtimeHours}
-          decadeData={decadeData}
-          decadeMax={decadeMax}
-          isMobile={isMobile}
-          ratingsArr={ratingsArr}
-          ratingMax={ratingMax}
-          quickMetrics={quickMetrics}
-          cineScore={cineScore}
-          showShareModal={showShareModal}
-          setShowShareModal={setShowShareModal}
-          shareCardData={shareCardData}
-          orientation={orientation}
-          setOrientation={setOrientation}
-          hasTriggeredFeedback={hasTriggeredFeedback}
-          setHasTriggeredFeedback={setHasTriggeredFeedback}
-          feedbackRef={feedbackRef}
-        />
-      </ThemeWrapper>
-    </ThemeProvider>
+    <>
+      <button
+        onClick={toggleDesign}
+        className="fixed top-4 right-4 z-50 px-2 py-1 text-[10px] font-mono uppercase border border-slate-600 bg-slate-900/80 text-slate-400 hover:border-orange-400 hover:text-orange-400 rounded backdrop-blur-sm"
+      >
+        {designMode === 'brutal' ? '← DEFAULT' : 'BRUTAL →'}
+      </button>
+      {designMode === 'brutal' ? (
+        <Wrapped />
+      ) : (
+        <ThemeProvider>
+          <ThemeWrapper>
+            <ResultsContent
+              stats={stats}
+              sessionId={sessionId}
+              username={username}
+              dateRangeText={dateRangeText}
+              timePct={timePct}
+              runtimeHours={runtimeHours}
+              decadeData={decadeData}
+              decadeMax={decadeMax}
+              isMobile={isMobile}
+              ratingsArr={ratingsArr}
+              ratingMax={ratingMax}
+              quickMetrics={quickMetrics}
+              cineScore={cineScore}
+              showShareModal={showShareModal}
+              setShowShareModal={setShowShareModal}
+              shareCardData={shareCardData}
+              orientation={orientation}
+              setOrientation={setOrientation}
+              hasTriggeredFeedback={hasTriggeredFeedback}
+              setHasTriggeredFeedback={setHasTriggeredFeedback}
+              feedbackRef={feedbackRef}
+            />
+          </ThemeWrapper>
+        </ThemeProvider>
+      )}
+    </>
   );
 }
 
