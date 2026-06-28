@@ -29,6 +29,13 @@ const SERIF = 'Georgia, "Times New Roman", serif';
 const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
 const shadow = (n) => `${n}px ${n}px 0 ${T.ink}`;
 
+// Format rating with actual precision from data, remove trailing zeros
+const formatRating = (num) => {
+  const val = num ?? 0;
+  const rounded = Math.round(val * 100) / 100;
+  return rounded;
+};
+
 // Color palette for cycling through items
 const COLORS = [T.lime, T.amber, T.cyan, T.purple, T.red];
 const getColor = (index) => COLORS[index % COLORS.length];
@@ -107,7 +114,7 @@ function Nav({ revealed, setRevealed }) {
 /* ---------- hero ---------- */
 function Hero({ stats }) {
   const totalFilms = stats?.total_films ?? 0;
-  const avgRating = (stats?.average_rating ?? 0).toFixed(1);
+  const avgRating = formatRating(stats?.average_rating ?? 0);
   const daysWatched = stats?.days_watched ?? 0;
   const langCount = stats?.top_languages?.length ?? 0;
 
@@ -193,7 +200,7 @@ function CardHoverInfo({ cardType, data, stats }) {
               <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, marginTop: 4, lineHeight: 1.4 }}>{f.text?.slice(0, 60)}...</div>
             ) : (
               <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, marginTop: 2 }}>
-                {f.year || "—"} · ★ {(f.rating ?? 0).toFixed(1)}
+                {f.year || "—"} · ★ {formatRating(f.rating ?? 0)}
               </div>
             )}
           </div>
@@ -203,6 +210,86 @@ function CardHoverInfo({ cardType, data, stats }) {
         <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, marginTop: 10 }}>+ more in your diary</div>
       )}
     </Box>
+  );
+}
+
+function DirectorProfileModal({ director, onClose, stats }) {
+  const [closeHover, setCloseHover] = useState(false);
+  const profileUrl = director?.profile_path ? `https://image.tmdb.org/t/p/h632${director.profile_path}` : null;
+
+  const films = (stats?.all_films || [])
+    .filter(f => f.director && f.director.toLowerCase() === director.name.toLowerCase() && f.rating !== null)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,15,12,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 24 }}>
+      <Box onClick={(e) => e.stopPropagation()} sh={8} style={{ maxWidth: 900, width: "100%", maxHeight: "90vh", padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", gap: 24, padding: "26px", overflowY: "auto", flex: 1 }}>
+          <div style={{ flexShrink: 0 }}>
+            {profileUrl && (
+              <img src={profileUrl} alt={director.name} style={{ width: 280, aspectRatio: "9/12", objectFit: "cover", border: `2.5px solid ${T.ink}`, boxShadow: shadow(4) }} onError={(e) => e.target.style.display = "none"} />
+            )}
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 36, color: T.ink, marginBottom: 12, lineHeight: 1.2 }}>{director.name || "—"}</div>
+            <div style={{ fontFamily: MONO, fontSize: 12, color: T.muted, marginBottom: 24 }}>
+              {director.count} film{director.count !== 1 ? "s" : ""} · {director.avg_rating ? `★ ${formatRating(director.avg_rating ?? 0)} avg` : ""}
+            </div>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 20 }}>{films.length} films in your diary</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, flex: 1 }}>
+              {films.slice(0, 12).map((f, i) => {
+                const [posterHover, setPosterHover] = useState(false);
+                return (
+                  <div key={i} style={{ display: "flex", flexDirection: "column" }}>
+                    {f.poster_path ? (
+                      <div onMouseEnter={() => setPosterHover(true)} onMouseLeave={() => setPosterHover(false)} style={{ position: "relative", aspectRatio: "2/3", background: getColor(i), border: `2.5px solid ${T.ink}`, overflow: "hidden", marginBottom: 8 }}>
+                        <img src={`https://image.tmdb.org/t/p/w342${f.poster_path}`} alt={f.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => e.target.style.display = "none"} />
+                        <div style={{ position: "absolute", top: 4, right: 4, background: T.lime, border: `1.5px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 11, padding: "2px 6px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right" }}>
+                          ★ {formatRating(f.rating ?? 0)}
+                        </div>
+                      </div>
+                    ) : (
+                      <Box bg={getColor(i)} sh={2} style={{ height: "100%", aspectRatio: "2/3", display: "flex", alignItems: "flex-end", padding: 10, marginBottom: 8 }}>
+                        <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 11, color: T.ink, lineHeight: 1.2 }}>{f.title || "—"}</div>
+                      </Box>
+                    )}
+                    <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 11, color: T.ink, lineHeight: 1.2, marginBottom: 3 }}>{f.title || "—"}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 8.5, color: T.muted }}>{f.year || "—"}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {films.length > 12 && (
+              <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, marginTop: 10 }}>+ {films.length - 12} more films</div>
+            )}
+          </div>
+        </div>
+        <div style={{ padding: "16px 26px", borderTop: `2.5px solid ${T.ink}`, background: T.paper }}>
+          <button
+            onClick={onClose}
+            onMouseEnter={() => setCloseHover(true)}
+            onMouseLeave={() => setCloseHover(false)}
+            style={{
+              fontFamily: MONO,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              padding: "8px 11px",
+              border: `2px solid ${T.ink}`,
+              background: closeHover ? T.amber : T.lime,
+              color: T.ink,
+              cursor: "pointer",
+              boxShadow: closeHover ? shadow(3) : shadow(2),
+              transform: closeHover ? "translate(-1px,-1px)" : "none",
+              transition: "all 90ms",
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </Box>
+    </div>
   );
 }
 
@@ -260,7 +347,7 @@ function CardModal({ cardInfo, onClose, stats }) {
                   style={{ position: "relative", marginBottom: 10, aspectRatio: "2/3", background: getColor(i), border: `2.5px solid ${T.ink}`, overflow: "hidden", cursor: "pointer" }}>
                   <img src={`https://image.tmdb.org/t/p/w342${f.poster_path}`} alt={f.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => e.target.style.display = "none"} />
                   <div style={{ position: "absolute", top: 8, right: 8, background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 13, padding: "4px 8px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right" }}>
-                    ★ {(f.rating ?? 0).toFixed(1)}
+                    ★ {formatRating(f.rating ?? 0)}
                   </div>
                 </div>
               ) : (
@@ -272,7 +359,7 @@ function CardModal({ cardInfo, onClose, stats }) {
                     <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 14, color: T.ink, lineHeight: 1.2 }}>{f.title || "—"}</div>
                   </Box>
                   <div style={{ position: "absolute", top: 8, right: 8, background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 13, padding: "4px 8px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right", zIndex: 10 }}>
-                    ★ {(f.rating ?? 0).toFixed(1)}
+                    ★ {formatRating(f.rating ?? 0)}
                   </div>
                 </div>
               )}
@@ -300,15 +387,16 @@ function WrappedCards({ stats }) {
   const reviewCount = stats?.review_analysis?.total_reviews || 0;
 
   const cards = [
-    ["TOP DIRECTOR", topDirector?.name || "—", topDirector ? `${topDirector.count} films · ${(topDirector.avg_rating ?? 0).toFixed(1)} avg` : "—", T.lime, "director", topDirector],
+    ["TOP DIRECTOR", topDirector?.name || "—", topDirector ? `${topDirector.count} films · ${formatRating(topDirector.avg_rating ?? 0)} avg` : "—", T.lime, "director", topDirector],
     ["TOP GENRE", topGenre?.name || "—", topGenre ? `${topGenre.count} of ${stats.total_films} films` : "—", T.cyan, "genre", topGenre],
     ["PEAK DECADE", peakDecade?.decade || "—", peakDecade ? `${peakDecade.count} films from these years` : "—", T.amber, "decade", peakDecade],
-    ["TOP ACTOR", topActor?.name || "—", topActor ? `★ ${(topActor.avg_rating ?? 0).toFixed(1)} across ${topActor.count} films` : "—", T.purple, "actor", topActor],
+    ["TOP ACTOR", topActor?.name || "—", topActor ? `★ ${formatRating(topActor.avg_rating ?? 0)} across ${topActor.count} films` : "—", T.purple, "actor", topActor],
     ["AVG RUNTIME", `${avgRuntime} min`, "feature-length comfort zone", T.lime, null, null],
     ["REVIEWS", `${reviewCount} written`, "see breakdown below", T.cyan, "reviews", null],
   ];
   const [h, setH] = useState(null);
   const [sel, setSel] = useState(null);
+  const [directorProfile, setDirectorProfile] = useState(null);
 
   return (
     <section style={{ marginBottom: 28 }}>
@@ -316,10 +404,18 @@ function WrappedCards({ stats }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
         {cards.map(([l, v, c, col, cardType, data], i) => {
           const isActive = sel && sel[0] === cardType && sel[1] === data;
+          const handleCardClick = () => {
+            if (!cardType) return;
+            if (cardType === "director") {
+              setDirectorProfile(data);
+            } else {
+              setSel([cardType, data, l, v]);
+            }
+          };
           return (
           <div key={l} className="relative" onMouseEnter={() => setH(i)} onMouseLeave={() => setH(null)} style={{ display: "flex", zIndex: h === i ? 10 : 1, position: "relative" }}>
             <Box bg={h === i && !isActive ? T.paper : col} sh={isActive ? 4 : (h === i ? 3 : 2)}
-              onClick={() => cardType && setSel([cardType, data, l, v])}
+              onClick={handleCardClick}
               style={{
                 width: "100%",
                 padding: "24px 22px 26px",
@@ -341,7 +437,7 @@ function WrappedCards({ stats }) {
                 <div style={{ fontFamily: MONO, fontSize: 10.5, color: T.ink, opacity: h === i || isActive ? 1 : 0.75, transition: "opacity 110ms" }}>{c}</div>
                 {cardType && (h === i || isActive) && (
                   <div style={{ fontFamily: MONO, fontSize: 9, color: T.lime, marginTop: 10, fontWeight: 700, opacity: 0, animation: "fadeIn 200ms 80ms forwards" }}>
-                    {isActive ? "✓ ACTIVE · CLICK AGAIN TO VIEW ALL" : "▸ CLICK TO VIEW ALL"}
+                    {cardType === "director" ? "▸ VIEW PROFILE" : (isActive ? "✓ ACTIVE · CLICK AGAIN TO VIEW ALL" : "▸ CLICK TO VIEW ALL")}
                   </div>
                 )}
               </div>
@@ -365,6 +461,7 @@ function WrappedCards({ stats }) {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      {directorProfile && <DirectorProfileModal director={directorProfile} onClose={() => setDirectorProfile(null)} stats={stats} />}
       {sel && <CardModal cardInfo={sel} onClose={() => setSel(null)} stats={stats} />}
     </section>
   );
@@ -373,7 +470,7 @@ function WrappedCards({ stats }) {
 /* ---------- rating outliers (brutalist posters) ---------- */
 function Poster({ f, flip, onClick, isActive }) {
   const [h, setH] = useState(false);
-  const diff = ((f.your_rating ?? 0) - (f.average_rating ?? 0)).toFixed(1);
+  const diff = formatRating((f.your_rating ?? 0) - (f.average_rating ?? 0));
   const col = getColor(f._index);
 
   return (
@@ -396,7 +493,7 @@ function Poster({ f, flip, onClick, isActive }) {
         </div>
         <div>
           <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 16, color: T.ink, lineHeight: 1.15, marginBottom: 8 }}>{f.title || "—"}</div>
-          <div style={{ fontFamily: MONO, fontSize: 10.5, color: T.ink, fontWeight: 700, opacity: h || isActive ? 1 : 0, transform: (h || isActive) ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "left" }}>★ {(f.your_rating ?? 0).toFixed(1)} vs avg {(f.average_rating ?? 0).toFixed(1)}</div>
+          <div style={{ fontFamily: MONO, fontSize: 10.5, color: T.ink, fontWeight: 700, opacity: h || isActive ? 1 : 0, transform: (h || isActive) ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "left" }}>★ {formatRating(f.your_rating ?? 0)} vs avg {formatRating(f.average_rating ?? 0)}</div>
         </div>
       </Box>
       {(h || isActive) && (
@@ -406,12 +503,12 @@ function Poster({ f, flip, onClick, isActive }) {
           <div className="flex items-center justify-between" style={{ marginTop: 10, fontFamily: MONO, fontSize: 10 }}>
             <span style={{ color: T.muted }}>YOU</span>
             <div style={{ flex: 1, height: 7, border: `1.5px solid ${T.ink}`, margin: "0 8px" }}><div style={{ width: "100%", height: "100%", background: T.lime }} /></div>
-            <span style={{ color: T.ink, fontWeight: 700 }}>{(f.your_rating ?? 0).toFixed(1)}</span>
+            <span style={{ color: T.ink, fontWeight: 700 }}>{formatRating(f.your_rating ?? 0)}</span>
           </div>
           <div className="flex items-center justify-between" style={{ marginTop: 4, fontFamily: MONO, fontSize: 10 }}>
             <span style={{ color: T.muted }}>AVG</span>
             <div style={{ flex: 1, height: 7, border: `1.5px solid ${T.ink}`, margin: "0 8px" }}><div style={{ width: `${Math.min((f.average_rating ?? 0) / 5 * 100, 100)}%`, height: "100%", background: T.muted }} /></div>
-            <span style={{ color: T.ink, fontWeight: 700 }}>{(f.average_rating ?? 0).toFixed(1)}</span>
+            <span style={{ color: T.ink, fontWeight: 700 }}>{formatRating(f.average_rating ?? 0)}</span>
           </div>
           {f.review && <div style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 12, color: T.ink, marginTop: 10, paddingLeft: 8, borderLeft: `3px solid ${T.ink}` }}>"{f.review}"</div>}
           <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, marginTop: 10 }}>{isActive ? "VIEWING ✓" : "CLICK FOR FULL CARD →"}</div>
@@ -429,7 +526,7 @@ function Poster({ f, flip, onClick, isActive }) {
 
 function FilmModal({ f, onClose }) {
   const col = getColor(f._index);
-  const diff = ((f.your_rating ?? 0) - (f.average_rating ?? 0)).toFixed(1);
+  const diff = formatRating((f.your_rating ?? 0) - (f.average_rating ?? 0));
   const [h, setH] = useState(false);
 
   return (
@@ -442,11 +539,11 @@ function FilmModal({ f, onClose }) {
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 22, color: T.ink }}>{f.title || "—"}</div>
             <div style={{ fontFamily: MONO, fontSize: 10.5, color: T.muted, marginBottom: 8 }}>{f.release_year || "—"} · DIR. {(f.director || "—").toUpperCase()}</div>
-            <span style={{ background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 8px", opacity: h ? 1 : 0, transform: h ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "left", display: "inline-block" }}>★ {(f.your_rating ?? 0).toFixed(1)} · +{diff} VS AVG</span>
+            <span style={{ background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: "2px 8px", opacity: h ? 1 : 0, transform: h ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "left", display: "inline-block" }}>★ {formatRating(f.your_rating ?? 0)} · +{diff} VS AVG</span>
           </div>
         </div>
         <div className="grid grid-cols-3" style={{ gap: 10, marginTop: 18 }}>
-          {[["RUNTIME", `${f.runtime || "—"} min`], ["LANGUAGE", f.language || "—"], ["RATED", `${(f.your_rating ?? 0).toFixed(1)} / 5`]].map(([k, v]) => (
+          {[["RUNTIME", `${f.runtime || "—"} min`], ["LANGUAGE", f.language || "—"], ["RATED", `${formatRating(f.your_rating ?? 0)} / 5`]].map(([k, v]) => (
             <Box key={k} bg={T.paper} sh={0} style={{ padding: "8px 10px" }}>
               <Label style={{ fontSize: 8.5 }}>{k}</Label>
               <div style={{ fontFamily: MONO, fontSize: 12, color: T.ink, marginTop: 3 }}>{v}</div>
@@ -487,7 +584,7 @@ function Outliers({ stats }) {
     <section style={{ marginBottom: 28 }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 24, color: T.ink, marginBottom: 6 }}>Your Rating Outliers</div>
-        <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 14 }}>Your average: ★ {avgRating.toFixed(2)} across {ratedFilms.length} films</div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 14 }}>Your average: ★ {formatRating(avgRating)} across {ratedFilms.length} films</div>
         <div className="flex" style={{ gap: 8 }}>
           <Btn active={mode === "higher"} color={T.lime} onClick={() => setMode("higher")}>Rated Higher</Btn>
           <Btn active={mode === "lower"} color={T.cyan} onClick={() => setMode("lower")}>Rated Lower</Btn>
@@ -595,7 +692,7 @@ function LangModal({ lang, count, films, color, onClose }) {
                 <span style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 14, color: T.ink }}>{f.title || "—"}</span>
                 <span style={{ fontFamily: MONO, fontSize: 10, color: T.muted, marginLeft: 8 }}>{f.release_year || "—"}</span>
               </div>
-              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: T.ink }}>{(f.your_rating ?? 0).toFixed(1)}★</span>
+              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: T.ink }}>{formatRating(f.your_rating ?? 0)}★</span>
             </div>
           ))}
           {count > films.length && (

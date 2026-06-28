@@ -24,6 +24,7 @@ function run(name, command, args, env) {
     cwd: frontendDir,
     env,
     stdio: 'inherit',
+    shell: true,
   });
 
   children.push(child);
