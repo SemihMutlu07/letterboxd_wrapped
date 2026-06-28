@@ -110,9 +110,9 @@ export interface StatsData {
   rated_films?: {
     title: string;
     year?: number;
-    rating: number;
+    your_rating: number;
     /** TMDB community rating, normalized to the 0–5 scale. null when no votes. */
-    community_rating?: number | null;
+    average_rating?: number | null;
     poster_path?: string;
   }[];
   /** Up to 4 films pinned as favorites on the user's Letterboxd profile page. */
@@ -180,6 +180,14 @@ export interface StatsData {
     bigram_frequency: { bigram: string; count: number }[];
     avg_length_by_rating: Record<string, number>;
     language_mix: Record<string, { count: number; percentage: number }>;
+    /** Individual reviews with text for word-based filtering. */
+    reviews?: {
+      title: string;
+      year?: number | null;
+      text: string;
+      likes: number;
+      rating?: number | null;
+    }[];
     /** Top liked reviews; present only on scrape-profile path with HTML like data. */
     top_liked_reviews?: {
       title: string;

@@ -86,8 +86,11 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
 
   const { higher, lower } = useMemo<{ higher: EnrichedFilm[]; lower: EnrichedFilm[] }>(() => {
     const films: EnrichedFilm[] = (stats.rated_films ?? []).map((f) => ({
-      ...f,
+      title: f.title,
+      year: f.year,
+      poster_path: f.poster_path,
       rating: f.your_rating ?? 0,
+      communityRating: f.average_rating ?? 0,
       delta: Math.round(((f.your_rating ?? 0) - userAvg) * 10) / 10,
     }));
     return {

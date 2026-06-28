@@ -346,6 +346,17 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     # Estimate vocab richness: unique tokens / total tokens
     vocab_richness = round(len(word_counts) / total_words, 4) if total_words > 0 else 0.0
 
+    # --- Individual reviews for frontend filtering ---
+    reviews_list: list[dict] = []
+    for _, row in with_text.iterrows():
+        reviews_list.append({
+            "title": str(row.get("title", "")),
+            "year": int(float(row.get("year", 0))) if pd.notna(row.get("year")) and str(row.get("year", "")).replace(".", "", 1).isdigit() else None,
+            "text": str(row.get("review", "")),
+            "likes": int(row.get("like_count", 0)) if pd.notna(row.get("like_count")) else 0,
+            "rating": float(row["rating"]) if "rating" in row and pd.notna(row.get("rating")) else None,
+        })
+
     # --- Top liked reviews + total likes (scraped HTML path only) ---
     # The 'like_count' column holds, per row, the count of people who liked
     # that specific review (parsed from each card's LikeComponent[data-count]).
@@ -396,6 +407,7 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         "review_volume_by_year": volume_by_year,
         "avg_length_over_time": length_over_time,
         "most_reviewed_films": most_reviewed,
+        "reviews": reviews_list,
         "top_liked_reviews": top_liked_reviews,
         "total_review_likes": total_review_likes,
         "reviews_with_likes_data": reviews_with_likes_data,
