@@ -12,6 +12,11 @@ export default function HeroStats({
   timePct,
   favoriteDirector,
   favoriteDecade,
+  onClickFilms,
+  onClickAvgRating,
+  onClickGenre,
+  onClickDirector,
+  onClickDecade,
 }: {
   totalFilms: number;
   avgRating?: number | null;
@@ -20,6 +25,11 @@ export default function HeroStats({
   timePct: string;
   favoriteDirector: { name: string; count: number };
   favoriteDecade: { name: string; count: number };
+  onClickFilms?: () => void;
+  onClickAvgRating?: () => void;
+  onClickGenre?: () => void;
+  onClickDirector?: () => void;
+  onClickDecade?: () => void;
 }) {
   const hoursLabel = `${Math.round(Math.max(0, hoursWatched)).toLocaleString()}h`;
   const avgRatingLabel = typeof avgRating === 'number' && Number.isFinite(avgRating)
@@ -30,10 +40,10 @@ export default function HeroStats({
     <section className="flex items-center justify-center py-4 md:py-6">
       <div className="text-center space-y-4 md:space-y-6 max-w-4xl mx-auto w-full">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 items-stretch" style={{ gridAutoRows: '1fr' }}>
-          <StatCard value={totalFilms} label="Films" size="large" color="text-white" />
-          <StatCard value={avgRatingLabel} label="Avg Rating" size="large" color="text-yellow-500" />
+          <StatCard value={totalFilms} label="Films" size="large" color="text-white" onClick={onClickFilms} />
+          <StatCard value={avgRatingLabel} label="Avg Rating" size="large" color="text-yellow-500" onClick={onClickAvgRating} />
           <StatCard value={hoursLabel} label="Hours watched" size="large" color="text-blue-500" />
-          <StatCard value={topGenre} label="Top Genre" color="text-purple-500" />
+          <StatCard value={topGenre} label="Top Genre" color="text-purple-500" onClick={onClickGenre} />
         </div>
 
         <Section variant="default" className="bg-slate-800/30">
@@ -44,13 +54,23 @@ export default function HeroStats({
                 of your time spent watching films
               </div>
             </div>
-            <div className="text-center bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px]">
-              <div className="text-xl md:text-2xl lg:text-3xl font-bold text-cyan-500 mb-2 truncate">{favoriteDirector.name}</div>
+            <div 
+              onClick={onClickDirector}
+              className={`text-center bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px] transition-all duration-200 ${
+                onClickDirector ? 'cursor-pointer hover:scale-[1.03] hover:bg-cyan-500/20 active:scale-[0.98]' : ''
+              }`}
+            >
+              <div className="text-xl md:text-2xl lg:text-3xl font-bold text-cyan-500 mb-2 truncate max-w-full">{favoriteDirector.name}</div>
               <div className="text-sm md:text-base uppercase tracking-wider opacity-80 font-medium text-cyan-200">
                 {favoriteDirector.count.toLocaleString()} films • Your director
               </div>
             </div>
-            <div className="text-center bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px]">
+            <div 
+              onClick={onClickDecade}
+              className={`text-center bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px] transition-all duration-200 ${
+                onClickDecade ? 'cursor-pointer hover:scale-[1.03] hover:bg-purple-500/20 active:scale-[0.98]' : ''
+              }`}
+            >
               <div className="text-3xl md:text-4xl lg:text-5xl font-black text-purple-500 mb-2">{favoriteDecade.name}</div>
               <div className="text-sm md:text-base uppercase tracking-wider opacity-80 font-medium text-purple-200">
                 {favoriteDecade.count.toLocaleString()} films • Your peak decade

@@ -191,12 +191,12 @@ const ratingDeviationStats: StatsData = {
   rating_distribution: {},
   total_rated_films: 6,
   rated_films: [
-    { title: 'A Very Long Film Title That Should Not Break The Mobile Card', year: 2024, rating: 5, poster_path: '/a.jpg' },
-    { title: 'High Two', year: 2023, rating: 4.5, poster_path: '/b.jpg' },
-    { title: 'High Three', year: 2022, rating: 4, poster_path: '/c.jpg' },
-    { title: 'Low One', year: 2021, rating: 2, poster_path: '/d.jpg' },
-    { title: 'Low Two', year: 2020, rating: 1.5, poster_path: '/e.jpg' },
-    { title: 'Low Three', year: 2019, rating: 1, poster_path: '/f.jpg' },
+    { title: 'A Very Long Film Title That Should Not Break The Mobile Card', year: 2024, rating: 5, poster_path: '/a.jpg', community_rating: 3.2 },
+    { title: 'High Two', year: 2023, rating: 4.5, poster_path: '/b.jpg', community_rating: 3.5 },
+    { title: 'High Three', year: 2022, rating: 4, poster_path: '/c.jpg', community_rating: 3.5 },
+    { title: 'Low One', year: 2021, rating: 2, poster_path: '/d.jpg', community_rating: 3.5 },
+    { title: 'Low Two', year: 2020, rating: 1.5, poster_path: '/e.jpg', community_rating: 3.5 },
+    { title: 'Low Three', year: 2019, rating: 1, poster_path: '/f.jpg', community_rating: 3.5 },
   ],
 };
 

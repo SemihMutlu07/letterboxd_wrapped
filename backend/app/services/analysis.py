@@ -1,69 +1,24 @@
-"""
-Letterboxd Wrapped — comprehensive analysis pipeline.
-
-Orchestrates CSV loading, TMDB enrichment, and delegates sub-computations
-to dedicated modules (ratings, geography, people, persona) to keep each
-focus area maintainable and testable.
-"""
-
 from __future__ import annotations
 
-import asyncio
-import logging as _logging
 import os
-import time
 from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, Optional
 
 import aiohttp
+import asyncio
 import pandas as pd
 
 from app import task_manager
 from app.analysis_utils import compute_cinema_scale
-from app.services.geography import (
-    compute_country_analytics,
-    compute_country_iso_data,
-    compute_country_language_stats,
-    compute_keyword_analytics,
-    compute_world_tour,
-)
-from app.services.people import (
-    compute_actor_counts,
-    compute_all_cast_counts,
-    compute_actor_profiles,
-    compute_actors_with_ratings,
-    compute_decade_stats,
-    compute_director_counts,
-    compute_director_deep_analysis,
-    compute_director_profiles,
-    compute_directors_with_ratings,
-    compute_favorite_genre_combo,
-    compute_genre_stats,
-    compute_movie_crush,
-    compute_my_star,
-    compute_popularity_info,
-    compute_signature_duo,
-    resolve_profile_paths,
-)
-from app.services.persona import (
-    compute_cinematic_persona,
-    compute_film_age_analysis,
-    compute_furthest_destination,
-    compute_insights,
-    compute_runtime_persona,
-    compute_secret_obsession,
-    compute_story_analytics,
-)
-from app.services.ratings import (
-    compute_budget_revenue_analytics,
-    compute_fun_rating_stats,
-    compute_highest_budget_film,
-    compute_highest_grossing_film,
-    compute_rating_personality,
-    compute_rating_stats,
-)
 from app.services.review_analysis import compute_review_metrics
+from app.services.tmdb_client import (
+    fetch_comprehensive_film_details,
+    find_person_by_film_credit,
+    resolve_tmdb_id,
+    search_person_with_fallback,
+    tmdb_get,
+)
 
 
 async def process_comprehensive_letterboxd_data(
@@ -71,11 +26,11 @@ async def process_comprehensive_letterboxd_data(
     csv_files: Dict[str, str],
     task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Process Letterboxd data with concurrent TMDB enrichment.
+    """Process Letterboxd data with concurrent TMDB enrichment."""
 
-    Loads CSV exports, enriches with TMDB metadata, then delegates to
-    specialised modules for ratings, geography, people, and persona analysis.
-    """
+    import time
+    import logging as _logging
+
     _bench_logger = _logging.getLogger("letterboxd_wrapped")
     logger = _bench_logger
     t0 = time.perf_counter()
@@ -84,11 +39,8 @@ async def process_comprehensive_letterboxd_data(
         if task_id:
             task_manager.update_task_progress(task_id, stage, message, progress, total)
         else:
-            print(f"\U0001f4ca {stage}: {message} ({progress}/{total})")
+            print(f"📊 {stage}: {message} ({progress}/{total})")
 
-    # -----------------------------------------------------------------------
-    # 1. LOAD CSV DATA
-    # -----------------------------------------------------------------------
     _progress("loading", "Loading CSV data files...", 0, 5)
 
     watched_df = pd.read_csv(csv_files["watched.csv"]) if "watched.csv" in csv_files else pd.DataFrame()
@@ -97,7 +49,7 @@ async def process_comprehensive_letterboxd_data(
     reviews_df = pd.read_csv(csv_files["reviews.csv"]) if "reviews.csv" in csv_files else pd.DataFrame()
 
     if watched_df.empty:
-        raise ValueError("\u274c watched.csv is required for analysis.")
+        raise ValueError("❌ watched.csv is required for analysis.")
 
     films_df = watched_df.rename(columns={"Name": "title", "Year": "year"})
 
@@ -115,16 +67,7 @@ async def process_comprehensive_letterboxd_data(
 
     _progress("processing", f"Found {len(unique_films)} unique films", 1, 3)
 
-    # -----------------------------------------------------------------------
-    # 2. TMDB MATCHING + METADATA ENRICHMENT
-    # -----------------------------------------------------------------------
     _progress("tmdb_matching", "Matching films to TMDb (fast)...", 0, len(unique_films))
-
-    from app.services.tmdb_client import (
-        fetch_comprehensive_film_details,
-        resolve_tmdb_id,
-    )
-
     resolve_tasks = [resolve_tmdb_id(session, row["title"], row["year"]) for _, row in unique_films.iterrows()]
     tmdb_ids = await asyncio.gather(*resolve_tasks)
     unique_films["tmdb_id"] = tmdb_ids
@@ -144,10 +87,12 @@ async def process_comprehensive_letterboxd_data(
     _progress("tmdb_metadata", "Metadata collection complete", len(unique_tmdb_ids), len(unique_tmdb_ids))
 
     films_enriched = pd.merge(unique_films, metadata_df, on="tmdb_id", how="left", suffixes=("_csv", "_tmdb"))
+
     if "title_tmdb" in films_enriched.columns:
         films_enriched["title"] = films_enriched["title_tmdb"].fillna(films_enriched["title_csv"])
     else:
         films_enriched["title"] = films_enriched["title_csv"]
+
     films_enriched.drop(
         columns=[col for col in ["title_csv", "title_tmdb"] if col in films_enriched.columns],
         inplace=True,
@@ -161,51 +106,25 @@ async def process_comprehensive_letterboxd_data(
 
     stats: Dict[str, Any] = {}
 
-    # -----------------------------------------------------------------------
-    # 3. ENRICHED FILM DATA SUMMARY
-    # -----------------------------------------------------------------------
+    # === ENRICHED FILM DATA SUMMARY ===
     stats["enriched_films_summary"] = {
         "total_enriched": len(films_enriched[films_enriched["tmdb_id"].notna()]),
         "budget_data_available": len(films_enriched[films_enriched["budget"] > 0]),
         "revenue_data_available": len(films_enriched[films_enriched["revenue"] > 0]),
         "popularity_data_available": len(films_enriched[films_enriched["popularity"] > 0]),
-        "keywords_data_available": len(
-            films_enriched[films_enriched["keywords_full"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]
-        ),
-        "countries_data_available": len(
-            films_enriched[films_enriched["production_countries"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]
-        ),
+        "keywords_data_available": len(films_enriched[films_enriched["keywords_full"].apply(lambda x: isinstance(x, list) and len(x) > 0)]),
+        "countries_data_available": len(films_enriched[films_enriched["production_countries"].apply(lambda x: isinstance(x, list) and len(x) > 0)]),
     }
 
     total_films = len(films_enriched)
     stats["data_quality_report"] = {
         "total_films_analyzed": total_films,
-        "tmdb_match_rate": round(
-            (len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "budget_coverage": round(
-            (len(films_enriched[films_enriched["budget"] > 0]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "revenue_coverage": round(
-            (len(films_enriched[films_enriched["revenue"] > 0]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "popularity_coverage": round(
-            (len(films_enriched[films_enriched["popularity"] > 0]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "keywords_coverage": round(
-            (len(films_enriched[films_enriched["keywords_full"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "countries_coverage": round(
-            (len(films_enriched[films_enriched["production_countries"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
+        "tmdb_match_rate": round((len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) * 100, 1) if total_films > 0 else 0,
+        "budget_coverage": round((len(films_enriched[films_enriched["budget"] > 0]) / total_films) * 100, 1) if total_films > 0 else 0,
+        "revenue_coverage": round((len(films_enriched[films_enriched["revenue"] > 0]) / total_films) * 100, 1) if total_films > 0 else 0,
+        "popularity_coverage": round((len(films_enriched[films_enriched["popularity"] > 0]) / total_films) * 100, 1) if total_films > 0 else 0,
+        "keywords_coverage": round((len(films_enriched[films_enriched["keywords_full"].apply(lambda x: isinstance(x, list) and len(x) > 0)]) / total_films) * 100, 1) if total_films > 0 else 0,
+        "countries_coverage": round((len(films_enriched[films_enriched["production_countries"].apply(lambda x: isinstance(x, list) and len(x) > 0)]) / total_films) * 100, 1) if total_films > 0 else 0,
         "storytelling_readiness": (
             "excellent" if total_films > 0 and (len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) > 0.8
             else "good" if total_films > 0 and (len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) > 0.6
@@ -213,22 +132,87 @@ async def process_comprehensive_letterboxd_data(
         ),
     }
 
-    # -----------------------------------------------------------------------
-    # 4. BASIC STATS
-    # -----------------------------------------------------------------------
+    if not films_enriched.empty:
+        valid_budgets = films_enriched[films_enriched["budget"] > 0]["budget"]
+        valid_revenues = films_enriched[films_enriched["revenue"] > 0]["revenue"]
+
+        if not valid_budgets.empty:
+            stats["budget_analytics"] = {
+                "average_budget": float(valid_budgets.mean()),
+                "median_budget": float(valid_budgets.median()),
+                "total_budget_watched": float(valid_budgets.sum()),
+                "highest_budget": float(valid_budgets.max()),
+                "budget_range_preference": "high" if valid_budgets.median() > 50000000 else "medium" if valid_budgets.median() > 10000000 else "low",
+            }
+
+        if not valid_revenues.empty:
+            stats["revenue_analytics"] = {
+                "average_revenue": float(valid_revenues.mean()),
+                "median_revenue": float(valid_revenues.median()),
+                "total_revenue_watched": float(valid_revenues.sum()),
+                "highest_revenue": float(valid_revenues.max()),
+            }
+
+        valid_popularity = films_enriched[films_enriched["popularity"] > 0]["popularity"]
+        if not valid_popularity.empty:
+            stats["popularity_analytics"] = {
+                "average_popularity": float(valid_popularity.mean()),
+                "median_popularity": float(valid_popularity.median()),
+                "popularity_variance": float(valid_popularity.std()) if len(valid_popularity) > 1 else 0,
+                "mainstream_percentage": float((valid_popularity > 20).mean() * 100),
+                "niche_percentage": float((valid_popularity < 5).mean() * 100),
+            }
+
+        all_keywords = []
+        for keywords_list in films_enriched["keywords_full"].dropna():
+            if isinstance(keywords_list, list):
+                all_keywords.extend([kw.get("name", "") for kw in keywords_list if isinstance(kw, dict)])
+
+        if all_keywords:
+            keyword_counts = Counter(all_keywords)
+            stats["keywords_analytics"] = {
+                "total_unique_keywords": len(keyword_counts),
+                "top_keywords": [{"keyword": k, "count": v} for k, v in keyword_counts.most_common(20)],
+                "keyword_diversity": len(keyword_counts) / len(all_keywords) if all_keywords else 0,
+            }
+
+        all_countries = []
+        for countries_list in films_enriched["production_countries"].dropna():
+            if isinstance(countries_list, list):
+                all_countries.extend([c.get("name", "") for c in countries_list if isinstance(c, dict)])
+
+        if all_countries:
+            country_counts_adv = Counter(all_countries)
+            stats["countries_analytics"] = {
+                "total_countries_explored": len(country_counts_adv),
+                "top_countries_detailed": [
+                    {"country": country, "count": count, "percentage": (count / len(all_countries)) * 100}
+                    for country, count in country_counts_adv.most_common(10)
+                ],
+                "geographic_diversity": len(country_counts_adv) / len(all_countries) if all_countries else 0,
+                "international_percentage": float((1 - country_counts_adv.get("United States", 0) / len(all_countries)) * 100) if all_countries else 0,
+            }
+
+    # === BASIC STATS ===
     stats["total_films"] = len(films_df)
 
+    # Rewatch count from watched.csv (Rewatch column: Yes/No)
     rewatched_count = 0
     if "Rewatch" in films_df.columns:
         rewatch_mask = films_df["Rewatch"].fillna("No").astype(str).str.strip().str.lower().eq("yes")
         rewatched_count = int(rewatch_mask.sum())
     stats["rewatched_count"] = rewatched_count
 
+    # Diary-only film count — films actually logged during the Letterboxd-usage window.
+    # total_films counts EVERY film the user has ever marked as watched (including
+    # pre-Letterboxd backfill). For pace calculations the diary window is the
+    # honest denominator, so we expose a separate count + per-film watch tally.
     diary_film_count = 0
     rewatch_champions: list[dict] = []
     if not diary_df.empty and "Name" in diary_df.columns:
         diary_year_col = "Year" if "Year" in diary_df.columns else None
         group_cols = ["Name", diary_year_col] if diary_year_col else ["Name"]
+        # Each diary row = one logged watch event; group by film to get rewatch tally
         watches_per_film = diary_df.groupby(group_cols, dropna=False).size().reset_index(name="watch_count")
         diary_film_count = int(len(watches_per_film))
         top_rewatched = watches_per_film[watches_per_film["watch_count"] >= 2].sort_values(
@@ -241,6 +225,7 @@ async def process_comprehensive_letterboxd_data(
                 year_int: Optional[int] = None if year_val is None or pd.isna(year_val) else int(year_val)
             except Exception:
                 year_int = None
+            # Resolve poster_path via films_enriched join when available
             poster = ""
             if not films_enriched.empty and "title" in films_enriched.columns:
                 match = films_enriched[films_enriched["title"] == title]
@@ -263,17 +248,23 @@ async def process_comprehensive_letterboxd_data(
     stats["metadata_coverage"] = round((len(metadata_df) / len(unique_films)) * 100, 1) if len(unique_films) > 0 else 0
     _progress("analyzing", "Basic stats complete", 1, 10)
 
-    # -----------------------------------------------------------------------
-    # 5. RATINGS
-    # -----------------------------------------------------------------------
-    stats.update(compute_rating_stats(films_df))
-    stats["rating_personality"] = compute_rating_personality(films_df)
-    stats.update(compute_budget_revenue_analytics(films_enriched))
+    # === RATING ANALYSIS ===
+    # Always set keys so frontend never encounters missing-key errors.
+    stats["average_rating"] = None
+    stats["median_rating"] = None
+    stats["rating_distribution"] = {}
+    stats["total_rated_films"] = 0
+    stats["most_common_rating"] = None
+    if "rating" in films_df.columns and films_df["rating"].notna().any():
+        ratings = films_df["rating"].dropna()
+        stats["average_rating"] = round(ratings.mean(), 2)
+        stats["median_rating"] = round(ratings.median(), 1)
+        stats["rating_distribution"] = ratings.value_counts().sort_index().to_dict()
+        stats["total_rated_films"] = len(ratings)
+        stats["most_common_rating"] = ratings.mode().iloc[0] if not ratings.mode().empty else None
     _progress("analyzing", "Rating analysis complete", 2, 10)
 
-    # -----------------------------------------------------------------------
-    # 6. RUNTIME ANALYSIS
-    # -----------------------------------------------------------------------
+    # === RUNTIME ANALYSIS ===
     if "runtime" in films_enriched.columns and films_enriched["runtime"].notna().any():
         runtimes = films_enriched[films_enriched["runtime"] > 0]["runtime"].dropna()
         if not runtimes.empty:
@@ -297,9 +288,7 @@ async def process_comprehensive_letterboxd_data(
             }
     _progress("analyzing", "Runtime analysis complete", 3, 10)
 
-    # -----------------------------------------------------------------------
-    # 7. DATE ANALYSIS
-    # -----------------------------------------------------------------------
+    # === DATE ANALYSIS ===
     if not diary_df.empty:
         date_column = None
         for col in ["Watched Date", "Date", "Watch Date", "Watched", "Date Watched", "WatchedDate"]:
@@ -375,137 +364,507 @@ async def process_comprehensive_letterboxd_data(
             "period_description": period_description,
         }
 
-    # -----------------------------------------------------------------------
-    # 8. KEYWORD ANALYTICS + COUNTRY ANALYTICS
-    # -----------------------------------------------------------------------
-    stats.update(compute_keyword_analytics(films_enriched))
-    stats.update(compute_country_analytics(films_enriched))
+    # === ADVANCED ANALYTICS — CINEMATIC PERSONA ===
+    top_genre = stats["top_genres"][0]["name"] if stats.get("top_genres") else "Film"
+    top_decade = stats["favorite_decade"]["name"] if stats.get("favorite_decade") else "2020s"
+    top_country = stats["top_countries"][0]["name"] if stats.get("top_countries") else "USA"
 
-    # -----------------------------------------------------------------------
-    # 9. GENRE, DECADE, COUNTRY, LANGUAGE STATS (used by persona below)
-    # -----------------------------------------------------------------------
-    stats.update(compute_genre_stats(films_enriched))
-    stats.update(compute_decade_stats(films_enriched))
-    stats.update(compute_country_language_stats(films_enriched))
+    if top_genre in ("Unknown", ""):
+        top_genre = "Genre-Defying"
+    if top_decade in ("Unknown", ""):
+        top_decade = "Timeless"
+    if top_country in ("Unknown", ""):
+        top_country = "International"
 
-    # -----------------------------------------------------------------------
-    # 10. CINEMATIC PERSONA + ARCHETYPE FOUNDATIONS
-    # -----------------------------------------------------------------------
-    top_genre = stats.get("top_genres", [{}])[0].get("name", "Film") if stats.get("top_genres") else "Film"
-    top_decade = stats.get("favorite_decade", {}).get("name", "2020s") if stats.get("favorite_decade") else "2020s"
-    top_country = stats.get("top_countries", [{}])[0].get("name", "USA") if stats.get("top_countries") else "USA"
+    persona_map = {
+        ("Action", "2020s", "USA"): ("Blockbuster Addict", "You live for explosions, CGI, and popcorn entertainment."),
+        ("Drama", "1970s", "USA"): ("Classic Hollywood Connoisseur", "You appreciate the golden age when movies had substance."),
+        ("Horror", "1980s", "USA"): ("Retro Horror Fiend", "You know true terror peaked in the 80s."),
+        ("Comedy", "2000s", "USA"): ("Millennial Comedy Scholar", "You quote movies more than you quote real people."),
+        ("Sci-Fi", "1980s", "USA"): ("Cyberpunk Prophet", "You saw the future coming before everyone else."),
+        ("Crime", "1990s", "USA"): ("Tarantino Disciple", "You believe violence can be art when done right."),
+        ("Romance", "1950s", "USA"): ("Old Hollywood Romantic", "You think love stories peaked before color TV."),
+        ("Thriller", "2010s", "USA"): ("Modern Suspense Seeker", "You need your movies to keep you guessing."),
+        ("Animation", "2000s", "Japan"): ("Anime Connoisseur", "You know Miyazaki is basically cinema Jesus."),
+        ("Documentary", "2010s", "USA"): ("Reality Obsessive", "Fiction is for people who can't handle the truth."),
+    }
 
-    stats["cinematic_persona"] = compute_cinematic_persona(top_genre, top_decade, top_country)
+    persona_key = (top_genre, top_decade, top_country)
+    if persona_key in persona_map:
+        persona, description = persona_map[persona_key]
+    else:
+        if "Horror" in top_genre:
+            persona, description = "Horror Devotee", "You watch scary movies like other people watch comfort food shows."
+        elif "Comedy" in top_genre:
+            persona, description = "Laugh Track Survivor", "You've seen every joke coming since 1995, but you still show up."
+        elif "Drama" in top_genre:
+            persona, description = "Emotional Masochist", "You pay money to feel feelings. That's commitment."
+        elif "Action" in top_genre:
+            persona, description = "Adrenaline Junkie", "Physics are optional, explosions are mandatory."
+        elif "Sci-Fi" in top_genre:
+            persona, description = "Future Pessimist", "You watch dystopian futures and think 'sounds about right.'"
+        else:
+            persona = f"{top_genre} Enthusiast"
+            description = f"You've made {top_genre} your personality, and honestly? Respect."
 
-    # -----------------------------------------------------------------------
-    # 11. DIRECTOR + ACTOR PROFILES (async)
-    # -----------------------------------------------------------------------
-    director_counts = compute_director_counts(films_enriched)
+    stats["cinematic_persona"] = {"persona": persona, "description": description}
 
-    director_result = await compute_director_profiles(session, films_enriched, films_df, director_counts, logger)
-    stats["top_directors"] = director_result["top_directors"]
-    stats["total_directors"] = director_result["total_directors"]
-    stats["most_watched_director"] = director_result["most_watched_director"]
-    director_profile_map = director_result.get("_director_profile_map", {})
-    director_films_map = director_result.get("_director_films_map", {})
-    rating_by_film = director_result.get("_rating_by_film", {})
-    _progress("analyzing", "Director analysis complete", 4, 10)
+    # === DIRECTOR DEEP ANALYSIS ===
+    if stats.get("most_watched_director") and not films_enriched.empty:
+        director_name = stats["most_watched_director"]["name"]
+        director_films = films_enriched[films_enriched["director"] == director_name]
 
-    # ---- Genre (after people to keep progress order) ----
-    genre_counts = Counter(
-        g for genres in films_enriched["genres"].dropna() for g in genres
-    ) if "genres" in films_enriched.columns else Counter()
-    _progress("analyzing", "Genre analysis complete", 5, 10)
+        if not director_films.empty and "rating" in films_df.columns:
+            director_with_ratings = pd.merge(
+                director_films, films_df[["title", "year", "rating"]], on=["title", "year"], how="left"
+            )
+            director_ratings = director_with_ratings["rating"].dropna()
 
-    # Decade — already computed via compute_decade_stats
-    _progress("analyzing", "Decade analysis complete", 6, 10)
+            if not director_ratings.empty:
+                avg_rating = round(director_ratings.mean(), 2)
+                stats["director_deep_analysis"] = {
+                    "director_name": director_name,
+                    "average_rating_given": avg_rating,
+                    "total_films": len(director_films),
+                    "relationship": "critical" if avg_rating < 3.5 else "generous" if avg_rating > 4.0 else "balanced",
+                }
 
-    # Country — already computed via compute_country_language_stats
-    _progress("analyzing", "Country analysis complete", 7, 10)
+    # === ACTOR/ACTRESS ANALYSIS ===
+    if not films_enriched.empty and "cast" in films_enriched.columns:
+        all_actors = []
+        for cast_list in films_enriched["cast"].dropna():
+            if isinstance(cast_list, list) and len(cast_list) > 0:
+                all_actors.append(cast_list[0])
 
-    # Language — already computed via compute_country_language_stats
-    _progress("analyzing", "Language analysis complete", 8, 10)
+        if all_actors:
+            actor_counts = Counter(all_actors)
+            top_actor = actor_counts.most_common(1)[0]
+            stats["my_star"] = {"name": top_actor[0], "count": top_actor[1]}
 
-    # ---- Director deep analysis (now most_watched_director is set) ----
-    stats["director_deep_analysis"] = compute_director_deep_analysis(
-        films_enriched, films_df, stats.get("most_watched_director")
-    )
+    # === POPULARITY INFO ===
+    if not films_enriched.empty and "popularity" in films_enriched.columns:
+        popularity_scores = films_enriched["popularity"].dropna()
+        if not popularity_scores.empty:
+            avg_popularity = float(popularity_scores.mean())
+            stats["popularity_info"] = {
+                "average": round(avg_popularity, 1),
+                "mainstream_pct": round(float((popularity_scores > 20).mean() * 100), 1),
+                "niche_pct": round(float((popularity_scores < 5).mean() * 100), 1),
+            }
 
-    # ---- Actor (my_star) ----
-    actor_counts_first = compute_actor_counts(films_enriched)
-    stats["my_star"] = compute_my_star(actor_counts_first)
-
-    # ---- Popularity info ----
-    pop_info = compute_popularity_info(films_enriched)
-    if pop_info:
-        stats["popularity_info"] = pop_info
-
-    # ---- Cast counts for full actor list ----
-    cast_counts = compute_all_cast_counts(films_enriched)
-
-    # ---- Actor profiles ----
-    actor_result = await compute_actor_profiles(session, films_enriched, films_df, cast_counts, logger)
-    stats["top_actors"] = actor_result["top_actors"]
-    actor_films_map = actor_result.get("_actor_films_map", {})
-    actor_profile_map = actor_result.get("_actor_profile_map", {})
-    _progress("analyzing", "Cast analysis complete", 9, 10)
-
-    # ---- Signature duo ----
-    signature_duo = compute_signature_duo(films_enriched)
-    if signature_duo:
-        from collections import Counter as _C  # ensure available in scope
-
-    # -----------------------------------------------------------------------
-    # 12. FUN STATISTICS
-    # -----------------------------------------------------------------------
+    # === FUN STATISTICS ===
     fun_stats: Dict[str, Any] = {}
 
     if not films_enriched.empty:
-        # Highest budget film
-        highest_budget = compute_highest_budget_film(films_enriched)
-        if highest_budget:
-            fun_stats["highest_budget_film"] = highest_budget
+        if "budget" in films_enriched.columns:
+            max_budget_film = films_enriched.loc[films_enriched["budget"].idxmax()]
+            if pd.notna(max_budget_film["budget"]) and max_budget_film["budget"] > 0:
+                fun_stats["highest_budget_film"] = {
+                    "title": max_budget_film["title"],
+                    "budget": int(max_budget_film["budget"]),
+                }
 
-        # Highest grossing film
-        highest_grossing = compute_highest_grossing_film(films_enriched)
-        if highest_grossing:
-            fun_stats["highest_grossing_film"] = highest_grossing
+        if "revenue" in films_enriched.columns:
+            max_revenue_film = films_enriched.loc[films_enriched["revenue"].idxmax()]
+            if pd.notna(max_revenue_film["revenue"]) and max_revenue_film["revenue"] > 0:
+                fun_stats["highest_grossing_film"] = {
+                    "title": max_revenue_film["title"],
+                    "revenue": int(max_revenue_film["revenue"]),
+                }
 
-        # Guilty pleasure + rating outlier
-        fun_stats.update(compute_fun_rating_stats(films_enriched, films_df))
+        if "vote_average" in films_enriched.columns and "rating" in films_df.columns:
+            enriched_with_ratings = pd.merge(
+                films_enriched, films_df[["title", "year", "rating"]], on=["title", "year"], how="left"
+            )
+            guilty_candidates = enriched_with_ratings[
+                (enriched_with_ratings["vote_average"] < 6.0) & (enriched_with_ratings["rating"] >= 4.0)
+            ]
+            if not guilty_candidates.empty:
+                guilty_pleasure = guilty_candidates.loc[guilty_candidates["vote_average"].idxmin()]
+                fun_stats["guilty_pleasure"] = {
+                    "title": guilty_pleasure["title"],
+                    "tmdb_rating": round(guilty_pleasure["vote_average"], 1),
+                    "your_rating": guilty_pleasure["rating"],
+                }
 
-        # Favorite genre combo
-        genre_combo = compute_favorite_genre_combo(films_enriched)
-        if genre_combo:
-            fun_stats["favorite_genre_combo"] = genre_combo
+            # Rating outlier — the film where your rating diverges most from TMDB community
+            # User rating is on a 0-5 scale (Letterboxd), TMDB vote_average is 0-10. Scale up to compare.
+            outlier_candidates = enriched_with_ratings.dropna(subset=["vote_average", "rating"])
+            if not outlier_candidates.empty:
+                deltas = (outlier_candidates["rating"] * 2.0) - outlier_candidates["vote_average"]
+                idx = deltas.abs().idxmax()
+                pick = outlier_candidates.loc[idx]
+                poster_path = pick.get("poster_path")
+                year_raw = pick.get("year")
+                try:
+                    year_clean: Optional[int] = None if pd.isna(year_raw) else int(year_raw)
+                except Exception:
+                    year_clean = None
+                stats["rating_outlier_film"] = {
+                    "title": str(pick.get("title") or ""),
+                    "year": year_clean,
+                    "poster_path": poster_path if isinstance(poster_path, str) else "",
+                    "user_rating": float(pick["rating"]),
+                    "avg_rating": round(float(pick["vote_average"]), 1),
+                    "delta": round(float(deltas.loc[idx]), 1),
+                }
 
-        # Film age analysis
-        film_age = compute_film_age_analysis(films_enriched)
-        if film_age:
-            fun_stats["film_age_analysis"] = film_age
+        if "genres" in films_enriched.columns:
+            genre_combinations = []
+            for genres in films_enriched["genres"].dropna():
+                if isinstance(genres, list) and len(genres) >= 2:
+                    genre_combinations.append(f"{genres[0]}-{genres[1]}")
 
-    # World tour
+            if genre_combinations:
+                combo_counts = Counter(genre_combinations)
+                top_combo = combo_counts.most_common(1)[0]
+                fun_stats["favorite_genre_combo"] = {
+                    "combination": top_combo[0],
+                    "count": top_combo[1],
+                }
+
     if stats.get("top_countries"):
-        fun_stats["world_tour"] = compute_world_tour(stats["top_countries"])
+        country_flags = {
+            "United States": "🇺🇸", "France": "🇫🇷", "United Kingdom": "🇬🇧",
+            "Japan": "🇯🇵", "Italy": "🇮🇹", "Germany": "🇩🇪", "South Korea": "🇰🇷",
+            "Spain": "🇪🇸", "Canada": "🇨🇦", "India": "🇮🇳", "China": "🇨🇳",
+            "Australia": "🇦🇺", "Russia": "🇷🇺", "Brazil": "🇧🇷", "Mexico": "🇲🇽",
+        }
+        fun_stats["world_tour"] = [
+            {"country": c["name"], "flag": country_flags.get(c["name"], "🎬"), "count": c["count"]}
+            for c in stats["top_countries"][:5]
+        ]
+
+    if not films_enriched.empty and "release_date" in films_enriched.columns:
+        current_year = datetime.now().year
+        film_ages = []
+        for release_date in films_enriched["release_date"].dropna():
+            if release_date:
+                try:
+                    film_ages.append(current_year - int(release_date[:4]))
+                except Exception:
+                    continue
+
+        if film_ages:
+            avg_age = round(sum(film_ages) / len(film_ages), 1)
+            recent_films = len([age for age in film_ages if age <= 5])
+            recent_percentage = round((recent_films / len(film_ages)) * 100, 1)
+            fun_stats["film_age_analysis"] = {
+                "average_age": avg_age,
+                "recent_percentage": recent_percentage,
+                "type": "innovation hunter" if recent_percentage > 60 else "classic lover" if avg_age > 20 else "balanced",
+            }
 
     stats["fun_statistics"] = fun_stats
 
-    # -----------------------------------------------------------------------
-    # 13. STORY-DRIVEN ANALYTICS
-    # -----------------------------------------------------------------------
-    story_analytics = compute_story_analytics(
-        stats, films_enriched, films_df, diary_df if "parsed_date" in diary_df.columns else pd.DataFrame()
-    )
+    # === STORY-DRIVEN ANALYTICS ===
+    story_analytics: Dict[str, Any] = {}
 
-    # Signature duo story (manual merge because it references the duo data)
-    if signature_duo:
-        story_analytics["signature_duo"] = signature_duo
+    if stats.get("days_watched", 0) > 0:
+        days = stats["days_watched"]
+        if days >= 30:
+            time_story = f"You spent {days:.0f} days watching movies this year. That's basically {days/30:.1f} months of your life. No regrets?"
+        elif days >= 7:
+            weeks = days / 7
+            time_story = f"You clocked {days:.1f} days of screen time. That's {weeks:.1f} weeks of pure cinema dedication."
+        else:
+            time_story = f"You spent {days:.1f} days watching movies. Quality over quantity, we respect that."
+        story_analytics["time_spent_story"] = time_story
+
+    if not diary_df.empty and "parsed_date" in diary_df.columns:
+        daily_counts = diary_df.groupby(diary_df["parsed_date"].dt.date).size()
+        if not daily_counts.empty:
+            most_active_date = daily_counts.idxmax()
+            max_films = daily_counts.max()
+            months_en = {
+                1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
+                7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December",
+            }
+            date_str = f"{months_en[most_active_date.month]} {most_active_date.day}"
+            if max_films >= 4:
+                activity_story = f"Remember {date_str}? You watched {max_films} movies in one day. That's either dedication or avoidance behavior."
+            elif max_films == 3:
+                activity_story = f"On {date_str}, you managed {max_films} films. Solid marathon vibes."
+            else:
+                activity_story = f"Your most active day was {date_str} with {max_films} films. Respectable commitment."
+            story_analytics["most_active_day"] = {
+                "date": date_str,
+                "films": int(max_films),
+                "story": activity_story,
+            }
+
+    # Rating personality
+    if "rating" in films_df.columns:
+        ratings = films_df["rating"].dropna()
+        if not ratings.empty:
+            avg_rating = ratings.mean()
+            rating_std = ratings.std() if len(ratings) > 1 else 0
+            if avg_rating >= 4.2:
+                rating_personality = "Easy to Please"
+                rating_description = "You hand out 4-5 stars like candy. Either you have great taste or low standards."
+            elif avg_rating <= 3.2:
+                rating_personality = "Tough Critic"
+                rating_description = "Your ratings hover around 3 stars. You're basically the Gordon Ramsay of cinema."
+            elif rating_std > 1.2:
+                rating_personality = "Mood Swinger"
+                rating_description = "Your ratings are all over the place. A film either destroys you or bores you to death."
+            else:
+                rating_personality = "Balanced Judge"
+                rating_description = "Your ratings are perfectly balanced. You give every film exactly what it deserves."
+            story_analytics["rating_personality"] = {
+                "type": rating_personality,
+                "description": rating_description,
+                "average": round(avg_rating, 1),
+            }
+
+    stats["rating_personality"] = None
+    if "rating" in films_df.columns:
+        ratings = films_df["rating"].dropna()
+        if not ratings.empty:
+            avg_rating = ratings.mean()
+            std_dev = ratings.std()
+            if avg_rating > 4.0:
+                stats["rating_personality"] = "The Generous Critic"
+            elif avg_rating < 3.0:
+                stats["rating_personality"] = "The Picky Gourmet"
+            elif std_dev > 1.2:
+                stats["rating_personality"] = "The All-or-Nothing Judge"
+            else:
+                stats["rating_personality"] = "The Balanced Reviewer"
+
+    # Signature duo (director + actor combo)
+    if not films_enriched.empty and "director" in films_enriched.columns and "cast" in films_enriched.columns:
+        director_actor_combos = []
+        for _, film in films_enriched.iterrows():
+            if pd.notna(film["director"]) and isinstance(film.get("cast"), list) and len(film["cast"]) > 0:
+                director = film["director"]
+                main_actor = next((a for a in film["cast"] if a != director), None)
+                if main_actor:
+                    director_actor_combos.append({
+                        "combo": f"{director}#{main_actor}",
+                        "director": director,
+                        "actor": main_actor,
+                        "film": film["title"],
+                    })
+
+        if director_actor_combos:
+            combo_counts = Counter([c["combo"] for c in director_actor_combos])
+            top_combo = combo_counts.most_common(1)[0]
+            combo_info = next((c for c in director_actor_combos if c["combo"] == top_combo[0]), None)
+            if combo_info:
+                if top_combo[1] >= 3:
+                    combo_story = f"You've got a serious thing for {combo_info['director']} directing {combo_info['actor']}. {top_combo[1]} films together? That's not coincidence, that's obsession."
+                elif top_combo[1] == 2:
+                    combo_story = f"{combo_info['director']} + {combo_info['actor']} = your comfort zone. {top_combo[1]} films prove it."
+                else:
+                    combo_story = f"Your go-to combo: {combo_info['director']} directing {combo_info['actor']}."
+                story_analytics["signature_duo"] = {
+                    "director": combo_info["director"],
+                    "actor": combo_info["actor"],
+                    "count": top_combo[1],
+                    "story": combo_story,
+                }
+
+    # Viewing season
+    if stats.get("monthly_viewing_habits"):
+        seasons = {
+            "Winter": ["December", "January", "February"],
+            "Spring": ["March", "April", "May"],
+            "Summer": ["June", "July", "August"],
+            "Fall": ["September", "October", "November"],
+        }
+        season_counts = {}
+        for season, months in seasons.items():
+            season_counts[season] = sum(
+                m["count"] for m in stats["monthly_viewing_habits"] if m["month"] in months
+            )
+
+        if sum(season_counts.values()) > 0:
+            top_season = max(season_counts, key=season_counts.get)
+            total_seasons = sum(season_counts.values())
+            season_percentage = round((season_counts[top_season] / total_seasons) * 100)
+            season_stories = {
+                "Winter": f"Winter is your movie season. You watched {season_percentage}% of your films during the cold months. Peak cozy behavior.",
+                "Summer": f"Summer is when you really commit to cinema. {season_percentage}% of your films happened in the sunny months. Air conditioning is underrated.",
+                "Spring": f"Spring awakens your cinematic spirit. {season_percentage}% of your films bloomed with the flowers. Very poetic of you.",
+                "Fall": f"Fall is your movie season. {season_percentage}% of your films dropped with the leaves. Maximum atmospheric vibes.",
+            }
+            story_analytics["viewing_season"] = {
+                "season": top_season,
+                "percentage": season_percentage,
+                "story": season_stories.get(top_season, f"{top_season} is your movie season!"),
+            }
+
+    # Cinematic passport
+    if stats.get("top_countries") and stats.get("total_countries", 0) > 0:
+        total_countries = stats["total_countries"]
+        if total_countries >= 15:
+            passport_story = f"You've collected {total_countries} countries in your cinematic passport this year. Basically a cultural anthropologist."
+        elif total_countries >= 8:
+            passport_story = f"You added {total_countries} new countries to your cinematic journey this year. Solid exploration game."
+        else:
+            passport_story = f"You discovered {total_countries} different countries through cinema this year. Quality over quantity."
+
+        total_directors = stats.get("total_directors", 0)
+        if total_directors >= 50:
+            director_story = f"You explored {total_directors} directors this year. You're basically a walking IMDb."
+        elif total_directors >= 20:
+            director_story = f"You discovered {total_directors} new directors, expanding your cinematic horizons like a proper film scholar."
+        else:
+            director_story = f"You explored {total_directors} different directors this year. Building that auteur knowledge base."
+
+        story_analytics["cinematic_passport"] = {
+            "countries": total_countries,
+            "directors": total_directors,
+            "country_story": passport_story,
+            "director_story": director_story,
+        }
+
+    # Cinema archetype
+    avg_popularity_val = 0.0
+    if not films_enriched.empty and "popularity" in films_enriched.columns:
+        pop_scores = films_enriched["popularity"].dropna()
+        if not pop_scores.empty:
+            avg_popularity_val = pop_scores.mean()
+
+    avg_film_age_val = 20.0
+    if stats.get("fun_statistics", {}).get("film_age_analysis"):
+        avg_film_age_val = stats["fun_statistics"]["film_age_analysis"]["average_age"]
+
+    is_mainstream = avg_popularity_val > 30
+    is_modern = avg_film_age_val < 15
+
+    if is_mainstream and is_modern:
+        archetype = "Pop Culture Professor"
+        archetype_description = "You follow current and popular films religiously. You're basically the pulse of contemporary cinema."
+    elif not is_mainstream and not is_modern:
+        archetype = "Archive Treasure Hunter"
+        archetype_description = "You dig up old and obscure films like a true cinephile. You're the keeper of forgotten classics."
+    elif not is_mainstream and is_modern:
+        archetype = "Indie Oracle"
+        archetype_description = "You discover new independent and festival films before everyone else. You're a cinema prophet."
+    else:
+        archetype = "Time Traveler"
+        archetype_description = "You watch films from every era with perfect balance. You're the master of cinema history."
+
+    story_analytics["cinema_archetype"] = {
+        "type": archetype,
+        "description": archetype_description,
+        "popularity_score": round(avg_popularity_val, 1),
+        "film_age": round(avg_film_age_val, 1),
+    }
 
     stats["story_analytics"] = story_analytics
 
-    # -----------------------------------------------------------------------
-    # 14. CINEMA SCALE
-    # -----------------------------------------------------------------------
+    # === DETAILED ANALYSIS ===
+    # title+year → user rating. films_enriched was reduced to unique title/year
+    # pairs for TMDB matching and lost the CSV rating column, so rebuild a lookup.
+    # ponytail: keyed by title+year like the existing rating merges (line ~419);
+    # if the TMDB title differs from the CSV title the rating is None (modal hides
+    # the star) — same graceful limitation the rest of the file already accepts.
+    rating_by_film: dict[tuple[str, str], Optional[float]] = {}
+    if "rating" in films_df.columns:
+        for _, _r in films_df.iterrows():
+            _y = _r.get("year", "")
+            _ys = ""
+            if pd.notna(_y):
+                try:
+                    _ys = str(int(_y))
+                except (ValueError, TypeError):
+                    _ys = str(_y)
+            _rv = _r.get("rating")
+            rating_by_film[(str(_r.get("title", "")), _ys)] = float(_rv) if pd.notna(_rv) else None
+
+    # Build director→films map for reverse credit lookup fallback
+    director_films_map: dict[str, list[dict]] = {}
+    for _, row in films_enriched.iterrows():
+        d = row.get("director")
+        if pd.notna(d):
+            year_val = row.get("year", "")
+            year_str = ""
+            if pd.notna(year_val):
+                try:
+                    year_str = str(int(year_val))
+                except (ValueError, TypeError):
+                    pass
+            director_films_map.setdefault(d, []).append({
+                "title": str(row.get("title", "")),
+                "year": year_str,
+                "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
+                "user_rating": rating_by_film.get((str(row.get("title", "")), year_str)),
+            })
+
+    director_counts = Counter(films_enriched["director"].dropna())
+    director_profile_map: dict[str, str | None] = {}
+    for name, _count in director_counts.most_common(20):
+        profile_path = None
+        search_source = None
+        try:
+            # Step 1+2: search/person with fallback (exact + diacritic-stripped)
+            person_data = await search_person_with_fallback(session, name, role="director")
+            if person_data and person_data.get("results"):
+                pp = person_data["results"][0].get("profile_path")
+                if isinstance(pp, str) and pp:
+                    profile_path = pp
+                    search_source = "tmdb_search"
+
+            # Step 3: reverse lookup via film credits
+            if not profile_path:
+                films = director_films_map.get(name, [])
+                if films:
+                    profile_path = await find_person_by_film_credit(session, name, films)
+                    if profile_path:
+                        search_source = "film_credit"
+        except Exception as exc:
+            logger.warning("[profile-debug] director '%s' lookup failed: %s", name, exc)
+        director_profile_map[name] = profile_path
+        if not profile_path:
+            logger.info("[profile-debug] director '%s' NO IMAGE (source=%s)", name, search_source or "none")
+
+    stats["top_directors"] = [
+        {"name": n, "count": c, "profile_path": director_profile_map.get(n),
+         "films": director_films_map.get(n, [])}
+        for n, c in director_counts.most_common(20)
+    ]
+    stats["total_directors"] = len(director_counts)
+    if director_counts:
+        n, c = director_counts.most_common(1)[0]
+        stats["most_watched_director"] = {"name": n, "count": c, "profile_path": director_profile_map.get(n)}
+    else:
+        stats["most_watched_director"] = None
+    _progress("analyzing", "Director analysis complete", 4, 10)
+
+    genre_counts = Counter([g for genres in films_enriched["genres"].dropna() for g in genres])
+    stats["top_genres"] = [{"name": n, "count": c} for n, c in genre_counts.most_common(15)]
+    if genre_counts:
+        n, c = genre_counts.most_common(1)[0]
+        stats["favorite_genre"] = {"name": n, "count": c}
+    else:
+        stats["favorite_genre"] = None
+    _progress("analyzing", "Genre analysis complete", 5, 10)
+
+    decade_counts = Counter(films_enriched["decade"].dropna())
+    stats["decades"] = [
+        {"decade": d, "count": c}
+        for d, c in sorted(decade_counts.items(), key=lambda x: int(x[0].replace("s", "")) if x[0] and x[0] != "Unknown" else 0)
+    ]
+    if decade_counts:
+        n, c = decade_counts.most_common(1)[0]
+        stats["favorite_decade"] = {"name": n, "count": c}
+    else:
+        stats["favorite_decade"] = None
+    _progress("analyzing", "Decade analysis complete", 6, 10)
+
+    country_counts = Counter([c for countries in films_enriched["countries"].dropna() for c in countries])
+    stats["top_countries"] = [{"name": n, "count": c} for n, c in country_counts.most_common(15)]
+    stats["total_countries"] = len(country_counts)
+    _progress("analyzing", "Country analysis complete", 7, 10)
+
+    language_counts = Counter(films_enriched["language"].dropna())
+    stats["top_languages"] = [{"language": lang, "count": cnt} for lang, cnt in language_counts.most_common(10)]
+    _progress("analyzing", "Language analysis complete", 8, 10)
+
+    # === Cinema Scale v2 ===
     median_release_year = None
     if "release_date" in films_enriched.columns:
         release_years = (
@@ -516,14 +875,6 @@ async def process_comprehensive_letterboxd_data(
         )
         if not release_years.empty:
             median_release_year = int(release_years.median())
-
-    country_counts = Counter(
-        c for countries in films_enriched["countries"].dropna()
-        if isinstance(countries, list) for c in countries
-    ) if "countries" in films_enriched.columns else Counter()
-
-    decade_counts = Counter(films_enriched["decade"].dropna()) if "decade" in films_enriched.columns else Counter()
-    language_counts = Counter(films_enriched["language"].dropna()) if "language" in films_enriched.columns else Counter()
 
     stats["sinefil_meter"] = compute_cinema_scale(
         country_counts=country_counts,
@@ -536,12 +887,69 @@ async def process_comprehensive_letterboxd_data(
     )
 
     if os.getenv("DEBUG_CINEMA_SCALE"):
-        print(f"\U0001f3ac Cinema Scale: score={stats['sinefil_meter']['score']}, "
-              f"breakdown={stats['sinefil_meter']['breakdown']}")
+        print(f"🎬 Cinema Scale: score={stats['sinefil_meter']['score']}, breakdown={stats['sinefil_meter']['breakdown']}")
 
-    # -----------------------------------------------------------------------
-    # 15. TEST LAB DATASETS
-    # -----------------------------------------------------------------------
+    # === TOP ACTORS with profiles ===
+    cast_counts = Counter([actor for cast_list in films_enriched["cast"].dropna() for actor in cast_list])
+
+    # Build actor→films map for reverse credit lookup fallback
+    actor_films_map: dict[str, list[dict]] = {}
+    for _, row in films_enriched.iterrows():
+        cast_list = row.get("cast")
+        if isinstance(cast_list, list):
+            year_val = row.get("year", "")
+            year_str = ""
+            if pd.notna(year_val):
+                try:
+                    year_str = str(int(year_val))
+                except (ValueError, TypeError):
+                    pass
+            film_info = {
+                "title": str(row.get("title", "")),
+                "year": year_str,
+                "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
+                "user_rating": rating_by_film.get((str(row.get("title", "")), year_str)),
+            }
+            for actor in cast_list:
+                actor_films_map.setdefault(actor, []).append(film_info)
+
+    top_actors_with_profiles = []
+    for name, count in cast_counts.most_common(4):
+        profile_path = None
+        search_source = None
+        try:
+            # Step 1+2: search/person with fallback (exact + diacritic-stripped)
+            person_data = await search_person_with_fallback(session, name, role="actor")
+            if person_data and person_data.get("results"):
+                pp = person_data["results"][0].get("profile_path")
+                if isinstance(pp, str) and pp:
+                    profile_path = pp
+                    search_source = "tmdb_search"
+
+            # Step 3: reverse lookup via film credits
+            if not profile_path:
+                films = actor_films_map.get(name, [])
+                if films:
+                    profile_path = await find_person_by_film_credit(session, name, films)
+                    if profile_path:
+                        search_source = "film_credit"
+        except Exception as exc:
+            logger.warning("[profile-debug] actor '%s' lookup failed: %s", name, exc)
+        top_actors_with_profiles.append({"name": name, "count": count, "profile_path": profile_path,
+                                         "films": actor_films_map.get(name, [])})
+        if not profile_path:
+            logger.info("[profile-debug] actor '%s' NO IMAGE (source=%s)", name, search_source or "none")
+
+    remaining_actors = [
+        {"name": n, "count": c, "films": actor_films_map.get(n, [])}
+        for n, c in cast_counts.most_common(20)[4:]
+    ]
+    stats["top_actors"] = top_actors_with_profiles + remaining_actors
+    _progress("analyzing", "Cast analysis complete", 9, 10)
+
+    # === TEST LAB DATASETS ===
+    # These fields power the optional results Test Lab sections. They are derived
+    # from already-enriched rows so the stable wrapped view remains unchanged.
     analysis_df = pd.merge(
         films_enriched,
         films_df[["title", "year", "rating"]] if "rating" in films_df.columns else films_df[["title", "year"]],
@@ -565,16 +973,26 @@ async def process_comprehensive_letterboxd_data(
         except Exception:
             return None
 
-    def _community_rating(value: Any) -> Optional[float]:
-        # TMDB vote_average is a 0–10 community score; normalize to the user's 0–5
-        # scale so per-film deltas are comparable. 0 means "no votes" → no signal.
-        try:
-            if pd.isna(value):
-                return None
-            score = float(value)
-            return round(score / 2.0, 1) if score > 0 else None
-        except Exception:
-            return None
+    def _rated_entity_rows(
+        entity_column: str,
+        count_source: Counter,
+        min_rated: int = 3,
+    ) -> list[dict]:
+        rows: list[dict] = []
+        if entity_column not in analysis_df.columns or "rating" not in analysis_df.columns:
+            return rows
+        for name, count in count_source.items():
+            rated = analysis_df[
+                (analysis_df[entity_column] == name) & analysis_df["rating"].notna()
+            ]["rating"]
+            if len(rated) >= min_rated:
+                rows.append({
+                    "name": name,
+                    "count": int(count),
+                    "avg_rating": round(float(rated.mean()), 2),
+                    "rated_count": int(len(rated)),
+                })
+        return sorted(rows, key=lambda row: (row["avg_rating"], row["rated_count"]), reverse=True)
 
     if "rating" in analysis_df.columns:
         rated_rows = analysis_df[analysis_df["rating"].notna()]
@@ -583,12 +1001,12 @@ async def process_comprehensive_letterboxd_data(
                 "title": str(row.get("title") or ""),
                 "year": _clean_year(row.get("year")),
                 "rating": float(row.get("rating")),
-                "community_rating": _community_rating(row.get("vote_average")),
                 "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
             }
             for _, row in rated_rows.sort_values("rating", ascending=False).iterrows()
         ]
     else:
+        rated_rows = pd.DataFrame()
         stats["rated_films"] = []
 
     stats["all_films"] = [
@@ -607,50 +1025,173 @@ async def process_comprehensive_letterboxd_data(
         for _, row in analysis_df.iterrows()
     ]
 
-    # Directors with ratings
-    stats["directors_with_ratings"] = compute_directors_with_ratings(director_counts, analysis_df)
+    stats["directors_with_ratings"] = _rated_entity_rows("director", director_counts, min_rated=3)
 
-    # Backfill profile_paths for rated directors
-    await resolve_profile_paths(
-        session, stats["directors_with_ratings"][:4], "director",
-        director_films_map, director_profile_map, logger,
+    # Highest-rated rows carry no profile_path from _rated_entity_rows; backfill the few
+    # the UI actually shows by reusing the most-watched TMDB lookup (existing maps = cache).
+    # ponytail: limit 4 — frontend shows top 4 (PAGE_SIZE=4, show-more off). Raise if it shows more.
+    async def _resolve_profile_path(name, role, films, cache):
+        if name in cache:
+            return cache[name]
+        pp = None
+        try:
+            data = await search_person_with_fallback(session, name, role=role)
+            if data and data.get("results"):
+                cand = data["results"][0].get("profile_path")
+                if isinstance(cand, str) and cand:
+                    pp = cand
+            if not pp and films:
+                pp = await find_person_by_film_credit(session, name, films)
+        except Exception as exc:
+            logger.warning("[profile-debug] rated %s '%s' lookup failed: %s", role, name, exc)
+        cache[name] = pp
+        return pp
+
+    for row in stats["directors_with_ratings"][:4]:
+        row["profile_path"] = await _resolve_profile_path(
+            row["name"], "director", director_films_map.get(row["name"], []), director_profile_map
+        )
+
+    actor_rated: dict[str, list[float]] = {}
+    if "cast" in analysis_df.columns and "rating" in analysis_df.columns:
+        for _, row in analysis_df.iterrows():
+            rating = _clean_rating(row.get("rating"))
+            cast = row.get("cast")
+            if rating is None or not isinstance(cast, list):
+                continue
+            for actor in cast:
+                actor_rated.setdefault(actor, []).append(rating)
+
+    actor_profile_map = {a["name"]: a.get("profile_path") for a in top_actors_with_profiles}
+    stats["actors_with_ratings"] = sorted(
+        [
+            {
+                "name": actor,
+                "count": int(cast_counts.get(actor, 0)),
+                "avg_rating": round(float(sum(ratings) / len(ratings)), 2),
+                "rated_count": len(ratings),
+                "profile_path": actor_profile_map.get(actor),
+            }
+            for actor, ratings in actor_rated.items()
+            if len(ratings) >= 3
+        ],
+        key=lambda row: (row["avg_rating"], row["rated_count"]),
+        reverse=True,
     )
 
-    # Actors with ratings
-    stats["actors_with_ratings"] = compute_actors_with_ratings(cast_counts, analysis_df, actor_profile_map)
+    for row in stats["actors_with_ratings"][:4]:
+        if not row.get("profile_path"):
+            row["profile_path"] = await _resolve_profile_path(
+                row["name"], "actor", actor_films_map.get(row["name"], []), actor_profile_map
+            )
 
-    # Backfill profile_paths for rated actors
-    await resolve_profile_paths(
-        session, stats["actors_with_ratings"][:4], "actor",
-        actor_films_map, actor_profile_map, logger,
+    country_iso_counts: Counter = Counter()
+    country_iso_names: dict[str, str] = {}
+    country_iso_ratings: dict[str, list[float]] = {}
+    country_name_ratings: dict[str, list[float]] = {}
+
+    if "production_countries" in analysis_df.columns:
+        for _, row in analysis_df.iterrows():
+            rating = _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None
+            production_countries = row.get("production_countries")
+            if not isinstance(production_countries, list):
+                continue
+            for country in production_countries:
+                if not isinstance(country, dict):
+                    continue
+                iso2 = country.get("iso_3166_1")
+                name = country.get("name")
+                if name:
+                    country_name_ratings.setdefault(name, [])
+                    if rating is not None:
+                        country_name_ratings[name].append(rating)
+                if not iso2 or not name:
+                    continue
+                country_iso_counts[iso2] += 1
+                country_iso_names[iso2] = name
+                if rating is not None:
+                    country_iso_ratings.setdefault(iso2, []).append(rating)
+
+    stats["countries_iso_data"] = []
+    for iso2, count in country_iso_counts.most_common():
+        ratings = country_iso_ratings.get(iso2, [])
+        item = {
+            "iso2": iso2,
+            "name": country_iso_names.get(iso2, iso2),
+            "count": int(count),
+        }
+        if len(ratings) >= 5:
+            item["avg_rating"] = round(float(sum(ratings) / len(ratings)), 2)
+            item["rated_count"] = len(ratings)
+        stats["countries_iso_data"].append(item)
+
+    stats["countries_with_ratings"] = sorted(
+        [
+            {
+                "name": name,
+                "count": int(country_counts.get(name, 0)),
+                "avg_rating": round(float(sum(ratings) / len(ratings)), 2),
+                "rated_count": len(ratings),
+            }
+            for name, ratings in country_name_ratings.items()
+            if len(ratings) >= 5
+        ],
+        key=lambda row: (row["avg_rating"], row["rated_count"]),
+        reverse=True,
     )
 
-    # Country ISO data
-    stats.update(compute_country_iso_data(analysis_df))
+    # === MOVIE CRUSH ===
+    stats["movie_crush"] = None
+    if top_actors_with_profiles:
+        top = top_actors_with_profiles[0]
+        stats["movie_crush"] = {
+            "name": top["name"],
+            "profile_path": top["profile_path"],
+            "count": top["count"],
+        }
 
-    # -----------------------------------------------------------------------
-    # 16. MOVIE CRUSH
-    # -----------------------------------------------------------------------
-    stats["movie_crush"] = compute_movie_crush(
-        actor_result.get("top_actors", [])[:4] if actor_result.get("top_actors") else []
-    )
+    # === INSIGHTS ===
+    insights = []
+    if stats.get("days_watched", 0) > 0:
+        insights.append({"title": "Time Invested", "description": f"You've spent {stats['days_watched']} days of your life watching movies!"})
+    if stats.get("most_watched_director"):
+        insights.append({"title": "Director Obsession", "description": f"You're a big fan of {stats['most_watched_director']['name']} - you've watched {stats['most_watched_director']['count']} of their films!"})
+    if stats.get("favorite_decade"):
+        insights.append({"title": "Time Traveler", "description": f"You love {stats['favorite_decade']['name']} cinema with {stats['favorite_decade']['count']} films from that era!"})
+    if stats.get("average_rating", 0) > 4:
+        insights.append({"title": "Easy to Please", "description": f"You're generous with ratings - averaging {stats['average_rating']}★!"})
+    elif stats.get("average_rating", 0) < 3:
+        insights.append({"title": "Tough Critic", "description": f"You're a tough critic with an average rating of {stats['average_rating']}★"})
+    if stats.get("total_countries", 0) > 10:
+        insights.append({"title": "Global Cinema Explorer", "description": f"You've watched films from {stats['total_countries']} different countries!"})
+    stats["insights"] = insights
 
-    # -----------------------------------------------------------------------
-    # 17. INSIGHTS
-    # -----------------------------------------------------------------------
-    stats["insights"] = compute_insights(stats)
-
-    # -----------------------------------------------------------------------
-    # 18. FINAL WRAP-UP
-    # -----------------------------------------------------------------------
+    # === FINAL WRAP-UP ===
     stats["analysis_date"] = datetime.now().isoformat()
-    stats["secret_obsession"] = compute_secret_obsession(stats)
-    stats["runtime_persona"] = compute_runtime_persona(stats)
-    stats["furthest_destination"] = compute_furthest_destination(stats)
 
-    # -----------------------------------------------------------------------
-    # 19. REVIEW TEXT ANALYSIS
-    # -----------------------------------------------------------------------
+    stats["secret_obsession"] = None
+    if "keywords_analytics" in stats and "top_keywords" in stats["keywords_analytics"]:
+        genre_names = {g["name"].lower() for g in stats.get("top_genres", [])}
+        for kw in stats["keywords_analytics"]["top_keywords"]:
+            if kw["keyword"].lower() not in genre_names:
+                stats["secret_obsession"] = kw["keyword"]
+                break
+
+    stats["runtime_persona"] = "The Balanced Viewer"
+    if "average_runtime" in stats:
+        if stats["average_runtime"] > 130:
+            stats["runtime_persona"] = "The Marathoner"
+        elif stats["average_runtime"] < 100:
+            stats["runtime_persona"] = "The Sprinter"
+
+    stats["furthest_destination"] = None
+    if "top_countries" in stats:
+        for country in stats["top_countries"]:
+            if country["name"] not in ("USA", "UK"):
+                stats["furthest_destination"] = country["name"]
+                break
+
+    # === REVIEW TEXT ANALYSIS ===
     _progress("analyzing", "Analyzing review text...", 10, 11)
     stats["review_analysis"] = compute_review_metrics(reviews_df)
 
@@ -658,9 +1199,6 @@ async def process_comprehensive_letterboxd_data(
 
     t4 = time.perf_counter()
     _bench_logger.info("[bench] stats computed, %d ms", int((t4 - t3) * 1000))
-    _bench_logger.info(
-        "[bench] total pipeline: %d ms for %d films",
-        int((t4 - t0) * 1000), len(films_enriched),
-    )
+    _bench_logger.info("[bench] total pipeline: %d ms for %d films", int((t4 - t0) * 1000), len(films_enriched))
 
     return stats

@@ -10,7 +10,8 @@ import RatingDeviation from '@/containers/results/experimental/sections/RatingDe
 import ReviewAnalysisSection from '@/containers/results/experimental/sections/ReviewAnalysisSection';
 import CastGrid from '@/containers/results/experimental/sections/CastGrid';
 import DirectorsGrid from '@/containers/results/experimental/sections/DirectorsGrid';
-import type { StatsData } from '@/containers/results/experimental/types';
+import type { StatsData, PersonFilm } from '@/containers/results/experimental/types';
+import PersonFilmsModal from '@/containers/results/experimental/sections/PersonFilmsModal';
 
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
@@ -556,6 +557,97 @@ function ResultsContent({
 }: any) {
   const { theme, config } = useTheme();
 
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalFilms, setModalFilms] = useState<PersonFilm[]>([]);
+
+  const handleFilmsClick = () => {
+    if (!stats?.all_films) return;
+    setModalTitle('All Watched Films');
+    setModalFilms(
+      stats.all_films.map((f: any) => ({
+        title: f.title,
+        year: f.year ? String(f.year) : undefined,
+        poster_path: f.poster_path,
+        user_rating: f.rating ?? null,
+      }))
+    );
+    setModalOpen(true);
+  };
+
+  const handleAvgRatingClick = () => {
+    if (!stats?.all_films) return;
+    setModalTitle('Your Rated Films');
+    setModalFilms(
+      stats.all_films
+        .filter((f: any) => f.rating != null)
+        .map((f: any) => ({
+          title: f.title,
+          year: f.year ? String(f.year) : undefined,
+          poster_path: f.poster_path,
+          user_rating: f.rating,
+        }))
+    );
+    setModalOpen(true);
+  };
+
+  const handleGenreClick = () => {
+    const genre = stats?.top_genres?.[0]?.name;
+    if (!genre || !stats?.all_films) return;
+    setModalTitle(`${genre} Films`);
+    setModalFilms(
+      stats.all_films
+        .filter((f: any) => f.genres && f.genres.includes(genre))
+        .map((f: any) => ({
+          title: f.title,
+          year: f.year ? String(f.year) : undefined,
+          poster_path: f.poster_path,
+          user_rating: f.rating ?? null,
+        }))
+    );
+    setModalOpen(true);
+  };
+
+  const handleDirectorClick = () => {
+    const director = stats?.top_directors?.[0]?.name || stats?.most_watched_director?.name;
+    if (!director || !stats?.all_films) return;
+    setModalTitle(`Films by ${director}`);
+    setModalFilms(
+      stats.all_films
+        .filter((f: any) => f.director && f.director.toLowerCase() === director.toLowerCase())
+        .map((f: any) => ({
+          title: f.title,
+          year: f.year ? String(f.year) : undefined,
+          poster_path: f.poster_path,
+          user_rating: f.rating ?? null,
+        }))
+    );
+    setModalOpen(true);
+  };
+
+  const handleDecadeClick = () => {
+    const decade = stats?.favorite_decade?.name;
+    if (!decade || !stats?.all_films) return;
+    const startYear = parseInt(decade);
+    if (isNaN(startYear)) return;
+    const endYear = startYear + 9;
+    setModalTitle(`Films from the ${decade}`);
+    setModalFilms(
+      stats.all_films
+        .filter((f: any) => {
+          const year = parseInt(String(f.year));
+          return !isNaN(year) && year >= startYear && year <= endYear;
+        })
+        .map((f: any) => ({
+          title: f.title,
+          year: f.year ? String(f.year) : undefined,
+          poster_path: f.poster_path,
+          user_rating: f.rating ?? null,
+        }))
+    );
+    setModalOpen(true);
+  };
+
   return (
     <>
       <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
@@ -649,6 +741,11 @@ function ResultsContent({
             timePct={timePct}
             favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
             favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
+            onClickFilms={handleFilmsClick}
+            onClickAvgRating={handleAvgRatingClick}
+            onClickGenre={handleGenreClick}
+            onClickDirector={handleDirectorClick}
+            onClickDecade={handleDecadeClick}
           />
         </SectionContainer>
 
@@ -784,6 +881,13 @@ function ResultsContent({
       />
 
       <FeedbackFab ref={feedbackRef} sessionId={sessionId} />
+
+      <PersonFilmsModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        name={modalTitle}
+        films={modalFilms}
+      />
     </>
   );
 }

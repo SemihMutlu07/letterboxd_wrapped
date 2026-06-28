@@ -47,11 +47,15 @@ export const StatCard: React.FC<{
   label: string;
   color?: string;
   size?: 'normal' | 'large';
-}> = React.memo(function StatCard({ value, label, color = 'text-white', size = 'normal' }) {
+  onClick?: () => void;
+}> = React.memo(function StatCard({ value, label, color = 'text-white', size = 'normal', onClick }) {
   return (
   <motion.div
     variants={itemVariants}
-    className="bg-slate-800/60 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-4 md:p-6 hover:scale-[1.02] hover:bg-slate-800/80 hover:border-slate-600/60 transition-all duration-200 shadow-lg h-full min-h-[120px] md:min-h-[140px] grid place-content-center text-center"
+    onClick={onClick}
+    className={`bg-slate-800/60 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-4 md:p-6 transition-all duration-200 shadow-lg h-full min-h-[120px] md:min-h-[140px] grid place-content-center text-center ${
+      onClick ? 'cursor-pointer hover:scale-[1.04] hover:bg-slate-800/90 hover:border-slate-500/60 active:scale-[0.97]' : 'hover:scale-[1.02] hover:bg-slate-800/80 hover:border-slate-600/60'
+    }`}
   >
     <div>
       <div
