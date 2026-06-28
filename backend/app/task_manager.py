@@ -289,10 +289,16 @@ def record_supervisor_poll(last_seen_restart_token: Optional[str] = None) -> Dic
     global _last_supervisor_poll_at
     _last_supervisor_poll_at = datetime.utcnow()
     control = get_worker_control_state()
-    should_restart = (
-        last_seen_restart_token is not None
-        and str(last_seen_restart_token) != str(control["restart_token"])
-    )
+    # One-directional: only restart when the backend's token is NEWER than what the
+    # supervisor last saw. A plain `!=` would fire a spurious restart (+ git pull,
+    # killing in-flight scrapes) after a backend restart resets the token to 0 while
+    # the supervisor still holds a higher last-seen value.
+    should_restart = False
+    if last_seen_restart_token is not None:
+        try:
+            should_restart = int(last_seen_restart_token) < int(control["restart_token"])
+        except (TypeError, ValueError):
+            should_restart = False
     return {
         **control,
         "should_restart": should_restart,
