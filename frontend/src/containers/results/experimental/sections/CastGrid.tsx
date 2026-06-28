@@ -20,9 +20,10 @@ import {
   gateFail,
   trackSectionViewed,
   trackToggleChanged,
+  trackShowMore,
   trackItemClicked,
 } from './section-utils';
-import { SectionShell, PersonCard } from './DirectorsGrid';
+import { SectionShell, PersonCard, ShowMoreButton } from './DirectorsGrid';
 
 // ─── Gating ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ interface ActorCard {
 }
 
 const PAGE_SIZE = 4;
+const EXPANDED_MAX = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -95,6 +97,7 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
   }, [mode, stats.top_actors, stats.actors_with_ratings, hasRatings, filmsByName]);
 
   const shown = actors.slice(0, visible);
+  const hasMore = visible < actors.length;
 
   return (
     <SectionShell
@@ -103,7 +106,7 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
       onToggle={handleToggle}
       ratedTabDisabled={!hasRatings}
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
-      ratedTabTooltip="Your average rating across films you&apos;ve rated for each actor (minimum 3 rated films)"
+  ratedTabTooltip="Your average rating across films you&apos;ve rated for each actor (minimum 3 rated films)"
     >
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {shown.map((a) => (
@@ -129,10 +132,6 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
                   }
                 : undefined
             }
-            onClick={() => {
-              onActorClick?.(a.name);
-              trackItemClicked('cast_grid', 'actor');
-            }}
           />
         ))}
       </div>

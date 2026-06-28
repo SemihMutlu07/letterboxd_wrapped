@@ -21,6 +21,7 @@ interface PersonFilmsModalProps {
 
 export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
   const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
+
   // Close on Escape
   useEffect(() => {
     if (!open) return;

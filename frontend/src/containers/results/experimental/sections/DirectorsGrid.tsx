@@ -23,6 +23,7 @@ import {
   gateFail,
   trackSectionViewed,
   trackToggleChanged,
+  trackShowMore,
   trackItemClicked,
   toggleClass,
 } from './section-utils';
@@ -48,6 +49,7 @@ interface DirectorCard {
 }
 
 const PAGE_SIZE = 4;
+const EXPANDED_MAX = 8;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -103,6 +105,7 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
   }, [mode, stats.top_directors, stats.directors_with_ratings, hasRatings, filmsByName]);
 
   const shown = directors.slice(0, visible);
+  const hasMore = visible < directors.length;
 
   return (
     <SectionShell
@@ -137,10 +140,6 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
                   }
                 : undefined
             }
-            onClick={() => {
-              onDirectorClick?.(d.name);
-              trackItemClicked('directors_grid', 'director');
-            }}
           />
         ))}
       </div>
@@ -228,7 +227,6 @@ export function PersonCard({
   primaryStat,
   secondaryStat,
   onShowFilms,
-  onClick,
 }: {
   name: string;
   profilePath?: string;
@@ -236,7 +234,6 @@ export function PersonCard({
   secondaryStat?: string;
   /** When provided, renders a "+" button that opens this person's films modal. */
   onShowFilms?: () => void;
-  onClick?: () => void;
 }) {
   const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
   const [imageError, setImageError] = useState(false);
@@ -306,10 +303,7 @@ export function PersonCard({
         {/* "+" button — opens this person's films modal */}
         {onShowFilms && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onShowFilms();
-            }}
+            onClick={onShowFilms}
             aria-label={`Show films with ${name}`}
             className="absolute bottom-0 right-0 w-8 h-8 grid place-items-center rounded-full bg-[#00c030] text-black text-lg font-bold leading-none shadow-lg ring-2 ring-[#1a1a1a] hover:scale-110 transition-transform"
           >
@@ -318,16 +312,13 @@ export function PersonCard({
         )}
       </div>
       {/* Name + stat */}
-      <button
-        onClick={onClick}
-        className="space-y-0.5 text-center hover:scale-105 active:scale-95 transition-all duration-150"
-      >
+      <div className="space-y-0.5">
         <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2">{name}</p>
         <p className="text-sm md:text-base text-slate-200">{primaryStat}</p>
         {secondaryStat && (
           <p className="text-xs md:text-sm text-slate-300">{secondaryStat}</p>
         )}
-      </button>
+      </div>
     </div>
   );
 }

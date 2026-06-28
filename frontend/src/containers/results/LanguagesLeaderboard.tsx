@@ -22,7 +22,7 @@ interface Film {
   rating?: number | null;
 }
 
-export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; allFilms: Film[] }) {
+export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; allFilms: any[] }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
 
