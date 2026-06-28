@@ -19,8 +19,6 @@ from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services.scraper import ScraperAPIError
 from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
-from app.services.rss_source import RssError, fetch_rss_items
-from app.services.rss_preview import build_preview_stats
 from app.services.run_log import persist_run
 
 logger = logging.getLogger("letterboxd_wrapped.analyze")
@@ -131,11 +129,6 @@ async def scrape_profile(request: Request):
     """
     Scrape a public Letterboxd profile and run the same analysis pipeline.
 
-    NOTE: As of the RSS-first migration this is the FALLBACK / fuller-history
-    path, not the primary username flow. The frontend now calls /api/rss-preview
-    first (fast, proxy-free, TMDB-linked) and only falls back to this HTML
-    scraper when RSS fails or the user explicitly wants their complete history.
-
     When DESKTOP-WORKER mode is enabled (settings.worker_token set), this does
     NOT scrape inline. It queues a job for the outbound desktop worker and
     returns 202 {task_id}; the frontend then polls /api/progress/{task_id}.
@@ -245,86 +238,6 @@ async def scrape_profile(request: Request):
 
     persist_run(username, "scrape", stats, ok=True)
     return {"status": "success", "stats": stats}
-
-
-_RSS_ERROR_STATUS = {
-    "invalid_username": 400,
-    "rss_not_found": 404,
-    "rss_parse_failed": 502,
-    "rss_network_error": 503,
-}
-
-
-@router.post("/api/rss-preview")
-async def rss_preview(request: Request):
-    """
-    Fast RSS-first preview for a public Letterboxd username.
-
-    Reads the proxy-free /{username}/rss/ feed (which embeds tmdb:movieId),
-    enriches each film by TMDB id directly, and returns a recent-sample
-    "preview" Wrapped. This is the primary username flow; the HTML scraper is
-    the fallback / fuller-history path.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail={"error_code": "invalid_json", "message": "Request body must be valid JSON."},
-        )
-
-    raw_username = str(body.get("username") or "").strip()
-    username = raw_username.lower()
-    if not username or not re.match(r"^[a-z0-9_]+$", username):
-        raise HTTPException(
-            status_code=400,
-            detail={"error_code": "invalid_username", "message": "Please enter a valid Letterboxd username."},
-        )
-
-    session = request.app.state.aiohttp_session
-    try:
-        items = await fetch_rss_items(session, username)
-    except RssError as exc:
-        logger.warning("RSS preview failed for %s: %s (%s)", username, exc.message, exc.error_code)
-        raise HTTPException(
-            status_code=_RSS_ERROR_STATUS.get(exc.error_code, 502),
-            detail={"error_code": exc.error_code, "message": exc.message},
-        )
-
-    if not items:
-        raise HTTPException(
-            status_code=404,
-            detail={"error_code": "no_rss_activity", "message": f"@{username}'s public RSS feed has no recent film activity. Upload your export for a complete Wrapped."},
-        )
-
-    stats = await build_preview_stats(session, items)
-    stats["scraped_username"] = username
-
-    preview_items = [
-        {
-            "title": it.get("title"),
-            "link": it.get("link"),
-            "tmdb_id": it.get("tmdb_id"),
-            "year": it.get("year"),
-            "rating": it.get("rating"),
-            "watched_date": it.get("watched_date"),
-            "poster_url": it.get("poster_url"),
-            "rewatch": it.get("rewatch"),
-            "is_review": it.get("is_review"),
-        }
-        for it in items
-    ]
-
-    persist_run(username, "rss-preview", stats, ok=True)
-
-    return {
-        "status": "success",
-        "source": "rss",
-        "username": username,
-        "stats": stats,
-        "items": preview_items,
-        "data_quality": stats.get("data_quality"),
-    }
 
 
 @router.get("/api/progress/{task_id}")
