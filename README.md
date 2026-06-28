@@ -80,7 +80,7 @@ cd frontend && npm run dev
 | Variable | Required | Description |
 |---|---|---|
 | `TMDB_API_KEY` | ✓ | The Movie Database API key |
-| `ALLOW_ALL_NETLIFY` | | CORS allow `*.netlify.app` |
+| `FRONTEND_ORIGINS` | (optional) | Comma-separated extra CORS origins (production Netlify URLs are already hardcoded) |
 | `SUPABASE_URL` | | New Supabase project URL |
 | `SUPABASE_ANON_KEY` | | Publishable anon key (never service_role) |
 | `WORKER_TOKEN` | | Shared secret for desktop worker auth |

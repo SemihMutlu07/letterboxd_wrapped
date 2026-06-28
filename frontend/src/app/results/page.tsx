@@ -639,23 +639,6 @@ function ResultsContent({
           </div>
         </header>
 
-        {/* RSS preview banner — sampled recent activity, not a full Wrapped */}
-        {stats.source === 'rss' && (
-          <div className="mx-auto max-w-2xl rounded-2xl border border-orange-400/40 bg-orange-500/10 px-4 py-3 text-center">
-            <p className="text-sm font-semibold text-orange-200">
-              {stats.recent_films_count
-                ? `Quick preview — based on your ${stats.recent_films_count} most recent films`
-                : 'Quick preview — based on your most recent films'}
-            </p>
-            <Link
-              href="/"
-              className="mt-1 inline-block text-xs font-medium text-orange-300 underline-offset-2 hover:underline"
-            >
-              Upload your Letterboxd export for your complete Wrapped →
-            </Link>
-          </div>
-        )}
-
         {/* Hero Stats */}
         <SectionContainer theme={theme}>
           <HeroStats

@@ -61,11 +61,11 @@ export interface StatsData {
   };
   /** Username when data came from scrape-profile path. */
   scraped_username?: string;
-  /** Data source for this Wrapped. "rss" = fast recent-sample preview. */
+  /** Data source for this Wrapped. "scrape" = full profile scrape, "csv" = upload. */
   source?: string;
-  /** Number of films in the recent RSS sample (preview mode). */
+  /** Number of films in the sample (scrape mode). */
   recent_films_count?: number;
-  /** Exactness metadata; present on the RSS preview so sampled stats are labelled. */
+  /** Exactness metadata; present on sample stats to label precision. */
   data_quality?: {
     mode?: string;
     exactness?: string;
@@ -111,6 +111,8 @@ export interface StatsData {
     title: string;
     year?: number;
     rating: number;
+    /** TMDB community rating, normalized to the 0–5 scale. null when no votes. */
+    community_rating?: number | null;
     poster_path?: string;
   }[];
   /** Up to 4 films pinned as favorites on the user's Letterboxd profile page. */

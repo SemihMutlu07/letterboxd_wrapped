@@ -55,7 +55,10 @@ interface EnrichedFilm {
   title: string;
   year?: number;
   rating: number;
+  /** TMDB community rating on the 0–5 scale. */
+  communityRating: number;
   poster_path?: string;
+  /** rating − communityRating: how far your score diverges from the crowd. */
   delta: number;
 }
 
@@ -82,15 +85,26 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   }, []);
 
   const { higher, lower } = useMemo<{ higher: EnrichedFilm[]; lower: EnrichedFilm[] }>(() => {
-    const films: EnrichedFilm[] = (stats.rated_films ?? []).map((f) => ({
-      ...f,
-      delta: Math.round((f.rating - userAvg) * 10) / 10,
-    }));
+    // Compare each film to ITS OWN community rating, not the user's global average,
+    // so every card has an individual delta. Films without a community score
+    // (no TMDB votes) can't form an outlier and are skipped.
+    const films: EnrichedFilm[] = (stats.rated_films ?? [])
+      .filter((f): f is typeof f & { community_rating: number } =>
+        typeof f.community_rating === 'number' && Number.isFinite(f.community_rating),
+      )
+      .map((f) => ({
+        title: f.title,
+        year: f.year,
+        rating: f.rating,
+        communityRating: f.community_rating,
+        poster_path: f.poster_path,
+        delta: Math.round((f.rating - f.community_rating) * 10) / 10,
+      }));
     return {
       higher: films.filter((f) => f.delta > 0).sort((a, b) => b.delta - a.delta),
       lower: films.filter((f) => f.delta < 0).sort((a, b) => a.delta - b.delta),
     };
-  }, [stats.rated_films, userAvg]);
+  }, [stats.rated_films]);
 
   const list = tab === 'higher' ? higher : lower;
   const shown = list.slice(0, visible);
@@ -108,8 +122,7 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
         <div>
           <h3 className="text-base font-bold text-white">Your Rating Outliers</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Your average: ★ {userAvg.toFixed(2)} across{' '}
-            {stats.total_rated_films ?? stats.rated_films?.length} films
+            Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
           </p>
         </div>
         <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">

@@ -31,7 +31,7 @@ Frontend is a static Next.js export; backend is FastAPI that processes uploads/s
 ## Environment variables (never hardcode values)
 Backend:
 - `TMDB_API_KEY` (required)
-- `ALLOW_ALL_NETLIFY` (CORS allow `*.netlify.app`)
+- `FRONTEND_ORIGINS` (optional comma-separated extra CORS origins; the 2 production Netlify URLs are already hardcoded)
 - `SUPABASE_URL` (new project: `https://ghumergebwwrwlykwjsu.supabase.co`)
 - `SUPABASE_ANON_KEY` (publishable key only — never service_role)
 

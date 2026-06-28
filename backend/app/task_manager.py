@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import uuid
 
@@ -17,7 +17,7 @@ class TaskState:
     total: int = 0
     result: Optional[Any] = None
     error: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     claimed_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
@@ -125,7 +125,7 @@ def claim_next_watchlist_job() -> Optional[TaskState]:
     job.status = "running"
     job.stage = "scraping"
     job.message = "Desktop worker is reading Letterboxd"
-    job.claimed_at = datetime.utcnow()
+    job.claimed_at = datetime.now(timezone.utc)
     return job
 
 
@@ -145,7 +145,7 @@ def claim_next_scrape_job() -> Optional[TaskState]:
     job.status = "running"
     job.stage = "scraping"
     job.message = "Desktop worker is reading Letterboxd"
-    job.claimed_at = datetime.utcnow()
+    job.claimed_at = datetime.now(timezone.utc)
     append_task_event(job.task_id, "claimed", "Desktop worker claimed the scrape job", level="info")
     return job
 
@@ -178,7 +178,7 @@ def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> No
 
 
 def _event_elapsed(task: TaskState) -> Optional[float]:
-    return _seconds_between(task.created_at, datetime.utcnow())
+    return _seconds_between(task.created_at, datetime.now(timezone.utc))
 
 
 def append_task_event(
@@ -200,7 +200,7 @@ def append_task_event(
             "elapsed_seconds": elapsed_seconds if elapsed_seconds is not None else _event_elapsed(task),
             "level": level,
             "metrics": metrics or {},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
 
@@ -223,28 +223,28 @@ def append_task_event_payload(task_id: str, event: Dict[str, Any]) -> None:
             "elapsed_seconds": elapsed if isinstance(elapsed, (int, float)) else _event_elapsed(task),
             "level": str(event.get("level") or "info"),
             "metrics": event.get("metrics") if isinstance(event.get("metrics"), dict) else {},
-            "timestamp": str(event.get("timestamp") or datetime.utcnow().isoformat()),
+            "timestamp": str(event.get("timestamp") or datetime.now(timezone.utc).isoformat()),
         }
     )
 
 
 def record_worker_heartbeat(meta: Optional[Dict[str, Any]] = None) -> None:
     global _last_worker_heartbeat, _last_worker_meta
-    _last_worker_heartbeat = datetime.utcnow()
+    _last_worker_heartbeat = datetime.now(timezone.utc)
     if meta:
         _last_worker_meta = {**_last_worker_meta, **meta}
 
 
 def record_worker_startup(meta: Optional[Dict[str, Any]] = None) -> None:
     global _last_worker_started_at, _last_worker_meta
-    _last_worker_started_at = datetime.utcnow()
+    _last_worker_started_at = datetime.now(timezone.utc)
     _last_worker_meta = dict(meta or {})
     record_worker_heartbeat()
 
 
 def record_worker_shutdown(meta: Optional[Dict[str, Any]] = None) -> None:
     global _last_worker_shutdown_at, _last_worker_meta
-    _last_worker_shutdown_at = datetime.utcnow()
+    _last_worker_shutdown_at = datetime.now(timezone.utc)
     if meta:
         _last_worker_meta = {**_last_worker_meta, **meta}
 
@@ -253,7 +253,7 @@ def record_worker_self_test(result: Dict[str, Any]) -> None:
     global _last_worker_self_test
     _last_worker_self_test = {
         **result,
-        "reported_at": datetime.utcnow(),
+        "reported_at": datetime.now(timezone.utc),
     }
 
 
@@ -273,7 +273,7 @@ def set_worker_desired_state(desired_state: str) -> Dict[str, Any]:
 def request_worker_restart() -> Dict[str, Any]:
     global _worker_restart_token, _worker_restart_requested_at
     _worker_restart_token += 1
-    _worker_restart_requested_at = datetime.utcnow()
+    _worker_restart_requested_at = datetime.now(timezone.utc)
     return get_worker_control_state()
 
 
@@ -287,7 +287,7 @@ def get_worker_control_state() -> Dict[str, Any]:
 
 def record_supervisor_poll(last_seen_restart_token: Optional[str] = None) -> Dict[str, Any]:
     global _last_supervisor_poll_at
-    _last_supervisor_poll_at = datetime.utcnow()
+    _last_supervisor_poll_at = datetime.now(timezone.utc)
     control = get_worker_control_state()
     # One-directional: only restart when the backend's token is NEWER than what the
     # supervisor last saw. A plain `!=` would fire a spurious restart (+ git pull,
@@ -323,7 +323,7 @@ def _coerce_supervisor_log_tail(value: Any) -> list[str]:
 
 def record_supervisor_report(payload: Dict[str, Any]) -> Dict[str, Any]:
     global _last_supervisor_report_at, _last_supervisor_status, _supervisor_log_tail
-    _last_supervisor_report_at = datetime.utcnow()
+    _last_supervisor_report_at = datetime.now(timezone.utc)
     allowed = {
         "supervisor_version",
         "supervisor_started_at",
@@ -361,7 +361,7 @@ def get_worker_supervisor_status() -> Dict[str, Any]:
 def is_worker_online(max_age_seconds: int) -> bool:
     if _last_worker_heartbeat is None:
         return False
-    return (datetime.utcnow() - _last_worker_heartbeat) <= timedelta(seconds=max_age_seconds)
+    return (datetime.now(timezone.utc) - _last_worker_heartbeat) <= timedelta(seconds=max_age_seconds)
 
 
 def get_worker_version_status(expected_protocol_version: int, backend_git_sha: Optional[str] = None) -> Dict[str, Any]:
@@ -383,7 +383,7 @@ def get_worker_version_status(expected_protocol_version: int, backend_git_sha: O
 
 
 def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 1, backend_git_sha: Optional[str] = None) -> Dict[str, Any]:
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     heartbeat_age_seconds = (
         round((now - _last_worker_heartbeat).total_seconds(), 1)
         if _last_worker_heartbeat is not None
@@ -492,7 +492,7 @@ def set_task_done(task_id: str, result: Any, telemetry: Optional[Dict[str, Any]]
         task.message = "Analysis complete!"
         task.progress = 100
         task.total = 100
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
         task.duration_seconds = _seconds_between(task.created_at, task.completed_at)
         task.queue_wait_seconds = _seconds_between(task.created_at, task.claimed_at)
         task.worker_seconds = _seconds_between(task.claimed_at, task.completed_at)
@@ -506,7 +506,7 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
         task.error = error
         task.stage = "error"
         task.message = error
-        task.failed_at = datetime.utcnow()
+        task.failed_at = datetime.now(timezone.utc)
         task.duration_seconds = _seconds_between(task.created_at, task.failed_at)
         task.queue_wait_seconds = _seconds_between(task.created_at, task.claimed_at)
         task.worker_seconds = _seconds_between(task.claimed_at, task.failed_at)
@@ -523,7 +523,7 @@ def requeue_stale_claims(now: Optional[datetime] = None) -> int:
     so a single-worker outage (desktop offline mid-scrape) re-queues the job
     instead of stranding the user on a job that will never complete. Idempotent —
     a late postback is keyed by task_id. Returns how many were re-queued."""
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc)
     cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
     count = 0
     for t in _tasks.values():
@@ -542,7 +542,7 @@ async def cleanup_loop() -> None:
     """Re-queue stale claims, then remove tasks older than 1 hour; every 5 minutes."""
     while True:
         await asyncio.sleep(300)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         requeue_stale_claims(now)
         cutoff = now - timedelta(hours=1)
         stale = [tid for tid, t in list(_tasks.items()) if t.created_at < cutoff]

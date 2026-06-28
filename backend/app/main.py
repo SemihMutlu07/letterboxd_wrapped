@@ -37,8 +37,10 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 warnings.filterwarnings("ignore")
 
-print("🎬 LETTERBOXD WRAPPED - High-Speed Backend Edition")
-print("=" * 60)
+banner = "🎬 LETTERBOXD WRAPPED - High-Speed Backend Edition"
+logger.info("=" * 60)
+logger.info(banner)
+logger.info("=" * 60)
 
 
 @asynccontextmanager
@@ -51,12 +53,12 @@ async def lifespan(app: FastAPI):
     )
     _cleanup = asyncio.create_task(cleanup_loop())
     _monitor = await start_worker_monitor()
-    print("🚀 FastAPI app startup: aiohttp session created.")
+    logger.info("🚀 FastAPI app startup: aiohttp session created.")
     yield
     _monitor.cancel()
     _cleanup.cancel()
     await app.state.aiohttp_session.close()
-    print("🌙 FastAPI app shutdown: aiohttp session closed.")
+    logger.info("🌙 FastAPI app shutdown: aiohttp session closed.")
 
 
 def create_app() -> FastAPI:
