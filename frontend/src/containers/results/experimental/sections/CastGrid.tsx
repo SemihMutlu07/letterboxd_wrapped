@@ -46,14 +46,14 @@ const PAGE_SIZE = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function CastGrid({ stats }: { stats: StatsData }) {
+export default function CastGrid({ stats, onActorClick }: { stats: StatsData; onActorClick?: (name: string) => void }) {
   const gate = requiresCastGrid(stats);
   if (!gate.ok) return null;
 
-  return <CastGridInner stats={stats} />;
+  return <CastGridInner stats={stats} onActorClick={onActorClick} />;
 }
 
-function CastGridInner({ stats }: { stats: StatsData }) {
+function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick?: (name: string) => void }) {
   const [mode, setMode] = useState<SectionToggle>('most_watched');
   const [visible, setVisible] = useState(PAGE_SIZE);
 
@@ -112,7 +112,10 @@ function CastGridInner({ stats }: { stats: StatsData }) {
                 ? `${a.count} film${a.count !== 1 ? 's' : ''}`
                 : a.avg_rating != null ? `★ ${a.avg_rating.toFixed(1)} avg` : undefined
             }
-            onClick={() => trackItemClicked('cast_grid', 'actor')}
+            onClick={() => {
+              onActorClick?.(a.name);
+              trackItemClicked('cast_grid', 'actor');
+            }}
           />
         ))}
       </div>

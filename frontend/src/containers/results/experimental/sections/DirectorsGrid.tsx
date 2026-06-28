@@ -49,14 +49,14 @@ const PAGE_SIZE = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function DirectorsGrid({ stats }: { stats: StatsData }) {
+export default function DirectorsGrid({ stats, onDirectorClick }: { stats: StatsData; onDirectorClick?: (name: string) => void }) {
   const gate = requiresDirectorsGrid(stats);
   if (!gate.ok) return null;
 
-  return <DirectorsGridInner stats={stats} />;
+  return <DirectorsGridInner stats={stats} onDirectorClick={onDirectorClick} />;
 }
 
-function DirectorsGridInner({ stats }: { stats: StatsData }) {
+function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDirectorClick?: (name: string) => void }) {
   const [mode, setMode] = useState<SectionToggle>('most_watched');
   const [visible, setVisible] = useState(PAGE_SIZE);
 
@@ -119,7 +119,10 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
                 ? `${d.count} film${d.count !== 1 ? 's' : ''}`
                 : d.avg_rating != null ? `★ ${d.avg_rating.toFixed(1)} avg` : undefined
             }
-            onClick={() => trackItemClicked('directors_grid', 'director')}
+            onClick={() => {
+              onDirectorClick?.(d.name);
+              trackItemClicked('directors_grid', 'director');
+            }}
           />
         ))}
       </div>
@@ -235,7 +238,7 @@ export function PersonCard({
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-2 group cursor-default text-center"
+      className="flex flex-col items-center gap-2 group cursor-pointer text-center hover:scale-105 active:scale-95 transition-all duration-150"
     >
       {/* Avatar */}
       <div

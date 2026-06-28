@@ -575,6 +575,27 @@ function ResultsContent({
     setModalOpen(true);
   };
 
+  const handlePersonClick = (name: string, isDirector: boolean) => {
+    if (!stats?.all_films) return;
+    setModalTitle(isDirector ? `Films by ${name}` : `Films starring ${name}`);
+    const filteredFilms = stats.all_films
+      .filter((f: any) => {
+        if (isDirector) {
+          return f.director && f.director.toLowerCase() === name.toLowerCase();
+        } else {
+          return f.cast && f.cast.some((actor: string) => actor.toLowerCase() === name.toLowerCase());
+        }
+      })
+      .map((f: any) => ({
+        title: f.title,
+        year: f.year ? String(f.year) : undefined,
+        poster_path: f.poster_path,
+        user_rating: f.rating ?? null,
+      }));
+    setModalFilms(filteredFilms);
+    setModalOpen(true);
+  };
+
   const handleAvgRatingClick = () => {
     if (!stats?.all_films) return;
     setModalTitle('Your Rated Films');
@@ -751,8 +772,8 @@ function ResultsContent({
 
         {/* 1. Directors & Cast */}
         <div className="grid grid-cols-1 gap-6">
-          <DirectorsGrid stats={stats} />
-          <CastGrid stats={stats} />
+          <DirectorsGrid stats={stats} onDirectorClick={(name) => handlePersonClick(name, true)} />
+          <CastGrid stats={stats} onActorClick={(name) => handlePersonClick(name, false)} />
         </div>
 
         {/* Share teaser — visible after directors/cast while users are engaged */}

@@ -56,7 +56,7 @@ interface EnrichedFilm {
   year?: number;
   rating: number;
   /** TMDB community rating on the 0–5 scale. */
-  communityRating?: number;
+  communityRating?: number | null;
   poster_path?: string;
   /** rating − communityRating: how far your score diverges from the crowd. */
   delta: number;
@@ -85,16 +85,21 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   }, []);
 
   const { higher, lower } = useMemo<{ higher: EnrichedFilm[]; lower: EnrichedFilm[] }>(() => {
-    const films: EnrichedFilm[] = (stats.rated_films ?? []).map((f) => ({
-      ...f,
-      rating: f.your_rating ?? 0,
-      delta: Math.round(((f.your_rating ?? 0) - userAvg) * 10) / 10,
-    }));
+    const films: EnrichedFilm[] = (stats.rated_films ?? [])
+      .filter((f) => typeof f.average_rating === 'number' && Number.isFinite(f.average_rating))
+      .map((f) => ({
+        title: f.title,
+        year: f.year,
+        rating: f.your_rating ?? 0,
+        communityRating: f.average_rating,
+        poster_path: f.poster_path,
+        delta: Math.round(((f.your_rating ?? 0) - (f.average_rating ?? 0)) * 10) / 10,
+      }));
     return {
       higher: films.filter((f) => f.delta > 0).sort((a, b) => b.delta - a.delta),
       lower: films.filter((f) => f.delta < 0).sort((a, b) => a.delta - b.delta),
     };
-  }, [stats.rated_films, userAvg]);
+  }, [stats.rated_films]);
 
   const list = tab === 'higher' ? higher : lower;
   const shown = list.slice(0, visible);
@@ -141,7 +146,6 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
             <FilmPosterCard
               key={`${film.title}-${film.year}`}
               film={film}
-              userAvg={userAvg}
               polarity={tab}
               onClick={() => trackItemClicked('rating_deviation', 'film')}
             />
@@ -170,12 +174,10 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
 
 function FilmPosterCard({
   film,
-  userAvg,
   polarity,
   onClick,
 }: {
   film: EnrichedFilm;
-  userAvg: number;
   polarity: SubTab;
   onClick?: () => void;
 }) {
@@ -259,7 +261,7 @@ function FilmPosterCard({
       <div className="min-w-0 px-0.5 space-y-0.5">
         <p className="text-xs font-medium text-white leading-tight line-clamp-1">{film.title}</p>
         <p className="text-[10px] sm:text-[11px] text-slate-400 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-          ★ {film.rating.toFixed(1)} vs avg {userAvg.toFixed(1)}
+          ★ {film.rating.toFixed(1)} vs avg {film.communityRating?.toFixed(1) ?? '—'}
         </p>
       </div>
     </button>

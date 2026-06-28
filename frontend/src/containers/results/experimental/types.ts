@@ -198,5 +198,13 @@ export interface StatsData {
     total_review_likes?: number | null;
     /** Number of reviews whose like_count was successfully parsed. */
     reviews_with_likes_data?: number | null;
+    /** Full list of reviews extracted from csv/scrape. */
+    reviews?: {
+      title: string;
+      year?: string;
+      text?: string;
+      likes?: number;
+      rating?: number | null;
+    }[];
   };
 }

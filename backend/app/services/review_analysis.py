@@ -208,11 +208,22 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     total_reviews = len(df)
     reviews_with_text = len(with_text)
 
+    reviews_list = []
+    for _, row in with_text.iterrows():
+        reviews_list.append({
+            "title": str(row.get("title") or ""),
+            "year": str(row.get("year") or ""),
+            "text": str(row.get("review") or ""),
+            "likes": int(row.get("like_count")) if pd.notna(row.get("like_count")) else 0,
+            "rating": float(row.get("rating")) if pd.notna(row.get("rating")) else None,
+        })
+
     if reviews_with_text == 0:
         return {
             "total_reviews": total_reviews,
             "reviews_with_text": 0,
             "review_rate": 0.0,
+            "reviews": [],
         }
 
     # --- Tokenize all review text ---
@@ -399,4 +410,5 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         "top_liked_reviews": top_liked_reviews,
         "total_review_likes": total_review_likes,
         "reviews_with_likes_data": reviews_with_likes_data,
+        "reviews": reviews_list,
     }

@@ -293,6 +293,41 @@ function DirectorProfileModal({ director, onClose, stats }) {
   );
 }
 
+function CardModalItem({ f, i }) {
+  const [posterHover, setPosterHover] = useState(false);
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {f.poster_path ? (
+        <div
+          onMouseEnter={() => setPosterHover(true)}
+          onMouseLeave={() => setPosterHover(false)}
+          style={{ position: "relative", marginBottom: 10, aspectRatio: "2/3", background: getColor(i), border: `2.5px solid ${T.ink}`, overflow: "hidden", cursor: "pointer" }}>
+          <img src={`https://image.tmdb.org/t/p/w342${f.poster_path}`} alt={f.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => e.target.style.display = "none"} />
+          <div style={{ position: "absolute", top: 8, right: 8, background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 13, padding: "4px 8px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right" }}>
+            ★ {formatRating(f.rating ?? 0)}
+          </div>
+        </div>
+      ) : (
+        <div
+          onMouseEnter={() => setPosterHover(true)}
+          onMouseLeave={() => setPosterHover(false)}
+          style={{ position: "relative", marginBottom: 10, aspectRatio: "2/3" }}>
+          <Box bg={getColor(i)} sh={3} style={{ height: "100%", display: "flex", alignItems: "flex-end", padding: 12, position: "relative" }}>
+            <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 14, color: T.ink, lineHeight: 1.2 }}>{f.title || "—"}</div>
+          </Box>
+          <div style={{ position: "absolute", top: 8, right: 8, background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 13, padding: "4px 8px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right", zIndex: 10 }}>
+            ★ {formatRating(f.rating ?? 0)}
+          </div>
+        </div>
+      )}
+      <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 12, color: T.ink, lineHeight: 1.3, marginBottom: 4 }}>{f.title || "—"}</div>
+      <div style={{ fontFamily: MONO, fontSize: 9.5, color: T.muted }}>
+        {f.year || "—"} {f.director && `· ${f.director}`}
+      </div>
+    </div>
+  );
+}
+
 function CardModal({ cardInfo, onClose, stats }) {
   if (!cardInfo) return null;
 
@@ -325,6 +360,8 @@ function CardModal({ cardInfo, onClose, stats }) {
     films = (stats?.review_analysis?.reviews || []);
   }
 
+  const isReviews = cardType === "reviews";
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,15,12,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 24 }}>
       <Box onClick={(e) => e.stopPropagation()} sh={8} style={{ maxWidth: 900, width: "100%", maxHeight: "90vh", padding: 26, overflowY: "auto", position: "relative" }}>
@@ -335,43 +372,31 @@ function CardModal({ cardInfo, onClose, stats }) {
           style={{ position: "absolute", top: 16, right: 16, width: 32, height: 32, border: `2.5px solid ${T.ink}`, background: closeHover ? T.red : T.lime, fontFamily: SERIF, fontSize: 20, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, lineHeight: 1, transform: closeHover ? "scale(1.15) translate(-2px,-2px)" : "scale(1)", transition: "all 120ms", boxShadow: closeHover ? shadow(5) : shadow(2) }}>×</button>
         <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 28, color: T.ink, marginBottom: 8 }}>{title}</div>
         <div style={{ fontFamily: MONO, fontSize: 11, color: T.muted, marginBottom: 20 }}>{films.length} items</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-          {films.slice(0, 60).map((f, i) => {
-            const [posterHover, setPosterHover] = useState(false);
-            return (
-            <div key={i} style={{ display: "flex", flexDirection: "column" }}>
-              {f.poster_path ? (
-                <div
-                  onMouseEnter={() => setPosterHover(true)}
-                  onMouseLeave={() => setPosterHover(false)}
-                  style={{ position: "relative", marginBottom: 10, aspectRatio: "2/3", background: getColor(i), border: `2.5px solid ${T.ink}`, overflow: "hidden", cursor: "pointer" }}>
-                  <img src={`https://image.tmdb.org/t/p/w342${f.poster_path}`} alt={f.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => e.target.style.display = "none"} />
-                  <div style={{ position: "absolute", top: 8, right: 8, background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 13, padding: "4px 8px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right" }}>
-                    ★ {formatRating(f.rating ?? 0)}
+        
+        {isReviews ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+            {films.map((r, i) => (
+              <Box key={i} bg={T.paper} sh={2} style={{ padding: 13 }}>
+                <div className="flex items-center justify-between">
+                  <span style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 15, color: T.ink }}>{r.title || "—"}</span>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {r.rating != null && <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, background: T.lime, border: `1.5px solid ${T.ink}`, padding: "2px 6px" }}>★ {formatRating(r.rating)}</span>}
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: T.ink }}>♥ {r.likes || 0}</span>
                   </div>
                 </div>
-              ) : (
-                <div
-                  onMouseEnter={() => setPosterHover(true)}
-                  onMouseLeave={() => setPosterHover(false)}
-                  style={{ position: "relative", marginBottom: 10, aspectRatio: "2/3" }}>
-                  <Box bg={getColor(i)} sh={3} style={{ height: "100%", display: "flex", alignItems: "flex-end", padding: 12, position: "relative" }}>
-                    <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 14, color: T.ink, lineHeight: 1.2 }}>{f.title || "—"}</div>
-                  </Box>
-                  <div style={{ position: "absolute", top: 8, right: 8, background: T.lime, border: `2px solid ${T.ink}`, fontFamily: MONO, fontWeight: 700, fontSize: 13, padding: "4px 8px", color: T.ink, opacity: posterHover ? 1 : 0, transform: posterHover ? "scale(1)" : "scale(0.8)", transition: "all 120ms", transformOrigin: "top right", zIndex: 10 }}>
-                    ★ {formatRating(f.rating ?? 0)}
-                  </div>
-                </div>
-              )}
-              <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 12, color: T.ink, lineHeight: 1.3, marginBottom: 4 }}>{f.title || "—"}</div>
-              <div style={{ fontFamily: MONO, fontSize: 9.5, color: T.muted }}>
-                {f.year || "—"} {f.director && `· ${f.director}`}
-              </div>
-            </div>
-            );
-          })}
-        </div>
-        {films.length > 60 && <div style={{ fontFamily: MONO, fontSize: 10, color: T.muted, marginTop: 16 }}>+ {films.length - 60} more</div>}
+                <Label style={{ fontSize: 8.5, margin: "2px 0 8px" }}>{r.year || "—"}</Label>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: T.ink, lineHeight: 1.5, wordBreak: "break-word" }}>{r.text || "No text"}</div>
+              </Box>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            {films.slice(0, 60).map((f, i) => (
+              <CardModalItem key={i} f={f} i={i} />
+            ))}
+          </div>
+        )}
+        {!isReviews && films.length > 60 && <div style={{ fontFamily: MONO, fontSize: 10, color: T.muted, marginTop: 16 }}>+ {films.length - 60} more</div>}
       </Box>
     </div>
   );
