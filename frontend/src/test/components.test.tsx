@@ -171,5 +171,64 @@ describe('WatchlistCompare', () => {
   });
 });
 
+// ---- RatingDeviation ---------------------------------------------------------
 
+import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
+import type { StatsData } from '@/containers/results/experimental/types';
+import HeroStats from '@/containers/results/HeroStats';
 
+const ratingDeviationStats: StatsData = {
+  total_films: 6,
+  average_rating: 3.2,
+  days_watched: 1,
+  average_runtime: 100,
+  top_genres: [],
+  top_directors: [],
+  top_actors: [],
+  top_countries: [],
+  top_languages: [],
+  decades: [],
+  rating_distribution: {},
+  total_rated_films: 6,
+  rated_films: [
+    { title: 'A Very Long Film Title That Should Not Break The Mobile Card', year: 2024, rating: 5, poster_path: '/a.jpg', community_rating: 3.2 },
+    { title: 'High Two', year: 2023, rating: 4.5, poster_path: '/b.jpg', community_rating: 3.5 },
+    { title: 'High Three', year: 2022, rating: 4, poster_path: '/c.jpg', community_rating: 3.5 },
+    { title: 'Low One', year: 2021, rating: 2, poster_path: '/d.jpg', community_rating: 3.5 },
+    { title: 'Low Two', year: 2020, rating: 1.5, poster_path: '/e.jpg', community_rating: 3.5 },
+    { title: 'Low Three', year: 2019, rating: 1, poster_path: '/f.jpg', community_rating: 3.5 },
+  ],
+};
+
+describe('RatingDeviation', () => {
+  it('uses a two-column grid and clipped captions for mobile outlier cards', () => {
+    const { container } = render(<RatingDeviation stats={ratingDeviationStats} />);
+
+    const grid = container.querySelector('.grid');
+    expect(grid?.className).toContain('grid-cols-2');
+    expect(grid?.className).not.toContain('grid-cols-1');
+
+    const caption = screen.getByText(/5\.0 vs avg 3\.2/i);
+    expect(caption.className).toContain('whitespace-nowrap');
+    expect(caption.className).toContain('text-ellipsis');
+  });
+});
+
+describe('HeroStats', () => {
+  it('renders watched runtime as real hours, not rounded days', () => {
+    render(
+      <HeroStats
+        totalFilms={494}
+        avgRating={3.8}
+        hoursWatched={1228.4}
+        topGenre="Drama"
+        timePct="14%"
+        favoriteDirector={{ name: 'Agnes Varda', count: 12 }}
+        favoriteDecade={{ name: '2010s', count: 88 }}
+      />,
+    );
+
+    expect(screen.getByText('1,228h')).toBeInTheDocument();
+    expect(screen.getByText('Hours watched')).toBeInTheDocument();
+  });
+});
