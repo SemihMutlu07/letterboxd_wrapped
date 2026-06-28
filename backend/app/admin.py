@@ -1,7 +1,8 @@
 """
 Admin dashboard for MoviesWrapped.
 Reads from backend/runs/ + watchlist_runs/ + date_night_runs/ JSON logs.
-Auth: ?key=secret query param.
+Auth: Authorization: Bearer <secret> header (primary), ?key= query param (GET nav fallback).
+ADMIN_SECRET env var is mandatory — no hardcoded default.
 """
 from __future__ import annotations
 
@@ -25,7 +26,13 @@ logger = logging.getLogger("letterboxd_wrapped.admin")
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "mw3169305")
+def _admin_secret() -> str:
+    """Lazy-load ADMIN_SECRET from env var. Raises if unset — no hardcoded fallback."""
+    secret = os.environ.get("ADMIN_SECRET")
+    if not secret:
+        raise RuntimeError("ADMIN_SECRET environment variable is required and must not be empty")
+    return secret
+
 
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
@@ -65,9 +72,19 @@ def _annotate_analysis_run(data: dict[str, Any]) -> None:
 
 
 def _require_admin(request: Request) -> None:
-    key = request.query_params.get("key") or request.headers.get("x-admin-key")
-    if key != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    secret = _admin_secret()
+    # Primary: Authorization: Bearer <token>
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        if auth_header[7:] == secret:
+            return
+    # Fallback: ?key= query param (for GET navigation links)
+    if request.query_params.get("key") == secret:
+        return
+    # Legacy: x-admin-key header
+    if request.headers.get("x-admin-key") == secret:
+        return
+    raise HTTPException(status_code=403, detail="Forbidden")
 
 
 def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
@@ -159,15 +176,15 @@ async def admin_login(request: Request):
 
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request):
+async def admin_dashboard(request: Request, limit: int = 500):
     _require_admin(request)
-    runs = await _load_analysis_runs(limit=50)
+    runs = await _load_analysis_runs(limit=limit)
     if settings.supabase_enabled:
-        watchlist_runs = await _load_watchlist_runs_supabase(limit=50)
-        date_night_runs = await _load_date_night_runs_supabase(limit=50)
+        watchlist_runs = await _load_watchlist_runs_supabase(limit=limit)
+        date_night_runs = await _load_date_night_runs_supabase(limit=limit)
     else:
-        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=50)
-        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=50)
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=limit)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=limit)
     worker_status = task_manager.get_worker_status(
         settings.worker_heartbeat_max_age_seconds,
         expected_protocol_version=settings.worker_protocol_version,
