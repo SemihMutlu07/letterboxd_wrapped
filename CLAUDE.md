@@ -95,9 +95,43 @@ Run logging:
   - Do NOT add server-only features or assumptions (no SSR-only features, no runtime server dependencies).
 - Commit messages must be in English.
 
+## Contribution workflow (external contributors)
+
+External contributors (like Berdan) must follow these rules to avoid merge chaos:
+
+### Branch strategy
+- **Fork-based**: Contributors fork the repo and work on their own fork. No direct pushes except by repo owner.
+- **Owner branches**: Owner may use `main`, `desktop_server` (worker sync), or short-lived feature branches locally.
+
+### Workflow for external PRs
+1. Contributor forks → creates a feature branch (e.g. `feat/widget-redesign`)
+2. Before opening a PR, contributor **rebases onto latest `origin/main`** and resolves all conflicts locally
+   ```
+   git fetch upstream
+   git rebase upstream/main
+   ```
+3. PR is opened against `main`. Squash-merge preferred (single commit lands on main).
+4. After merge, contributor deletes their remote feature branch.
+
+### What went wrong before (so it doesn't repeat)
+- **Dead code sweep done twice**: Once on main (`c2eae18`), once on Berdan's branch (`423648c`). The merge brought back old Test Lab files that main had already cleaned. Solution: always rebase before PR, and keep sweeping decisions on main, not in PR branches.
+- **RSS subsystem resurrection**: The Berdan merge conflict resolution accidentally preserved dead files. Solution: after merging a PR, run a quick `find` check for known-dead patterns (RSS, Sentry, etc.).
+- **Experimental tree vs redesign**: Berdan's PR (#11) replaced `results/page.tsx` with `WrappedBrutal.jsx`. Concurrent feedback features (FeedbackFab, ShareModal, PostHog) became dead code because they lived in the old page. Solution: **one PR = one scope**. If a PR rewrites the page shell, it must either integrate or explicitly defer existing features.
+
+### PR readiness checklist (for contributors)
+Before opening a PR, verify:
+- [ ] `git rebase origin/main` done, no conflicts
+- [ ] `cd frontend && npx tsc --noEmit` passes
+- [ ] `cd backend && pytest` passes (or known pre-existing failures documented)
+- [ ] No `.env`, secrets, or credentials in the diff
+- [ ] Commit messages in English
+- [ ] No deleted files that are still referenced by live code (check with `rg`)
+
 ## Known issues (triage order)
 1) `frontend/src/app/api/upload/route.ts` returns 501
    - This is intentional for the static export build. Backend API should be used for all processing.
+2) **WrappedBrutal orphan gap**: `FeedbackFab`, `ShareModal`, and `PageViewTracker` (PostHog) exist in the codebase but are NOT imported by `WrappedBrutal.jsx`. They must be re-integrated into the neo-brutalist shell.
+3) **desktop_server branch out of sync**: Local `desktop_server` branch has no upstream and is behind `origin/desktop_server`, which is itself 3 commits behind `main`. Needs reset + sync before next Windows worker deploy.
 
 ## AI workflow (how to work in this repo)
 When asked to implement a change:
