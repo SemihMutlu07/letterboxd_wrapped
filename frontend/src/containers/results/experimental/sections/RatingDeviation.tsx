@@ -232,7 +232,7 @@ function FilmPosterCard({
   };
 
   return (
-    <button
+    <div
       onClick={handleClick}
       className="flex min-w-0 flex-col gap-1.5 text-left group cursor-default"
     >
@@ -301,7 +301,7 @@ function FilmPosterCard({
           ★ {film.rating.toFixed(1)} vs avg {userAvg.toFixed(1)}
         </p>
       </div>
-    </button>
+    </div>
   );
 }
 
