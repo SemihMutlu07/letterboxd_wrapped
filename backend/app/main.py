@@ -108,9 +108,6 @@ def create_app() -> FastAPI:
     app.include_router(recommend.router)
     app.include_router(worker.router)
 
-    # Sentry integration (lightweight — only if SENTRY_DSN is set and sentry-sdk is installed)
-    _init_sentry()
-
     @app.get("/")
     async def root():
         return {"message": "🎬 Letterboxd Wrapped - High-Speed Backend", "admin": "/admin"}
@@ -120,23 +117,6 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     return app
-
-
-def _init_sentry() -> None:
-    """Initialise Sentry if SENTRY_DSN is set and sentry-sdk is available."""
-    import os
-
-    dsn = os.getenv("SENTRY_DSN")
-    if not dsn:
-        return
-    try:
-        import sentry_sdk  # type: ignore[import-untyped]
-        from sentry_sdk.integrations.asgi import SentryAsgiMiddleware  # type: ignore[import-untyped]
-
-        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.1)
-        logger.info("Sentry initialized (DSN set)")
-    except ImportError:
-        pass  # sentry-sdk not installed — silently skip
 
 
 app = create_app()
