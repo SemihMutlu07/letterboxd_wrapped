@@ -16,24 +16,6 @@ import LoadingScreen from '@/components/landing/LoadingScreen';
 import UploadZone from '@/components/landing/UploadZone';
 import ExportInstructions from '@/components/landing/ExportInstructions';
 
-const T = {
-  darkblue:"#2776F5",
-  paper: "#F1ECDE",
-  card: "#FBF8EF",
-  ink: "#100F0C",
-  lime: "#AEE63E",
-  amber: "#F2B33D",
-  cyan: "#53CFE6",
-  purple: "#A98BEA",
-  red: "#E8463A",
-  muted: "#6F6E63",
-  darkamber:"#e16517",
-  lines:"#cdcdcd"
-};
-const SERIF = 'Georgia, "Times New Roman", serif';
-const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
-const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
-
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
@@ -52,7 +34,6 @@ export default function LetterboxdLanding() {
   const [debugResult, setDebugResult] = useState<object | null>(null);
   const [debugError, setDebugError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
-  const [showAlert, setShowAlert] = useState(false);
 
   // Track initial session on page load
   useEffect(() => {
@@ -400,120 +381,88 @@ export default function LetterboxdLanding() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: T.paper,
-      backgroundImage: `
-        linear-gradient(0deg, transparent 24%, ${T.lines} 25%, ${T.lines} 26%, transparent 27%, transparent 74%, ${T.lines} 75%, ${T.lines} 76%, transparent 77%, transparent),
-        linear-gradient(90deg, transparent 24%, ${T.lines} 25%, ${T.lines} 26%, transparent 27%, transparent 74%, ${T.lines} 75%, ${T.lines} 76%, transparent 77%, transparent)
-      `,
-      backgroundSize: '50px 50px',
-      color: T.ink,
-      fontFamily: SERIF,
-      paddingBottom: 40
-    }}>
-      {/* Hero section */}
-      <div style={{ paddingTop: 40, paddingBottom: 40, textAlign: 'center', borderBottom: `2.5px solid ${T.ink}` }}>
-        <div style={{ maxWidth: 720, margin: '0 auto', paddingLeft: 20, paddingRight: 20 }}>
-          <h1 style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 56, lineHeight: 1, marginBottom: 16, letterSpacing: '-0.02em' }}>
-            Film Wrapped
-          </h1>
-          <p style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted, marginBottom: 8 }}>
-            Your Letterboxd Year
-          </p>
-          
-        </div>
+    <div className="relative min-h-screen bg-slate-900 text-white">
+      <style>{`
+        @keyframes watchlist-pulse {
+          0%, 100% {
+            box-shadow: 0 0 8px 0 rgba(251, 146, 60, 0.15);
+            border-color: rgba(148, 163, 184, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 20px 4px rgba(251, 146, 60, 0.30);
+            border-color: rgba(251, 146, 60, 0.5);
+          }
+        }
+        .watchlist-glow {
+          animation: watchlist-pulse 2.5s ease-in-out infinite;
+        }
+      `}</style>
+      {/* Decorative background blobs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-20 -left-20 h-72 w-72 sm:h-96 sm:w-96 rounded-full bg-purple-600/15 blur-3xl" />
+        <div className="absolute -bottom-24 -right-20 h-80 w-80 sm:h-[28rem] sm:w-[28rem] rounded-full bg-orange-500/15 blur-3xl" />
       </div>
 
-      <div style={{ maxWidth: 720, margin: '0 auto', paddingLeft: 20, paddingRight: 20, paddingTop: 40 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+      <div className="relative mx-auto max-w-[720px] px-4 py-10 sm:py-14">
+        <div className="space-y-10">
+          {/* Hero */}
+          <header className="text-center">
+            <h1 className="font-black tracking-tight leading-[0.95] text-[clamp(36px,8vw,64px)]">
+              <span className="bg-gradient-to-r from-orange-400 via-pink-500 to-purple-500 bg-clip-text text-transparent">Movies Wrapped</span>
+            </h1>
+            <p className="mx-auto mt-4 text-slate-300 text-lg sm:text-xl leading-relaxed">Your Letterboxd year, re-edited.</p>
+            <p className="mx-auto mt-2 text-slate-500 text-sm">Just type your username — no downloads, no uploads.</p>
+          </header>
 
-          {/* Username input section */}
-          <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 24, boxShadow: shadow(3) }}>
-            <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <h2 style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 36, marginBottom: 12 }}>Enter your username</h2>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, marginBottom: 12, maxWidth: 500, margin: '0 auto 12px' }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontFamily: MONO, fontWeight: 700, fontSize: 18, color: T.ink }}>@</span>
-                <input
-                  type="text"
-                  value={usernameInput}
-                  onChange={(e) => setUsernameInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleScrape();
-                  }}
-                  onFocus={(e) => {
-                    const input = e.target as HTMLInputElement;
-                    input.style.borderColor = '#000000';
-                    input.style.background = '#e4dbcd';
-                  }}
-                  onBlur={(e) => {
-                    const input = e.target as HTMLInputElement;
-                    input.style.borderColor = T.ink;
-                    input.style.background = T.paper;
-                  }}
-                  placeholder="username"
-                  autoFocus
-                  autoComplete="off"
-                  spellCheck={false}
-                  style={{
-                    width: '100%',
-                    border: `2.5px solid ${T.ink}`,
-                    background: T.paper,
-                    padding: '10px 12px 10px 34px',
-                    fontFamily: MONO,
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: T.ink,
-                    boxShadow: shadow(2),
-                    outline: 'none',
-                  }}
-                />
+          {/* Username — primary CTA */}
+          <section aria-label="Enter your Letterboxd username">
+            <div className="mx-auto max-w-xl rounded-3xl border border-slate-700/50 bg-slate-800/40 p-7 sm:p-9 text-center backdrop-blur-sm">
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-orange-400/25 bg-orange-500/10">
+                <Globe className="h-8 w-8 text-orange-300" />
               </div>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Just type your username</h2>
+              <p className="mt-2 text-sm text-slate-400">We read your public Letterboxd diary — no downloads, no uploads.</p>
+
+              <div className="mx-auto mt-7 flex max-w-md flex-col gap-3 sm:flex-row">
+                <label className="relative flex-1">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-slate-500">@</span>
+                  <input
+                    type="text"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleScrape();
+                    }}
+                    placeholder="your_username"
+                    autoFocus
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-2xl border border-slate-600/70 bg-slate-900/70 py-3.5 pl-9 pr-4 text-base text-white placeholder:text-slate-500 focus:border-orange-400/60 focus:outline-none focus:ring-2 focus:ring-orange-400/20"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void handleScrape()}
+                  disabled={!usernameInput.trim()}
+                  className="rounded-2xl bg-orange-400 px-6 py-3.5 text-base font-semibold text-slate-950 transition hover:bg-orange-300 active:scale-[0.98] disabled:bg-slate-700 disabled:text-slate-500"
+                >
+                  Analyze →
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => {
-                  if (!usernameInput.trim()) {
-                    setShowAlert(true);
-                    return;
-                  }
-                  void handleScrape();
-                }}
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  padding: '10px 14px',
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.lime,
-                  color: T.ink,
-                  cursor: 'pointer',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                }}
-                onMouseEnter={(e) => {
-                  const btn = e.target as HTMLButtonElement;
-                  btn.style.background = T.amber;
-                  btn.style.boxShadow = shadow(3);
-                  btn.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  const btn = e.target as HTMLButtonElement;
-                  btn.style.background = T.lime;
-                  btn.style.boxShadow = shadow(2);
-                  btn.style.transform = 'none';
-                }}
+                onClick={() => void handleDebug()}
+                disabled={!usernameInput.trim()}
+                className="mt-5 inline-flex items-center gap-1.5 text-[11px] text-slate-600 transition hover:text-slate-400 disabled:opacity-30"
               >
-                Analyze
+                <Bug className="size-3" />
+                Debug — show raw response
               </button>
             </div>
 
-            {/* Secondary: upload export & compare watchlists */}
-            <div style={{ display: 'flex', gap: 12, marginTop: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
+            {/* Secondary: upload export */}
+            <div className="mt-5 grid gap-2.5 sm:flex sm:justify-center">
               <button
                 type="button"
                 onClick={() => {
@@ -521,79 +470,24 @@ export default function LetterboxdLanding() {
                   setError(null);
                   trackEvent('upload_modal_opened');
                 }}
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  padding: '10px 14px',
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.cyan,
-                  color: T.ink,
-                  cursor: 'pointer',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-                onMouseEnter={(e) => {
-                  const btn = e.currentTarget;
-                  btn.style.background = T.darkblue;
-                  btn.style.boxShadow = shadow(3);
-                  btn.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  const btn = e.currentTarget;
-                  btn.style.background = T.cyan;
-                  btn.style.boxShadow = shadow(2);
-                  btn.style.transform = 'none';
-                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700/60 bg-slate-800/40 px-5 py-3 text-sm font-medium text-slate-300 transition hover:border-orange-400/40 hover:bg-slate-800/60 hover:text-orange-200 active:scale-[0.98] sm:w-auto"
               >
                 <Upload className="h-4 w-4" />
-                Upload
+                Upload export
               </button>
               <Link
                 href="/watchlist"
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
-                  padding: '10px 14px',
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.amber,
-                  color: T.ink,
-                  cursor: 'pointer',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  textDecoration: 'none',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = T.darkamber;
-                  e.currentTarget.style.boxShadow = shadow(3);
-                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = T.amber;
-                  e.currentTarget.style.boxShadow = shadow(2);
-                  e.currentTarget.style.transform = 'none';
-                }}
+                className="watchlist-glow inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-600/70 bg-slate-800/50 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-orange-400/50 hover:bg-slate-800/70 hover:text-orange-200 active:scale-[0.98] sm:w-auto"
               >
                 <Users className="h-4 w-4" />
-                Compare
+                Compare two watchlists
               </Link>
             </div>
           </section>
 
           {backendOffline && (
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.amber, padding: 16, textAlign: 'center', boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 14, color: T.ink,fontWeight:600 }}>
+            <div className="mx-auto max-w-xl rounded-2xl border border-amber-700/50 bg-amber-900/20 p-4 text-center">
+              <p className="text-sm text-amber-200">
                 ⚠ Backend server is starting up. Analysis may not work immediately.
               </p>
             </div>
@@ -603,103 +497,27 @@ export default function LetterboxdLanding() {
 
           {/* Inside Your Wrapped */}
           <section>
-            <h2 style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 24, textAlign: 'center', marginBottom: 24 }}>Inside Your Wrapped</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-              <div
-                style={{
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.card,
-                  padding: 16,
-                  textAlign: 'center',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = T.lime;
-                  e.currentTarget.style.boxShadow = shadow(3);
-                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = T.card;
-                  e.currentTarget.style.boxShadow = shadow(2);
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <Film className="w-6 h-6 mx-auto mb-2" style={{ color: T.ink }} />
-                <div style={{ fontFamily: MONO, fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', marginBottom: 4, color: T.ink }}>Film Analysis</div>
-                <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, lineHeight: 1.4 }}>Trends across genres & decades.</div>
+            <h2 className="text-center text-lg font-semibold text-slate-300 mb-4">Inside Your Wrapped</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60">
+                <Film className="w-6 h-6 text-orange-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Film Analysis</div>
+                <div className="text-slate-400 text-xs mt-1">Trends across genres and decades.</div>
               </div>
-              <div
-                style={{
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.card,
-                  padding: 16,
-                  textAlign: 'center',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = T.amber;
-                  e.currentTarget.style.boxShadow = shadow(3);
-                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = T.card;
-                  e.currentTarget.style.boxShadow = shadow(2);
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <Star className="w-6 h-6 mx-auto mb-2" style={{ color: T.ink }} />
-                <div style={{ fontFamily: MONO, fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', marginBottom: 4, color: T.ink }}>Rating Patterns</div>
-                <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, lineHeight: 1.4 }}>How you judge films.</div>
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60">
+                <Star className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Rating Patterns</div>
+                <div className="text-slate-400 text-xs mt-1">How you judge the films you watch.</div>
               </div>
-              <div
-                style={{
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.card,
-                  padding: 16,
-                  textAlign: 'center',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = T.cyan;
-                  e.currentTarget.style.boxShadow = shadow(3);
-                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = T.card;
-                  e.currentTarget.style.boxShadow = shadow(2);
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <Clock className="w-6 h-6 mx-auto mb-2" style={{ color: T.ink }} />
-                <div style={{ fontFamily: MONO, fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', marginBottom: 4, color: T.ink }}>Time Statistics</div>
-                <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, lineHeight: 1.4 }}>Your viewing rhythm.</div>
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60">
+                <Clock className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Time Statistics</div>
+                <div className="text-slate-400 text-xs mt-1">Your viewing rhythm across the years.</div>
               </div>
-              <div
-                style={{
-                  border: `2.5px solid ${T.ink}`,
-                  background: T.card,
-                  padding: 16,
-                  textAlign: 'center',
-                  boxShadow: shadow(2),
-                  transition: 'all 90ms',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = T.purple;
-                  e.currentTarget.style.boxShadow = shadow(3);
-                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = T.card;
-                  e.currentTarget.style.boxShadow = shadow(2);
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <Globe className="w-6 h-6 mx-auto mb-2" style={{ color: T.ink }} />
-                <div style={{ fontFamily: MONO, fontWeight: 700, fontSize: 10.5, textTransform: 'uppercase', marginBottom: 4, color: T.ink }}>Global Cinema</div>
-                <div style={{ fontFamily: MONO, fontSize: 9, color: T.muted, lineHeight: 1.4 }}>Countries & languages.</div>
+              <div className="rounded-xl border border-slate-700/60 bg-slate-800/40 p-4 text-center transition hover:bg-slate-800/60">
+                <Globe className="w-6 h-6 text-green-400 mx-auto mb-2" />
+                <div className="font-medium text-sm">Global Cinema</div>
+                <div className="text-slate-400 text-xs mt-1">Countries and languages that shape your taste.</div>
               </div>
             </div>
           </section>
@@ -708,27 +526,18 @@ export default function LetterboxdLanding() {
 
       {/* Debug overlay */}
       {showDebug && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 15, 12, 0.9)', padding: 16 }}>
-          <div style={{ position: 'relative', maxHeight: '80vh', width: '100%', maxWidth: 640, overflow: 'auto', border: `2.5px solid ${T.ink}`, background: T.paper, padding: 20, boxShadow: shadow(4), color: T.ink, fontFamily: MONO, fontSize: 11 }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="relative max-h-[80vh] w-full max-w-2xl overflow-auto rounded-2xl border border-slate-700/60 bg-slate-900 p-5">
             <button
               onClick={() => setShowDebug(false)}
-              style={{
-                position: 'absolute',
-                right: 12,
-                top: 12,
-                padding: 4,
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                color: T.muted,
-              }}
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"
             >
               <X className="size-4" />
             </button>
-            <h3 style={{ marginBottom: 12, fontFamily: SERIF, fontWeight: 700, fontSize: 16 }}>
-              {debugError ? 'Scrape Error' : 'Raw Response'}
+            <h3 className="mb-3 text-base font-semibold text-slate-200">
+              {debugError ? 'Scrape Error' : 'Raw Scrape Response'}
             </h3>
-            <pre style={{ overflow: 'auto', padding: 12, background: T.card, border: `1px solid ${T.muted}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4 }}>
+            <pre className="overflow-auto rounded-xl bg-slate-950 p-4 text-xs leading-relaxed text-slate-300">
               {JSON.stringify(debugError ? { error: debugError } : debugResult, null, 2)}
             </pre>
           </div>
@@ -737,65 +546,24 @@ export default function LetterboxdLanding() {
 
       {/* Upload Export modal — optional path; opens from secondary link */}
       {showUploadModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 15, 12, 0.95)', padding: 16 }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/75 backdrop-blur-sm">
           <div
-            style={{ position: 'absolute', inset: 0 }}
+            className="absolute inset-0"
             onClick={() => setShowUploadModal(false)}
             aria-hidden
           />
-          <div style={{
-            position: 'relative',
-            zIndex: 10,
-            width: '100%',
-            maxWidth: 640,
-            maxHeight: '92vh',
-            overflowY: 'auto',
-            border: `2.5px solid ${T.ink}`,
-            background: T.paper,
-            backgroundImage: `
-              linear-gradient(0deg, transparent 24%, ${T.card} 25%, ${T.card} 26%, transparent 27%, transparent 74%, ${T.card} 75%, ${T.card} 76%, transparent 77%, transparent),
-              linear-gradient(90deg, transparent 24%, ${T.card} 25%, ${T.card} 26%, transparent 27%, transparent 74%, ${T.card} 75%, ${T.card} 76%, transparent 77%, transparent)
-            `,
-            backgroundSize: '50px 50px',
-            padding: 24,
-            boxShadow: shadow(4),
-            color: T.ink,
-            fontFamily: SERIF
-          }}>
+          <div className="relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-slate-700/60 bg-slate-900/95 p-6 sm:p-8 shadow-2xl">
             <button
               onClick={() => setShowUploadModal(false)}
               aria-label="Close upload"
-              style={{
-                position: 'absolute',
-                right: 12,
-                top: 12,
-                width: 40,
-                height: 40,
-                display: 'grid',
-                placeItems: 'center',
-                border: `2.5px solid ${T.ink}`,
-                background: T.card,
-                cursor: 'pointer',
-                transition: 'all 90ms',
-                boxShadow: shadow(2),
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = T.lime;
-                e.currentTarget.style.boxShadow = shadow(3);
-                e.currentTarget.style.transform = 'translate(-1px, -1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = T.card;
-                e.currentTarget.style.boxShadow = shadow(2);
-                e.currentTarget.style.transform = 'none';
-              }}
+              className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-slate-700/60 bg-slate-800/60 text-slate-300 transition hover:border-slate-500 hover:text-white"
             >
               <X className="size-4" />
             </button>
 
-            <div style={{ marginBottom: 20, paddingRight: 40 }}>
-              <h3 style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 28, marginBottom: 12 }}>Upload your Letterboxd export</h3>
-              <p style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, letterSpacing: '0.05em', color: T.muted }}>For complete analysis. Follow the steps below.</p>
+            <div className="mb-5 pr-12">
+              <h3 className="text-xl font-bold tracking-tight sm:text-2xl">Upload your Letterboxd export</h3>
+              <p className="mt-1 text-sm text-slate-400">For the most complete analysis. Follow the steps below to get your file.</p>
             </div>
 
             <ExportInstructions />
@@ -807,50 +575,6 @@ export default function LetterboxdLanding() {
             <p className="mt-4 text-center text-xs text-slate-500">
               Prefer the quick path? Close this and just type your username.
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* Alert dialog */}
-      {showAlert && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(16, 15, 12, 0.9)', padding: 16 }}>
-          <div style={{ position: 'relative', width: '100%',display: 'flex',alignItems: 'center',justifyContent: 'center',flexDirection:'column', maxWidth: 400, border: `2.5px solid ${T.ink}`, background: T.card, padding: 24, boxShadow: shadow(4), color: T.ink }}>
-            <h2 style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 25, marginBottom: 12 }}>Please enter a username</h2>
-            <p style={{ fontFamily: MONO, fontSize: 15, color: T.muted, marginBottom: 20,marginLeft:30 }}>To analyze a public Letterboxd profile, enter a username above.</p>
-            <button
-              type="button"
-              onClick={() => setShowAlert(false)}
-              style={{
-                width:120,
-                height:45,
-                fontFamily: MONO,
-                fontSize: 10.5,
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                padding: '10px 14px',
-                border: `2.5px solid ${T.ink}`,
-                background: T.lime,
-                color: T.ink,
-                cursor: 'pointer',
-                boxShadow: shadow(2),
-                transition: 'all 90ms',
-              }}
-              onMouseEnter={(e) => {
-                const btn = e.target as HTMLButtonElement;
-                btn.style.background = T.amber;
-                btn.style.boxShadow = shadow(3);
-                btn.style.transform = 'translate(-1px, -1px)';
-              }}
-              onMouseLeave={(e) => {
-                const btn = e.target as HTMLButtonElement;
-                btn.style.background = T.lime;
-                btn.style.boxShadow = shadow(2);
-                btn.style.transform = 'none';
-              }}
-            >
-              Close
-            </button>
           </div>
         </div>
       )}

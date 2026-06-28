@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Clapperboard, Shuffle, Sparkles, Users, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clapperboard, Shuffle, Sparkles, X } from 'lucide-react';
 
 import {
   compareWatchlists,
@@ -14,24 +14,6 @@ import {
 } from '@/lib/api';
 import { readWatchlistUsersFromLocation, watchlistPath } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
-
-const T = {
-  darkblue: "#2776F5",
-  paper: "#F1ECDE",
-  card: "#FBF8EF",
-  ink: "#100F0C",
-  lime: "#AEE63E",
-  amber: "#F2B33D",
-  cyan: "#53CFE6",
-  purple: "#A98BEA",
-  red: "#E8463A",
-  muted: "#6F6E63",
-  darkamber: "#e16517",
-  lines: "#cdcdcd"
-};
-const SERIF = 'Georgia, "Times New Roman", serif';
-const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
-const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
 
 const COLLAPSED_FILM_LIMIT = 10;
 
@@ -49,40 +31,39 @@ function LoadingPanel({
   onClose?: () => void;
 }) {
   return (
-    <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, position: 'relative', boxShadow: shadow(2) }}>
+    <section className="border border-amber-300/60 bg-[#171411] p-5 relative">
       {onClose && (
         <button
           type="button"
           onClick={onClose}
-          style={{ position: 'absolute', right: 12, top: 12, padding: 4, background: 'none', border: 'none', color: T.muted, cursor: 'pointer', transition: 'color 150ms' }}
-          onMouseEnter={(e) => e.currentTarget.style.color = T.ink}
-          onMouseLeave={(e) => e.currentTarget.style.color = T.muted}
+          className="absolute right-3 top-3 p-1 text-stone-500 hover:text-stone-200 transition-colors"
           aria-label="Close loading panel"
         >
           <X className="h-4 w-4" />
         </button>
       )}
-      <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'auto 1fr' }}>
+      <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span style={{ height: 36, width: 36, flexShrink: 0, animation: 'spin 1s linear infinite', borderRadius: '50%', border: `2px solid ${T.ink}20`, borderTopColor: T.amber }} />
+          <div className="flex items-center gap-4">
+            <span className="h-9 w-9 shrink-0 animate-spin rounded-full border-2 border-amber-200/20 border-t-amber-300" />
             <div>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.lime }}>{title}</p>
-              <p style={{ marginTop: 4, fontSize: 14, color: T.muted }}>{message}</p>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">{title}</p>
+              <p className="mt-1 text-sm text-stone-400">{message}</p>
             </div>
           </div>
-          <div style={{ marginTop: 16, height: 4, overflow: 'hidden', background: T.ink + '20' }}>
-            <div style={{ height: '100%', width: '50%', animation: 'pulse 1.5s ease-in-out infinite', background: T.lime }} />
+          <div className="mt-4 h-1 overflow-hidden bg-stone-900">
+            <div className="h-full w-1/2 animate-pulse bg-amber-300" />
           </div>
         </div>
         {showPosterRail && (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="flex gap-2">
             {[0, 1, 2].map((index) => (
               <div
                 key={index}
-                style={{ height: 96, width: 64, border: `2.5px solid ${T.ink}`, background: T.card, animationDelay: `${index * 120}ms` }}
+                className="h-24 w-16 border border-amber-300/30 bg-gradient-to-b from-stone-700 via-stone-900 to-amber-950/50"
+                style={{ animationDelay: `${index * 120}ms` }}
               >
-                <div style={{ height: '100%', width: '100%', animation: 'pulse 1.5s ease-in-out infinite', background: T.ink + '10' }} />
+                <div className="h-full w-full animate-pulse bg-amber-200/10" />
               </div>
             ))}
           </div>
@@ -171,11 +152,11 @@ function FilmListOpen({
   const remaining = films.length - visible.length;
 
   return (
-    <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 16, boxShadow: shadow(2) }}>
-      <h3 style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.lime }}>{title}</h3>
-      <ul style={{ marginTop: 16, borderTop: `1px solid ${T.ink}20` }}>
+    <section className="border border-stone-800 bg-[#171411] p-4">
+      <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">{title}</h3>
+      <ul className="mt-4 divide-y divide-stone-800/80">
         {films.length === 0 && (
-          <li style={{ paddingTop: 8, paddingBottom: 8, fontSize: 14, color: T.muted }}>
+          <li className="py-2 text-sm text-stone-500">
             {emptyMessage || 'No films in this bucket.'}
           </li>
         )}
@@ -183,43 +164,18 @@ function FilmListOpen({
       </ul>
 
       {(films.length > COLLAPSED_FILM_LIMIT || (truncated && films.length > 0)) && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="mt-3 space-y-2">
           {films.length > COLLAPSED_FILM_LIMIT && (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              style={{
-                width: '100%',
-                border: `2.5px solid ${T.ink}`,
-                padding: '8px 12px',
-                fontFamily: MONO,
-                fontSize: 11,
-                textTransform: 'uppercase',
-                letterSpacing: '0.14em',
-                color: T.muted,
-                background: T.card,
-                cursor: 'pointer',
-                transition: 'all 90ms',
-                boxShadow: shadow(2)
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = T.lime;
-                e.currentTarget.style.color = T.ink;
-                e.currentTarget.style.boxShadow = shadow(3);
-                e.currentTarget.style.transform = 'translate(-1px, -1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = T.card;
-                e.currentTarget.style.color = T.muted;
-                e.currentTarget.style.boxShadow = shadow(2);
-                e.currentTarget.style.transform = 'none';
-              }}
+              className="w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
             >
               {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT}` : `Show ${remaining} more`}
             </button>
           )}
           {truncated && (
-            <p style={{ fontFamily: MONO, fontSize: 11, color: T.muted }}>
+            <p className="font-mono text-[11px] text-stone-500">
               Showing {films.length} of {totalCount}. Backend caps each bucket at {films.length}.
             </p>
           )}
@@ -250,52 +206,30 @@ function WatchlistAccordion({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        style={{
-          display: 'flex',
-          width: '100%',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          border: `2.5px solid ${T.ink}`,
-          background: T.card,
-          padding: '12px 16px',
-          textAlign: 'left',
-          transition: 'all 90ms',
-          cursor: 'pointer',
-          boxShadow: shadow(2)
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = T.lime;
-          e.currentTarget.style.boxShadow = shadow(3);
-          e.currentTarget.style.transform = 'translate(-1px, -1px)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = T.card;
-          e.currentTarget.style.boxShadow = shadow(2);
-          e.currentTarget.style.transform = 'none';
-        }}
+        className="flex w-full items-center justify-between border border-stone-700 bg-[#171411] px-4 py-3 text-left transition-colors duration-150 ease-out hover:border-stone-500 hover:bg-[#1e1a14]"
       >
-        <span style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em', color: T.muted }}>
-          Only @{user} <span style={{ marginLeft: 4, color: T.amber }}>({count})</span>
+        <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-300">
+          Only @{user} <span className="ml-1 text-amber-300">({count})</span>
         </span>
-        <ChevronDown className="h-4 w-4 shrink-0" style={{ color: T.muted }} />
+        <ChevronDown className="h-4 w-4 shrink-0 text-stone-500" />
       </button>
     );
   }
 
   return (
-    <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 16, boxShadow: shadow(2) }}>
+    <section className="border border-stone-800 bg-[#171411] p-4">
       <button
         type="button"
         onClick={() => setOpen(false)}
-        style={{ marginBottom: 12, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        className="mb-3 flex w-full items-center justify-between text-left"
       >
-        <h3 style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.lime }}>
-          Only @{user} <span style={{ color: T.muted }}>({count})</span>
+        <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">
+          Only @{user} <span className="text-stone-400">({count})</span>
         </h3>
-        <ChevronUp className="h-4 w-4 shrink-0" style={{ color: T.muted }} />
+        <ChevronUp className="h-4 w-4 shrink-0 text-stone-500" />
       </button>
 
-      <ul style={{ borderTop: `1px solid ${T.ink}20` }}>
+      <ul className="divide-y divide-stone-800/80">
         <FilmRows films={visible} />
       </ul>
 
@@ -303,33 +237,7 @@ function WatchlistAccordion({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          style={{
-            marginTop: 12,
-            width: '100%',
-            border: `2.5px solid ${T.ink}`,
-            padding: '8px 12px',
-            fontFamily: MONO,
-            fontSize: 11,
-            textTransform: 'uppercase',
-            letterSpacing: '0.14em',
-            color: T.muted,
-            background: T.card,
-            cursor: 'pointer',
-            transition: 'all 90ms',
-            boxShadow: shadow(2)
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = T.lime;
-            e.currentTarget.style.color = T.ink;
-            e.currentTarget.style.boxShadow = shadow(3);
-            e.currentTarget.style.transform = 'translate(-1px, -1px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = T.card;
-            e.currentTarget.style.color = T.muted;
-            e.currentTarget.style.boxShadow = shadow(2);
-            e.currentTarget.style.transform = 'none';
-          }}
+          className="mt-3 w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100"
         >
           {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT}` : `Show ${remaining} more`}
         </button>
@@ -342,16 +250,16 @@ function WatchlistAccordion({
 
 function RecommendationStrip({ recommendation }: { recommendation: FilmRecommendation }) {
   return (
-    <div style={{ border: `2.5px solid ${T.amber}`, background: T.amber, padding: 16, color: T.ink, boxShadow: shadow(2) }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+    <div className="border border-amber-400/40 bg-amber-300 p-4 text-stone-950">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', fontWeight: 700 }}>Tonight's pick</p>
-          <p style={{ marginTop: 4, fontSize: 24, fontWeight: 900, lineHeight: 1 }}>{recommendation.title}</p>
-          <p style={{ marginTop: 4, fontFamily: MONO, fontSize: 12, color: T.muted }}>{recommendation.year}</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em]">Tonight's pick</p>
+          <p className="mt-1 text-2xl font-black leading-tight">{recommendation.title}</p>
+          <p className="mt-1 font-mono text-xs text-stone-700">{recommendation.year}</p>
         </div>
         <Sparkles className="h-6 w-6 shrink-0" />
       </div>
-      <p style={{ marginTop: 12, fontSize: 14, fontWeight: 500, color: T.ink }}>{recommendation.reason}</p>
+      <p className="mt-3 text-sm font-medium text-stone-800">{recommendation.reason}</p>
     </div>
   );
 }
@@ -452,48 +360,20 @@ export default function WatchlistCompare() {
   const formatPct = (n: number) => `${Math.round((n / barTotal) * 100)}%`;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-      <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, boxShadow: shadow(2) }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-          <div style={{ display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', background: T.lime, boxShadow: shadow(2) }}>
-            <Users className="h-5 w-5" style={{ color: T.ink }} />
-          </div>
-          <div>
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: T.ink }}>Watchlist Compare</h2>
-            <p style={{ fontSize: 14, color: T.muted, marginTop: 4 }}>Find overlap, split the misses, then pick a film from the shared shelf.</p>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(150px, 250px) minmax(150px, 250px) auto', alignItems: 'end' }}>
-          <label style={{ display: 'block' }}>
-            <span style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>First watchlist</span>
+    <div className="space-y-8">
+      <section className="border border-stone-800 bg-[#201b16] p-5 shadow-2xl shadow-black/20">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+          <label className="block">
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">First watchlist</span>
             <input
               value={first}
               onChange={(event) => setFirst(event.target.value)}
               placeholder={placeholders[0]}
-              style={{
-                marginTop: 8,
-                width: '100%',
-                border: `2.5px solid ${T.ink}`,
-                background: T.card,
-                padding: '12px 16px',
-                fontSize: 14,
-                color: T.ink,
-                transition: 'all 150ms',
-                boxShadow: shadow(2),
-                fontFamily: 'inherit'
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.boxShadow = shadow(3);
-                e.currentTarget.style.borderColor = T.lime;
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.boxShadow = shadow(2);
-                e.currentTarget.style.borderColor = T.ink;
-              }}
+              className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-amber-400 focus:outline-none focus-visible:outline-none"
             />
           </label>
-          <label style={{ display: 'block' }}>
-            <span style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>Second watchlist</span>
+          <label className="block">
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">Second watchlist</span>
             <input
               value={second}
               onChange={(event) => setSecond(event.target.value)}
@@ -501,88 +381,27 @@ export default function WatchlistCompare() {
                 if (event.key === 'Enter') void handleCompare();
               }}
               placeholder={placeholders[1]}
-              style={{
-                marginTop: 8,
-                width: '100%',
-                border: `2.5px solid ${T.ink}`,
-                background: T.card,
-                padding: '12px 16px',
-                fontSize: 14,
-                color: T.ink,
-                transition: 'all 150ms',
-                boxShadow: shadow(2),
-                fontFamily: 'inherit'
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.boxShadow = shadow(3);
-                e.currentTarget.style.borderColor = T.lime;
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.boxShadow = shadow(2);
-                e.currentTarget.style.borderColor = T.ink;
-              }}
+              className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-amber-400 focus:outline-none focus-visible:outline-none"
             />
           </label>
           <button
             type="button"
-            onClick={() => {
-              if (!canSubmit) {
-                alert('Please enter both usernames and make sure they\'re different');
-                return;
-              }
-              void handleCompare();
-            }}
-            style={{
-              display: 'inline-flex',
-              height: 46,
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              background: T.lime,
-              paddingLeft: 12,
-              paddingRight: 12,
-              fontFamily: MONO,
-              fontSize: 11,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.14em',
-              color: T.ink,
-              cursor: 'pointer',
-              transition: 'all 90ms',
-              border: `2.5px solid ${T.ink}`,
-              boxShadow: shadow(2),
-              opacity: loading ? 0.6 : 1,
-              marginLeft: 120
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) {
-                e.currentTarget.style.background = T.amber;
-                e.currentTarget.style.boxShadow = shadow(3);
-                e.currentTarget.style.transform = 'translate(-1px, -1px)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!loading) {
-                e.currentTarget.style.background = T.lime;
-                e.currentTarget.style.boxShadow = shadow(2);
-                e.currentTarget.style.transform = 'none';
-              }
-            }}
+            onClick={() => void handleCompare()}
+            disabled={!canSubmit || loading}
+            className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-amber-200 active:scale-[0.97] active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
           >
             <Clapperboard className="h-4 w-4" />
             {loading ? 'Reading' : 'Compare'}
           </button>
         </div>
-        {validationMessage && <p style={{ marginTop: 16, border: `2.5px solid ${T.red}`, background: T.red + '20', padding: '12px 16px', fontSize: 14, color: T.red }}>{validationMessage}</p>}
+        {validationMessage && <p className="mt-4 border border-amber-900/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{validationMessage}</p>}
         {error && (
-          <div style={{ marginTop: 16, border: `2.5px solid ${T.red}`, background: T.red + '20', padding: '12px 16px' }}>
-            <p style={{ fontSize: 14, color: T.red }}>{error}</p>
+          <div className="mt-4 border border-red-900/70 bg-red-950/40 px-4 py-3">
+            <p className="text-sm text-red-200">{error}</p>
             <button
               type="button"
               onClick={() => void handleCompare()}
-              style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: T.red, background: 'none', border: 'none', cursor: 'pointer', transition: 'color 150ms' }}
-              onMouseEnter={(e) => e.currentTarget.style.color = T.darkamber}
-              onMouseLeave={(e) => e.currentTarget.style.color = T.red}
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-300 hover:text-red-100 transition-colors"
             >
               <Clapperboard className="h-3.5 w-3.5" />
               Try again
@@ -602,134 +421,77 @@ export default function WatchlistCompare() {
       {result && (
         <>
           {/* Match score header */}
-          <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, textAlign: 'center', boxShadow: shadow(2) }}>
-            <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.amber }}>Match score</p>
-            <p style={{ marginTop: 8, fontSize: 72, fontWeight: 900, lineHeight: 1, color: T.ink }}>{result.match_score}%</p>
-            <p style={{ marginTop: 8, fontSize: 14, color: T.muted }}>
-              <span style={{ fontWeight: 600, color: T.darkamber }}>@{result.users[0]}</span>
-              <span style={{ margin: '0 6px', color: T.muted }}>vs</span>
-              <span style={{ fontWeight: 600, color: T.darkblue }}>@{result.users[1]}</span>
+          <section className="border border-amber-400/40 bg-[#0f0d0b] p-5 text-center">
+            <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">Match score</p>
+            <p className="mt-2 text-7xl font-black leading-none text-stone-50">{result.match_score}%</p>
+            <p className="mt-2 text-sm text-stone-400">
+              <span className="font-semibold text-orange-400">@{result.users[0]}</span>
+              <span className="mx-1.5 text-stone-600">vs</span>
+              <span className="font-semibold text-emerald-400">@{result.users[1]}</span>
             </p>
           </section>
 
           {/* Responsive summary cards */}
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: '12px 16px', textAlign: 'center', boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.darkamber, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <section className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="border border-orange-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-orange-400 truncate">
                 Only @{result.users[0]}
               </p>
-              <p style={{ marginTop: 4, fontSize: 24, fontWeight: 900, lineHeight: 1, color: T.ink }}>{counts?.first_only ?? 0}</p>
+              <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.first_only ?? 0}</p>
             </div>
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: '12px 16px', textAlign: 'center', boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.lime }}>
+            <div className="border border-amber-300/40 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-amber-300">
                 Both
               </p>
-              <p style={{ marginTop: 4, fontSize: 24, fontWeight: 900, lineHeight: 1, color: T.ink }}>{counts?.common ?? 0}</p>
+              <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.common ?? 0}</p>
             </div>
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: '12px 16px', textAlign: 'center', boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: T.darkblue, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div className="border border-emerald-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-emerald-400 truncate">
                 Only @{result.users[1]}
               </p>
-              <p style={{ marginTop: 4, fontSize: 24, fontWeight: 900, lineHeight: 1, color: T.ink }}>{counts?.second_only ?? 0}</p>
+              <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.second_only ?? 0}</p>
             </div>
           </section>
 
           {/* Proportional bar */}
-          <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, boxShadow: shadow(2) }}>
-            <div style={{ display: 'flex', width: '100%', gap: 2 }}>
+          <section className="border border-stone-800 bg-[#171411] p-5">
+            <div className="flex w-full gap-0.5">
               {counts && (
                 <>
                   <div
-                    style={{
-                      flex: counts.first_only || 1,
-                      position: 'relative',
-                      height: 48,
-                      background: T.darkamber,
-                      border: `2.5px solid ${T.ink}`
-                    }}
+                    style={{ flex: counts.first_only || 1 }}
+                    className="group relative h-12 bg-orange-500/80"
                     title={`Only @${result.users[0]}: ${counts.first_only} (${formatPct(counts.first_only)})`}
-                    onMouseEnter={(e) => {
-                      const span = e.currentTarget.querySelector('span');
-                      if (span) {
-                        span.style.opacity = '1';
-                        e.currentTarget.style.boxShadow = shadow(3);
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      const span = e.currentTarget.querySelector('span');
-                      if (span) {
-                        span.style.opacity = '0';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
                   >
-                    <span style={{ pointerEvents: 'none', position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', fontSize: 11, fontWeight: 700, color: T.paper, opacity: 0, transition: 'opacity 150ms' }}>
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.first_only)}
                     </span>
                   </div>
                   <div
-                    style={{
-                      flex: counts.common || 1,
-                      position: 'relative',
-                      height: 48,
-                      background: T.amber,
-                      border: `2.5px solid ${T.ink}`
-                    }}
+                    style={{ flex: counts.common || 1 }}
+                    className="group relative h-12 bg-amber-300"
                     title={`Both: ${counts.common} (${formatPct(counts.common)})`}
-                    onMouseEnter={(e) => {
-                      const span = e.currentTarget.querySelector('span');
-                      if (span) {
-                        span.style.opacity = '1';
-                        e.currentTarget.style.boxShadow = shadow(3);
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      const span = e.currentTarget.querySelector('span');
-                      if (span) {
-                        span.style.opacity = '0';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
                   >
-                    <span style={{ pointerEvents: 'none', position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', fontSize: 11, fontWeight: 700, color: T.ink, opacity: 0, transition: 'opacity 150ms' }}>
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-stone-950 opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.common)}
                     </span>
                   </div>
                   <div
-                    style={{
-                      flex: counts.second_only || 1,
-                      position: 'relative',
-                      height: 48,
-                      background: T.darkblue,
-                      border: `2.5px solid ${T.ink}`
-                    }}
+                    style={{ flex: counts.second_only || 1 }}
+                    className="group relative h-12 bg-emerald-500/80"
                     title={`Only @${result.users[1]}: ${counts.second_only} (${formatPct(counts.second_only)})`}
-                    onMouseEnter={(e) => {
-                      const span = e.currentTarget.querySelector('span');
-                      if (span) {
-                        span.style.opacity = '1';
-                        e.currentTarget.style.boxShadow = shadow(3);
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      const span = e.currentTarget.querySelector('span');
-                      if (span) {
-                        span.style.opacity = '0';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
                   >
-                    <span style={{ pointerEvents: 'none', position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', fontSize: 11, fontWeight: 700, color: T.paper, opacity: 0, transition: 'opacity 150ms' }}>
+                    <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.second_only)}
                     </span>
                   </div>
                 </>
               )}
             </div>
-            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-              <span style={{ textAlign: 'center', color: T.darkamber }}>Only @{result.users[0]}: {counts?.first_only}</span>
-              <span style={{ textAlign: 'center', color: T.amber }}>Both: {counts?.common}</span>
-              <span style={{ textAlign: 'center', color: T.darkblue }}>Only @{result.users[1]}: {counts?.second_only}</span>
+            <div className="mt-3 grid grid-cols-3 gap-2 font-mono text-[11px] uppercase tracking-[0.12em]">
+              <span className="text-orange-400/90 text-center">Only @{result.users[0]}: {counts?.first_only}</span>
+              <span className="text-amber-300 text-center">Both: {counts?.common}</span>
+              <span className="text-emerald-400/90 text-center">Only @{result.users[1]}: {counts?.second_only}</span>
             </div>
           </section>
 
@@ -756,55 +518,26 @@ export default function WatchlistCompare() {
           </div>
 
           {result.counts.common === 0 && (
-            <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.muted }}>No overlap yet</p>
-              <p style={{ marginTop: 8, fontSize: 14, color: T.muted }}>
+            <section className="border border-stone-800 bg-[#171411] p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No overlap yet</p>
+              <p className="mt-2 text-sm text-stone-400">
                 Zero shared films. Expand individual watchlists above to see what each person wants to watch.
               </p>
             </section>
           )}
 
-          <section style={{ display: 'grid', gap: 16, border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, boxShadow: shadow(2), gridTemplateColumns: result.counts.common === 0 ? undefined : '1fr auto' }}>
+          <section className="grid gap-4 border border-stone-800 bg-[#201b16] p-5 md:grid-cols-[1fr_auto]">
             <div>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.muted }}>What should we watch?</p>
-              <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">What should we watch?</p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 {(['random', 'highest_rated', 'newest'] as RecommendationStrategy[]).map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => setStrategy(item)}
-                    style={{
-                      border: `2.5px solid ${strategy === item ? T.ink : T.ink}`,
-                      background: strategy === item ? T.amber : T.card,
-                      color: strategy === item ? T.ink : T.muted,
-                      paddingLeft: 12,
-                      paddingRight: 12,
-                      paddingTop: 8,
-                      paddingBottom: 8,
-                      fontFamily: MONO,
-                      fontSize: 11,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.12em',
-                      cursor: 'pointer',
-                      transition: 'all 90ms',
-                      boxShadow: shadow(2)
-                    }}
-                    onMouseEnter={(e) => {
-                      if (strategy !== item) {
-                        e.currentTarget.style.background = T.lime;
-                        e.currentTarget.style.color = T.ink;
-                        e.currentTarget.style.boxShadow = shadow(3);
-                        e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (strategy !== item) {
-                        e.currentTarget.style.background = T.card;
-                        e.currentTarget.style.color = T.muted;
-                        e.currentTarget.style.boxShadow = shadow(2);
-                        e.currentTarget.style.transform = 'none';
-                      }
-                    }}
+                    className={`border px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors duration-150 ease-out active:scale-[0.97] active:opacity-90 ${
+                      strategy === item ? 'border-amber-300 bg-amber-300 text-stone-950' : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
+                    }`}
                   >
                     {item.replace('_', ' ')}
                   </button>
@@ -815,40 +548,7 @@ export default function WatchlistCompare() {
               type="button"
               onClick={() => void handleRecommend()}
               disabled={recommending || result.counts.common === 0}
-              style={{
-                display: 'inline-flex',
-                height: 46,
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                background: recommending || result.counts.common === 0 ? T.muted : T.lime,
-                paddingLeft: 20,
-                paddingRight: 20,
-                fontFamily: MONO,
-                fontSize: 11,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.14em',
-                color: T.ink,
-                cursor: recommending || result.counts.common === 0 ? 'not-allowed' : 'pointer',
-                transition: 'all 90ms',
-                border: `2.5px solid ${T.ink}`,
-                boxShadow: shadow(2)
-              }}
-              onMouseEnter={(e) => {
-                if (!recommending && result.counts.common > 0) {
-                  e.currentTarget.style.background = T.amber;
-                  e.currentTarget.style.boxShadow = shadow(3);
-                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!recommending && result.counts.common > 0) {
-                  e.currentTarget.style.background = T.lime;
-                  e.currentTarget.style.boxShadow = shadow(2);
-                  e.currentTarget.style.transform = 'none';
-                }
-              }}
+              className="inline-flex h-[46px] items-center justify-center gap-2 bg-stone-100 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-colors duration-150 ease-out hover:bg-white active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
             >
               <Shuffle className="h-4 w-4" />
               {recommending ? 'Choosing' : 'Pick one'}

@@ -8,24 +8,6 @@ import { getPosterUrl } from '@/lib/analytics';
 import { readWatchlistUsersFromLocation } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 
-const T = {
-  darkblue: "#2776F5",
-  paper: "#F1ECDE",
-  card: "#FBF8EF",
-  ink: "#100F0C",
-  lime: "#AEE63E",
-  amber: "#F2B33D",
-  cyan: "#53CFE6",
-  purple: "#A98BEA",
-  red: "#E8463A",
-  muted: "#6F6E63",
-  darkamber: "#e16517",
-  lines: "#cdcdcd"
-};
-const SERIF = 'Georgia, "Times New Roman", serif';
-const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
-const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
-
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
 }
@@ -55,49 +37,30 @@ export default function DateNight() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, boxShadow: shadow(2) }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ display: 'flex', height: 40, width: 40, alignItems: 'center', justifyContent: 'center', background: T.red, boxShadow: shadow(2) }}>
-          <HeartHandshake className="h-5 w-5" style={{ color: T.ink }} />
+    <div className="space-y-5 border border-stone-800 bg-[#15120f] p-5">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center bg-red-900/50 text-red-200">
+          <HeartHandshake className="h-5 w-5" />
         </div>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 900, color: T.ink }}>Date Night Engine</h2>
-          <p style={{ fontSize: 14, color: T.muted, marginTop: 4 }}>Taste-profile recommendations beyond watchlist overlap.</p>
+          <h2 className="text-xl font-black text-stone-100">Date Night Engine</h2>
+          <p className="text-sm text-stone-500">Taste-profile recommendations beyond watchlist overlap.</p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(150px, 250px) minmax(150px, 250px) auto', alignItems: 'end' }}>
-        <label style={{ display: 'block' }}>
-          <span style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>First profile</span>
+      <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+        <label className="block">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">First profile</span>
           <input
             value={first}
             onChange={(event) => setFirst(event.target.value)}
             placeholder={placeholders[0]}
             aria-label="First Letterboxd username"
-            style={{
-              marginTop: 8,
-              width: '100%',
-              border: `2.5px solid ${T.ink}`,
-              background: T.card,
-              padding: '12px 16px',
-              fontSize: 14,
-              color: T.ink,
-              transition: 'all 150ms',
-              boxShadow: shadow(2),
-              fontFamily: 'inherit'
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = shadow(3);
-              e.currentTarget.style.borderColor = T.red;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = shadow(2);
-              e.currentTarget.style.borderColor = T.ink;
-            }}
+            className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
           />
         </label>
-        <label style={{ display: 'block' }}>
-          <span style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>Second profile</span>
+        <label className="block">
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Second profile</span>
           <input
             value={second}
             onChange={(event) => setSecond(event.target.value)}
@@ -106,100 +69,42 @@ export default function DateNight() {
             }}
             placeholder={placeholders[1]}
             aria-label="Second Letterboxd username"
-            style={{
-              marginTop: 8,
-              width: '100%',
-              border: `2.5px solid ${T.ink}`,
-              background: T.card,
-              padding: '12px 16px',
-              fontSize: 14,
-              color: T.ink,
-              transition: 'all 150ms',
-              boxShadow: shadow(2),
-              fontFamily: 'inherit'
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.boxShadow = shadow(3);
-              e.currentTarget.style.borderColor = T.red;
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.boxShadow = shadow(2);
-              e.currentTarget.style.borderColor = T.ink;
-            }}
+            className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
           />
         </label>
         <button
           type="button"
-          onClick={() => {
-            if (!canSubmit) {
-              alert('Please enter both usernames and make sure they\'re different');
-              return;
-            }
-            void handleSubmit();
-          }}
-          style={{
-            display: 'inline-flex',
-            height: 46,
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            background: T.red,
-            paddingLeft: 12,
-            paddingRight: 12,
-            fontFamily: MONO,
-            fontSize: 11,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.14em',
-            color: T.ink,
-            cursor: 'pointer',
-            transition: 'all 90ms',
-            border: `2.5px solid ${T.ink}`,
-            boxShadow: shadow(2),
-            opacity: loading ? 0.6 : 1,
-            marginLeft: 120
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) {
-              e.currentTarget.style.background = T.darkamber;
-              e.currentTarget.style.boxShadow = shadow(3);
-              e.currentTarget.style.transform = 'translate(-1px, -1px)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!loading) {
-              e.currentTarget.style.background = T.red;
-              e.currentTarget.style.boxShadow = shadow(2);
-              e.currentTarget.style.transform = 'none';
-            }
-          }}
+          onClick={() => void handleSubmit()}
+          disabled={!canSubmit || loading}
+          className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-red-200 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-red-100 active:scale-[0.97] active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-200 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
         >
           <Search className="h-4 w-4" />
           {loading ? 'Profiling' : 'Find films'}
         </button>
       </div>
 
-      {error && <p style={{ border: `2.5px solid ${T.red}`, background: T.red + '20', padding: '12px 16px', fontSize: 14, color: T.red }}>{error}</p>}
+      {error && <p className="border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p>}
 
       {loading && (
-        <section style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 16, boxShadow: shadow(2) }}>
-          <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', alignItems: 'center' }}>
+        <section className="border border-red-200/50 bg-[#201612] p-4">
+          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ height: 32, width: 32, flexShrink: 0, animation: 'spin 1s linear infinite', borderRadius: '50%', border: `2px solid ${T.muted}`, borderTopColor: T.red }} />
+              <div className="flex items-center gap-4">
+                <span className="h-8 w-8 shrink-0 animate-spin rounded-full border-2 border-red-100/20 border-t-red-200" />
                 <div>
-                  <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.red }}>Building mutual profile</p>
-                  <p style={{ marginTop: 4, fontSize: 14, color: T.muted }}>Scanning both public profiles, finding shared taste signals, then looking for unwatched recommendations.</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-red-200">Building mutual profile</p>
+                  <p className="mt-1 text-sm text-stone-400">Scanning both public profiles, finding shared taste signals, then looking for unwatched recommendations.</p>
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="flex gap-2">
               {[0, 1, 2].map((index) => (
                 <div
                   key={index}
-                  style={{ height: 96, width: 64, border: `2.5px solid ${T.ink}`, background: T.amber, animationDelay: `${index * 120}ms`, animation: 'pulse 1.5s ease-in-out infinite' }}
+                  className="h-24 w-16 border border-red-200/30 bg-gradient-to-b from-stone-700 via-stone-950 to-red-950/50"
+                  style={{ animationDelay: `${index * 120}ms` }}
                 >
-                  <div style={{ height: '100%', width: '100%', animation: 'pulse 1.5s ease-in-out infinite', background: T.red + '20', animationDelay: `${index * 120}ms` }} />
+                  <div className="h-full w-full animate-pulse bg-red-100/10" />
                 </div>
               ))}
             </div>
@@ -208,31 +113,31 @@ export default function DateNight() {
       )}
 
       {result && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 16, boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>Genres</p>
-              <p style={{ marginTop: 8, fontSize: 14, color: T.ink }}>{result.mutual_profile.top_genres.join(', ') || 'Mixed'}</p>
+        <div className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="border border-stone-800 bg-[#201b16] p-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Genres</p>
+              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.top_genres.join(', ') || 'Mixed'}</p>
             </div>
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 16, boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>Directors</p>
-              <p style={{ marginTop: 8, fontSize: 14, color: T.ink }}>{result.mutual_profile.top_directors.join(', ') || 'No shared auteur yet'}</p>
+            <div className="border border-stone-800 bg-[#201b16] p-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Directors</p>
+              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.top_directors.join(', ') || 'No shared auteur yet'}</p>
             </div>
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 16, boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.16em', color: T.muted }}>Era</p>
-              <p style={{ marginTop: 8, fontSize: 14, color: T.ink }}>{result.mutual_profile.era_overlap}</p>
+            <div className="border border-stone-800 bg-[#201b16] p-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Era</p>
+              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.era_overlap}</p>
             </div>
           </div>
 
           {result.recommendations.length === 0 ? (
-            <div style={{ border: `2.5px solid ${T.ink}`, background: T.card, padding: 20, boxShadow: shadow(2) }}>
-              <p style={{ fontFamily: MONO, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.18em', color: T.muted }}>No mutual picks</p>
-              <p style={{ marginTop: 8, fontSize: 14, color: T.muted }}>
+            <div className="border border-stone-800 bg-[#201b16] p-5">
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No mutual picks</p>
+              <p className="mt-2 text-sm text-stone-400">
                 Zero overlap between your watchlists — no films on both lists. But you can still check what's on <em>their</em> watchlist by scrolling down.
               </p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {result.recommendations.map((film, index) => {
                 const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
                 const extra = film as unknown as Record<string, unknown>;
@@ -249,26 +154,9 @@ export default function DateNight() {
                 return (
                   <article
                     key={`${film.title}-${film.year}-${index}`}
-                    style={{
-                      display: 'flex',
-                      gap: 16,
-                      border: `2.5px solid ${T.ink}`,
-                      background: T.card,
-                      padding: 16,
-                      transition: 'all 150ms',
-                      boxShadow: shadow(2),
-                      cursor: 'pointer'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow = shadow(3);
-                      e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow = shadow(2);
-                      e.currentTarget.style.transform = 'none';
-                    }}
+                    className="flex gap-4 border border-stone-800 bg-[#201b16] p-4 transition-colors duration-150 ease-out hover:border-stone-600"
                   >
-                    <div style={{ position: 'relative', height: 120, width: 80, flexShrink: 0, overflow: 'hidden', background: T.muted, border: `2.5px solid ${T.ink}` }}>
+                    <div className="relative h-[120px] w-[80px] shrink-0 overflow-hidden bg-stone-800">
                       {posterUrl && !imgError ? (
                         <img
                           src={posterUrl}
@@ -276,47 +164,33 @@ export default function DateNight() {
                           width={80}
                           height={120}
                           loading="lazy"
-                          style={{ height: '100%', width: '100%', objectFit: 'cover' }}
+                          className="h-full w-full object-cover"
                           onError={() => setErroredPosters(prev => new Set(prev).add(posterKey))}
                         />
                       ) : (
-                        <div style={{ display: 'flex', height: '100%', width: '100%', alignItems: 'center', justifyContent: 'center', color: T.muted }} aria-hidden="true">
+                        <div className="flex h-full w-full items-center justify-center text-stone-600" aria-hidden="true">
                           <ExternalLink className="h-6 w-6" />
                         </div>
                       )}
                     </div>
 
-                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
-                      <h3 style={{ fontSize: 16, fontWeight: 900, color: T.ink, lineHeight: 1.2 }}>{film.title}</h3>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 8px', fontSize: 12, color: T.muted }}>
+                    <div className="min-w-0 flex flex-col justify-center gap-1">
+                      <h3 className="text-base font-black text-stone-100 leading-tight">{film.title}</h3>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-stone-500">
                         <span>{film.year || '—'}</span>
                         <span>·</span>
                         <span>{director || '—'}</span>
                       </div>
-                      <p style={{ fontSize: 12, color: T.muted, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{overview || '—'}</p>
-                      <p style={{ fontSize: 12, fontStyle: 'italic', color: T.muted }}>{film.reason}</p>
+                      <p className="text-xs text-stone-600 line-clamp-2">{overview || '—'}</p>
+                      <p className="text-xs italic text-stone-400">{film.reason}</p>
                       {watchlistAddedAt && (
-                        <span style={{ fontSize: 12, color: T.muted }}>added {watchlistAddedAt}</span>
+                        <span className="text-xs text-stone-500">added {watchlistAddedAt}</span>
                       )}
                       <a
                         href={letterboxdUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{
-                          marginTop: 4,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          fontFamily: MONO,
-                          fontSize: 11,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.14em',
-                          color: T.darkamber,
-                          transition: 'color 150ms',
-                          textDecoration: 'none'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = T.amber}
-                        onMouseLeave={(e) => e.currentTarget.style.color = T.darkamber}
+                        className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         View on Letterboxd

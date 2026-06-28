@@ -2,24 +2,6 @@
 import { useEffect, useState } from 'react';
 import { Film, X } from 'lucide-react';
 
-const T = {
-  darkblue: "#2776F5",
-  paper: "#F1ECDE",
-  card: "#FBF8EF",
-  ink: "#100F0C",
-  lime: "#AEE63E",
-  amber: "#F2B33D",
-  cyan: "#53CFE6",
-  purple: "#A98BEA",
-  red: "#E8463A",
-  muted: "#6F6E63",
-  darkamber: "#e16517",
-  lines: "#cdcdcd"
-};
-const SERIF = 'Georgia, "Times New Roman", serif';
-const MONO = 'ui-monospace, "Cascadia Code", "Courier New", monospace';
-const shadow = (n: number) => `${n}px ${n}px 0 ${T.ink}`;
-
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
@@ -126,99 +108,62 @@ export default function LoadingScreen({
     : `Elapsed ${formatElapsed(elapsed)}. Most exports finish in under a minute.`;
 
   return (
-    <div style={{ minHeight: '100vh', background: T.card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
       {/* Giant rotating fun message — big, unexpected, attention-grabbing */}
       {isScrape && (
-        <div style={{ marginBottom: 20, textAlign: 'center' }}>
+        <div className="mb-5 text-center">
           <p
             key={funMessageIndex}
-            style={{
-              fontSize: 18,
-              fontWeight: 600,
-              fontStyle: 'italic',
-              lineHeight: 1.4,
-              letterSpacing: '0.02em',
-              color: T.muted,
-              transition: 'opacity 500ms'
-            }}
+            className="text-lg md:text-xl font-semibold italic leading-snug tracking-tight text-white/80 transition-opacity duration-500"
           >
             {FUN_MESSAGES[funMessageIndex]}
           </p>
         </div>
       )}
 
-      <div style={{ position: 'relative', width: '100%', maxWidth: 600, textAlign: 'center', border: `2.5px solid ${T.ink}`, background: T.card, padding: 32, boxShadow: shadow(4) }}>
+      <div className="relative w-full max-w-xl text-center rounded-3xl border border-slate-700/70 bg-slate-800/55 p-8 md:p-10 backdrop-blur-sm">
         {onCancel && (
           <button
             onClick={onCancel}
-            style={{
-              position: 'absolute',
-              right: 16,
-              top: 16,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              border: `2.5px solid ${T.ink}`,
-              background: T.red,
-              padding: '8px 12px',
-              fontFamily: MONO,
-              fontSize: 11,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '0.14em',
-              color: T.ink,
-              cursor: 'pointer',
-              transition: 'all 90ms',
-              boxShadow: shadow(2)
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = T.darkamber;
-              e.currentTarget.style.boxShadow = shadow(3);
-              e.currentTarget.style.transform = 'translate(-1px, -1px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = T.red;
-              e.currentTarget.style.boxShadow = shadow(2);
-              e.currentTarget.style.transform = 'none';
-            }}
+            className="group absolute right-4 top-4 flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white/85 shadow-sm shadow-black/20 transition-all duration-200 hover:border-rose-400/40 hover:bg-rose-500/15 hover:text-white hover:shadow-rose-500/15 active:scale-[0.96]"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5 transition-transform duration-200 group-hover:rotate-90" />
             Cancel
           </button>
         )}
 
-        <div style={{ margin: '0 auto 24px', height: 56, width: 56, border: `2.5px solid ${T.amber}`, background: T.amber + '20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Film style={{ height: 28, width: 28, color: T.amber, animation: 'pulse 2s ease-in-out infinite' }} />
+        <div className="mx-auto mb-6 h-14 w-14 rounded-2xl bg-orange-500/15 border border-orange-400/35 flex items-center justify-center">
+          <Film className="h-7 w-7 text-orange-300 animate-pulse" />
         </div>
-        <h1 style={{ fontSize: 36, fontFamily: SERIF, fontWeight: 900, color: T.ink, marginBottom: 12 }}>{displayTitle}</h1>
-        <p style={{ fontSize: 16, color: T.ink, marginBottom: 8 }}>{displayMessage}</p>
+        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">{displayTitle}</h1>
+        <p className="text-slate-300 mb-2">{displayMessage}</p>
 
         {/* Live discovery feed — real counts/stages streamed from the scrape */}
         {isScrape && (liveFilms > 0 || recentEvents.length > 0) && (
-          <div style={{ marginBottom: 16 }}>
+          <div className="mb-4 space-y-1.5">
             {liveFilms > 0 && (
-              <p style={{ fontSize: 28, fontWeight: 900, fontFamily: MONO, color: T.darkamber, marginBottom: 4 }}>
+              <p className="text-2xl font-black tabular-nums text-orange-300">
                 {liveFilms.toLocaleString()}{' '}
-                <span style={{ fontSize: 13, fontWeight: 500, color: T.muted }}>films found</span>
+                <span className="text-sm font-medium text-slate-400">films found</span>
               </p>
             )}
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ul className="space-y-0.5 text-xs text-slate-400">
               {recentEvents.map((e, i) => (
-                <li key={i} style={{ fontSize: 12, color: T.muted, transition: 'opacity 500ms' }}>{e.message}</li>
+                <li key={i} className="transition-opacity duration-500">{e.message}</li>
               ))}
             </ul>
           </div>
         )}
 
-        {/* Guess-your-stat game (wait UX B) */}
+        {/* Guess-your-stat game (wait UX B) — reveal vs your guess at the end */}
         {isScrape && reveal && (
-          <div style={{ marginBottom: 20, border: `2.5px solid ${T.ink}`, background: T.amber + '20', boxShadow: shadow(3), padding: 16 }}>
-            <p style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.14em', fontFamily: MONO, color: T.darkamber, marginBottom: 4 }}>Tahmin vs gerçek</p>
-            <p style={{ fontSize: 18, fontWeight: 700, color: T.ink }}>
-              Sen <span style={{ fontFamily: MONO }}>{reveal.guess.toLocaleString()}</span> · Gerçek{' '}
-              <span style={{ fontFamily: MONO, color: T.darkamber }}>{reveal.actual.toLocaleString()}</span>
+          <div className="mb-5 rounded-2xl border border-orange-400/30 bg-orange-500/10 p-4">
+            <p className="text-[10px] uppercase tracking-wider text-orange-300/80 mb-1">Tahmin vs gerçek</p>
+            <p className="text-lg font-bold">
+              Sen <span className="tabular-nums">{reveal.guess.toLocaleString()}</span> · Gerçek{' '}
+              <span className="tabular-nums text-orange-300">{reveal.actual.toLocaleString()}</span>
             </p>
-            <p style={{ marginTop: 4, fontSize: 14, color: T.muted }}>
+            <p className="mt-1 text-sm text-slate-400">
               {reveal.actual === reveal.guess
                 ? 'Tam isabet. 🎯'
                 : `${Math.abs(reveal.actual - reveal.guess).toLocaleString()} film ${reveal.actual > reveal.guess ? 'fazla çıktı' : 'az çıktı'}.`}
@@ -228,14 +173,14 @@ export default function LoadingScreen({
 
         {isScrape && !reveal && guess == null && onGuess && (
           <form
-            style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            className="mb-5 flex flex-wrap items-center justify-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               const n = parseInt(guessInput, 10);
               if (Number.isFinite(n) && n >= 0) onGuess(n);
             }}
           >
-            <label htmlFor="film-guess" style={{ fontSize: 14, color: T.ink }}>Kaç film logladın dersin?</label>
+            <label htmlFor="film-guess" className="text-sm text-slate-300">Kaç film logladın dersin?</label>
             <input
               id="film-guess"
               type="number"
@@ -244,59 +189,55 @@ export default function LoadingScreen({
               value={guessInput}
               onChange={(e) => setGuessInput(e.target.value)}
               placeholder="?"
-              style={{ width: 96, border: `2.5px solid ${T.ink}`, background: T.card, padding: '6px 12px', textAlign: 'center', color: T.ink, outline: 'none', fontFamily: MONO }}
+              className="w-24 rounded-lg border border-slate-600 bg-slate-900/60 px-3 py-1.5 text-center text-white outline-none focus:border-orange-400"
             />
-            <button type="submit" style={{ border: `2.5px solid ${T.ink}`, background: T.amber, boxShadow: shadow(2), padding: '6px 12px', fontSize: 14, fontWeight: 700, color: T.ink, cursor: 'pointer' }}>
+            <button type="submit" className="rounded-lg bg-orange-500/90 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-orange-500">
               Tahmin et
             </button>
           </form>
         )}
 
         {isScrape && !reveal && guess != null && (
-          <p style={{ marginBottom: 20, fontSize: 14, color: T.darkamber }}>
-            Tahminin: <span style={{ fontWeight: 700, fontFamily: MONO }}>{guess.toLocaleString()}</span> — birazdan görürüz.
+          <p className="mb-5 text-sm text-orange-300/90">
+            Tahminin: <span className="font-bold tabular-nums">{guess.toLocaleString()}</span> — birazdan görürüz.
           </p>
         )}
 
         {isScrape && !reveal && (
-          <p style={{ marginBottom: 20, fontSize: 14, color: T.muted, fontStyle: 'italic', transition: 'opacity 500ms' }}>
+          <p className="mb-5 text-sm text-slate-400 italic transition-opacity duration-500">
             {FUN_MESSAGES[funMessageIndex]}
           </p>
         )}
 
         {/* Progress + remaining time */}
-        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
-            <span style={{ color: T.muted }}>Typical</span>
-            <span style={{ color: T.ink }}>{formatElapsed(typical)}</span>
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Typical</span>
+            <span className="text-slate-400">{formatElapsed(typical)}</span>
           </div>
-          <div style={{ height: 8, border: `2.5px solid ${T.ink}`, background: T.paper, overflow: 'hidden', boxShadow: shadow(1) }}>
+          <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
             <div
-              style={{
-                height: '100%',
-                background: `linear-gradient(to right, ${T.amber}, ${T.darkamber}, ${T.amber})`,
-                transition: 'width 1000ms',
-                width: `${pct}%`
-              }}
+              className="h-full bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400 transition-all duration-1000"
+              style={{ width: `${pct}%` }}
             />
           </div>
           {remaining > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
-              <span style={{ color: T.muted }}>Remaining (est.)</span>
-              <span style={{ color: T.amber, fontWeight: 700 }}>{formatElapsed(remaining)}</span>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Remaining (est.)</span>
+              <span className="text-orange-300 font-medium">{formatElapsed(remaining)}</span>
             </div>
           )}
           {remaining <= 0 && (
-            <div style={{ fontSize: 11, textAlign: 'center', color: T.amber, fontWeight: 700, fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+            <div className="text-xs text-center text-orange-300 font-medium">
               Almost there... wrapping up
             </div>
           )}
         </div>
 
-        <p style={{ fontSize: 14, color: T.muted, marginTop: 16 }}>{displayDetail}</p>
+        <p className="text-sm text-slate-400">{displayDetail}</p>
 
         {elapsed > typical && (
-          <p style={{ marginTop: 12, fontSize: 11, color: T.amber, animation: 'pulse 2s ease-in-out infinite', fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.14em' }}>
+          <p className="mt-3 text-xs text-amber-300/90 animate-pulse">
             Having a little trouble — bigger libraries can take a bit longer. Hang tight.
           </p>
         )}
