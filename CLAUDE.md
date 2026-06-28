@@ -159,9 +159,10 @@ Before opening a PR, verify:
    - Details: Created LangModal.tsx component matching modern dark theme. Updated LanguagesLeaderboard to track selected language and filter all_films by language field. Added click handler to language rows with hover state. Modal displays films (up to 20) with title, year, and rating. Integrated allFilms data flow from results/page.tsx through LazyLanguages wrapper.
 
 4. **Reviews word filter + reveal toggle** (lines 785–841 in WrappedBrutal.jsx)
-   - [ ] ReviewAnalysisSection already has word filter (✓ done)
-   - [ ] Add blur reveal toggle (filter: blur(4px) when revealed=false)
-   - Status: Filter exists, needs reveal toggle
+   - [x] ReviewAnalysisSection already has word filter (✓ done)
+   - [x] Add blur reveal toggle (filter: blur(4px) when revealed=false)
+   - Status: ✓ Done
+   - Details: Added `revealed` state to ReviewAnalysisSection. When a word is selected and reviews are filtered, a REVEAL/HIDE toggle button appears in the filter header. Review text displays with `filter: blur(4px)` when hidden, revealing on toggle with 200ms transition. Shows hint text "Review text hidden · hit REVEAL to show it" when blurred. Button styling matches modern theme (slate-700 with slate-200 text).
 
 5. **RatingDeviation → use FilmPosterCard data for modal** (HIGH PRIORITY)
    - [ ] Expand EnrichedFilm interface to carry: director, runtime, language, review_text, your_rating, average_rating
