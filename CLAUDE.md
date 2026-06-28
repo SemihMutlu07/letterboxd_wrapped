@@ -153,9 +153,10 @@ Before opening a PR, verify:
    - Details: Added profilePath prop to PersonFilmsModalProps interface. Compute profileUrl at component level using getTmdbImageUrl(profilePath, 'h632'). Display portrait (w-16 h-24 rounded-lg) to the left of director name in header. Updated DirectorsGrid and CastGrid to pass selected?.profile_path to PersonFilmsModal. Portrait displays gracefully when available.
 
 3. **Language → film list modal** (lines 721–750 in WrappedBrutal.jsx)
-   - [ ] Extract LangModal pattern
-   - [ ] Integrate into LanguagesLeaderboard.tsx: clicking a language row opens modal
-   - Status: Not started
+   - [x] Extract LangModal pattern
+   - [x] Integrate into LanguagesLeaderboard.tsx: clicking a language row opens modal
+   - Status: ✓ Done
+   - Details: Created LangModal.tsx component matching modern dark theme. Updated LanguagesLeaderboard to track selected language and filter all_films by language field. Added click handler to language rows with hover state. Modal displays films (up to 20) with title, year, and rating. Integrated allFilms data flow from results/page.tsx through LazyLanguages wrapper.
 
 4. **Reviews word filter + reveal toggle** (lines 785–841 in WrappedBrutal.jsx)
    - [ ] ReviewAnalysisSection already has word filter (✓ done)
