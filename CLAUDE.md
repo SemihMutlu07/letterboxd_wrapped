@@ -147,9 +147,10 @@ Before opening a PR, verify:
    - Details: Created FilmModal.tsx with modern dark theme (bg-[#1a1a1a], border-white/8, rounded-2xl). Enhanced EnrichedFilm interface with director, runtime, language fields. RatingDeviation enriches films with all_films data. FilmPosterCard "View Details" button opens modal with film info and rating comparison.
 
 2. **Director portrait in PersonFilmsModal** (lines 216–294 in WrappedBrutal.jsx)
-   - [ ] Add `profilePath?: string` prop to PersonFilmsModal.tsx
-   - [ ] Show TMDB portrait image (h632 size) alongside film grid when available
-   - Status: Not started
+   - [x] Add `profilePath?: string` prop to PersonFilmsModal.tsx
+   - [x] Show TMDB portrait image (h632 size) alongside film grid when available
+   - Status: ✓ Done
+   - Details: Added profilePath prop to PersonFilmsModalProps interface. Compute profileUrl at component level using getTmdbImageUrl(profilePath, 'h632'). Display portrait (w-16 h-24 rounded-lg) to the left of director name in header. Updated DirectorsGrid and CastGrid to pass selected?.profile_path to PersonFilmsModal. Portrait displays gracefully when available.
 
 3. **Language → film list modal** (lines 721–750 in WrappedBrutal.jsx)
    - [ ] Extract LangModal pattern

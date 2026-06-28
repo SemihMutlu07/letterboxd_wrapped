@@ -149,6 +149,7 @@ function DirectorsGridInner({ stats }: { stats: StatsData }) {
         onClose={() => setSelected(null)}
         name={selected?.name ?? ''}
         films={selected?.films ?? []}
+        profilePath={selected?.profile_path}
       />
 
       {/* Show more disabled — showing exactly 4 per user request */}

@@ -16,9 +16,12 @@ interface PersonFilmsModalProps {
   onClose: () => void;
   name: string;
   films: PersonFilm[];
+  profilePath?: string;
 }
 
-export default function PersonFilmsModal({ open, onClose, name, films }: PersonFilmsModalProps) {
+export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
+  const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
+
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -56,17 +59,28 @@ export default function PersonFilmsModal({ open, onClose, name, films }: PersonF
             className="relative w-full max-w-lg max-h-[80vh] flex flex-col bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-              <div>
-                <p className="text-base font-bold text-white">{name}</p>
-                <p className="text-xs text-slate-500">
-                  {films.length} film{films.length !== 1 ? 's' : ''} you watched
-                </p>
+            <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                {profileUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={profileUrl}
+                    alt={name}
+                    loading="lazy"
+                    className="w-16 h-24 rounded-lg object-cover flex-shrink-0"
+                  />
+                )}
+                <div className="min-w-0">
+                  <p className="text-base font-bold text-white">{name}</p>
+                  <p className="text-xs text-slate-500">
+                    {films.length} film{films.length !== 1 ? 's' : ''} you watched
+                  </p>
+                </div>
               </div>
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="w-8 h-8 grid place-items-center rounded-full text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
+                className="w-8 h-8 grid place-items-center rounded-full text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors flex-shrink-0"
               >
                 ✕
               </button>
