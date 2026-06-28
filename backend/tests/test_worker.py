@@ -267,6 +267,13 @@ async def test_worker_restart_token_comparison(client: AsyncClient):
     assert seen.status_code == 200
     assert seen.json()["should_restart"] is False
 
+    # Backend restart resets the in-memory token to 0 while the supervisor still holds
+    # last_seen=1. A stale token must NOT trigger a restart (regression: bug_006).
+    task_manager._worker_restart_token = 0
+    stale = await client.get("/api/worker/control?last_seen_restart_token=1", headers=AUTH)
+    assert stale.status_code == 200
+    assert stale.json()["should_restart"] is False
+
 
 @pytest.mark.asyncio
 async def test_supervisor_report_does_not_pollute_worker_heartbeat(client: AsyncClient):
