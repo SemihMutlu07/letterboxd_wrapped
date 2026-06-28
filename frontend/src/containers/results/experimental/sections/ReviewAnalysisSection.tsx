@@ -121,7 +121,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                   {revealed ? 'HIDE' : 'REVEAL'}
                 </button>
                 <button
-                  onClick={() => { setSelectedWord(null); setRevealed(false); }}
+                  onClick={() => setSelectedWord(null)}
                   className="text-xs font-bold px-3 py-1 rounded-full bg-orange-400 text-slate-900 hover:bg-orange-300 transition-colors"
                 >
                   Clear
@@ -165,7 +165,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
               No reviews found containing "<span className="font-mono">{selectedWord}</span>"
             </p>
             <button
-              onClick={() => { setSelectedWord(null); setRevealed(false); }}
+              onClick={() => setSelectedWord(null)}
               className="mt-2 text-xs font-bold px-3 py-1 rounded-full bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
             >
               Clear filter

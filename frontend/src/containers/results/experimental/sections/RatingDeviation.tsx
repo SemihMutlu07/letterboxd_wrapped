@@ -3,12 +3,12 @@
 /**
  * SECTION 3 — RATED HIGHER / LOWER THAN YOUR AVERAGE
  *
- * Computes delta = filmRating - userAvgRating for each rated film.
+ * Computes delta = yourRating - userAvgRating for each rated film.
  * A) Rated Higher: largest positive delta first
  * B) Rated Lower:  most negative delta first
  *
  * Data requirements:
- *   stats.rated_films  — individual film records with rating + poster_path
+ *   stats.rated_films  — individual film records with your_rating + average_rating + poster_path
  *   stats.average_rating — user's global average
  *
  * Gating: if rated_films is absent or has < 5 entries, hide section.
@@ -97,22 +97,20 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
       allFilmsLookup.set(f.title, f);
     });
 
-    const films: EnrichedFilm[] = (stats.rated_films ?? [])
-      .filter((f) => typeof f.average_rating === 'number' && Number.isFinite(f.average_rating))
-      .map((f) => {
-        const enrichedData = allFilmsLookup.get(f.title);
-        return {
-          title: f.title,
-          year: f.year,
-          poster_path: f.poster_path,
-          rating: f.your_rating ?? 0,
-          communityRating: f.average_rating ?? 0,
-          delta: Math.round(((f.your_rating ?? 0) - (f.average_rating ?? 0)) * 10) / 10,
-          director: enrichedData?.director,
-          runtime: enrichedData?.runtime,
-          language: enrichedData?.language,
-        };
-      });
+    const films: EnrichedFilm[] = (stats.rated_films ?? []).map((f) => {
+      const enrichedData = allFilmsLookup.get(f.title);
+      return {
+        title: f.title,
+        year: f.year,
+        poster_path: f.poster_path,
+        rating: f.your_rating ?? 0,
+        communityRating: f.average_rating ?? 0,
+        delta: Math.round(((f.your_rating ?? 0) - userAvg) * 10) / 10,
+        director: enrichedData?.director,
+        runtime: enrichedData?.runtime,
+        language: enrichedData?.language,
+      };
+    });
     return {
       higher: films.filter((f) => f.delta > 0).sort((a, b) => b.delta - a.delta),
       lower: films.filter((f) => f.delta < 0).sort((a, b) => a.delta - b.delta),
@@ -175,6 +173,7 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
               <FilmPosterCard
                 key={`${film.title}-${film.year}`}
                 film={film}
+                userAvg={userAvg}
                 polarity={tab}
                 onOpenModal={(f) => {
                   setSelectedFilm(f);
@@ -207,10 +206,12 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
 
 function FilmPosterCard({
   film,
+  userAvg,
   polarity,
   onOpenModal,
 }: {
   film: EnrichedFilm;
+  userAvg: number;
   polarity: SubTab;
   onOpenModal?: (film: EnrichedFilm) => void;
 }) {
@@ -224,6 +225,10 @@ function FilmPosterCard({
 
   const handleClick = () => {
     setRevealed((prev) => !prev);
+  };
+
+  const handleModalClick = () => {
+    onOpenModal?.(film);
   };
 
   return (
@@ -280,7 +285,7 @@ function FilmPosterCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onOpenModal?.(film);
+              handleModalClick();
             }}
             className="mt-1 text-[11px] font-semibold px-4 py-2 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors text-center"
           >
@@ -293,7 +298,7 @@ function FilmPosterCard({
       <div className="min-w-0 px-0.5 space-y-0.5">
         <p className="text-xs font-medium text-white leading-tight line-clamp-1">{film.title}</p>
         <p className="text-[10px] sm:text-[11px] text-slate-400 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-          ★ {film.rating.toFixed(1)} vs avg {film.communityRating.toFixed(1)}
+          ★ {film.rating.toFixed(1)} vs avg {userAvg.toFixed(1)}
         </p>
       </div>
     </div>
