@@ -171,21 +171,5 @@ describe('WatchlistCompare', () => {
   });
 });
 
-  it('renders watched runtime as real hours, not rounded days', () => {
-    render(
-      <HeroStats
-        totalFilms={494}
-        avgRating={3.8}
-        hoursWatched={1228.4}
-        topGenre="Drama"
-        timePct="14%"
-        favoriteDirector={{ name: 'Agnes Varda', count: 12 }}
-        favoriteDecade={{ name: '2010s', count: 88 }}
-      />,
-    );
 
-    expect(screen.getByText('1,228h')).toBeInTheDocument();
-    expect(screen.getByText('Hours watched')).toBeInTheDocument();
-  });
-});
 

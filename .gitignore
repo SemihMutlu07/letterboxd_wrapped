@@ -70,3 +70,4 @@ Thumbs.db
 
 # prototype backup (do not track)
 prototype_backup_DO_NOT_TOUCH/
+.deepsec/
