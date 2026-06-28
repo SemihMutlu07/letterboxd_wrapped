@@ -130,10 +130,32 @@ async def worker_self_test(request: Request, x_worker_token: str | None = Header
     return {"ok": True}
 
 
+@router.get("/control")
+async def worker_control(
+    last_seen_restart_token: str | None = None,
+    x_worker_token: str | None = Header(default=None),
+):
+    """Supervisor control poll. Does not update Python worker heartbeat."""
+    _require_worker_token(x_worker_token)
+    return task_manager.record_supervisor_poll(last_seen_restart_token)
+
+
+@router.post("/supervisor")
+async def worker_supervisor_report(request: Request, x_worker_token: str | None = Header(default=None)):
+    """Record launcher/supervisor status without marking the scraper child online."""
+    _require_worker_token(x_worker_token)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_body", "message": "Body must be an object."})
+    return {"ok": True, "supervisor": task_manager.record_supervisor_report(body)}
+
+
 @router.get("/scrape/next")
 async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     """Claim the oldest queued scrape job, or return {job: null} if none."""
     _require_worker_token(x_worker_token)
+    if task_manager.is_worker_paused():
+        return {"job": None, "paused": True, "desired_state": "pause"}
     mismatch = _worker_version_mismatch()
     if mismatch:
         raise HTTPException(
@@ -289,6 +311,8 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
 async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)):
     """Claim the oldest queued watchlist/date-night scrape job, or return {job: null}."""
     _require_worker_token(x_worker_token)
+    if task_manager.is_worker_paused():
+        return {"job": None, "paused": True, "desired_state": "pause"}
     mismatch = _worker_version_mismatch()
     if mismatch:
         raise HTTPException(

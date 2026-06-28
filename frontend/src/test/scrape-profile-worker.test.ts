@@ -4,7 +4,7 @@ import { scrapeProfile } from '@/lib/api';
 // scrapeProfile() must transparently support both backend contracts:
 //   - synchronous { status, stats } (local / no desktop worker)
 //   - desktop-worker 202 { task_id } → poll /api/progress until done
-// and surface the desktop_worker_offline guidance message on a 503.
+// and surface desktop-worker guidance messages on a 503.
 
 function jsonResponse(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -43,5 +43,12 @@ describe('scrapeProfile', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(503, { detail: { error_code: 'desktop_worker_offline', message } })));
 
     await expect(scrapeProfile('semihmutsuz')).rejects.toThrow(/desktop scraper is offline/i);
+  });
+
+  it('surfaces the desktop_worker_paused guidance on a 503', async () => {
+    const message = 'The desktop scraper is paused for maintenance. Upload your Letterboxd export for a full Wrapped, or try again shortly.';
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(503, { detail: { error_code: 'desktop_worker_paused', message } })));
+
+    await expect(scrapeProfile('semihmutsuz')).rejects.toThrow(/paused for maintenance.*upload your letterboxd export/i);
   });
 });

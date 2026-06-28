@@ -46,6 +46,18 @@ _last_worker_shutdown_at: Optional[datetime] = None
 _last_worker_meta: Dict[str, Any] = {}
 _last_worker_self_test: Optional[Dict[str, Any]] = None
 
+WORKER_DESIRED_STATES = {"run", "pause"}
+SUPERVISOR_LOG_TAIL_MAX_LINES = 80
+SUPERVISOR_LOG_LINE_MAX_CHARS = 500
+
+_worker_desired_state: str = "run"
+_worker_restart_token: int = 0
+_worker_restart_requested_at: Optional[datetime] = None
+_last_supervisor_poll_at: Optional[datetime] = None
+_last_supervisor_report_at: Optional[datetime] = None
+_last_supervisor_status: Dict[str, Any] = {}
+_supervisor_log_tail: list[str] = []
+
 
 def create_task_state() -> str:
     task_id = str(uuid.uuid4())
@@ -100,6 +112,8 @@ def create_date_night_job(usernames: list) -> str:
 
 def claim_next_watchlist_job() -> Optional[TaskState]:
     """Atomically claim the oldest unclaimed watchlist/date-night job."""
+    if is_worker_paused():
+        return None
     queued = sorted(
         [t for t in _tasks.values() if t.kind == "watchlist" and t.status == "pending" and not t.claimed],
         key=lambda t: t.created_at,
@@ -118,6 +132,8 @@ def claim_next_watchlist_job() -> Optional[TaskState]:
 def claim_next_scrape_job() -> Optional[TaskState]:
     """Atomically claim the oldest unclaimed, pending scrape job (single-process,
     asyncio single-thread — no lock needed). Returns None if the queue is empty."""
+    if is_worker_paused():
+        return None
     queued = sorted(
         [t for t in _tasks.values() if t.kind == "scrape" and t.status == "pending" and not t.claimed],
         key=lambda t: t.created_at,
@@ -138,6 +154,10 @@ def _seconds_between(start: Optional[datetime], end: Optional[datetime]) -> Opti
     if start is None or end is None:
         return None
     return round((end - start).total_seconds(), 1)
+
+
+def _iso(value: Optional[datetime]) -> Optional[str]:
+    return value.isoformat() if value is not None else None
 
 
 def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> None:
@@ -237,6 +257,101 @@ def record_worker_self_test(result: Dict[str, Any]) -> None:
     }
 
 
+def is_worker_paused() -> bool:
+    return _worker_desired_state == "pause"
+
+
+def set_worker_desired_state(desired_state: str) -> Dict[str, Any]:
+    global _worker_desired_state
+    normalized = str(desired_state or "").strip().lower()
+    if normalized not in WORKER_DESIRED_STATES:
+        raise ValueError("desired_state must be 'run' or 'pause'")
+    _worker_desired_state = normalized
+    return get_worker_control_state()
+
+
+def request_worker_restart() -> Dict[str, Any]:
+    global _worker_restart_token, _worker_restart_requested_at
+    _worker_restart_token += 1
+    _worker_restart_requested_at = datetime.utcnow()
+    return get_worker_control_state()
+
+
+def get_worker_control_state() -> Dict[str, Any]:
+    return {
+        "desired_state": _worker_desired_state,
+        "restart_token": _worker_restart_token,
+        "restart_requested_at": _iso(_worker_restart_requested_at),
+    }
+
+
+def record_supervisor_poll(last_seen_restart_token: Optional[str] = None) -> Dict[str, Any]:
+    global _last_supervisor_poll_at
+    _last_supervisor_poll_at = datetime.utcnow()
+    control = get_worker_control_state()
+    should_restart = (
+        last_seen_restart_token is not None
+        and str(last_seen_restart_token) != str(control["restart_token"])
+    )
+    return {
+        **control,
+        "should_restart": should_restart,
+        "last_supervisor_poll_at": _iso(_last_supervisor_poll_at),
+    }
+
+
+def _coerce_supervisor_log_tail(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        lines = value.splitlines()
+    elif isinstance(value, list):
+        lines = [str(item) for item in value]
+    else:
+        lines = [str(value)]
+    clipped: list[str] = []
+    for line in lines[-SUPERVISOR_LOG_TAIL_MAX_LINES:]:
+        clipped.append(line[-SUPERVISOR_LOG_LINE_MAX_CHARS:])
+    return clipped
+
+
+def record_supervisor_report(payload: Dict[str, Any]) -> Dict[str, Any]:
+    global _last_supervisor_report_at, _last_supervisor_status, _supervisor_log_tail
+    _last_supervisor_report_at = datetime.utcnow()
+    allowed = {
+        "supervisor_version",
+        "supervisor_started_at",
+        "backend_url",
+        "poll_interval_seconds",
+        "desired_state",
+        "child_status",
+        "child_pid",
+        "child_started_at",
+        "child_exit_code",
+        "last_restart_token_seen",
+        "last_control_error",
+    }
+    status = {key: payload.get(key) for key in allowed if key in payload}
+    status["reported_at"] = _iso(_last_supervisor_report_at)
+    _last_supervisor_status = status
+    _supervisor_log_tail = _coerce_supervisor_log_tail(payload.get("log_tail"))
+    return get_worker_supervisor_status()
+
+
+def get_worker_supervisor_status() -> Dict[str, Any]:
+    return {
+        "last_poll_at": _iso(_last_supervisor_poll_at),
+        "last_report_at": _iso(_last_supervisor_report_at),
+        "child_status": _last_supervisor_status.get("child_status") or "unknown",
+        "child_pid": _last_supervisor_status.get("child_pid"),
+        "child_started_at": _last_supervisor_status.get("child_started_at"),
+        "last_restart_token_seen": _last_supervisor_status.get("last_restart_token_seen"),
+        "last_control_error": _last_supervisor_status.get("last_control_error"),
+        "status": dict(_last_supervisor_status),
+        "log_tail": list(_supervisor_log_tail),
+    }
+
+
 def is_worker_online(max_age_seconds: int) -> bool:
     if _last_worker_heartbeat is None:
         return False
@@ -274,15 +389,14 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
     completed = [t for t in scrape_tasks if t.status == "done"]
     failed = [t for t in scrape_tasks if t.status == "failed"]
 
-    def _iso(value: Optional[datetime]) -> Optional[str]:
-        return value.isoformat() if value is not None else None
-
     self_test = dict(_last_worker_self_test) if _last_worker_self_test else None
     if self_test and isinstance(self_test.get("reported_at"), datetime):
         self_test["reported_at"] = self_test["reported_at"].isoformat()
 
     return {
         "online": is_worker_online(max_age_seconds),
+        "control": get_worker_control_state(),
+        "supervisor": get_worker_supervisor_status(),
         "last_heartbeat": _iso(_last_worker_heartbeat),
         "heartbeat_age_seconds": heartbeat_age_seconds,
         "max_age_seconds": max_age_seconds,

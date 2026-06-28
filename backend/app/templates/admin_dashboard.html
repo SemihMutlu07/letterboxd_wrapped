@@ -46,11 +46,23 @@
 
     <!-- WORKER TAB -->
     <div id="panel-worker" class="space-y-6 hidden">
-      <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Desktop Worker</p>
           <p id="worker-online" class="text-2xl font-black {% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-600{% endif %}">
             {% if worker_enabled and worker_status.online %}Live{% elif worker_enabled %}Offline{% else %}Disabled{% endif %}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Job Control</p>
+          <p id="worker-desired-state" class="text-2xl font-black {% if worker_status.control.desired_state == 'pause' %}text-amber-400{% else %}text-emerald-400{% endif %}">
+            {{ "Paused" if worker_status.control.desired_state == "pause" else "Run" }}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Child</p>
+          <p id="worker-child-status" class="text-2xl font-black {% if worker_status.supervisor.child_status == 'running' %}text-emerald-400{% elif worker_status.supervisor.child_status == 'unknown' %}text-slate-600{% else %}text-amber-400{% endif %}">
+            {{ worker_status.supervisor.child_status | capitalize }}
           </p>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -75,6 +87,23 @@
         </div>
       </div>
 
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white">Remote Control</h2>
+            <p id="worker-control-summary" class="text-xs text-slate-500 mt-1">
+              Desired state: {{ worker_status.control.desired_state }} · restart token {{ worker_status.control.restart_token }}
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="worker-pause-button" onclick="setWorkerDesiredState('pause')" class="px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-40">Pause Jobs</button>
+            <button id="worker-resume-button" onclick="setWorkerDesiredState('run')" class="px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-40">Resume Jobs</button>
+            <button id="worker-restart-button" onclick="requestWorkerRestart()" class="px-3 py-2 rounded-lg border border-orange-500/40 bg-orange-500/10 text-xs font-semibold text-orange-200 hover:bg-orange-500/20 disabled:opacity-40">Restart Worker</button>
+          </div>
+        </div>
+        <p id="worker-control-feedback" class="text-xs text-slate-500 mt-3">Pause blocks new jobs and worker claims; it does not kill active work.</p>
+      </div>
+
       <div class="grid md:grid-cols-2 gap-3">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <h2 class="text-sm font-bold text-white mb-3">Lifecycle</h2>
@@ -95,6 +124,20 @@
         </div>
 
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 class="text-sm font-bold text-white mb-3">Supervisor</h2>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
+            <dt class="text-slate-500">Last Poll</dt><dd id="worker-supervisor-poll" class="text-slate-300">{{ worker_status.supervisor.last_poll_at or "—" }}</dd>
+            <dt class="text-slate-500">Last Report</dt><dd id="worker-supervisor-report" class="text-slate-300">{{ worker_status.supervisor.last_report_at or "—" }}</dd>
+            <dt class="text-slate-500">Child PID</dt><dd id="worker-child-pid" class="text-slate-300">{{ worker_status.supervisor.child_pid or "—" }}</dd>
+            <dt class="text-slate-500">Child Started</dt><dd id="worker-child-started" class="text-slate-300">{{ worker_status.supervisor.child_started_at or "—" }}</dd>
+            <dt class="text-slate-500">Restart Seen</dt><dd id="worker-restart-seen" class="text-slate-300">{{ worker_status.supervisor.last_restart_token_seen if worker_status.supervisor.last_restart_token_seen is not none else "—" }}</dd>
+            <dt class="text-slate-500">Poll Error</dt><dd id="worker-control-error" class="text-slate-300">{{ worker_status.supervisor.last_control_error or "—" }}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <h2 class="text-sm font-bold text-white mb-3">Startup Self-Test</h2>
           {% set self_test = worker_status.self_test %}
           <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
@@ -107,6 +150,14 @@
             <dt class="text-slate-500">Reported</dt><dd id="worker-self-test-time" class="text-slate-300">{{ self_test.reported_at if self_test else "—" }}</dd>
             <dt class="text-slate-500">Message</dt><dd id="worker-self-test-message" class="text-slate-300">{{ self_test.message if self_test and self_test.message is defined else "—" }}</dd>
           </dl>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-white">Supervisor Log Tail</h2>
+            <span class="text-[10px] text-slate-500">Last {{ worker_status.supervisor.log_tail|length }} lines</span>
+          </div>
+          <pre id="worker-log-tail" class="scrollbar max-h-64 overflow-auto whitespace-pre-wrap px-4 py-3 text-[11px] leading-relaxed text-slate-300 bg-slate-950/50">{{ worker_status.supervisor.log_tail | join("\n") if worker_status.supervisor.log_tail else "No supervisor log reported yet." }}</pre>
         </div>
       </div>
 
@@ -342,6 +393,56 @@
       return value === null || value === undefined ? '—' : `${value}s`;
     }
 
+    function setWorkerControlBusy(isBusy) {
+      ['worker-pause-button', 'worker-resume-button', 'worker-restart-button'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = isBusy;
+      });
+    }
+
+    function setWorkerControlFeedback(message, tone = 'neutral') {
+      const node = document.getElementById('worker-control-feedback');
+      if (!node) return;
+      node.textContent = message;
+      node.className = `text-xs mt-3 ${tone === 'error' ? 'text-red-300' : tone === 'ok' ? 'text-emerald-300' : 'text-slate-500'}`;
+    }
+
+    async function setWorkerDesiredState(desiredState) {
+      if (!adminKey) return;
+      setWorkerControlBusy(true);
+      try {
+        const response = await fetch(`/admin/api/worker/control?key=${encodeURIComponent(adminKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ desired_state: desiredState }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setWorkerControlFeedback(desiredState === 'pause' ? 'Paused: new jobs and claims are blocked.' : 'Resumed: new jobs can be claimed.', 'ok');
+        await refreshWorkerStatus();
+      } catch (error) {
+        console.warn('Worker control failed', error);
+        setWorkerControlFeedback('Control request failed. Check backend logs and try again.', 'error');
+      } finally {
+        setWorkerControlBusy(false);
+      }
+    }
+
+    async function requestWorkerRestart() {
+      if (!adminKey) return;
+      setWorkerControlBusy(true);
+      try {
+        const response = await fetch(`/admin/api/worker/restart?key=${encodeURIComponent(adminKey)}`, { method: 'POST' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setWorkerControlFeedback('Restart requested. The supervisor will relaunch the child on its next poll.', 'ok');
+        await refreshWorkerStatus();
+      } catch (error) {
+        console.warn('Worker restart request failed', error);
+        setWorkerControlFeedback('Restart request failed. Check backend logs and try again.', 'error');
+      } finally {
+        setWorkerControlBusy(false);
+      }
+    }
+
     function fmtBottleneck(run) {
       if (!run.bottleneck_stage) return '—';
       const seconds = run.bottleneck_seconds === null || run.bottleneck_seconds === undefined ? '' : ` <span class="text-slate-500">(${run.bottleneck_seconds}s)</span>`;
@@ -457,6 +558,26 @@
         onlineNode.className = `text-2xl font-black ${color.replace('text-slate-500', 'text-slate-600')}`;
         document.getElementById('worker-heartbeat-age').textContent =
           status.heartbeat_age_seconds === null || status.heartbeat_age_seconds === undefined ? '—' : `${status.heartbeat_age_seconds}s`;
+        const control = status.control || {};
+        const desiredState = control.desired_state || 'run';
+        const desiredNode = document.getElementById('worker-desired-state');
+        desiredNode.textContent = desiredState === 'pause' ? 'Paused' : 'Run';
+        desiredNode.className = `text-2xl font-black ${desiredState === 'pause' ? 'text-amber-400' : 'text-emerald-400'}`;
+        document.getElementById('worker-control-summary').textContent = `Desired state: ${desiredState} · restart token ${control.restart_token ?? '—'}`;
+
+        const supervisor = status.supervisor || {};
+        const childStatus = supervisor.child_status || 'unknown';
+        const childNode = document.getElementById('worker-child-status');
+        childNode.textContent = childStatus.charAt(0).toUpperCase() + childStatus.slice(1);
+        childNode.className = `text-2xl font-black ${childStatus === 'running' ? 'text-emerald-400' : childStatus === 'unknown' ? 'text-slate-600' : 'text-amber-400'}`;
+        document.getElementById('worker-supervisor-poll').textContent = shortTime(supervisor.last_poll_at);
+        document.getElementById('worker-supervisor-report').textContent = shortTime(supervisor.last_report_at);
+        document.getElementById('worker-child-pid').textContent = supervisor.child_pid ?? '—';
+        document.getElementById('worker-child-started').textContent = shortTime(supervisor.child_started_at);
+        document.getElementById('worker-restart-seen').textContent = supervisor.last_restart_token_seen ?? '—';
+        document.getElementById('worker-control-error').textContent = supervisor.last_control_error || '—';
+        document.getElementById('worker-log-tail').textContent = (supervisor.log_tail || []).join('\n') || 'No supervisor log reported yet.';
+
         document.getElementById('worker-queued').textContent = status.queue?.queued ?? 0;
         document.getElementById('worker-running').textContent = status.queue?.running ?? 0;
         document.getElementById('worker-completed').textContent = status.queue?.completed ?? 0;
