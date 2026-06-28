@@ -181,65 +181,6 @@ async def test_parse_username_no_match(client: AsyncClient):
     assert r.json()["username"] is None
 
 
-# ---- rss preview -------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_rss_preview_success(client: AsyncClient):
-    async def fake_fetch_items(session, username):
-        return [{
-            "title": "Dune: Part Two", "link": "https://letterboxd.com/u/film/dune-part-two/",
-            "tmdb_id": 693134, "year": 2024, "rating": 4.5, "watched_date": "2024-03-10",
-            "poster_url": "https://img/poster.jpg", "rewatch": False, "is_review": True,
-        }]
-
-    async def fake_build(session, items):
-        return {
-            "source": "rss",
-            "total_films": 1,
-            "data_quality": {
-                "mode": "preview", "exactness": "sampled",
-                "sample_size": 1, "tmdb_id_coverage": 100.0, "limitations": [],
-            },
-        }
-
-    with (
-        patch("app.routes.analyze.fetch_rss_items", side_effect=fake_fetch_items),
-        patch("app.routes.analyze.build_preview_stats", side_effect=fake_build),
-    ):
-        r = await client.post("/api/rss-preview", json={"username": "semihmutsuz"})
-
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "success"
-    assert body["source"] == "rss"
-    assert body["username"] == "semihmutsuz"
-    assert body["stats"]["source"] == "rss"
-    assert body["data_quality"]["mode"] == "preview"
-    assert len(body["items"]) == 1
-    assert body["items"][0]["tmdb_id"] == 693134
-
-
-@pytest.mark.asyncio
-async def test_rss_preview_invalid_username(client: AsyncClient):
-    r = await client.post("/api/rss-preview", json={"username": "bad name"})
-    assert r.status_code == 400
-    assert r.json()["detail"]["error_code"] == "invalid_username"
-
-
-@pytest.mark.asyncio
-async def test_rss_preview_not_found_surfaces_structured_error(client: AsyncClient):
-    from app.services.rss_source import RssError
-
-    async def fake_fetch_items(session, username):
-        raise RssError("rss_not_found", "No public RSS feed.")
-
-    with patch("app.routes.analyze.fetch_rss_items", side_effect=fake_fetch_items):
-        r = await client.post("/api/rss-preview", json={"username": "ghost"})
-
-    assert r.status_code == 404
-    assert r.json()["detail"]["error_code"] == "rss_not_found"
-
-
 # ---- watchlist compare -------------------------------------------------------
 
 @pytest.fixture(autouse=True)

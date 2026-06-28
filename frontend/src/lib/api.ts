@@ -278,49 +278,6 @@ export async function scrapeProfile(username: string, signal?: AbortSignal) {
   }
 }
 
-// RSS-first preview for a username — fast, proxy-free, TMDB-linked recent sample.
-// This is the PRIMARY username path; scrapeProfile() is the slower fallback.
-export async function rssPreview(username: string, signal?: AbortSignal) {
-  const url = `${API_BASE}/api/rss-preview`;
-
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username }),
-      signal,
-    });
-
-    if (!r.ok) {
-      let detail = '';
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') {
-          detail = body.detail;
-        } else if (body.detail && typeof body.detail === 'object') {
-          detail = body.detail.message || body.detail.error_code || '';
-        }
-      } catch {
-        // body wasn't JSON
-      }
-      throw new Error(detail || `rss-preview ${r.status}`);
-    }
-
-    const data = await r.json();
-
-    if (!data || data.status === 'error') {
-      throw new Error(data?.detail || 'RSS preview failed');
-    }
-
-    return data;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw error;
-    }
-    throw handleApiError(error, 'RSS preview');
-  }
-}
-
 // Compare two public Letterboxd watchlists by username
 export async function compareWatchlists(
   firstUsername: string,

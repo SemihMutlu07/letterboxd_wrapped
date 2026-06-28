@@ -291,10 +291,7 @@ export default function LetterboxdLanding() {
       } catch { /* analytics failure is non-fatal */ }
 
       startedAt = performance.now();
-      // RSS-first preview is SUSPENDED on the desktop_server branch. The desktop
-      // worker scrapes the full profile from a residential IP, so we go straight
-      // to the complete scrape like the original flow. rssPreview() is kept in
-      // lib/api.ts and can be re-enabled in one line.
+      // The desktop worker scrapes the full profile from a residential IP.
       const method = 'scrape' as const;
       const result = await scrapeProfile(username);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
