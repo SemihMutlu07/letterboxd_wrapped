@@ -164,10 +164,24 @@ async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]
     return _payload_rows(await supabase_ops.select("ops_date_night_runs", _list_params(limit)))
 
 
-async def _load_analysis_runs(limit: int = 50) -> list[dict[str, Any]]:
+def _mark_consecutive_dupes(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    i = 0
+    while i < len(runs):
+        username = runs[i].get("username")
+        j = i + 1
+        while j < len(runs) and runs[j].get("username") == username:
+            j += 1
+        runs[i]["_run_count"] = j - i
+        for k in range(i + 1, j):
+            runs[k]["_skip"] = True
+        i = j
+    return runs
+
+
+async def _load_analysis_runs(limit: int = 500) -> list[dict[str, Any]]:
     if settings.supabase_enabled:
-        return await _load_runs_supabase(limit)
-    return _load_json_dir(RUNS_DIR, limit=limit)
+        return _mark_consecutive_dupes(await _load_runs_supabase(limit))
+    return _mark_consecutive_dupes(_load_json_dir(RUNS_DIR, limit=limit))
 
 
 @router.get("/admin", response_class=HTMLResponse)
