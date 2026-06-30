@@ -183,7 +183,6 @@ def _parse_diary_rows(soup: BeautifulSoup) -> list[dict]:
         title_td = row.select_one(".col-production")
         year_td = row.select_one(".col-releaseyear")
         rating_td = row.select_one(".col-rating")
-        month_td = row.select_one(".col-monthdate")
         day_td = row.select_one(".col-daydate")
 
         title = ""
@@ -195,14 +194,15 @@ def _parse_diary_rows(soup: BeautifulSoup) -> list[dict]:
         rating = _parse_rating(rating_td.select_one(".rating") if rating_td else None)
 
         watch_date = ""
-        if month_td and day_td:
-            month_link = month_td.find("a")
-            day_link = day_td.find("a")
-            if month_link and day_link:
-                href = day_link.get("href", "")
-                date_match = re.search(r"/for/(\d{4})/(\d{2})/(\d{2})/", href)
-                if date_match:
-                    watch_date = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+        # The day cell's href carries the full /for/YYYY/MM/DD/ date. Letterboxd
+        # only renders the month <a> on the first row of each month, so requiring
+        # it would drop the date from every later row in the month.
+        day_link = day_td.find("a") if day_td else None
+        if day_link:
+            href = day_link.get("href", "")
+            date_match = re.search(r"/for/(\d{4})/(\d{2})/(\d{2})/", href)
+            if date_match:
+                watch_date = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
 
         if title:
             films.append({

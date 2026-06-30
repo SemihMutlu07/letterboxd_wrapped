@@ -278,3 +278,39 @@ async def test_scrape_profile_sources_survives_one_source_failing(monkeypatch):
 
     assert result.diary == []
     assert result.grid[0]["title"] == "G"
+
+
+def test_parse_diary_rows_dates_rows_without_month_link():
+    """Letterboxd renders the month <a> only on the FIRST row of each month;
+    later rows in the same month have an empty .col-monthdate. The day cell's
+    href carries the full /for/YYYY/MM/DD/ date, so every diary row must still
+    get a watch_date — not just the first row of each month.
+
+    Regression: requiring a month-link dropped ~88% of diary dates, collapsing
+    a 410-entry diary to ~47 'watched' rows (one per distinct month).
+    """
+    html = """
+    <table><tbody>
+      <tr class="diary-entry-row">
+        <td class="col-monthdate"><a href="/u/films/diary/for/2024/03/">Mar 2024</a></td>
+        <td class="col-daydate"><a href="/u/films/diary/for/2024/03/15/">15</a></td>
+        <td class="col-production"><a href="/film/a/">Film A</a></td>
+        <td class="col-releaseyear">2020</td>
+        <td class="col-rating"><span class="rating rated-8"></span></td>
+      </tr>
+      <tr class="diary-entry-row">
+        <td class="col-monthdate"></td>
+        <td class="col-daydate"><a href="/u/films/diary/for/2024/03/14/">14</a></td>
+        <td class="col-production"><a href="/film/b/">Film B</a></td>
+        <td class="col-releaseyear">2019</td>
+        <td class="col-rating"><span class="rating rated-6"></span></td>
+      </tr>
+    </tbody></table>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    films = scraper._parse_diary_rows(soup)
+
+    by_title = {f["title"]: f for f in films}
+    assert by_title["Film A"]["watch_date"] == "2024-03-15"
+    # Film B has no month-link but a dated day-link — must still be dated.
+    assert by_title["Film B"]["watch_date"] == "2024-03-14"
