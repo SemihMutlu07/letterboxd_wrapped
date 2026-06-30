@@ -984,12 +984,6 @@ def diary_to_csv_dicts(films: list[dict]) -> dict[str, list[dict]]:
             continue
         seen.add(key)
 
-        watch_date = f.get("watch_date") or ""
-        # ponytail: only dated diary entries count as watched; undated grid entries
-        # are IMDB bulk-imports with no known watch date — exclude from analysis.
-        if not watch_date:
-            continue
-
         watched_rows.append({
             "Name": f["title"],
             "Year": f["year"],
@@ -1002,12 +996,17 @@ def diary_to_csv_dicts(films: list[dict]) -> dict[str, list[dict]]:
                 "Rating": f["rating"],
             })
 
-        diary_rows.append({
-            "Date": watch_date,
-            "Name": f["title"],
-            "Year": f["year"],
-            "Rating": f["rating"] if f["rating"] is not None else "",
-            "Watched Date": watch_date,
-        })
+        # Only dated entries feed the diary timeline (pace/cadence). Undated
+        # grid-only films still count as watched/rated above — they just have
+        # no Letterboxd watch date to place on the timeline.
+        watch_date = f.get("watch_date") or ""
+        if watch_date:
+            diary_rows.append({
+                "Date": watch_date,
+                "Name": f["title"],
+                "Year": f["year"],
+                "Rating": f["rating"] if f["rating"] is not None else "",
+                "Watched Date": watch_date,
+            })
 
     return {"watched": watched_rows, "ratings": ratings_rows, "diary": diary_rows}

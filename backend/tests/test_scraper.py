@@ -314,3 +314,28 @@ def test_parse_diary_rows_dates_rows_without_month_link():
     assert by_title["Film A"]["watch_date"] == "2024-03-15"
     # Film B has no month-link but a dated day-link — must still be dated.
     assert by_title["Film B"]["watch_date"] == "2024-03-14"
+
+
+def test_diary_to_csv_dicts_keeps_undated_films_in_watched():
+    """Undated films (grid-only / IMDB bulk imports with no Letterboxd watch
+    date) must still count as watched and rated — only the diary timeline is
+    gated by watch_date.
+
+    Regression: c5adb3c excluded undated films from watched/ratings too, which
+    collapsed full ~700-film profiles down to just the dated diary subset.
+    """
+    films = [
+        {"title": "Dated", "year": 2020, "rating": 4.0, "watch_date": "2024-03-15"},
+        {"title": "Undated", "year": 2019, "rating": 3.5, "watch_date": ""},
+    ]
+    result = scraper.diary_to_csv_dicts(films)
+
+    watched_titles = {r["Name"] for r in result["watched"]}
+    rated_titles = {r["Name"] for r in result["ratings"]}
+    diary_titles = {r["Name"] for r in result["diary"]}
+
+    # Both films count as watched and rated...
+    assert watched_titles == {"Dated", "Undated"}
+    assert rated_titles == {"Dated", "Undated"}
+    # ...but only the dated film feeds the diary timeline.
+    assert diary_titles == {"Dated"}
