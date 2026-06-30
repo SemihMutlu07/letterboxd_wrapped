@@ -7,11 +7,13 @@
 
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getTmdbImageUrl } from '@/lib/analytics';
 
 interface Film {
   title: string;
   year?: number;
   your_rating?: number | null;
+  poster_path?: string;
 }
 
 interface LangModalProps {
@@ -71,22 +73,31 @@ export default function LangModal({ open, onClose, language, count, films }: Lan
 
             {/* Film list */}
             <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
-              {films.slice(0, 20).map((f, idx) => (
-                <div
-                  key={`${f.title}-${idx}`}
-                  className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{f.title || '—'}</p>
-                    <p className="text-xs text-slate-500">{f.year || '—'}</p>
+              {films.slice(0, 20).map((f, idx) => {
+                const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w154') : null;
+                return (
+                  <div
+                    key={`${f.title}-${idx}`}
+                    className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-colors"
+                  >
+                    <div className="shrink-0 w-10 aspect-[2/3] rounded overflow-hidden bg-zinc-800 ring-1 ring-white/10">
+                      {poster && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={poster} alt={f.title} loading="lazy" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-white truncate">{f.title || '—'}</p>
+                      <p className="text-xs text-slate-500">{f.year || '—'}</p>
+                    </div>
+                    {f.your_rating != null && (
+                      <span className="shrink-0 text-sm font-semibold text-orange-400">
+                        ★ {f.your_rating.toFixed(1)}
+                      </span>
+                    )}
                   </div>
-                  {f.your_rating != null && (
-                    <span className="shrink-0 text-sm font-semibold text-orange-400">
-                      ★ {f.your_rating.toFixed(1)}
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               {count > films.length && (
                 <div className="text-xs text-slate-500 italic pt-2">
                   + {count - films.length} more in your diary

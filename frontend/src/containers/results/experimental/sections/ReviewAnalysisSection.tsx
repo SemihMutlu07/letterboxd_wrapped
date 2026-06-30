@@ -27,7 +27,6 @@ function scaledWordSize(count: number, max: number): string {
 
 export default function ReviewAnalysisSection({ stats }: Props) {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState(false);
 
   const ra = stats.review_analysis;
   if (!ra || ra.reviews_with_text === 0) return null;
@@ -113,42 +112,16 @@ export default function ReviewAnalysisSection({ stats }: Props) {
               <p className="text-sm font-semibold text-orange-200">
                 Filtering: "<span className="font-mono">{selectedWord}</span>" · {filteredReviews.length} review{filteredReviews.length === 1 ? '' : 's'}
               </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setRevealed(!revealed)}
-                  className="text-xs font-bold px-3 py-1 rounded-full bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
-                >
-                  {revealed ? 'HIDE' : 'REVEAL'}
-                </button>
-                <button
-                  onClick={() => setSelectedWord(null)}
-                  className="text-xs font-bold px-3 py-1 rounded-full bg-orange-400 text-slate-900 hover:bg-orange-300 transition-colors"
-                >
-                  Clear
-                </button>
-              </div>
+              <button
+                onClick={() => setSelectedWord(null)}
+                className="text-xs font-bold px-3 py-1 rounded-full bg-orange-400 text-slate-900 hover:bg-orange-300 transition-colors"
+              >
+                Clear
+              </button>
             </div>
             <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredReviews.slice(0, 6).map((review, idx) => (
-                <li
-                  key={`${review.title}-${review.year}-${idx}`}
-                  className="rounded-lg bg-slate-800/50 p-3 hover:bg-slate-800/80 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <p className="font-semibold text-orange-100 text-sm truncate">{review.title}</p>
-                    <span className="shrink-0 text-xs font-mono text-slate-400">♥ {review.likes || 0}</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mb-2">{review.year || '—'}</p>
-                  <p
-                    className="text-xs text-slate-300 line-clamp-3 leading-relaxed"
-                    style={{ filter: revealed ? 'none' : 'blur(4px)', transition: 'filter 200ms' }}
-                  >
-                    {review.text}
-                  </p>
-                  {!revealed && (
-                    <p className="text-[10px] text-slate-500 mt-1">Review text hidden · hit REVEAL to show it</p>
-                  )}
-                </li>
+                <FilteredReviewCard key={`${review.title}-${review.year}-${idx}`} review={review} />
               ))}
             </ul>
             {filteredReviews.length > 6 && (
@@ -234,5 +207,36 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         )}
       </div>
     </Section>
+  );
+}
+
+type ReviewItem = NonNullable<NonNullable<StatsData['review_analysis']>['reviews']>[number];
+
+/** A single word-filtered review. Long text collapses to 3 lines with a Read more toggle. */
+function FilteredReviewCard({ review }: { review: ReviewItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const text = review.text ?? '';
+  // ponytail: char-length proxy for "needs a toggle"; line-clamp-3 ≈ ~200 chars
+  const isLong = text.length > 200;
+
+  return (
+    <li className="rounded-lg bg-slate-800/50 p-3 hover:bg-slate-800/80 transition-colors">
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <p className="font-semibold text-orange-100 text-sm truncate">{review.title}</p>
+        <span className="shrink-0 text-xs font-mono text-slate-400">♥ {review.likes || 0}</span>
+      </div>
+      <p className="text-xs text-slate-400 mb-2">{review.year || '—'}</p>
+      <p className={`text-xs text-slate-300 leading-relaxed ${expanded ? 'whitespace-pre-line' : 'line-clamp-3'}`}>
+        {text}
+      </p>
+      {isLong && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1.5 text-[11px] font-bold text-orange-300 hover:text-orange-200 transition-colors"
+        >
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </li>
   );
 }

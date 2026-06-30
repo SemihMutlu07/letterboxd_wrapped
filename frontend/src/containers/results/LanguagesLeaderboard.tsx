@@ -40,6 +40,7 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
         title: f.title,
         year: f.year ? Number(f.year) : undefined,
         your_rating: f.rating ?? null,
+        poster_path: f.poster_path || undefined,
       }));
   }, [selectedLanguage, allFilms]);
 

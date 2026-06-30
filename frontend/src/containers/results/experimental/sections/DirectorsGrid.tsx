@@ -262,8 +262,26 @@ export function PersonCard({
     }
   }, [profilePath, imageUrl, name]);
 
+  const interactive = Boolean(onShowFilms);
+
   return (
-    <div className="relative flex flex-col items-center gap-2 group text-center">
+    <div
+      className={`relative flex flex-col items-center gap-2 group text-center ${interactive ? 'cursor-pointer' : ''}`}
+      {...(interactive
+        ? {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': `Show films with ${name}`,
+            onClick: onShowFilms,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onShowFilms!();
+              }
+            },
+          }
+        : {})}
+    >
       {/* Avatar */}
       <div
         className="relative w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
@@ -299,16 +317,6 @@ export function PersonCard({
           <span className="flex items-center justify-center w-full h-full text-xl font-bold text-white/70">
             {initials}
           </span>
-        )}
-        {/* "+" button — opens this person's films modal */}
-        {onShowFilms && (
-          <button
-            onClick={onShowFilms}
-            aria-label={`Show films with ${name}`}
-            className="absolute bottom-0 right-0 w-8 h-8 grid place-items-center rounded-full bg-[#00c030] text-black text-lg font-bold leading-none shadow-lg ring-2 ring-[#1a1a1a] hover:scale-110 transition-transform"
-          >
-            +
-          </button>
         )}
       </div>
       {/* Name + stat */}
