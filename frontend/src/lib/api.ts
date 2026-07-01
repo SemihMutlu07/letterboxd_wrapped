@@ -13,6 +13,10 @@ export interface WatchlistFilm {
   year: string;
   slug: string;
   poster_url?: string;
+  popularity?: number | null;
+  vote_average?: number | null;
+  vote_count?: number | null;
+  genres?: string[];
 }
 
 export interface WatchlistBucketCounts {
@@ -380,6 +384,46 @@ export async function recommendFromCompare(
     return await r.json() as RecommendFromCompareResult;
   } catch (error) {
     throw handleApiError(error, 'watchlist recommendation');
+  }
+}
+
+// Enrich watchlist common films with TMDB metadata (popularity, genres, ratings)
+export async function enrichWatchlistFilms(
+  firstUsername: string,
+  secondUsername: string,
+): Promise<{ status: string; users: [string, string]; films: WatchlistFilm[] }> {
+  const url = `${API_BASE}/api/watchlist-enrich`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernames: [firstUsername, secondUsername] }),
+    });
+
+    if (!r.ok) {
+      let detail = '';
+      let code: string | undefined;
+      try {
+        const body = await r.json();
+        if (typeof body.detail === 'string') {
+          detail = body.detail;
+        } else if (body.detail && typeof body.detail === 'object') {
+          detail = body.detail.message || body.detail.error_code || '';
+          code = body.detail.error_code;
+        }
+      } catch {
+        // body wasn't JSON
+      }
+      const err = new Error(detail || `watchlist enrichment ${r.status}`) as Error & { code?: string };
+      if (code) err.code = code;
+      console.error(`[API Error] watchlist enrichment failed:`, { status: r.status, code, detail });
+      throw err;
+    }
+
+    return await r.json();
+  } catch (error) {
+    throw handleApiError(error, 'watchlist enrichment');
   }
 }
 
