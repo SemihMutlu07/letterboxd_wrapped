@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import { readWatchlistUsersFromLocation, watchlistPath } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
+import { PosterPlaceholder } from '@/components/results/Placeholders';
 
 const COLLAPSED_FILM_LIMIT = 10;
 
@@ -89,21 +90,31 @@ function FilmRows({ films }: { films: WatchlistFilm[] }) {
         const href = slug ? `https://letterboxd.com/film/${slug}/` : null;
         const content = (
           <div className="flex items-center gap-3 py-2">
-            <div className="h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">
+            <div className="relative h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">
               {film.poster_url ? (
-                <img
-                  src={film.poster_url}
-                  alt={`${film.title} poster`}
-                  width={40}
-                  height={60}
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : null}
+                <>
+                  <img
+                    src={film.poster_url}
+                    alt={`${film.title} poster`}
+                    width={40}
+                    height={60}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      const el = e.currentTarget as HTMLImageElement;
+                      el.style.display = 'none';
+                      const sib = el.nextElementSibling as HTMLElement | null;
+                      if (sib) sib.style.display = '';
+                    }}
+                  />
+                  <div style={{ display: 'none' }} className="absolute inset-0">
+                    <PosterPlaceholder />
+                  </div>
+                </>
+              ) : (
+                <PosterPlaceholder />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-stone-100">{film.title}</p>
