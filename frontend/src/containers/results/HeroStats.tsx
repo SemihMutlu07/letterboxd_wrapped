@@ -50,22 +50,21 @@ export default function HeroStats({
 
         <Section variant="default" className="bg-slate-800/30">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 lg:gap-6">
-            <div className="relative text-center bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px]">
-              <button
-                type="button"
-                onClick={() => setTimeInfoOpen((v) => !v)}
-                aria-label="How is this calculated?"
-                className="absolute top-2 right-2 text-orange-300/60 hover:text-orange-200 transition-colors"
-              >
+            <button
+              type="button"
+              onClick={() => setTimeInfoOpen((v) => !v)}
+              aria-expanded={timeInfoOpen}
+              className="relative text-center bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px] transition-all duration-200 hover:scale-[1.03] hover:bg-orange-500/20 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-300"
+            >
+              <span className="absolute top-2 right-2 text-orange-300/60 transition-colors" aria-hidden>
                 <Info className="w-4 h-4" />
-              </button>
+              </span>
               <div className="text-3xl md:text-4xl lg:text-5xl font-black text-orange-500 mb-2">{timePct}</div>
               <div className="text-sm md:text-base uppercase tracking-wider opacity-80 font-medium text-orange-200">
                 of your time spent watching films
               </div>
               {timeInfoOpen && (
                 <div
-                  onClick={() => setTimeInfoOpen(false)}
                   className="absolute inset-0 z-10 flex items-center rounded-xl bg-slate-900/95 backdrop-blur-sm border border-orange-500/30 p-3 text-left shadow-2xl cursor-pointer"
                 >
                   <p className="text-[11px] leading-snug text-orange-100/90 normal-case tracking-normal font-normal">
@@ -73,7 +72,7 @@ export default function HeroStats({
                   </p>
                 </div>
               )}
-            </div>
+            </button>
             <div 
               onClick={onClickDirector}
               className={`text-center bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-3 md:p-4 lg:p-6 flex flex-col items-center justify-center min-h-[100px] md:min-h-[120px] transition-all duration-200 ${

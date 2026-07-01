@@ -263,6 +263,7 @@ async def get_task_progress(task_id: str):
         "postback_seconds": task.postback_seconds,
         "error_type": task.error_type,
         "error_stage": task.error_stage,
+        "error_code": task.error_code,
         "trace_events": task.trace_events,
     }
 

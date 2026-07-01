@@ -50,6 +50,7 @@ def _task_telemetry(task: task_manager.TaskState) -> dict:
         "postback_seconds": task.postback_seconds,
         "error_type": task.error_type,
         "error_stage": task.error_stage,
+        "error_code": task.error_code,
     }
 
 
@@ -302,6 +303,7 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
         "error_message": message,
         "error_type": telemetry.get("error_type"),
         "error_stage": telemetry.get("error_stage"),
+        "error_code": telemetry.get("error_code"),
         "duration_seconds": telemetry.get("duration_seconds"),
     })
     return {"ok": True}

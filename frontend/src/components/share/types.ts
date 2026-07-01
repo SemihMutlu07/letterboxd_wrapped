@@ -41,6 +41,7 @@ export type ShareCardData = {
   favoriteDirector: SharePersonStat;
   watchedFilms: number;
   spentDays: number;
+  spentHours: number;
   timePercent: number;
   cinemaScale: number;
   personaLabel: string;

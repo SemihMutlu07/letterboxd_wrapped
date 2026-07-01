@@ -16,6 +16,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { getPosterUrl } from '@/lib/analytics';
+import { PosterImage } from '@/components/results/Placeholders';
 import FilmModal from './FilmModal';
 import type { StatsData } from '../types';
 import type { GateResult } from './section-utils';
@@ -220,7 +221,6 @@ function FilmPosterCard({
   const imageUrl = film.poster_path ? getPosterUrl(film.poster_path, 'grid') : null;
   const deltaStr = formatDelta(film.delta);
   const deltaColor = polarity === 'higher' ? LB_GREEN : '#f87171';
-  const hue = film.title.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
   const showFallback = !imageUrl || imgFailed;
 
   const handleClick = () => {
@@ -239,7 +239,6 @@ function FilmPosterCard({
       {/* Poster */}
       <div
         className="relative w-full aspect-[2/3] rounded-lg overflow-hidden ring-1 ring-white/8 group-hover:ring-white/20 transition-all"
-        style={showFallback ? { background: `hsl(${hue},25%,18%)` } : undefined}
       >
         {imageUrl && !imgFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -251,9 +250,7 @@ function FilmPosterCard({
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <span className="flex items-end p-2 h-full text-[10px] text-white/40 leading-tight">
-            {film.title}
-          </span>
+          <PosterImage src={showFallback ? null : imageUrl} alt={`${film.title} poster`} />
         )}
         {/* Delta badge */}
         <span

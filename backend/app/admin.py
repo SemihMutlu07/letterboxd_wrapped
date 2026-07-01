@@ -37,6 +37,10 @@ def _admin_secret() -> str:
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 
+# Row limit shared by the initial dashboard render and the JS poll endpoint.
+# These MUST match, otherwise the table shrinks on the first poll (was 500 vs 50).
+DASHBOARD_RUNS_LIMIT = 500
+
 
 def _num(value: Any) -> float | None:
     return value if isinstance(value, (int, float)) else None
@@ -178,7 +182,7 @@ def _mark_consecutive_dupes(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return runs
 
 
-async def _load_analysis_runs(limit: int = 500) -> list[dict[str, Any]]:
+async def _load_analysis_runs(limit: int = DASHBOARD_RUNS_LIMIT) -> list[dict[str, Any]]:
     if settings.supabase_enabled:
         return _mark_consecutive_dupes(await _load_runs_supabase(limit))
     return _mark_consecutive_dupes(_load_json_dir(RUNS_DIR, limit=limit))
@@ -190,7 +194,7 @@ async def admin_login(request: Request):
 
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, limit: int = 500):
+async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
     _require_admin(request)
     runs = await _load_analysis_runs(limit=limit)
     if settings.supabase_enabled:
@@ -238,7 +242,7 @@ async def admin_run_detail(request: Request, filename: str):
 
 
 @router.get("/admin/api/runs")
-async def admin_api_runs(request: Request, limit: int = 50):
+async def admin_api_runs(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
     """JSON API for the admin dashboard."""
     _require_admin(request)
     if settings.supabase_enabled:

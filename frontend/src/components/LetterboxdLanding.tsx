@@ -170,7 +170,8 @@ export default function LetterboxdLanding() {
       }
       try {
         uploadFiles = [await zipFiles(csvFiles)];
-      } catch {
+      } catch (err) {
+        console.error('[upload] folder zip packaging failed:', err);
         setError({ title: 'Failed to prepare folder', message: 'Could not package the selected folder for upload.', action: 'Please try again or upload the original .zip file instead.', reason: 'unknown_error' });
         setIsUploading(false);
         trackEvent('analyze_failed', { reason: 'zip_pack_failed', step: 'preparation' });
@@ -183,7 +184,8 @@ export default function LetterboxdLanding() {
     } else {
       try {
         uploadFiles = [await zipFiles(files)];
-      } catch {
+      } catch (err) {
+        console.error('[upload] file zip packaging failed:', err);
         setError({ title: 'Failed to prepare files', message: 'Could not package the selected files for upload.', action: 'Please try again or upload as a single ZIP.', reason: 'unknown_error' });
         setIsUploading(false);
         trackEvent('analyze_failed', { reason: 'zip_pack_failed', step: 'preparation' });
@@ -236,6 +238,7 @@ export default function LetterboxdLanding() {
 
       setTimeout(() => { window.location.href = resultPath(detectedUsername); }, 100);
     } catch (err) {
+      console.error('[upload] analysis failed:', err);
       const normalized = normalizeError(err);
       if (analysisRun && detectedUsername) {
         try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
@@ -318,6 +321,7 @@ export default function LetterboxdLanding() {
         setTimeout(() => { window.location.href = resultPath(username); }, 100);
       }
     } catch (err) {
+      console.error('[scrape] analysis failed:', err);
       const normalized = normalizeError(err);
       if (analysisRun) {
         try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }

@@ -29,6 +29,7 @@ class TaskState:
     postback_seconds: Optional[float] = None
     error_type: Optional[str] = None
     error_stage: Optional[str] = None
+    error_code: Optional[str] = None
     kind: str = "analyze"     # analyze | scrape | watchlist
     username: Optional[str] = None
     usernames: list = field(default_factory=list)  # watchlist jobs
@@ -172,6 +173,7 @@ def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> No
         "postback_seconds",
         "error_type",
         "error_stage",
+        "error_code",
     ):
         if field_name in telemetry:
             setattr(task, field_name, telemetry.get(field_name))
@@ -435,6 +437,7 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
                 "postback_seconds": t.postback_seconds,
                 "error_type": t.error_type,
                 "error_stage": t.error_stage,
+                "error_code": t.error_code,
                 "latest_event": t.trace_events[-1] if t.trace_events else None,
             }
             for t in sorted(queued + running, key=lambda task: task.created_at)
@@ -446,6 +449,7 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
                 "message": t.error or t.message,
                 "error_type": t.error_type,
                 "error_stage": t.error_stage,
+                "error_code": t.error_code,
                 "duration_seconds": t.duration_seconds,
                 "queue_wait_seconds": t.queue_wait_seconds,
                 "worker_seconds": t.worker_seconds,

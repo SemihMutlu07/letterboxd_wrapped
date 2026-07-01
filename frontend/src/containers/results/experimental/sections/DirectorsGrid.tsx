@@ -18,6 +18,7 @@ import { getProfileUrl } from '@/lib/analytics';
 import type { StatsData, PersonFilm } from '../types';
 import type { GateResult, SectionToggle } from './section-utils';
 import PersonFilmsModal from './PersonFilmsModal';
+import { PersonAvatarPlaceholder } from '@/components/results/Placeholders';
 import {
   gateOk,
   gateFail,
@@ -240,17 +241,6 @@ export function PersonCard({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [retried, setRetried] = useState(false);
 
-  const initials = name
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
-  // Deterministic gradient from name
-  const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-  const gradient = `hsl(${hue},40%,25%)`;
-
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
 
@@ -284,8 +274,7 @@ export function PersonCard({
     >
       {/* Avatar */}
       <div
-        className="relative w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
-        style={{ background: gradient }}
+        className="relative w-28 h-28 md:w-32 md:h-32 rounded-2xl overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
       >
         {showImage && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -313,11 +302,7 @@ export function PersonCard({
             }}
           />
         )}
-        {showFallback && (
-          <span className="flex items-center justify-center w-full h-full text-xl font-bold text-white/70">
-            {initials}
-          </span>
-        )}
+        {showFallback && <PersonAvatarPlaceholder />}
       </div>
       {/* Name + stat */}
       <div className="space-y-0.5">

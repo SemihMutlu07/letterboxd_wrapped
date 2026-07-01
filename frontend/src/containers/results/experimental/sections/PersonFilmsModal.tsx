@@ -6,9 +6,10 @@
  * Reuses the ShareModal backdrop pattern (fixed overlay + click-to-close).
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
+import { PersonAvatarPlaceholder, PosterImage } from '@/components/results/Placeholders';
 import type { PersonFilm } from '../types';
 
 interface PersonFilmsModalProps {
@@ -21,6 +22,11 @@ interface PersonFilmsModalProps {
 
 export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
   const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
+  const [profileFailed, setProfileFailed] = useState(false);
+
+  useEffect(() => {
+    if (open) setProfileFailed(false);
+  }, [open, profileUrl]);
 
   // Close on Escape
   useEffect(() => {
@@ -59,31 +65,48 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
             className="relative w-full max-w-2xl max-h-[85vh] flex flex-col bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-white/[0.06]">
-              <div className="flex items-center gap-4 min-w-0 flex-1">
-                {profileUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={profileUrl}
-                    alt={name}
-                    loading="lazy"
-                    className="w-16 h-24 rounded-lg object-cover flex-shrink-0"
-                  />
-                )}
-                <div className="min-w-0">
-                  <p className="text-base font-bold text-white">{name}</p>
-                  <p className="text-xs text-slate-500">
-                    {films.length} film{films.length !== 1 ? 's' : ''} you watched
-                  </p>
+            <div className="relative min-h-[168px] overflow-hidden border-b border-white/[0.06]">
+              {profileUrl && !profileFailed && (
+                <div
+                  className="absolute inset-0 scale-110 bg-cover bg-center opacity-25 blur-md"
+                  style={{ backgroundImage: `url(${profileUrl})` }}
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/90 to-[#141414]/55" />
+              <div className="relative z-10 flex h-full items-end justify-between gap-4 px-5 py-5">
+                <div className="flex min-w-0 flex-1 items-end gap-4">
+                  <div className="h-28 w-20 flex-shrink-0 overflow-hidden rounded-2xl bg-slate-800 ring-1 ring-white/10 shadow-2xl">
+                    {profileUrl && !profileFailed ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={profileUrl}
+                        alt={name}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                        onError={() => setProfileFailed(true)}
+                      />
+                    ) : (
+                      <PersonAvatarPlaceholder />
+                    )}
+                  </div>
+                  <div className="min-w-0 pb-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-300/70">
+                      Film shelf
+                    </p>
+                    <p className="mt-1 text-2xl font-black leading-tight text-white md:text-3xl">{name}</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {films.length} film{films.length !== 1 ? 's' : ''} you watched
+                    </p>
+                  </div>
                 </div>
-              </div>
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="w-8 h-8 grid place-items-center rounded-full text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors flex-shrink-0"
+                className="mb-auto w-8 h-8 grid place-items-center rounded-full text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors flex-shrink-0"
               >
                 ✕
               </button>
+              </div>
             </div>
 
             {/* Film grid */}
@@ -92,20 +115,8 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                 const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
                 return (
                   <div key={`${f.title}-${f.year}`} className="space-y-1.5">
-                    <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-zinc-800 ring-1 ring-white/10">
-                      {poster ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={poster}
-                          alt={f.title}
-                          loading="lazy"
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 grid place-items-center text-center px-1 text-[10px] font-bold text-slate-500">
-                          {f.title}
-                        </div>
-                      )}
+                    <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-zinc-800 ring-1 ring-white/10 transition-all duration-150 hover:scale-[1.02] hover:ring-orange-400/30 hover:shadow-2xl hover:shadow-black/40">
+                      <PosterImage src={poster} alt={`${f.title} poster`} />
                       {f.user_rating != null && (
                         <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-[10px] font-bold text-yellow-400">
                           ★ {f.user_rating.toFixed(1)}

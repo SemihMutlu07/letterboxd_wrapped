@@ -111,4 +111,5 @@ def test_failure_telemetry_mapping():
         "duration_seconds": 1.2,
         "error_type": "ScrapeAnalysisEmpty",
         "error_stage": "analysis_empty",
+        "error_code": "analysis_failed",
     }

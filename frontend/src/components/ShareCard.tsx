@@ -10,6 +10,7 @@ export type ShareCardProps = {
   favoriteDirector: { name: string; headshotUrl: string; count: number };
   watchedFilms: number;
   spentDays: number;
+  spentHours: number;
   timePercent: number;
   cinemaScale: number;
   personaLabel: string;
@@ -107,6 +108,28 @@ const StatPill: React.FC<{ icon: React.ReactNode; label: string; value: React.Re
   </div>
 );
 
+const TimeCallout: React.FC<{ hours: number; percent: number; compact?: boolean }> = ({
+  hours,
+  percent,
+  compact = false,
+}) => (
+  <div className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-br from-zinc-900 via-zinc-950 to-emerald-950/35 px-6 py-5">
+    <div className="absolute right-0 top-0 h-24 w-24 translate-x-1/3 -translate-y-1/3 rounded-full bg-green-400/10 blur-2xl" />
+    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-500">
+      Time on screen
+    </p>
+    <div className="mt-2 flex items-end gap-3">
+      <GiantNumber className={compact ? "text-[54px]" : "text-[72px]"}>
+        {Math.max(0, Math.round(hours)).toLocaleString()}
+      </GiantNumber>
+      <span className="pb-2 text-2xl font-black text-neutral-300">hours</span>
+    </div>
+    <p className="mt-2 text-sm font-bold text-green-300">
+      {Math.max(0, percent)}% of your year went to film
+    </p>
+  </div>
+);
+
 const PersonCard: React.FC<{
   label: string;
   name: string;
@@ -159,13 +182,13 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     favoriteDirector,
     watchedFilms,
     spentDays,
+    spentHours,
     timePercent,
     cinemaScale,
     minutesAverage,
     mostCommonRating,
     peakDecade,
     peakDecadeCount,
-    topFilms,
     topReviewWords,
     username,
     className = "",
@@ -310,15 +333,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
             )}
           </div>
 
-          {/* Top films */}
-          {topFilms && topFilms.length > 0 && (
-            <div>
-              <SectionLabel>Favorite films</SectionLabel>
-              <div className="mt-2">
-                <PosterStrip films={topFilms} size="xl" />
-              </div>
-            </div>
-          )}
+          <TimeCallout hours={spentHours} percent={timePercent} />
 
           {/* Footer */}
           <div className="mt-auto pt-4 text-center">
@@ -398,9 +413,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
             )}
           </div>
 
-          {topFilms && topFilms.length > 0 && (
-            <PosterStrip films={topFilms} size="lg" />
-          )}
+          <TimeCallout hours={spentHours} percent={timePercent} compact />
 
           {/* Footer */}
           <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-neutral-600">

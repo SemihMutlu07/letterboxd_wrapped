@@ -182,8 +182,9 @@ export default function ResultsPage() {
             average_runtime: parsedStats.average_runtime,
           });
         }
-      } catch {
-        // silent: stale localStorage data
+      } catch (err) {
+        // Stale/corrupt sessionStorage data — log so a blank results page is diagnosable.
+        console.error('[results] failed to parse stored stats:', err);
       }
     }
     setLoading(false);
@@ -434,6 +435,7 @@ export default function ResultsPage() {
       favoriteDirector: topDirectors[directorIdx] || { name: 'Unknown Director', headshotUrl: '', count: 0 },
       watchedFilms: stats?.total_films || 0,
       spentDays: Math.round(runtimeHours / 24),
+      spentHours: Math.round(runtimeHours),
       timePercent: Number.parseInt(timePct, 10) || 0,
       cinemaScale: cineScore,
       personaLabel: stats?.cinematic_persona?.persona || '',
@@ -801,7 +803,14 @@ function ResultsContent({
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
 
         {/* Ratings Bar */}
-        <LazyRatingsBar data={ratingsArr} max={ratingMax} isMobile={isMobile} mostCommonRating={stats.most_common_rating} />
+        <LazyRatingsBar
+          data={ratingsArr}
+          max={ratingMax}
+          isMobile={isMobile}
+          mostCommonRating={stats.most_common_rating}
+          allFilms={stats.all_films ?? []}
+          userAvg={stats.average_rating}
+        />
 
         {/* Quick Facts */}
         <LazyQuickFacts
@@ -964,13 +973,34 @@ function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; is
 }
 
 // Lazy wrapper for Ratings Bar
-function LazyRatingsBar({ data, max, isMobile, mostCommonRating }: { data: any[]; max: number; isMobile: boolean; mostCommonRating?: number }) {
+function LazyRatingsBar({
+  data,
+  max,
+  isMobile,
+  mostCommonRating,
+  allFilms,
+  userAvg,
+}: {
+  data: any[];
+  max: number;
+  isMobile: boolean;
+  mostCommonRating?: number;
+  allFilms: any[];
+  userAvg?: number | null;
+}) {
   const { ref, shouldMount } = useLazyMount(200);
 
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <RatingsBar data={data} max={max} isMobile={isMobile} mostCommonRating={mostCommonRating} />
+        <RatingsBar
+          data={data}
+          max={max}
+          isMobile={isMobile}
+          mostCommonRating={mostCommonRating}
+          allFilms={allFilms}
+          userAvg={userAvg}
+        />
       ) : (
         <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}

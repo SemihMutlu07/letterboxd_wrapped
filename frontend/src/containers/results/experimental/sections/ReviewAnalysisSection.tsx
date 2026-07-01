@@ -5,6 +5,7 @@ import Section from '@/components/results/Section';
 import type { StatsData } from '../types';
 
 type Props = { stats: StatsData };
+type ReviewSort = 'likes' | 'length';
 
 const WORD_PALETTE = [
   'bg-orange-500/25 text-orange-200',
@@ -27,6 +28,7 @@ function scaledWordSize(count: number, max: number): string {
 
 export default function ReviewAnalysisSection({ stats }: Props) {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [reviewSort, setReviewSort] = useState<ReviewSort>('likes');
 
   const ra = stats.review_analysis;
   if (!ra || ra.reviews_with_text === 0) return null;
@@ -39,6 +41,12 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   const reviewsWithLikesData = ra.reviews_with_likes_data ?? null;
 
   const allReviews = (ra.reviews ?? []);
+  const sortedReviews = [...allReviews].sort((a, b) => {
+    if (reviewSort === 'likes') {
+      return (b.likes ?? 0) - (a.likes ?? 0);
+    }
+    return (b.text?.length ?? 0) - (a.text?.length ?? 0);
+  });
   const filteredReviews = selectedWord
     ? allReviews.filter((r) => r.text?.toLowerCase().includes(selectedWord.toLowerCase()))
     : [];
@@ -205,6 +213,32 @@ export default function ReviewAnalysisSection({ stats }: Props) {
             </ul>
           </details>
         )}
+
+        {sortedReviews.length > 0 && (
+          <div className="w-full rounded-xl bg-slate-800/35 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-orange-300">All written reviews</p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Sort without extra scraping — likes come from the review listing page.
+                </p>
+              </div>
+              <div className="flex rounded-full border border-slate-700/60 bg-slate-900/60 p-0.5">
+                <ReviewSortButton active={reviewSort === 'likes'} onClick={() => setReviewSort('likes')}>
+                  Most liked
+                </ReviewSortButton>
+                <ReviewSortButton active={reviewSort === 'length'} onClick={() => setReviewSort('length')}>
+                  Longest
+                </ReviewSortButton>
+              </div>
+            </div>
+            <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {sortedReviews.map((review, idx) => (
+                <FullReviewCard key={`${review.title}-${review.year}-${idx}`} review={review} />
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </Section>
   );
@@ -233,6 +267,70 @@ function FilteredReviewCard({ review }: { review: ReviewItem }) {
         <button
           onClick={() => setExpanded((v) => !v)}
           className="mt-1.5 text-[11px] font-bold text-orange-300 hover:text-orange-200 transition-colors"
+        >
+          {expanded ? 'Show less' : 'Read more'}
+        </button>
+      )}
+    </li>
+  );
+}
+
+function ReviewSortButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+        active
+          ? 'bg-orange-400 text-slate-950'
+          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FullReviewCard({ review }: { review: ReviewItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const text = review.text ?? '';
+  const likes = review.likes ?? 0;
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const isLong = text.length > 260;
+
+  return (
+    <li className="rounded-xl border border-white/[0.04] bg-slate-900/45 p-4 transition-colors hover:bg-slate-900/70">
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-100">{review.title}</p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {review.year || '—'}
+            {review.rating != null ? ` · ★ ${review.rating.toFixed(1)}` : ''}
+            {wordCount > 0 ? ` · ${wordCount} words` : ''}
+          </p>
+        </div>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+          likes > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-800 text-slate-500'
+        }`}>
+          {likes > 0 ? `♥ ${likes}` : 'Not yet liked'}
+        </span>
+      </header>
+      <p className={`mt-3 text-sm leading-relaxed text-slate-300 ${expanded ? 'whitespace-pre-line' : 'line-clamp-4'}`}>
+        {text}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 text-[11px] font-bold text-orange-300 transition-colors hover:text-orange-200"
         >
           {expanded ? 'Show less' : 'Read more'}
         </button>

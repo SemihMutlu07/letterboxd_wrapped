@@ -202,7 +202,10 @@ def _failure_message(username: str, exc: Exception) -> str:
             return f"Scraped @{username} but the analysis came back empty. Please try again."
         return f"No public films found for @{username}. The profile may be private, empty, or blocked by Letterboxd."
     if isinstance(exc, ScraperAPIError):
-        return f"Scraper service error while reading @{username}. Please try again shortly."
+        # Forward the specific scraper message (all ScraperAPIError strings are
+        # hand-crafted + secret-free, e.g. "Too many people are using the scraper")
+        # so the frontend can classify + log the real cause instead of a flat generic.
+        return str(exc) or f"Scraper service error while reading @{username}. Please try again shortly."
     if isinstance(exc, ValueError):
         return str(exc)
     return f"Letterboxd returned an unexpected response for @{username}. Please try again later."
@@ -212,17 +215,22 @@ def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
     """Classify failures enough for the admin dashboard and future fix loops."""
     if isinstance(exc, ScraperAPIError):
         error_stage = "scraper_api"
+        error_code = "scraper_unavailable"
     elif isinstance(exc, ScrapeAnalysisEmpty):
         error_stage = "analysis_empty" if exc.scraper_ok else "scrape_empty"
+        error_code = "analysis_failed" if exc.scraper_ok else "no_films"
     elif isinstance(exc, ValueError):
         error_stage = "letterboxd_or_scrape"
+        error_code = "scrape_failed"
     else:
         error_stage = "pipeline_unexpected"
+        error_code = "scrape_failed"
 
     return {
         "duration_seconds": duration_seconds,
         "error_type": type(exc).__name__,
         "error_stage": error_stage,
+        "error_code": error_code,
     }
 
 

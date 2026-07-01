@@ -38,6 +38,7 @@ const baseData: ShareCardData = {
   favoriteDirector: { name: 'Director One', headshotUrl: '/tmdb-proxy/t/p/w300/d1.jpg', count: 5 },
   watchedFilms: 120,
   spentDays: 9,
+  spentHours: 216,
   timePercent: 3,
   cinemaScale: 72,
   personaLabel: 'Archivist',
