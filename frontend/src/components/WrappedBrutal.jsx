@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import PageViewTracker from "@/components/PageViewTracker";
+import FeedbackFab from "@/components/FeedbackFab";
+import ShareModal from "@/components/ShareModal";
 
 /* =================================================================
    WRAPPED — neo-brutalist rebuild (WRAPMINAL visual language)
@@ -95,7 +98,7 @@ function Btn({ children, active, onClick, color = T.lime }) {
 }
 
 /* ---------- nav ---------- */
-function Nav({ revealed, setRevealed }) {
+function Nav({ revealed, setRevealed, onShare }) {
   return (
     <div className="flex items-center justify-between" style={{ padding: "18px 0 22px" }}>
       <div className="flex items-center" style={{ gap: 10 }}>
@@ -104,8 +107,7 @@ function Nav({ revealed, setRevealed }) {
       </div>
       <div className="flex" style={{ gap: 8 }}>
         <Btn active={revealed} color={T.cyan} onClick={() => setRevealed((v) => !v)}>{revealed ? "Hide" : "Reveal"}</Btn>
-        <Btn>Sample</Btn>
-        <Btn>Export SVG</Btn>
+        <Btn onClick={onShare}>Share</Btn>
       </div>
     </div>
   );
@@ -937,6 +939,8 @@ export default function Wrapped() {
   const [revealed, setRevealed] = useState(false);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showShare, setShowShare] = useState(false);
+  const [shareOrientation, setShareOrientation] = useState('vertical');
 
   useEffect(() => {
     const saved = sessionStorage.getItem('letterboxdStats');
@@ -1001,8 +1005,9 @@ export default function Wrapped() {
       backgroundImage: `linear-gradient(${T.ink}0a 1px, transparent 1px), linear-gradient(90deg, ${T.ink}0a 1px, transparent 1px)`,
       backgroundSize: "30px 30px",
     }}>
+      <PageViewTracker />
       <div style={{ maxWidth: 880, margin: "0 auto", padding: "0 24px" }}>
-        <Nav revealed={revealed} setRevealed={setRevealed} />
+        <Nav revealed={revealed} setRevealed={setRevealed} onShare={() => setShowShare(true)} />
         <Hero stats={stats} />
         <WrappedCards stats={stats} />
         <Outliers stats={stats} />
@@ -1013,6 +1018,38 @@ export default function Wrapped() {
         <CinemaScale stats={stats} />
         <Footer />
       </div>
+      <FeedbackFab sessionId={sessionStorage.getItem('letterboxd_username') || 'anonymous'} />
+      {stats && (
+        <ShareModal
+          open={showShare}
+          onClose={() => setShowShare(false)}
+          orientation={shareOrientation}
+          setOrientation={setShareOrientation}
+          cardProps={{
+            onScreenCrush: {
+              name: stats?.top_actors?.[0]?.name || '—',
+              headshotUrl: '',
+              count: stats?.top_actors?.[0]?.count || 0,
+            },
+            favoriteDirector: {
+              name: stats?.top_directors?.[0]?.name || '—',
+              headshotUrl: '',
+              count: stats?.top_directors?.[0]?.count || 0,
+            },
+            watchedFilms: stats?.total_films ?? 0,
+            spentDays: stats?.days_watched ?? 0,
+            spentHours: (stats?.days_watched ?? 0) * 2,
+            timePercent: 0,
+            cinemaScale: Math.round(stats?.sinefil_meter?.score ?? 0),
+            personaLabel: stats?.cinematic_persona ?? 'Cinephile',
+            minutesAverage: Math.round(stats?.average_runtime ?? 0),
+            mostCommonRating: 0,
+            peakDecade: '',
+            peakDecadeCount: 0,
+            username: sessionStorage.getItem('letterboxd_username') || undefined,
+          }}
+        />
+      )}
     </div>
   );
 }
