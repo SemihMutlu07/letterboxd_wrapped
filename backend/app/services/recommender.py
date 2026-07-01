@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import random
 import re
 from collections import Counter
@@ -33,6 +34,11 @@ def public_film(film: dict[str, Any]) -> dict[str, Any]:
         "year": str(film.get("year", "") or ""),
         "slug": film.get("slug", ""),
         "poster_url": str(film.get("poster_url") or ""),
+        # Pass-through enrichment fields (populated by enrich_films, absent on raw scraper output)
+        "popularity": film.get("popularity"),
+        "vote_average": film.get("vote_average"),
+        "vote_count": film.get("vote_count"),
+        "genres": film.get("genres") or [],
     }
 
 
@@ -95,6 +101,29 @@ async def enrich_films(
         details = await fetch_comprehensive_film_details(session, tmdb_id) if tmdb_id else {}
         enriched.append({**film, **details})
     return enriched
+
+
+async def enrich_films_concurrent(
+    session: aiohttp.ClientSession,
+    films: Iterable[dict[str, Any]],
+    limit: int = 50,
+    max_concurrency: int = 5,
+) -> list[dict[str, Any]]:
+    """Concurrent version of enrich_films using asyncio.gather + semaphore.
+
+    Used by the watchlist swipe endpoint where we need to enrich more films
+    than the sequential version can handle without hitting TMDB rate limits.
+    """
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def enrich_one(film: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            year = _year_from_film(film)
+            tmdb_id = await resolve_tmdb_id(session, str(film.get("title", "")), year)
+            details = await fetch_comprehensive_film_details(session, tmdb_id) if tmdb_id else {}
+            return {**film, **details}
+
+    return await asyncio.gather(*(enrich_one(f) for f in list(films)[:limit]))
 
 
 def pick_from_common(

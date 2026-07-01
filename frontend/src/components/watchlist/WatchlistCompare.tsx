@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Clapperboard, Shuffle, Sparkles, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clapperboard, Layers, List, Shuffle, Sparkles, X } from 'lucide-react';
 
 import {
   compareWatchlists,
+  enrichWatchlistFilms,
   recommendFromCompare,
   handleApiError,
   type FilmRecommendation,
@@ -15,6 +16,7 @@ import {
 import { readWatchlistUsersFromLocation, watchlistPath } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
+import SwipeDeck from './SwipeDeck';
 
 const COLLAPSED_FILM_LIMIT = 10;
 
@@ -298,6 +300,9 @@ export default function WatchlistCompare() {
   const [dismissLoading, setDismissLoading] = useState(false);
   const [recommending, setRecommending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'swipe'>('list');
+  const [enrichedFilms, setEnrichedFilms] = useState<WatchlistFilm[] | null>(null);
+  const [enriching, setEnriching] = useState(false);
   const autoComparedRef = useRef(false);
 
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
@@ -363,6 +368,21 @@ export default function WatchlistCompare() {
       setError(handleApiError(err, 'recommendation').message);
     } finally {
       setRecommending(false);
+    }
+  };
+
+  const handleSwitchToSwipe = async () => {
+    setViewMode('swipe');
+    if (enrichedFilms !== null || !result) return;
+    setEnriching(true);
+    setError(null);
+    try {
+      const res = await enrichWatchlistFilms(normalized[0], normalized[1]);
+      setEnrichedFilms(res.films);
+    } catch (err) {
+      setError(handleApiError(err, 'watchlist enrichment').message);
+    } finally {
+      setEnriching(false);
     }
   };
 
@@ -506,13 +526,57 @@ export default function WatchlistCompare() {
             </div>
           </section>
 
-          {/* Common shelf — always visible */}
-          <FilmListOpen
-            title="Shared shelf"
-            films={result.common}
-            totalCount={result.counts.common}
-            emptyMessage="Zero shared films in both watchlists."
-          />
+          {/* View mode toggle */}
+          {result.counts.common > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-1.5 border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors ${
+                  viewMode === 'list'
+                    ? 'border-amber-300 bg-amber-300 text-stone-950'
+                    : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
+                }`}
+              >
+                <List className="h-3.5 w-3.5" />
+                List
+              </button>
+              <button
+                type="button"
+                onClick={handleSwitchToSwipe}
+                className={`flex items-center gap-1.5 border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors ${
+                  viewMode === 'swipe'
+                    ? 'border-amber-300 bg-amber-300 text-stone-950'
+                    : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Swipe
+              </button>
+            </div>
+          )}
+
+          {/* Common shelf — list view */}
+          {viewMode === 'list' && (
+            <FilmListOpen
+              title="Shared shelf"
+              films={result.common}
+              totalCount={result.counts.common}
+              emptyMessage="Zero shared films in both watchlists."
+            />
+          )}
+
+          {/* Swipe deck — alternate view */}
+          {viewMode === 'swipe' && (
+            enriching ? (
+              <section className="border border-stone-800 bg-[#171411] p-8 text-center">
+                <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-amber-200/20 border-t-amber-300" />
+                <p className="mt-3 font-mono text-xs uppercase tracking-[0.14em] text-stone-400">Enriching films with TMDB data…</p>
+              </section>
+            ) : enrichedFilms ? (
+              <SwipeDeck films={enrichedFilms} />
+            ) : null
+          )}
 
           {/* Individual watchlists — collapsed by default */}
           <div className="grid grid-cols-1 gap-3">

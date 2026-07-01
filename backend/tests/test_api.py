@@ -252,6 +252,10 @@ async def test_watchlist_compare_success(client: AsyncClient):
         "year": "2022",
         "slug": "/film/aftersun/",
         "poster_url": "https://img/aftersun.jpg",
+        "popularity": None,
+        "vote_average": None,
+        "vote_count": None,
+        "genres": [],
     }]
 
 

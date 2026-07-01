@@ -17,7 +17,9 @@ from app.models.recommend import RecommendFromCompareRequest, RecommendFromCompa
 from app.services.recommender import (
     compare_watchlist_sets,
     enrich_films,
+    enrich_films_concurrent,
     pick_from_common,
+    public_film,
     recommendation_from_film,
 )
 from app.config import settings
@@ -284,3 +286,63 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
     )
     _persist_watchlist_run([first, second], {"recommendation": selected.get("title"), "alternatives": len(alternatives)}, request, ok=True)
     return response
+
+
+@router.post("/api/watchlist-enrich")
+async def enrich_watchlist_films(request: Request, payload: WatchlistCompareRequest):
+    """Enrich the common films from a watchlist compare with TMDB metadata.
+
+    Returns the common bucket with popularity, vote_average, vote_count, and
+    genres added — used by the swipe UI for sorting by popularity.
+    """
+    if not _check_rate_limit(_client_key(request)):
+        raise _rate_limit_exception()
+
+    first = _validate_username(payload.usernames[0])
+    second = _validate_username(payload.usernames[1])
+
+    if first == second:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
+        )
+
+    if task_manager.is_worker_paused():
+        raise _worker_paused_exception()
+
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
+        )
+
+    task_id = task_manager.create_watchlist_compare_job([first, second])
+    outcome, data = await _await_worker_job(task_id, 120)
+
+    if outcome == "failed":
+        raise _worker_failure_exception(data)
+    if outcome == "timeout":
+        raise HTTPException(
+            status_code=504,
+            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
+        )
+
+    comparison = compare_watchlist_sets(data.get("first_watchlist", []), data.get("second_watchlist", []))
+    common = comparison["common"]
+
+    if not common:
+        return {"status": "success", "users": [first, second], "films": []}
+
+    try:
+        enriched = await enrich_films_concurrent(
+            request.app.state.aiohttp_session, common, limit=50, max_concurrency=5,
+        )
+    except Exception:
+        logger.exception("Watchlist-enrich failed for %s/%s", first, second)
+        raise HTTPException(
+            status_code=502,
+            detail={"error_code": "enrichment_failed", "message": "Could not look up film details. Try again later."},
+        )
+
+    films = [public_film(f) for f in enriched]
+    return {"status": "success", "users": [first, second], "films": films}
