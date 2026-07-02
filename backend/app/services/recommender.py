@@ -34,6 +34,9 @@ def public_film(film: dict[str, Any]) -> dict[str, Any]:
         "year": str(film.get("year", "") or ""),
         "slug": film.get("slug", ""),
         "poster_url": str(film.get("poster_url") or ""),
+        # TMDB poster path (populated by enrich_films). Preferred over poster_url,
+        # whose raw-scraper value is a broken /image-150/ AJAX endpoint, not an image.
+        "poster_path": str(film.get("poster_path") or ""),
         # Pass-through enrichment fields (populated by enrich_films, absent on raw scraper output)
         "popularity": film.get("popularity"),
         "vote_average": film.get("vote_average"),
