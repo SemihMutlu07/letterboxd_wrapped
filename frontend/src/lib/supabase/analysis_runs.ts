@@ -146,6 +146,42 @@ function extractMetrics(summaryPayload: Record<string, unknown> | null): {
     };
 }
 
+export type CachedAnalysisRun = {
+    id: string;
+    username: string;
+    started_at: string | null;
+    finished_at: string | null;
+    summary: Record<string, unknown> | null;
+    total_films: number | null;
+    sinefil_meter: number | null;
+    cinematic_persona: string | null;
+    average_rating: number | null;
+    total_countries: number | null;
+};
+
+/**
+ * Read the most recent successful run for a username (experiment tooling:
+ * lets /dev/load-run reproduce a full results page from cached Supabase data
+ * without a live scrape). Returns null when no completed run exists.
+ */
+export async function getLatestAnalysisRunByUsername(username: string): Promise<CachedAnalysisRun | null> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from("analysis_runs")
+        .select("id, username, started_at, finished_at, summary, total_films, sinefil_meter, cinematic_persona, average_rating, total_countries")
+        .eq("username", username.trim().toLowerCase())
+        .eq("ok", true)
+        .not("summary", "is", null)
+        .order("finished_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(`Cached-run lookup failed: ${error.message || error.code || "Unknown error"}`);
+    }
+    return (data as CachedAnalysisRun | null) ?? null;
+}
+
 export async function finishAnalysis(input: AnalysisFinishInput) {
     const supabase = getSupabase();
     const summaryPayload = (() => {
