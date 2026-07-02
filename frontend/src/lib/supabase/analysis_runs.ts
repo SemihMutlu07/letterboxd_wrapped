@@ -182,6 +182,37 @@ export async function getLatestAnalysisRunByUsername(username: string): Promise<
     return (data as CachedAnalysisRun | null) ?? null;
 }
 
+/** Metric card for the /dev/load-run account picker — summary intentionally excluded to keep the list light. */
+export type CachedRunPreview = Omit<CachedAnalysisRun, "summary">;
+
+/**
+ * List the most recent successful run per username (experiment tooling:
+ * the /dev/load-run account picker). Fetches recent ok runs and dedupes
+ * client-side — PostgREST has no DISTINCT ON.
+ */
+export async function getRecentAnalysisRuns(maxAccounts = 10): Promise<CachedRunPreview[]> {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+        .from("analysis_runs")
+        .select("id, username, started_at, finished_at, total_films, sinefil_meter, cinematic_persona, average_rating, total_countries")
+        .eq("ok", true)
+        .not("summary", "is", null)
+        .not("total_films", "is", null)
+        .order("finished_at", { ascending: false })
+        .limit(50);
+
+    if (error) {
+        throw new Error(`Recent-runs lookup failed: ${error.message || error.code || "Unknown error"}`);
+    }
+
+    const byUsername = new Map<string, CachedRunPreview>();
+    for (const row of (data ?? []) as CachedRunPreview[]) {
+        if (!byUsername.has(row.username)) byUsername.set(row.username, row);
+        if (byUsername.size >= maxAccounts) break;
+    }
+    return [...byUsername.values()];
+}
+
 export async function finishAnalysis(input: AnalysisFinishInput) {
     const supabase = getSupabase();
     const summaryPayload = (() => {

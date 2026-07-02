@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   getLatestAnalysisRunByUsername,
+  getRecentAnalysisRuns,
   getDetailsFromSummary,
   type CachedAnalysisRun,
+  type CachedRunPreview,
 } from '@/lib/supabase/analysis_runs';
 import { resultPath } from '@/lib/routes';
 
@@ -18,6 +20,15 @@ export default function LoadRunPage() {
   const [username, setUsername] = useState('semihmutsuz');
   const [status, setStatus] = useState<string | null>(null);
   const [run, setRun] = useState<CachedAnalysisRun | null>(null);
+  const [accounts, setAccounts] = useState<CachedRunPreview[]>([]);
+
+  useEffect(() => {
+    getRecentAnalysisRuns()
+      .then(setAccounts)
+      .catch((err: unknown) => {
+        setStatus(err instanceof Error ? err.message : 'Could not list cached accounts.');
+      });
+  }, []);
 
   // NODE_ENV is inlined at build time; the static prod export ships a stub.
   if (process.env.NODE_ENV === 'production') {
@@ -30,8 +41,8 @@ export default function LoadRunPage() {
     );
   }
 
-  const handleLoad = async () => {
-    const clean = username.trim().replace(/^@/, '').toLowerCase();
+  const handleLoad = async (name?: string) => {
+    const clean = (name ?? username).trim().replace(/^@/, '').toLowerCase();
     if (!clean) return;
     setStatus('Fetching latest cached run…');
     setRun(null);
@@ -82,6 +93,33 @@ export default function LoadRunPage() {
             Load
           </button>
         </div>
+
+        {accounts.length > 0 && (
+          <section>
+            <p className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">
+              Cached test accounts ({accounts.length})
+            </p>
+            <div className="mt-3 grid gap-2">
+              {accounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  onClick={() => { setUsername(acc.username); void handleLoad(acc.username); }}
+                  className="border border-stone-800 bg-[#171411] px-4 py-3 text-left transition-colors hover:border-amber-400/60"
+                >
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="font-bold text-stone-100">@{acc.username}</span>
+                    <span className="font-mono text-[11px] text-stone-500">{acc.finished_at?.slice(0, 10) ?? '—'}</span>
+                  </span>
+                  <span className="mt-1 block font-mono text-[11px] text-stone-400">
+                    {acc.total_films ?? '—'} films · sinefil {acc.sinefil_meter ?? '—'} · ★ {acc.average_rating ?? '—'} ·{' '}
+                    {acc.total_countries ?? '—'} countries · {acc.cinematic_persona ?? '—'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         {status && <p className="border border-stone-800 bg-[#171411] px-4 py-3 text-sm text-stone-300">{status}</p>}
 
