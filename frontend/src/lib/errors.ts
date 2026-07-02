@@ -102,8 +102,10 @@ export function normalizeError(err: unknown): NormalizedError {
     };
   }
 
-  // ScraperAPI proxy failure (quota, bad key, timeout, upstream 5xx)
-  // Match before scrape_blocked since some messages reference Letterboxd 403 surfaced via proxy.
+  // Scraper-service failure (worker failed/unreachable). The quota/proxy message
+  // patterns are legacy — kept so a worker still running pre-removal code
+  // (ScraperAPI was deleted 2026-07-02) classifies correctly until restarted.
+  // Match before scrape_blocked since some messages reference Letterboxd 403.
   if (
     /scraper_unavailable|scraper service|scraper quota|too many people are using the scraper/i.test(
       raw,

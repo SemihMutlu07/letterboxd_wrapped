@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     frontend_origins: str = ""
     debug_cinema_scale: bool = False
     log_level: str = "INFO"
-    scraper_api_key: str = ""
 
     # Optional: mirror run logs to Supabase so the admin dashboard survives Render
     # restarts (local runs/ is ephemeral there). Anon key only — never service_role.

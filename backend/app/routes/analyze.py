@@ -17,7 +17,6 @@ from app import task_manager
 from app.config import settings
 from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
-from app.services.scraper import ScraperAPIError
 from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
 from app.services.run_log import persist_run
 
@@ -197,14 +196,6 @@ async def scrape_profile(request: Request):
     # Synchronous fallback: no desktop worker configured (local dev).
     try:
         stats = await scrape_and_analyze(request.app.state.aiohttp_session, username)
-    except ScraperAPIError as exc:
-        # ScraperAPI itself failed (quota, bad key, timeout, upstream 5xx) —
-        # not a Letterboxd / user problem. Surface as service-unavailable.
-        logger.error("ScraperAPI failure for %s: %s", username, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error_code": "scraper_unavailable", "message": str(exc)},
-        )
     except ScrapeAnalysisEmpty as exc:
         if exc.scraper_ok:
             raise HTTPException(

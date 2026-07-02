@@ -7,10 +7,10 @@
 ## 1. Mental model (read this first)
 
 Public users hit the **Render-hosted FastAPI backend**. The heavy Letterboxd HTML
-scrape does **not** run on Render (datacenter IPs get Cloudflare-blocked, and
-ScraperAPI's free 5K/mo quota runs out). Instead an **always-on home desktop
-worker** (residential IP, no public exposure) **polls the backend outbound** for
-queued jobs, scrapes, and posts results back.
+scrape does **not** run on Render (datacenter IPs get Cloudflare-blocked). Instead
+an **always-on home desktop worker** (residential IP, no public exposure)
+**polls the backend outbound** for queued jobs, scrapes, and posts results back.
+(The old ScraperAPI proxy fallback was removed entirely on 2026-07-02.)
 
 ```
 Browser ──HTTPS──> Render backend ──(job queue)──> [desktop polls outbound] ──> Letterboxd
@@ -21,8 +21,9 @@ Browser ──HTTPS──> Render backend ──(job queue)──> [desktop poll
 The desktop is **never exposed publicly**. It only makes outbound calls. The
 shared secret `WORKER_TOKEN` (sent as `X-Worker-Token`) authenticates it.
 
-Transport on this branch is **direct cloudscraper** — the worker **refuses to
-start if `SCRAPER_API_KEY` is set** (`backend/app/worker/desktop_scrape_worker.py:106`).
+Transport is **direct cloudscraper** — ScraperAPI was removed from the codebase
+on 2026-07-02, so there is no proxy code path at all. A stale `SCRAPER_API_KEY`
+in an old `.env` is inert; delete it.
 
 ## 2. End-to-end request lifecycle
 
@@ -67,7 +68,6 @@ heartbeat loop → poll `/scrape/next` every 5s, **one job at a time** → on ex
 | `WORKER_TRACE_FLUSH_INTERVAL` | 5s | Live-trace flush |
 | `WORKER_OUTBOX_DIR` | `.worker_outbox` | Failed-postback durability |
 | `LETTERBOXD_PAGE_DELAY` | 0.25s | Per-page politeness delay |
-| `SCRAPER_API_KEY` | must be **unset** | Worker exits if set (direct-scrape branch) |
 
 Backend side (`config.py`): `worker_heartbeat_max_age_seconds=60`,
 `worker_protocol_version=1`, `worker_self_test_on_start=False`.
@@ -79,7 +79,6 @@ Backend side (`config.py`): `worker_heartbeat_max_age_seconds=60`,
 - **After a code/env change:** the worker must be **restarted** — it does not hot-reload.
 - **Invariants / do-nots:**
   - Run from `backend/` (so `.env`, `runs/`, `.worker_outbox/` resolve).
-  - Never set `SCRAPER_API_KEY` on the worker (this branch is direct cloudscraper).
   - Never run two workers on the same `WORKER_TOKEN`.
   - Keep `WORKER_SELF_TEST_ON_START` off (it runs a real Letterboxd scrape).
   - Desktop `.env` must use the new `SUPABASE_URL` + `SUPABASE_ANON_KEY` only — **no** old `SUPABASE_SERVICE_ROLE`.
@@ -124,11 +123,11 @@ zero-cost paths cover most of the need and are currently underused:
 ```
 Username → (no RSS preview — removed) → Upload export (exact, $0, zero block)
                 └─ optional background upgrade to full history:
-                      ├─ desktop worker if online (free, residential)
-                      └─ ScraperAPI inline if offline ($49 Hobby) — no hard 503
+                      └─ desktop worker if online (free, residential)
         → co-primary CTA: Upload export (exact, $0, zero block)
 Cross-cutting: per-username result cache (TTL ~12h, in ops_runs) + persistent TMDB cache
 ```
 **Do-first (all S-effort):** default `include_reviews=False` · per-username result cache + persistent TMDB cache.
 
-> Sources: ScraperAPI Hobby $49/100K credits (~1 credit/Letterboxd page); Bright Data residential ~$3–8.4/GB; browserless not needed (pages are server-rendered HTML).
+> Note: paid-proxy fallbacks (ScraperAPI etc.) were considered and rejected — the
+> decision on 2026-07-02 is desktop-worker-only, with export upload as the offline path.
