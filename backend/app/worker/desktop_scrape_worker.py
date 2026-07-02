@@ -5,7 +5,7 @@ Runs on the always-on home desktop (residential IP, no public exposure). It
 polls the public backend for queued scrape jobs, runs the SAME local scrape +
 analysis pipeline used by the synchronous route (app.services.scrape_pipeline),
 and posts the final stats back. Public users keep using the normal site; the
-heavy Letterboxd HTML scrape just executes here instead of on Render/ScraperAPI.
+heavy Letterboxd HTML scrape just executes here instead of on Render.
 
 Run from the backend/ directory (so .env and runs/ resolve correctly):
 
@@ -37,10 +37,8 @@ load_dotenv()
 
 import aiohttp
 
-from app.config import settings
 from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
-    ScraperAPIError,
     scrape_and_analyze,
 )
 from app.services.scraper import scrape_watchlist, scrape_profile_sources
@@ -104,8 +102,6 @@ class WorkerConfig:
         ]
         if missing:
             raise SystemExit(f"Missing required env: {', '.join(missing)}")
-        if settings.scraper_api_key:
-            raise SystemExit("SCRAPER_API_KEY must be unset for the direct-cloudscraper desktop worker")
 
 
 def _git_value(*args: str) -> str | None:
@@ -201,11 +197,6 @@ def _failure_message(username: str, exc: Exception) -> str:
         if exc.scraper_ok:
             return f"Scraped @{username} but the analysis came back empty. Please try again."
         return f"No public films found for @{username}. The profile may be private, empty, or blocked by Letterboxd."
-    if isinstance(exc, ScraperAPIError):
-        # Forward the specific scraper message (all ScraperAPIError strings are
-        # hand-crafted + secret-free, e.g. "Too many people are using the scraper")
-        # so the frontend can classify + log the real cause instead of a flat generic.
-        return str(exc) or f"Scraper service error while reading @{username}. Please try again shortly."
     if isinstance(exc, ValueError):
         return str(exc)
     return f"Letterboxd returned an unexpected response for @{username}. Please try again later."
@@ -213,10 +204,7 @@ def _failure_message(username: str, exc: Exception) -> str:
 
 def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
     """Classify failures enough for the admin dashboard and future fix loops."""
-    if isinstance(exc, ScraperAPIError):
-        error_stage = "scraper_api"
-        error_code = "scraper_unavailable"
-    elif isinstance(exc, ScrapeAnalysisEmpty):
+    if isinstance(exc, ScrapeAnalysisEmpty):
         error_stage = "analysis_empty" if exc.scraper_ok else "scrape_empty"
         error_code = "analysis_failed" if exc.scraper_ok else "no_films"
     elif isinstance(exc, ValueError):

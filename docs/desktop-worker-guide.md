@@ -66,7 +66,7 @@ Eğer bilgisayar açıldığında `.bat` dosyasının kendiliğinden başlaması
 3. **Güç Seçeneklerini Ayarlayın**: Kod içerisinde Windows uyku kilidi (wakelock) yerleşiktir; ancak bilgisayarınızın kapak kapatma eylemleri veya derin uyku ayarları Python'u askıya alabilir. Masaüstü cihazınızın otomatik olarak tamamen kapanmadığından emin olun.
 
 ### 🔴 Yapılmaması Gerekenler (Don'ts)
-1. **`.env` Dosyasına `SCRAPER_API_KEY` Eklemeyin**: Eğer bu anahtar tanımlı olursa worker kendi yerel IP'niz yerine ücretli harici proxy kullanmaya çalışır. Masaüstü worker'ın amacı zaten kendi ev internetiniz (residential) üzerinden ücretsiz kazımaktır.
+1. **Eski `.env` Dosyasındaki `SCRAPER_API_KEY` Satırını Silin**: ScraperAPI entegrasyonu 2026-07-02'de kod tabanından tümüyle kaldırıldı — bu değişken artık hiçbir şey yapmıyor. Worker her zaman kendi ev internetiniz (residential IP) üzerinden doğrudan kazır.
 2. **Aynı Token ile Birden Fazla Worker Çalıştırmayın**: Aynı anda aynı bilgisayarda veya farklı makinelerde birden fazla worker başlatmak, Letterboxd tarafında IP engellemesine (rate-limit) sebep olabilir.
 3. **Admin Dashboard Şifresini (`ADMIN_SECRET`) Boş Bırakmayın**: `admin.py` içerisindeki yedek fallback şifresi yerine Render üzerinde güçlü ve benzersiz bir `ADMIN_SECRET` tanımladığınızdan emin olun.
 

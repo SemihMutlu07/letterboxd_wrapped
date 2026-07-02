@@ -58,8 +58,8 @@ WORKER_SELF_TEST_ON_START=0
 WORKER_SELF_TEST_USERNAME=semihmutsuz
 ```
 
-> [!WARNING]
-> `.env` dosyası içerisinde kesinlikle `SCRAPER_API_KEY` değişkenini **tanımlamayın (boş bile bırakmayın)**. Sistem yerel IP adresiniz üzerinden kazıma yapacaktır.
+> [!NOTE]
+> ScraperAPI entegrasyonu 2026-07-02'de tümüyle kaldırıldı. Eski `.env` dosyanızda `SCRAPER_API_KEY` satırı varsa silin — artık hiçbir etkisi yok; sistem her zaman yerel IP adresiniz üzerinden kazır.
 
 ---
 

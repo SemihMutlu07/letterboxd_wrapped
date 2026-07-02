@@ -15,106 +15,22 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from functools import partial
-from urllib.parse import urlencode
 import time
 
 import cloudscraper
-import requests
 from bs4 import BeautifulSoup
-
-from app.config import settings
 
 logger = logging.getLogger("letterboxd_wrapped.scraper")
 
-SCRAPER_API_ENDPOINT = "https://api.scraperapi.com/"
-SCRAPER_API_TIMEOUT_FLOOR = 30  # residential proxy responses are slower than direct fetches
-
-
-def _scraperapi_url(target: str) -> str:
-    """Wrap a Letterboxd URL through ScraperAPI's proxy endpoint.
-
-    No `country_code` — that's a premium-credit feature (5-10 credits per
-    request on free tier) and Letterboxd's public profile pages aren't
-    geo-restricted. Keeping the request plain means 1 credit per fetch.
-    """
-    params = {
-        "api_key": settings.scraper_api_key,
-        "url": target,
-    }
-    return f"{SCRAPER_API_ENDPOINT}?{urlencode(params)}"
-
-
-class ScraperAPIError(ValueError):
-    """Raised when ScraperAPI itself (not Letterboxd) refuses or fails the request.
-
-    Inherits from ValueError so existing route-level handlers surface it to the
-    frontend as a user-facing error message.
-    """
-
 
 def _fetch(session: "cloudscraper.CloudScraper", url: str, timeout: int = 10):
-    """Fetch a Letterboxd URL.
+    """Fetch a Letterboxd URL directly via the warmed cloudscraper session.
 
-    When SCRAPER_API_KEY is set (Render prod), routes through ScraperAPI so the
-    request egresses from a residential IP — bypassing Letterboxd's Cloudflare
-    datacenter-IP block. Locally (no key), falls back to the cloudscraper session.
-
-    ScraperAPI-side failures (bad key, quota, rate limit, upstream error) raise
-    ScraperAPIError with a user-facing message. Target-site responses (Letterboxd
-    200/404/etc.) are returned unchanged for the caller to interpret.
+    All scrapes run from a residential IP (the desktop worker, or local dev) —
+    the ScraperAPI proxy path was removed entirely on 2026-07-02. Responses
+    (200/404/403/etc.) are returned unchanged for the caller to interpret.
     """
-    if not settings.scraper_api_key:
-        return session.get(url, timeout=timeout)
-
-    proxied_url = _scraperapi_url(url)
-    try:
-        r = requests.get(proxied_url, timeout=max(timeout * 3, SCRAPER_API_TIMEOUT_FLOOR))
-    except requests.exceptions.Timeout:
-        logger.error("ScraperAPI timeout for %s", url)
-        raise ScraperAPIError(
-            "Scraper service timed out. Please try again in a moment, or use the export upload option."
-        )
-    except requests.exceptions.RequestException as exc:
-        logger.error("ScraperAPI network error for %s: %s", url, exc)
-        raise ScraperAPIError(
-            "Scraper service is unreachable. Please try again in a moment, or use the export upload option."
-        )
-
-    if r.status_code == 401:
-        logger.critical("ScraperAPI returned 401 for %s — SCRAPER_API_KEY is invalid or missing", url)
-        raise ScraperAPIError(
-            "Scraper service is misconfigured on our end. Please use the export upload option for now."
-        )
-    if r.status_code == 403:
-        # ScraperAPI's own 403 (out of credits) vs proxied Letterboxd 403 — body distinguishes
-        body_preview = r.text[:500].lower() if r.text else ""
-        if "credit" in body_preview or "limit" in body_preview or "subscription" in body_preview:
-            logger.error("ScraperAPI quota exhausted for %s — credits used up", url)
-            raise ScraperAPIError(
-                "We've hit our scraper quota. Please try the export upload option, or try again next month."
-            )
-        # else: let Letterboxd 403 fall through to caller's existing 403 handling
-    if r.status_code == 429:
-        logger.warning("ScraperAPI rate limit hit for %s (concurrent requests)", url)
-        raise ScraperAPIError(
-            "Too many people are using the scraper right now. Please wait a few seconds and try again."
-        )
-    if r.status_code in (500, 502, 503, 504):
-        final_status = r.headers.get("sa-final-status-code", "unknown")
-        logger.warning(
-            "ScraperAPI upstream error %d for %s (target final-status=%s)",
-            r.status_code, url, final_status,
-        )
-        # If ScraperAPI gave up because Letterboxd kept returning 403, surface it cleanly
-        if str(final_status) == "403":
-            raise ScraperAPIError(
-                "Letterboxd is blocking automated access right now. Please use the export upload option."
-            )
-        raise ScraperAPIError(
-            "Scraper service is having a moment. Please try again, or use the export upload option."
-        )
-
-    return r
+    return session.get(url, timeout=timeout)
 
 
 @dataclass(frozen=True)
@@ -392,8 +308,6 @@ def _new_session() -> cloudscraper.CloudScraper:
 
 
 def _warm_session(session: cloudscraper.CloudScraper) -> None:
-    if settings.scraper_api_key:
-        return  # each ScraperAPI request egresses from a different residential IP — warmup is meaningless
     try:
         session.get(BASE_URL, timeout=10)  # warmup for cookies; failures non-fatal
     except Exception:

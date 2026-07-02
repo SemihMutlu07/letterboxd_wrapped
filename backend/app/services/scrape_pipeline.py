@@ -22,7 +22,6 @@ from typing import Any, Callable, Optional
 
 from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services.scraper import (
-    ScraperAPIError,  # noqa: F401 — re-exported for callers that catch it
     diary_to_csv_dicts,
     merge_scraped_films,
     scrape_profile_sources,
@@ -61,7 +60,6 @@ async def scrape_and_analyze(
 
     Returns the stats dict (with scraped_* provenance fields) on success.
     Raises:
-        ScraperAPIError    — ScraperAPI itself failed (quota / key / upstream 5xx)
         ValueError         — Letterboxd 404 / 403 / rate-limit / block
         ScrapeAnalysisEmpty — no usable films
         Exception          — any other unexpected failure
