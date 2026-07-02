@@ -13,6 +13,7 @@ export interface WatchlistFilm {
   year: string;
   slug: string;
   poster_url?: string;
+  poster_path?: string;
   popularity?: number | null;
   vote_average?: number | null;
   vote_count?: number | null;

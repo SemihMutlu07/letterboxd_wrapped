@@ -5,6 +5,7 @@ import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { Heart, X, Star, TrendingUp } from 'lucide-react';
 
 import type { WatchlistFilm } from '@/lib/api';
+import { getPosterUrl } from '@/lib/analytics';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
 
 type SortMode = 'popularity' | 'rating' | 'year';
@@ -25,12 +26,6 @@ function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
     sorted.sort((a, b) => String(b.year).localeCompare(String(a.year)));
   }
   return sorted;
-}
-
-function getPosterUrl(path: string | undefined): string | null {
-  if (!path) return null;
-  if (path.startsWith('http')) return path;
-  return `https://image.tmdb.org/t/p/w500${path}`;
 }
 
 export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
@@ -208,21 +203,34 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
 }
 
 function SwipeCard({ film }: { film: WatchlistFilm }) {
-  const poster = film.poster_url ? getPosterUrl(film.poster_url) : null;
+  // poster_path is the TMDB-enriched field; poster_url is the raw scraper
+  // value (often a broken /image-150/ AJAX endpoint, not an image).
+  const poster = getPosterUrl(film.poster_path) || getPosterUrl(film.poster_url);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-stone-700 bg-[#0f0d0b] shadow-2xl">
       {/* Poster */}
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-stone-900">
         {poster ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={poster}
-            alt={`${film.title} poster`}
-            className="h-full w-full object-cover"
-            referrerPolicy="no-referrer"
-            loading="lazy"
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={poster}
+              alt={`${film.title} poster`}
+              className="h-full w-full object-cover"
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              onError={(e) => {
+                const el = e.currentTarget as HTMLImageElement;
+                el.style.display = 'none';
+                const sib = el.nextElementSibling as HTMLElement | null;
+                if (sib) sib.style.display = '';
+              }}
+            />
+            <div style={{ display: 'none' }} className="absolute inset-0">
+              <PosterPlaceholder />
+            </div>
+          </>
         ) : (
           <PosterPlaceholder />
         )}
