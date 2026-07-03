@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from app import task_manager
 from app.config import settings
+from app.services import dashboard_settings
 from app.worker.desktop_scrape_worker import WorkerConfig, _worker_meta
 
 WORKER_TOKEN = "test-worker-secret"
@@ -62,6 +63,7 @@ async def client(tmp_path):
     task_manager._worker_desired_state = "run"
     task_manager._worker_restart_token = 0
     task_manager._worker_restart_requested_at = None
+    dashboard_settings.reset_cache_for_tests()
     task_manager._last_supervisor_poll_at = None
     task_manager._last_supervisor_report_at = None
     task_manager._last_supervisor_status = {}
@@ -96,6 +98,7 @@ async def client(tmp_path):
     task_manager._worker_desired_state = "run"
     task_manager._worker_restart_token = 0
     task_manager._worker_restart_requested_at = None
+    dashboard_settings.reset_cache_for_tests()
     task_manager._last_supervisor_poll_at = None
     task_manager._last_supervisor_report_at = None
     task_manager._last_supervisor_status = {}
@@ -219,6 +222,7 @@ async def test_admin_worker_status_api(client: AsyncClient):
     assert "version" in body["status"]
     assert body["status"]["control"]["desired_state"] == "run"
     assert body["status"]["supervisor"]["child_status"] == "unknown"
+    assert body["settings_store"]["source"] == "memory"
 
 
 @pytest.mark.asyncio
@@ -233,6 +237,53 @@ async def test_worker_control_defaults_to_run_and_records_supervisor_poll(client
     status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
     assert status["control"]["desired_state"] == "run"
     assert status["supervisor"]["last_poll_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_worker_control_persists_to_supabase_settings(client: AsyncClient):
+    with patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
+         patch.object(settings, "supabase_anon_key", "mock-key"), \
+         patch("app.supabase_ops.upsert", return_value=True) as mock_upsert:
+        pause = await client.post("/admin/api/worker/control", headers=ADMIN_AUTH, json={"desired_state": "pause"})
+
+    assert pause.status_code == 200
+    body = pause.json()
+    assert body["control"]["desired_state"] == "pause"
+    assert body["settings_store"]["source"] == "supabase"
+    assert body["settings_store"]["last_save_ok"] is True
+    mock_upsert.assert_awaited_once()
+    _, row = mock_upsert.await_args.args
+    assert row["key"] == "worker_control"
+    assert row["value"]["desired_state"] == "pause"
+
+
+@pytest.mark.asyncio
+async def test_worker_control_loads_persisted_pause_after_memory_reset(client: AsyncClient):
+    task_manager._worker_desired_state = "run"
+    task_manager._worker_restart_token = 0
+    dashboard_settings.reset_cache_for_tests()
+
+    persisted_rows = [{
+        "value": {
+            "desired_state": "pause",
+            "restart_token": 3,
+            "restart_requested_at": "2026-07-02T09:00:00+00:00",
+        },
+        "updated_at": "2026-07-02T09:00:00+00:00",
+    }]
+    with patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
+         patch.object(settings, "supabase_anon_key", "mock-key"), \
+         patch("app.supabase_ops.select", return_value=persisted_rows) as mock_select:
+        control = await client.get("/api/worker/control?last_seen_restart_token=2", headers=AUTH)
+        status = await client.get("/admin/api/worker", headers=ADMIN_AUTH)
+
+    assert control.status_code == 200
+    assert control.json()["desired_state"] == "pause"
+    assert control.json()["restart_token"] == 3
+    assert control.json()["should_restart"] is True
+    assert status.json()["status"]["control"]["desired_state"] == "pause"
+    assert status.json()["settings_store"]["persistent"] is True
+    mock_select.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -297,6 +348,8 @@ async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     assert "Startup Self-Test" in html
     assert "Pause Jobs" in html
     assert "Restart Worker" in html
+    assert "Settings Store" in html
+    assert "Durable ops dashboard" in html
     assert "Supervisor Log Tail" in html
     assert "refreshAnalysisRuns" in html
     assert "/admin/api/runs" in html

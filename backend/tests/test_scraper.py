@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from bs4 import BeautifulSoup
 
@@ -20,6 +22,22 @@ class FakeSession:
     def get(self, url, timeout):
         # Overview fetch in _sync_scrape_profile_sources hits this — empty body skips count parsing
         return FakeResponse(200, "")
+
+
+def _run_scraper_executor_inline(monkeypatch):
+    """Keep scraper async tests hermetic; they validate orchestration, not threads."""
+    running_loop = asyncio.get_running_loop()
+
+    class InlineExecutorLoop:
+        def run_in_executor(self, executor, func):
+            future = running_loop.create_future()
+            try:
+                future.set_result(func())
+            except BaseException as exc:
+                future.set_exception(exc)
+            return future
+
+    monkeypatch.setattr(scraper.asyncio, "get_event_loop", lambda: InlineExecutorLoop())
 
 
 def test_scrape_profile_sources_reuses_one_session(monkeypatch):
@@ -239,6 +257,7 @@ def test_sync_scrape_profile_sources_includes_reviews_when_flagged(monkeypatch):
 
 async def test_scrape_profile_sources_runs_sources_in_parallel(monkeypatch):
     """Async orchestrator merges diary/grid/overview (each its own thread+session)."""
+    _run_scraper_executor_inline(monkeypatch)
     monkeypatch.setattr(scraper, "_sync_scrape_diary",
                         lambda u, p, s=None, t=None: [{"title": "D", "year": "2024", "rating": None, "watch_date": "2024-01-01"}])
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
@@ -256,6 +275,7 @@ async def test_scrape_profile_sources_runs_sources_in_parallel(monkeypatch):
 
 async def test_scrape_profile_sources_raises_when_both_film_sources_fail(monkeypatch):
     """If diary AND grid both fail, the real error (e.g. 'not found') must surface."""
+    _run_scraper_executor_inline(monkeypatch)
     def boom(u, p, s=None, t=None):
         raise ValueError(f"User '{u}' not found")
     monkeypatch.setattr(scraper, "_sync_scrape_diary", boom)
@@ -268,6 +288,7 @@ async def test_scrape_profile_sources_raises_when_both_film_sources_fail(monkeyp
 
 async def test_scrape_profile_sources_survives_one_source_failing(monkeypatch):
     """One film source failing is tolerated — the other still produces results."""
+    _run_scraper_executor_inline(monkeypatch)
     monkeypatch.setattr(scraper, "_sync_scrape_diary",
                         lambda u, p, s=None, t=None: (_ for _ in ()).throw(ValueError("rate limit")))
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid",

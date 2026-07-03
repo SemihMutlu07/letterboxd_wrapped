@@ -17,6 +17,7 @@ from app import task_manager
 from app.config import settings
 from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
+from app.services import dashboard_settings
 from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
 from app.services.run_log import persist_run
 
@@ -151,6 +152,7 @@ async def scrape_profile(request: Request):
 
     # Desktop-worker mode: route the heavy scrape to the always-on desktop worker.
     if settings.desktop_worker_enabled:
+        await dashboard_settings.load_worker_control_state()
         if task_manager.is_worker_paused():
             logger.warning("scrape-profile desktop_worker_paused for %s", username)
             persist_run(

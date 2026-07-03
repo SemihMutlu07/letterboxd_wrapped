@@ -161,6 +161,15 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value is not None else None
 
 
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> None:
     if not telemetry:
         return
@@ -276,6 +285,25 @@ def request_worker_restart() -> Dict[str, Any]:
     global _worker_restart_token, _worker_restart_requested_at
     _worker_restart_token += 1
     _worker_restart_requested_at = datetime.now(timezone.utc)
+    return get_worker_control_state()
+
+
+def apply_worker_control_state(control: Dict[str, Any]) -> Dict[str, Any]:
+    """Replace in-memory worker controls with a validated persisted snapshot."""
+    global _worker_desired_state, _worker_restart_token, _worker_restart_requested_at
+    desired_state = str(control.get("desired_state") or "run").strip().lower()
+    if desired_state not in WORKER_DESIRED_STATES:
+        desired_state = "run"
+
+    restart_token = control.get("restart_token")
+    try:
+        restart_token_int = max(0, int(restart_token))
+    except (TypeError, ValueError):
+        restart_token_int = 0
+
+    _worker_desired_state = desired_state
+    _worker_restart_token = restart_token_int
+    _worker_restart_requested_at = _parse_iso_datetime(control.get("restart_requested_at"))
     return get_worker_control_state()
 
 
