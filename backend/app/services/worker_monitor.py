@@ -20,11 +20,11 @@ logger = logging.getLogger("letterboxd_wrapped.worker_monitor")
 CHECK_INTERVAL_SECONDS = 30
 
 
-def log_worker_event(event_type: str, meta: dict[str, Any] | None = None) -> None:
-    """Best-effort synchronous Supabase insert for a worker lifecycle event."""
+async def log_worker_event(event_type: str, meta: dict[str, Any] | None = None) -> None:
+    """Best-effort Supabase insert for a worker lifecycle event."""
     if not settings.supabase_enabled:
         return
-    supabase_ops.insert("ops_worker_events", {
+    await supabase_ops.insert("ops_worker_events", {
         "event_type": event_type,
         "meta": meta or {},
     })
@@ -47,7 +47,7 @@ async def _run_monitor() -> None:
                 # Worker went offline
                 status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
                 logger.warning("Worker heartbeat expired — worker is offline")
-                log_worker_event("offline", {
+                await log_worker_event("offline", {
                     "last_heartbeat": status.get("last_heartbeat"),
                     "seconds_since_heartbeat": status.get("seconds_since_heartbeat"),
                     "worker_git_sha": status.get("worker_git_sha"),
@@ -59,7 +59,7 @@ async def _run_monitor() -> None:
                 # Worker came back online
                 status = task_manager.get_worker_status(settings.worker_heartbeat_max_age_seconds)
                 logger.info("Worker heartbeat resumed — worker is back online")
-                log_worker_event("online", {
+                await log_worker_event("online", {
                     "last_heartbeat": status.get("last_heartbeat"),
                     "worker_git_sha": status.get("worker_git_sha"),
                     "worker_branch": status.get("worker_branch"),
