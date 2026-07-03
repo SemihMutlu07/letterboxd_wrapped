@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import ShareModal from '@/components/ShareModal';
+import dynamic from 'next/dynamic';
 import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
+
+const ShareModal = dynamic(() => import('@/components/ShareModal'), { ssr: false, loading: () => null });
 
 import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
 import ReviewAnalysisSection from '@/containers/results/experimental/sections/ReviewAnalysisSection';
@@ -534,7 +536,7 @@ export default function ResultsPage() {
 
 /* ===================== RESULTS CONTENT (theme-aware) ===================== */
 
-function ResultsContent({
+export function ResultsContent({
   stats,
   sessionId,
   username,
@@ -797,7 +799,13 @@ function ResultsContent({
         <RatingDeviation stats={stats} />
 
         {/* 4. Your Reviews — promoted: it's the most personal section */}
-        {stats.review_analysis && <ReviewAnalysisSection stats={stats} />}
+        {stats.review_analysis ? (
+          <ReviewAnalysisSection stats={stats} />
+        ) : (
+          <div className="rounded-xl bg-white/5 p-8 text-center text-slate-400">
+            <p className="text-sm">Bu hesapta yazılı review bulunamadı.</p>
+          </div>
+        )}
 
         {/* Film History */}
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />

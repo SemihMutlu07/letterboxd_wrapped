@@ -257,7 +257,9 @@ type RatingBucket = {
   films: RatingBucketFilm[];
 };
 
-function RatingBucketModal({
+const INITIAL_POSTER_PAGE = 12;
+
+export function RatingBucketModal({
   bucket,
   onClose,
   onSelectFilm,
@@ -266,6 +268,8 @@ function RatingBucketModal({
   onClose: () => void;
   onSelectFilm: (film: RatingBucketFilm) => void;
 }) {
+  const [posterPage, setPosterPage] = useState(1);
+
   useEffect(() => {
     if (!bucket) return;
     const onKey = (e: KeyboardEvent) => {
@@ -276,6 +280,10 @@ function RatingBucketModal({
   }, [bucket, onClose]);
 
   if (!bucket) return null;
+
+  const visibleCount = posterPage * INITIAL_POSTER_PAGE;
+  const visibleFilms = bucket.films.slice(0, visibleCount);
+  const hasMoreFilms = bucket.films.length > visibleFilms.length;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -304,7 +312,7 @@ function RatingBucketModal({
           </button>
         </header>
         <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {bucket.films.map((film) => {
+          {visibleFilms.map((film) => {
             const poster = getPosterUrl(film.poster_path, 'grid');
             return (
               <button
@@ -327,6 +335,17 @@ function RatingBucketModal({
             );
           })}
         </div>
+        {hasMoreFilms && (
+          <div className="border-t border-white/[0.06] px-5 py-3">
+            <button
+              type="button"
+              onClick={() => setPosterPage((p) => p + 1)}
+              className="w-full rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-colors py-2.5"
+            >
+              Show more films
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
