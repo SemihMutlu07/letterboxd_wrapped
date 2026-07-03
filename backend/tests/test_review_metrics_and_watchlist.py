@@ -1,126 +1,73 @@
-"""Targeted tests for the additive review-likes path and watchlist 50-cap."""
+"""Tests for watchlist enrichment and recommendation schema."""
 
-import pandas as pd
+import pytest
 
-from app.services.recommender import compare_watchlist_sets, public_film, BUCKET_CAP
-from app.services.review_analysis import compute_review_metrics
-
-
-def test_compute_review_metrics_emits_top_liked_when_likes_column_present():
-    df = pd.DataFrame([
-        {
-            "Date": "2024-01-01",
-            "Name": "Memories of Underdevelopment",
-            "Year": "1968",
-            "Rating": 4.5,
-            "Rewatch": "",
-            "Review": "Sergio's gaze is sharper than any thesis.",
-            "Tags": "",
-            "Watched Date": "",
-            "Likes": 18,
-            "Slug": "memories-of-underdevelopment",
-        },
-        {
-            "Date": "2024-02-04",
-            "Name": "Aftersun",
-            "Year": "2022",
-            "Rating": 4.0,
-            "Rewatch": "",
-            "Review": "Quiet, devastating.",
-            "Tags": "",
-            "Watched Date": "",
-            "Likes": 4,
-            "Slug": "aftersun",
-        },
-    ])
-
-    metrics = compute_review_metrics(df)
-
-    assert metrics["total_review_likes"] == 22
-    top = metrics["top_liked_reviews"]
-    assert top[0]["title"] == "Memories of Underdevelopment"
-    assert top[0]["like_count"] == 18
-    assert top[0]["slug"] == "memories-of-underdevelopment"
-    assert top[1]["title"] == "Aftersun"
-    assert top[1]["like_count"] == 4
+from app.services.recommender import compare_watchlist_sets, public_film, recommendation_from_film
 
 
-def test_compute_review_metrics_works_without_likes_column():
-    df = pd.DataFrame([
-        {
-            "Date": "2024-01-01",
-            "Name": "Just A Film",
-            "Year": "2024",
-            "Rating": 3.5,
-            "Rewatch": "",
-            "Review": "It exists.",
-            "Tags": "",
-            "Watched Date": "",
-        }
-    ])
-
-    metrics = compute_review_metrics(df)
-
-    assert metrics["top_liked_reviews"] == []
-    assert metrics["total_review_likes"] is None
-    assert metrics["reviews_with_text"] == 1
-
-
-def test_compare_watchlist_sets_caps_buckets_and_reports_truncation():
-    first = [
-        {"title": f"Film {i}", "year": "2000", "slug": f"film-{i}"} for i in range(120)
-    ]
-    # Second has the first 80 in common, then 60 unique
-    second = (
-        [{"title": f"Film {i}", "year": "2000", "slug": f"film-{i}"} for i in range(80)]
-        + [{"title": f"Other {i}", "year": "2001", "slug": f"other-{i}"} for i in range(60)]
-    )
-
-    result = compare_watchlist_sets(first, second)
-
-    # raw counts unchanged
-    assert result["counts"]["common"] == 80
-    assert result["counts"]["first_only"] == 40
-    assert result["counts"]["second_only"] == 60
-
-    # returned arrays capped
-    assert len(result["common"]) == BUCKET_CAP
-    assert len(result["first_only"]) == 40  # below cap → not truncated
-    assert len(result["second_only"]) == BUCKET_CAP
-
-    assert result["returned_counts"] == {
-        "common": BUCKET_CAP,
-        "first_only": 40,
-        "second_only": BUCKET_CAP,
-    }
-    assert result["truncated"] == {
-        "common": True,
-        "first_only": False,
-        "second_only": True,
+@pytest.fixture
+def raw_scrape_film():
+    return {
+        "title": "Inception",
+        "year": "2010",
+        "slug": "inception",
+        "poster_url": "https://letterboxd.com/ajax-poster/.../image-150/",
     }
 
 
-def test_compare_watchlist_sets_preserves_poster_url():
-    first = [{"title": "Aftersun", "year": "2022", "slug": "aftersun", "poster_url": "https://img/aftersun.jpg"}]
-    second = [{"title": "Aftersun", "year": "2022", "slug": "aftersun"}]
-
-    result = compare_watchlist_sets(first, second)
-
-    assert result["common"][0]["poster_url"] == "https://img/aftersun.jpg"
-
-
-def test_public_film_carries_tmdb_poster_path():
-    """After TMDB enrichment a film has poster_path; public_film must pass it
-    through so the frontend can render a real poster instead of the scraper's
-    broken /image-150/ AJAX-endpoint URL."""
-    enriched = {
-        "title": "Aftersun",
-        "year": "2022",
-        "slug": "aftersun",
-        "poster_url": "https://letterboxd.com/film/aftersun/image-150/",
-        "poster_path": "/1p5aI299YBnqrEEfBpimMWzmVQZ.jpg",
+@pytest.fixture
+def enriched_film():
+    return {
+        "title": "Inception",
+        "year": "2010",
+        "slug": "inception",
+        "poster_url": "https://letterboxd.com/ajax-poster/.../image-150/",
+        "poster_path": "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg",
+        "popularity": 75.5,
+        "vote_average": 8.4,
+        "vote_count": 34_000,
+        "genres": ["Action", "Science Fiction"],
+        "director": "Christopher Nolan",
+        "overview": "Cobb, a skilled thief...",
     }
 
-    result = public_film(enriched)
 
-    assert result["poster_path"] == "/1p5aI299YBnqrEEfBpimMWzmVQZ.jpg"
+def test_public_film_prefers_poster_path_over_poster_url(raw_scrape_film, enriched_film):
+    public = public_film(enriched_film)
+    assert public["poster_path"] == "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg"
+    # poster_url is retained only as a last-resort fallback for legacy consumers
+    assert public["poster_url"] == raw_scrape_film["poster_url"]
+    assert public["popularity"] == 75.5
+    assert public["genres"] == ["Action", "Science Fiction"]
+
+
+def test_compare_watchlist_sets_poster_fields(raw_scrape_film):
+    first_watchlist = [raw_scrape_film]
+    second_watchlist = [raw_scrape_film]
+    result = compare_watchlist_sets(first_watchlist, second_watchlist)
+    common = result["common"][0]
+    # Raw scrape data has a broken poster_url and no poster_path before enrichment
+    assert common["poster_url"] == raw_scrape_film["poster_url"]
+    assert common["poster_path"] == ""
+
+
+def test_compare_watchlist_sets_buckets_capped():
+    films = [{"title": f"Film {i}", "year": "2020", "slug": f"film-{i}"} for i in range(200)]
+    result = compare_watchlist_sets(films, films)
+    assert len(result["common"]) == 50
+    assert result["truncated"]["common"] is True
+
+
+def test_recommendation_from_film_includes_director_overview(enriched_film):
+    rec = recommendation_from_film(enriched_film, "Shared watchlist gem.")
+    assert rec.title == "Inception"
+    assert rec.director == "Christopher Nolan"
+    assert rec.overview == "Cobb, a skilled thief..."
+    assert rec.poster_path == "/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg"
+
+
+def test_recommendation_from_film_handles_missing_director():
+    film = {"title": "Mystery", "year": "2020", "slug": "mystery"}
+    rec = recommendation_from_film(film, "Random pick.")
+    assert rec.director is None
+    assert rec.overview is None

@@ -60,6 +60,8 @@ export interface FilmRecommendation {
   slug?: string;
   vote_average?: number | null;
   release_date?: string;
+  director?: string | null;
+  overview?: string | null;
 }
 
 export interface RecommendFromCompareResult {
@@ -83,32 +85,29 @@ export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8
 export function handleApiError(error: unknown, context: string): Error {
   const code = error instanceof Error && 'code' in error ? (error as { code?: string }).code : undefined;
   const rawMessage = error instanceof Error ? error.message : String(error);
+  const hint = code ? ERROR_CODE_HINTS[code] : undefined;
+
+  // Log a structured, self-diagnosing error so the console is useful for both
+  // users and the next Claude session. We always log detail + hint + code.
+  console.error(`[API Error] ${context}:`, rawMessage, {
+    code,
+    hint,
+    error,
+    context,
+  });
 
   if (error instanceof Error) {
-    console.error(`[API Error] ${context}:`, rawMessage, { code, error });
     if (error.name === 'TypeError' || error.message.includes('fetch') || error.message.includes('Failed to fetch')) {
       const err = new Error(`Network error: Unable to connect to ${context}. The server may still be starting or your internet connection may be down.`);
       if (code) (err as { code?: string }).code = code;
       return err;
     }
-    if (error.message.includes('analyze') || error.message.includes('test')) {
-      const statusMatch = error.message.match(/(\d+)/);
-      const status = statusMatch ? statusMatch[1] : 'unknown';
-      let msg = '';
-      switch (status) {
-        case '404': msg = `${context} not found. The service may be temporarily unavailable.`; break;
-        case '500': msg = `Server error in ${context}. Please try again later.`; break;
-        case '413': msg = `File too large for ${context}. Please try with smaller files.`; break;
-        case '429': msg = `Too many requests to ${context}. Please wait a moment and try again.`; break;
-        default:    msg = `${context} failed (${status}). Please try again.`; break;
-      }
-      const err = new Error(msg);
-      if (code) (err as { code?: string }).code = code;
-      return err;
+    if (code) {
+      // The error already carries a backend code; prefer that over regexp parsing.
+      return error;
     }
     return error;
   }
-  console.error(`[API Error] ${context}:`, error);
   const err = new Error(`Unexpected error in ${context}: ${rawMessage}`);
   if (code) (err as { code?: string }).code = code;
   return err;
@@ -119,15 +118,32 @@ export function handleApiError(error: unknown, context: string): Error {
 // the console) instead of a raw object dump with no explanation.
 const ERROR_CODE_HINTS: Record<string, string> = {
   scraper_unavailable:
-    'Worker/backend scrape failed. If the message mentions "quota" or "too many people", the desktop worker is running stale pre-ScraperAPI-removal code — restart it.',
+    'All available scraper slots are full. If the backend uses a desktop worker, the worker is either busy, offline, or still starting up. Try again in 30–60 seconds or use ZIP upload for a guaranteed result.',
+  worker_paused:
+    'The admin dashboard paused the desktop worker. Scrape jobs will not run until an admin resumes the worker. ZIP upload still works.',
   desktop_worker_paused: 'Admin dashboard has the worker paused for maintenance.',
-  worker_offline: "Desktop worker heartbeat is missing — the worker process isn't running or isn't reachable.",
-  desktop_worker_offline: "Desktop worker heartbeat is missing — the worker process isn't running or isn't reachable.",
-  scrape_blocked: 'Letterboxd blocked the scrape (bot detection on this IP).',
-  user_not_found: 'Username is misspelled or the profile is private.',
-  same_username: 'Both usernames were the same — user input issue, not a backend failure.',
-  watchlist_lab_rate_limited: 'Too many watchlist-lab requests from this client — a real rate limit, not a scraper issue.',
+  worker_offline:
+    'No desktop worker heartbeat has been received. The worker process is not running or cannot reach the backend. Restart the worker or use ZIP upload.',
+  desktop_worker_offline:
+    'No desktop worker heartbeat has been received. The worker process is not running or cannot reach the backend. Restart the worker or use ZIP upload.',
+  scrape_blocked:
+    'Letterboxd blocked the scrape request (bot detection / cloud IP). The backend has reached Letterboxd directly and was denied. Use ZIP upload instead.',
+  user_not_found:
+    'Letterboxd returned a 404 for this username, or the profile is private. Double-check spelling and that the profile is public.',
+  same_username: 'Both usernames were identical. This is a client-side validation problem.',
+  watchlist_lab_rate_limited:
+    'You hit the per-client watchlist-lab rate limit (10 requests / 10 min). Wait a few minutes.',
+  scrape_timeout:
+    'The desktop worker accepted the job but did not finish within the timeout. It may be stuck or overloaded. Try again.',
+  enrichment_failed:
+    'TMDB metadata lookup failed for the shared watchlist. This is usually transient. Try again.',
+  invalid_username:
+    'The submitted username contains invalid characters. The UI should prevent this; report if it did not.',
+  no_common_watchlist:
+    'The two watchlists have zero films in common. This is a real result, not an error.',
 };
+
+export { ERROR_CODE_HINTS };
 
 // Shared failure parser for watchlist/date-night endpoints: reads the FastAPI
 // `{detail: {error_code, message}}` shape, logs a labeled + hinted console error,
@@ -135,24 +151,35 @@ const ERROR_CODE_HINTS: Record<string, string> = {
 async function parseApiFailure(r: Response, context: string, fallbackMessage: string): Promise<Error & { code?: string }> {
   let detail = '';
   let code: string | undefined;
+  let fullBody: unknown;
   try {
-    const body = await r.json();
-    if (typeof body.detail === 'string') {
-      detail = body.detail;
-    } else if (body.detail && typeof body.detail === 'object') {
-      detail = body.detail.message || body.detail.error_code || '';
-      code = body.detail.error_code;
+    fullBody = await r.json();
+    if (typeof fullBody === 'object' && fullBody !== null) {
+      const { detail: bodyDetail } = fullBody as { detail?: unknown };
+      if (typeof bodyDetail === 'string') {
+        detail = bodyDetail;
+      } else if (bodyDetail && typeof bodyDetail === 'object') {
+        const obj = bodyDetail as Record<string, unknown>;
+        detail = String(obj.message || obj.error_code || '');
+        code = typeof obj.error_code === 'string' ? obj.error_code : undefined;
+      }
     }
   } catch {
     // body wasn't JSON
   }
   const err = new Error(detail || fallbackMessage) as Error & { code?: string };
   if (code) err.code = code;
-  console.error(`[API Error] ${context} failed — error_code: ${code ?? 'none'}`, {
-    status: r.status,
-    detail,
-    hint: code ? ERROR_CODE_HINTS[code] : undefined,
-  });
+  console.error(
+    `[API Error] ${context} failed — ${code ? `error_code: ${code}` : `HTTP ${r.status}`}`,
+    {
+      status: r.status,
+      code,
+      detail,
+      hint: code ? ERROR_CODE_HINTS[code] : undefined,
+      body: fullBody,
+      url: r.url,
+    },
+  );
   return err;
 }
 
@@ -238,19 +265,17 @@ export async function analyzeFiles(formData: FormData): Promise<{ status: string
     const r = await fetch(url, { method: 'POST', body: formData });
 
     if (!r.ok) {
-      let detail = '';
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') detail = body.detail;
-        else if (body.detail && typeof body.detail === 'object') detail = body.detail.message || body.detail.error_code || '';
-      } catch { /* body not JSON */ }
-      throw new Error(detail || `analyze ${r.status}`);
+      throw await parseApiFailure(r, 'file analysis', `analyze ${r.status}`);
     }
 
-    const { task_id } = await r.json();
-    if (!task_id) throw new Error('Server did not return a task_id');
-
-    return await pollTask(task_id);
+    const data = await r.json();
+    if (data && data.task_id) {
+      return await pollTask(data.task_id);
+    }
+    if (!data || data.status === 'error') {
+      throw new Error(data?.detail || 'Analysis failed');
+    }
+    return data as { status: string; stats: LetterboxdStats };
   } catch (error) {
     throw handleApiError(error, 'file analysis');
   }
@@ -308,18 +333,7 @@ export async function scrapeProfile(
     });
 
     if (!r.ok) {
-      let detail = '';
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') {
-          detail = body.detail;
-        } else if (body.detail && typeof body.detail === 'object') {
-          detail = body.detail.message || body.detail.error_code || '';
-        }
-      } catch {
-        // body wasn't JSON
-      }
-      throw new Error(detail || `scrape ${r.status}`);
+      throw await parseApiFailure(r, 'profile scraping', `scrape ${r.status}`);
     }
 
     const data = await r.json();

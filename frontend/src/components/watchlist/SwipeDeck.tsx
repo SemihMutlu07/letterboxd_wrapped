@@ -2,18 +2,20 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { Heart, X, Star, TrendingUp } from 'lucide-react';
+import { Filter, Heart, X, Star, TrendingUp } from 'lucide-react';
 
 import type { WatchlistFilm } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
+import { curatedLists, type CuratedList } from '@/lib/curatedLists';
 
-type SortMode = 'popularity' | 'rating' | 'year';
+type SortMode = 'popularity' | 'rating' | 'year' | 'most_watched';
 
 const SORT_LABELS: Record<SortMode, string> = {
   popularity: 'Most popular',
   rating: 'Highest rated',
   year: 'Newest',
+  most_watched: 'Most watched',
 };
 
 function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
@@ -22,6 +24,9 @@ function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
     sorted.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
   } else if (mode === 'rating') {
     sorted.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
+  } else if (mode === 'most_watched') {
+    // vote_count is the better proxy for "most watched"; fall back to popularity
+    sorted.sort((a, b) => (b.vote_count ?? b.popularity ?? 0) - (a.vote_count ?? a.popularity ?? 0));
   } else {
     sorted.sort((a, b) => String(b.year).localeCompare(String(a.year)));
   }
@@ -30,14 +35,42 @@ function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
 
 export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
   const [sortMode, setSortMode] = useState<SortMode>('popularity');
+  const [curatedSlug, setCuratedSlug] = useState<CuratedList['slug']>('all');
   const [index, setIndex] = useState(0);
   const [kept, setKept] = useState<WatchlistFilm[]>([]);
   const [skipped, setSkipped] = useState<WatchlistFilm[]>([]);
   const [direction, setDirection] = useState<0 | 1 | -1>(0);
 
-  const sorted = useMemo(() => sortFilms(films, sortMode), [films, sortMode]);
+  const selectedList = useMemo(
+    () => curatedLists.find((list) => list.slug === curatedSlug) ?? curatedLists[0],
+    [curatedSlug],
+  );
+
+  const filtered = useMemo(
+    () => films.filter((film) => selectedList.match(film)),
+    [films, selectedList],
+  );
+
+  const sorted = useMemo(() => sortFilms(filtered, sortMode), [filtered, sortMode]);
   const current = sorted[index];
   const isDone = index >= sorted.length;
+
+  const resetForFilter = () => {
+    setIndex(0);
+    setKept([]);
+    setSkipped([]);
+    setDirection(0);
+  };
+
+  const handleSortChange = (mode: SortMode) => {
+    setSortMode(mode);
+    resetForFilter();
+  };
+
+  const handleCuratedChange = (slug: CuratedList['slug']) => {
+    setCuratedSlug(slug);
+    resetForFilter();
+  };
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
     const threshold = 100;
@@ -84,16 +117,16 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
 
   return (
     <section className="border border-stone-800 bg-[#171411] p-5">
-      {/* Sort control */}
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+      {/* Controls */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-500">Sort by</span>
           <div className="flex gap-1">
             {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
               <button
                 key={mode}
                 type="button"
-                onClick={() => { setSortMode(mode); setIndex(0); setKept([]); setSkipped([]); }}
+                onClick={() => handleSortChange(mode)}
                 className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors ${
                   sortMode === mode
                     ? 'border-amber-300 bg-amber-300 text-stone-950'
@@ -105,16 +138,38 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
             ))}
           </div>
         </div>
-        <p className="font-mono text-[11px] text-stone-500">
-          {index} / {sorted.length} · {kept.length} kept
-        </p>
+
+        <div className="flex items-center gap-2">
+          <Filter className="h-3.5 w-3.5 text-stone-500" />
+          <select
+            value={curatedSlug}
+            onChange={(e) => handleCuratedChange(e.target.value as CuratedList['slug'])}
+            aria-label="Filter by curated list"
+            className="border border-stone-700 bg-[#0f0d0b] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-stone-300 focus:border-amber-300 focus:outline-none"
+          >
+            {curatedLists.map((list) => (
+              <option key={list.slug} value={list.slug}>
+                {list.title}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {isDone ? (
+      <p className="mb-3 font-mono text-[11px] text-stone-500">
+        {selectedList.slug !== 'all' && `${selectedList.description} · `}
+        {index} / {sorted.length} · {kept.length} kept
+      </p>
+
+      {isDone || sorted.length === 0 ? (
         <div className="py-8 text-center">
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">All done</p>
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">
+            {sorted.length === 0 ? 'No films match this filter' : 'All done'}
+          </p>
           <p className="mt-2 text-sm text-stone-400">
-            You kept {kept.length} and skipped {skipped.length} of {sorted.length} films.
+            {sorted.length === 0
+              ? 'Try another curated list or sort option.'
+              : `You kept ${kept.length} and skipped ${skipped.length} of ${sorted.length} films.`}
           </p>
           {kept.length > 0 && (
             <div className="mx-auto mt-4 max-w-sm space-y-1">
@@ -213,13 +268,13 @@ function SwipeCard({ film }: { film: WatchlistFilm }) {
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-stone-900">
         {poster ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={poster}
               alt={`${film.title} poster`}
               className="h-full w-full object-cover"
               referrerPolicy="no-referrer"
               loading="lazy"
+              crossOrigin="anonymous"
               onError={(e) => {
                 const el = e.currentTarget as HTMLImageElement;
                 el.style.display = 'none';
@@ -258,6 +313,11 @@ function SwipeCard({ film }: { film: WatchlistFilm }) {
             <span className="flex items-center gap-1 text-xs text-stone-400">
               <TrendingUp className="h-3.5 w-3.5 text-stone-500" />
               {Math.round(film.popularity)}
+            </span>
+          )}
+          {film.vote_count != null && film.vote_count > 0 && (
+            <span className="font-mono text-[10px] text-stone-600">
+              {film.vote_count.toLocaleString()} votes
             </span>
           )}
         </div>

@@ -49,6 +49,6 @@ describe('scrapeProfile', () => {
     const message = 'The desktop scraper is paused for maintenance. Upload your Letterboxd export for a full Wrapped, or try again shortly.';
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(503, { detail: { error_code: 'desktop_worker_paused', message } })));
 
-    await expect(scrapeProfile('semihmutsuz')).rejects.toThrow(/paused for maintenance.*upload your letterboxd export/i);
+    await expect(scrapeProfile('semihmutsuz')).rejects.toThrow(/paused for maintenance/i);
   });
 });

@@ -90,13 +90,14 @@ function FilmRows({ films }: { films: WatchlistFilm[] }) {
       {films.map((film) => {
         const slug = film.slug?.replace(/^\/film\/|\/$/g, '');
         const href = slug ? `https://letterboxd.com/film/${slug}/` : null;
+        const posterUrl = film.poster_path || film.poster_url || null;
         const content = (
           <div className="flex items-center gap-3 py-2">
             <div className="relative h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">
-              {film.poster_url ? (
+              {posterUrl ? (
                 <>
                   <img
-                    src={film.poster_url}
+                    src={posterUrl}
                     alt={`${film.title} poster`}
                     width={40}
                     height={60}

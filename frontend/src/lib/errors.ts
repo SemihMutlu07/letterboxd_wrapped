@@ -102,28 +102,18 @@ export function normalizeError(err: unknown): NormalizedError {
     };
   }
 
-  // Scraper-service failure (worker failed/unreachable). The quota/proxy message
-  // patterns are legacy — kept so a worker still running pre-removal code
-  // (ScraperAPI was deleted 2026-07-02) classifies correctly until restarted.
-  // Match before scrape_blocked since some messages reference Letterboxd 403.
+  // Scraper-service failure (worker failed/unreachable/too busy). These messages
+  // come from the local scraper or desktop worker when it cannot complete a job.
   if (
-    /scraper_unavailable|scraper service|scraper quota|too many people are using the scraper/i.test(
+    /scraper_unavailable|scraper service|too many people are using the scraper|all scraper slots are full|worker is (busy|offline|not available)|scrape queue full/i.test(
       raw,
     )
   ) {
-    const isQuota = /quota|too many people/i.test(raw);
-    const isMisconfigured = /misconfigured/i.test(raw);
     return {
-      title: isQuota
-        ? 'Scraper at capacity'
-        : isMisconfigured
-          ? 'Service misconfigured'
-          : 'Scraper service unavailable',
-      message:
-        raw ||
-        'The username scraper is temporarily unavailable. This is on our end, not yours.',
+      title: 'Scraper is busy',
+      message: raw || 'Too many people are using the scraper right now. Please wait a few seconds and try again.',
       action:
-        'Please use the export upload option below (30 seconds, no proxy needed), or try again in a few minutes.',
+        'Wait 30–60 seconds and retry, or use the export upload option below for a guaranteed result.',
       reason: 'scraper_unavailable',
     };
   }

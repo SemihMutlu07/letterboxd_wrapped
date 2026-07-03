@@ -25,6 +25,8 @@ class FilmRecommendation(BaseModel):
     letterboxd_slug: str = ""
     vote_average: Optional[float] = None
     release_date: str = ""
+    director: Optional[str] = None
+    overview: Optional[str] = None
 
 
 class RecommendFromCompareResponse(BaseModel):

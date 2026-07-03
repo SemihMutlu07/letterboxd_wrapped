@@ -217,6 +217,21 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
         )
 
     comparison = compare_watchlist_sets(data.get("first_watchlist", []), data.get("second_watchlist", []))
+
+    # Enrich all buckets with TMDB metadata so the UI has real posters, genres,
+    # vote counts and popularity in list view as well as swipe view.
+    session = request.app.state.aiohttp_session
+    try:
+        enriched_common, enriched_first, enriched_second = await asyncio.gather(
+            enrich_films_concurrent(session, comparison["common"], limit=50),
+            enrich_films_concurrent(session, comparison["first_only"], limit=50),
+            enrich_films_concurrent(session, comparison["second_only"], limit=50),
+        )
+        comparison["common"] = [public_film(f) for f in enriched_common]
+        comparison["first_only"] = [public_film(f) for f in enriched_first]
+        comparison["second_only"] = [public_film(f) for f in enriched_second]
+    except Exception:
+        logger.exception("Watchlist enrichment failed for %s/%s; returning raw scrape data", first, second)
     _persist_watchlist_run([first, second], comparison, request, ok=True)
     return {"status": "success", "users": [first, second], **comparison}
 

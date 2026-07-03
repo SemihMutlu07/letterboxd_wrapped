@@ -225,11 +225,27 @@ async def test_watchlist_compare_success(client: AsyncClient):
         {"title": "Heat", "year": "1995", "slug": "/film/heat-1995/", "poster_url": ""},
     ]
 
+    async def fake_enrich_concurrent(session, films, limit=50):
+        # Provide TMDB-like enrichment data so the response includes poster_path,
+        # popularity, vote counts and genres.
+        return [
+            {
+                **film,
+                "poster_path": "/aftersun.jpg",
+                "popularity": 10.0,
+                "vote_average": 7.5,
+                "vote_count": 1000,
+                "genres": ["Drama"],
+            }
+            for film in films
+        ]
+
     with (
         patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True),
         patch("app.routes.watchlist.task_manager.create_watchlist_compare_job", return_value="test-id"),
         patch("app.routes.watchlist.task_manager.get_task_state", return_value=_done_task({"first_watchlist": alice_wl, "second_watchlist": bob_wl})),
         patch("app.routes.watchlist.asyncio.sleep"),
+        patch("app.routes.watchlist.enrich_films_concurrent", side_effect=fake_enrich_concurrent),
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
 
@@ -252,11 +268,11 @@ async def test_watchlist_compare_success(client: AsyncClient):
         "year": "2022",
         "slug": "/film/aftersun/",
         "poster_url": "https://img/aftersun.jpg",
-        "poster_path": "",
-        "popularity": None,
-        "vote_average": None,
-        "vote_count": None,
-        "genres": [],
+        "poster_path": "/aftersun.jpg",
+        "popularity": 10.0,
+        "vote_average": 7.5,
+        "vote_count": 1000,
+        "genres": ["Drama"],
     }]
 
 
