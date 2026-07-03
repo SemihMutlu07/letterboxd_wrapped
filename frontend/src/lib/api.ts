@@ -114,6 +114,48 @@ export function handleApiError(error: unknown, context: string): Error {
   return err;
 }
 
+// Likely cause for a given backend error_code — surfaced in the console log so a
+// failure is self-diagnosing (for both a human and a future Claude session reading
+// the console) instead of a raw object dump with no explanation.
+const ERROR_CODE_HINTS: Record<string, string> = {
+  scraper_unavailable:
+    'Worker/backend scrape failed. If the message mentions "quota" or "too many people", the desktop worker is running stale pre-ScraperAPI-removal code — restart it.',
+  desktop_worker_paused: 'Admin dashboard has the worker paused for maintenance.',
+  worker_offline: "Desktop worker heartbeat is missing — the worker process isn't running or isn't reachable.",
+  desktop_worker_offline: "Desktop worker heartbeat is missing — the worker process isn't running or isn't reachable.",
+  scrape_blocked: 'Letterboxd blocked the scrape (bot detection on this IP).',
+  user_not_found: 'Username is misspelled or the profile is private.',
+  same_username: 'Both usernames were the same — user input issue, not a backend failure.',
+  watchlist_lab_rate_limited: 'Too many watchlist-lab requests from this client — a real rate limit, not a scraper issue.',
+};
+
+// Shared failure parser for watchlist/date-night endpoints: reads the FastAPI
+// `{detail: {error_code, message}}` shape, logs a labeled + hinted console error,
+// and returns an Error carrying `.code` for handleApiError to pass through.
+async function parseApiFailure(r: Response, context: string, fallbackMessage: string): Promise<Error & { code?: string }> {
+  let detail = '';
+  let code: string | undefined;
+  try {
+    const body = await r.json();
+    if (typeof body.detail === 'string') {
+      detail = body.detail;
+    } else if (body.detail && typeof body.detail === 'object') {
+      detail = body.detail.message || body.detail.error_code || '';
+      code = body.detail.error_code;
+    }
+  } catch {
+    // body wasn't JSON
+  }
+  const err = new Error(detail || fallbackMessage) as Error & { code?: string };
+  if (code) err.code = code;
+  console.error(`[API Error] ${context} failed — error_code: ${code ?? 'none'}`, {
+    status: r.status,
+    detail,
+    hint: code ? ERROR_CODE_HINTS[code] : undefined,
+  });
+  return err;
+}
+
 // Search for person (director/actor) in TMDB
 export async function searchPerson(name: string, role: 'director' | 'actor' = 'director') {
   const url = `${API_BASE}/api/tmdb/person/search?name=${encodeURIComponent(name)}&role=${encodeURIComponent(role)}`;
@@ -316,23 +358,7 @@ export async function compareWatchlists(
     });
 
     if (!r.ok) {
-      let detail = '';
-      let code: string | undefined;
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') {
-          detail = body.detail;
-        } else if (body.detail && typeof body.detail === 'object') {
-          detail = body.detail.message || body.detail.error_code || '';
-          code = body.detail.error_code;
-        }
-      } catch {
-        // body wasn't JSON
-      }
-      const err = new Error(detail || `watchlist compare ${r.status}`) as Error & { code?: string };
-      if (code) err.code = code;
-      console.error(`[API Error] watchlist comparison failed:`, { status: r.status, code, detail });
-      throw err;
+      throw await parseApiFailure(r, 'watchlist comparison', `watchlist compare ${r.status}`);
     }
 
     const data = await r.json();
@@ -363,23 +389,7 @@ export async function recommendFromCompare(
     });
 
     if (!r.ok) {
-      let detail = '';
-      let code: string | undefined;
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') {
-          detail = body.detail;
-        } else if (body.detail && typeof body.detail === 'object') {
-          detail = body.detail.message || body.detail.error_code || '';
-          code = body.detail.error_code;
-        }
-      } catch {
-        // body wasn't JSON
-      }
-      const err = new Error(detail || `watchlist recommendation ${r.status}`) as Error & { code?: string };
-      if (code) err.code = code;
-      console.error(`[API Error] watchlist recommendation failed:`, { status: r.status, code, detail });
-      throw err;
+      throw await parseApiFailure(r, 'watchlist recommendation', `watchlist recommendation ${r.status}`);
     }
 
     return await r.json() as RecommendFromCompareResult;
@@ -403,23 +413,7 @@ export async function enrichWatchlistFilms(
     });
 
     if (!r.ok) {
-      let detail = '';
-      let code: string | undefined;
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') {
-          detail = body.detail;
-        } else if (body.detail && typeof body.detail === 'object') {
-          detail = body.detail.message || body.detail.error_code || '';
-          code = body.detail.error_code;
-        }
-      } catch {
-        // body wasn't JSON
-      }
-      const err = new Error(detail || `watchlist enrichment ${r.status}`) as Error & { code?: string };
-      if (code) err.code = code;
-      console.error(`[API Error] watchlist enrichment failed:`, { status: r.status, code, detail });
-      throw err;
+      throw await parseApiFailure(r, 'watchlist enrichment', `watchlist enrichment ${r.status}`);
     }
 
     return await r.json();
@@ -443,23 +437,7 @@ export async function dateNight(
     });
 
     if (!r.ok) {
-      let detail = '';
-      let code: string | undefined;
-      try {
-        const body = await r.json();
-        if (typeof body.detail === 'string') {
-          detail = body.detail;
-        } else if (body.detail && typeof body.detail === 'object') {
-          detail = body.detail.message || body.detail.error_code || '';
-          code = body.detail.error_code;
-        }
-      } catch {
-        // body wasn't JSON
-      }
-      const err = new Error(detail || `date night ${r.status}`) as Error & { code?: string };
-      if (code) err.code = code;
-      console.error(`[API Error] date night failed:`, { status: r.status, code, detail });
-      throw err;
+      throw await parseApiFailure(r, 'date night recommendations', `date night ${r.status}`);
     }
 
     return await r.json() as DateNightResult;
