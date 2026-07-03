@@ -140,9 +140,9 @@ export default function DateNight() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {result.recommendations.map((film, index) => {
                 const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
+                const director = film.director;
+                const overview = film.overview;
                 const extra = film as unknown as Record<string, unknown>;
-                const director = extra.director as string | undefined;
-                const overview = extra.overview as string | undefined;
                 const watchlistAddedAt = extra.watchlist_added_at as string | undefined;
                 const slug = (extra.letterboxd_slug as string) || film.slug;
                 const letterboxdUrl = slug

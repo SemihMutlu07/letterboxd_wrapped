@@ -159,6 +159,8 @@ def recommendation_from_film(film: dict[str, Any], reason: str) -> FilmRecommend
         letterboxd_slug=letterboxd_slug,
         vote_average=film.get("vote_average") if isinstance(film.get("vote_average"), (int, float)) else None,
         release_date=str(film.get("release_date") or ""),
+        director=str(film.get("director") or "") or None,
+        overview=str(film.get("overview") or "") or None,
     )
 
 

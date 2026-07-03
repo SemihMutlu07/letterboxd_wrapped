@@ -60,6 +60,8 @@ export interface FilmRecommendation {
   slug?: string;
   vote_average?: number | null;
   release_date?: string;
+  director?: string | null;
+  overview?: string | null;
 }
 
 export interface RecommendFromCompareResult {
