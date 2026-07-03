@@ -21,7 +21,7 @@ const SORT_LABELS: Record<SortMode, string> = {
 // Only lists a human has actually populated show up as a filter option.
 const AVAILABLE_CURATED_LISTS = Object.entries(CURATED_LISTS).filter(([, slugs]) => slugs.length > 0);
 
-function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
+export function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
   const sorted = [...films];
   if (mode === 'popularity') {
     sorted.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
