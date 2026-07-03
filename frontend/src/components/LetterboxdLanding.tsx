@@ -427,32 +427,35 @@ export default function LetterboxdLanding() {
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Just type your username</h2>
               <p className="mt-2 text-sm text-slate-400">We read your public Letterboxd diary — no downloads, no uploads.</p>
 
-              <div className="mx-auto mt-7 flex max-w-md flex-col gap-3 sm:flex-row">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleScrape();
+                }}
+                className="mx-auto mt-7 flex max-w-md flex-col gap-3 sm:flex-row"
+              >
                 <label className="relative flex-1">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-slate-500">@</span>
                   <input
                     type="text"
+                    name="username"
                     value={usernameInput}
                     onChange={(e) => setUsernameInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void handleScrape();
-                    }}
                     placeholder="your_username"
                     autoFocus
-                    autoComplete="off"
+                    autoComplete="username"
                     spellCheck={false}
                     className="w-full rounded-2xl border border-slate-600/70 bg-slate-900/70 py-3.5 pl-9 pr-4 text-base text-white placeholder:text-slate-500 focus:border-orange-400/60 focus:outline-none focus:ring-2 focus:ring-orange-400/20"
                   />
                 </label>
                 <button
-                  type="button"
-                  onClick={() => void handleScrape()}
+                  type="submit"
                   disabled={!usernameInput.trim()}
                   className="rounded-2xl bg-orange-400 px-6 py-3.5 text-base font-semibold text-slate-950 transition hover:bg-orange-300 active:scale-[0.98] disabled:bg-slate-700 disabled:text-slate-500"
                 >
                   Analyze →
                 </button>
-              </div>
+              </form>
 
               <button
                 type="button"

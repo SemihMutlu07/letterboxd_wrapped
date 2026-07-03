@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app import supabase_ops, task_manager
 from app.models.recommend import RecommendFromCompareRequest, RecommendFromCompareResponse
+from app.services import dashboard_settings
 from app.services.recommender import (
     compare_watchlist_sets,
     enrich_films,
@@ -83,9 +84,9 @@ def _worker_paused_exception() -> HTTPException:
     )
 
 
-def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
+async def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort mirror of watchlist comparison run to Supabase."""
-    supabase_ops.insert("ops_watchlist_runs", {
+    await supabase_ops.insert("ops_watchlist_runs", {
         "usernames": payload.get("usernames"),
         "ok": payload.get("ok"),
         "match_score": payload.get("match_score"),
@@ -121,10 +122,7 @@ def _persist_watchlist_run(
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if settings.supabase_enabled:
-            try:
-                asyncio.get_running_loop().run_in_executor(None, _mirror_watchlist_to_supabase, payload)
-            except RuntimeError:
-                _mirror_watchlist_to_supabase(payload)
+            supabase_ops.fire_and_forget(_mirror_watchlist_to_supabase(payload))
     except Exception as exc:
         logger.warning("Failed to persist watchlist run: %s", exc)
 
@@ -193,6 +191,7 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
+    await dashboard_settings.load_worker_control_state()
     if task_manager.is_worker_paused():
         _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_paused")
         raise _worker_paused_exception()
@@ -236,6 +235,7 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
+    await dashboard_settings.load_worker_control_state()
     if task_manager.is_worker_paused():
         _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_paused")
         raise _worker_paused_exception()
@@ -307,6 +307,7 @@ async def enrich_watchlist_films(request: Request, payload: WatchlistCompareRequ
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
+    await dashboard_settings.load_worker_control_state()
     if task_manager.is_worker_paused():
         raise _worker_paused_exception()
 

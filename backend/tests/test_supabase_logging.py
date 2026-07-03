@@ -9,44 +9,57 @@ from app.admin import (
     _load_runs_supabase,
     _load_run_supabase,
 )
+from app import supabase_ops
 from app.config import settings
 
-@patch("httpx.post")
-def test_mirror_watchlist_to_supabase(mock_post):
+def _mock_insert_client():
+    mock_response = MagicMock()
+    mock_client = MagicMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    return mock_client
+
+
+@pytest.mark.asyncio
+async def test_mirror_watchlist_to_supabase():
     payload = {
         "usernames": ["user1", "user2"],
         "ok": True,
         "match_score": 85,
         "extra_field": "some_extra"
     }
-    with patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
+    mock_client = _mock_insert_client()
+    with patch("httpx.AsyncClient", return_value=mock_client) as mock_client_cls, \
+         patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
          patch.object(settings, "supabase_anon_key", "mock_key"):
-        _mirror_watchlist_to_supabase(payload)
-        
-    mock_post.assert_called_once()
-    args, kwargs = mock_post.call_args
+        await _mirror_watchlist_to_supabase(payload)
+
+    assert mock_client_cls.call_args.kwargs["headers"]["apikey"] == "mock_key"
+    mock_client.post.assert_called_once()
+    args, kwargs = mock_client.post.call_args
     assert args[0] == "https://mock.supabase.co/rest/v1/ops_watchlist_runs"
-    assert kwargs["headers"]["apikey"] == "mock_key"
     assert kwargs["json"]["usernames"] == ["user1", "user2"]
     assert kwargs["json"]["match_score"] == 85
     assert kwargs["json"]["payload"] == payload
 
 
-@patch("httpx.post")
-def test_mirror_date_night_to_supabase(mock_post):
+@pytest.mark.asyncio
+async def test_mirror_date_night_to_supabase():
     payload = {
         "usernames": ["user1", "user2"],
         "ok": False,
         "extra_field": "some_extra"
     }
-    with patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
+    mock_client = _mock_insert_client()
+    with patch("httpx.AsyncClient", return_value=mock_client), \
+         patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
          patch.object(settings, "supabase_anon_key", "mock_key"):
-        _mirror_date_night_to_supabase(payload)
-        
-    mock_post.assert_called_once()
-    args, kwargs = mock_post.call_args
+        await _mirror_date_night_to_supabase(payload)
+
+    mock_client.post.assert_called_once()
+    args, kwargs = mock_client.post.call_args
     assert args[0] == "https://mock.supabase.co/rest/v1/ops_date_night_runs"
-    assert kwargs["headers"]["apikey"] == "mock_key"
     assert kwargs["json"]["usernames"] == ["user1", "user2"]
     assert kwargs["json"]["ok"] is False
     assert kwargs["json"]["payload"] == payload
@@ -155,3 +168,29 @@ async def test_load_date_night_runs_supabase():
     assert len(runs) == 1
     assert runs[0]["usernames"] == ["user1", "user2"]
     assert runs[0]["_mtime"] == "2026-06-23T12:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_upsert_dashboard_setting_uses_on_conflict():
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client = MagicMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("httpx.AsyncClient", return_value=mock_client), \
+         patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
+         patch.object(settings, "supabase_anon_key", "mock_key"):
+        ok = await supabase_ops.upsert(
+            "ops_dashboard_settings",
+            {"key": "worker_control", "value": {"desired_state": "pause"}},
+            on_conflict="key",
+        )
+
+    assert ok is True
+    _, kwargs = mock_client.post.call_args
+    assert kwargs["params"] == {"on_conflict": "key"}
+    assert kwargs["headers"]["Prefer"] == "resolution=merge-duplicates,return=minimal"
+    assert kwargs["json"]["key"] == "worker_control"

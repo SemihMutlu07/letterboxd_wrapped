@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from app.services.recommender import compare_watchlist_sets, BUCKET_CAP
+from app.services.recommender import compare_watchlist_sets, public_film, BUCKET_CAP
 from app.services.review_analysis import compute_review_metrics
 
 
@@ -107,3 +107,20 @@ def test_compare_watchlist_sets_preserves_poster_url():
     result = compare_watchlist_sets(first, second)
 
     assert result["common"][0]["poster_url"] == "https://img/aftersun.jpg"
+
+
+def test_public_film_carries_tmdb_poster_path():
+    """After TMDB enrichment a film has poster_path; public_film must pass it
+    through so the frontend can render a real poster instead of the scraper's
+    broken /image-150/ AJAX-endpoint URL."""
+    enriched = {
+        "title": "Aftersun",
+        "year": "2022",
+        "slug": "aftersun",
+        "poster_url": "https://letterboxd.com/film/aftersun/image-150/",
+        "poster_path": "/1p5aI299YBnqrEEfBpimMWzmVQZ.jpg",
+    }
+
+    result = public_film(enriched)
+
+    assert result["poster_path"] == "/1p5aI299YBnqrEEfBpimMWzmVQZ.jpg"
