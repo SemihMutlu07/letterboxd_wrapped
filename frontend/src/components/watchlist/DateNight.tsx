@@ -164,6 +164,7 @@ export default function DateNight() {
                           width={80}
                           height={120}
                           loading="lazy"
+                          referrerPolicy="no-referrer"
                           className="h-full w-full object-cover"
                           onError={() => setErroredPosters(prev => new Set(prev).add(posterKey))}
                         />

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
 import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend, type ScrapeProgress } from '@/lib/api';
+import { ERROR_CODE_HINTS } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -329,6 +330,19 @@ export default function LetterboxdLanding() {
       trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0, method: 'scrape' });
       setError(normalized);
       setIsScraping(false);
+
+      // Surface a single, structured diagnostics line in the console so any user
+      // (or agent reading the console later) immediately sees why the scraper failed.
+      if (err instanceof Error && 'code' in err) {
+        console.error('[scrape] failure diagnostics:', {
+          username,
+          reason: normalized.reason,
+          error_code: (err as { code?: string }).code,
+          hint: ERROR_CODE_HINTS[(err as { code?: string }).code ?? ''] ?? 'No hint available for this code',
+          message: err.message,
+          action: normalized.action,
+        });
+      }
     }
   }, [usernameInput]);
 
