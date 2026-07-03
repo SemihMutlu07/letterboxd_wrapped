@@ -7,19 +7,26 @@ import { Heart, X, Star, TrendingUp } from 'lucide-react';
 import type { WatchlistFilm } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
+import { CURATED_LISTS, CURATED_LIST_LABELS } from '@/lib/curatedLists';
 
-type SortMode = 'popularity' | 'rating' | 'year';
+type SortMode = 'popularity' | 'votes' | 'rating' | 'year';
 
 const SORT_LABELS: Record<SortMode, string> = {
   popularity: 'Most popular',
+  votes: 'Most watched',
   rating: 'Highest rated',
   year: 'Newest',
 };
+
+// Only lists a human has actually populated show up as a filter option.
+const AVAILABLE_CURATED_LISTS = Object.entries(CURATED_LISTS).filter(([, slugs]) => slugs.length > 0);
 
 function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
   const sorted = [...films];
   if (mode === 'popularity') {
     sorted.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+  } else if (mode === 'votes') {
+    sorted.sort((a, b) => (b.vote_count ?? 0) - (a.vote_count ?? 0));
   } else if (mode === 'rating') {
     sorted.sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0));
   } else {
@@ -30,12 +37,17 @@ function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
 
 export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
   const [sortMode, setSortMode] = useState<SortMode>('popularity');
+  const [curatedFilter, setCuratedFilter] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [kept, setKept] = useState<WatchlistFilm[]>([]);
   const [skipped, setSkipped] = useState<WatchlistFilm[]>([]);
   const [direction, setDirection] = useState<0 | 1 | -1>(0);
 
-  const sorted = useMemo(() => sortFilms(films, sortMode), [films, sortMode]);
+  const filtered = useMemo(
+    () => (curatedFilter ? films.filter((f) => CURATED_LISTS[curatedFilter]?.includes(f.slug)) : films),
+    [films, curatedFilter],
+  );
+  const sorted = useMemo(() => sortFilms(filtered, sortMode), [filtered, sortMode]);
   const current = sorted[index];
   const isDone = index >= sorted.length;
 
@@ -109,6 +121,40 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
           {index} / {sorted.length} · {kept.length} kept
         </p>
       </div>
+
+      {/* Curated-list filter — only shows once a list has been populated */}
+      {AVAILABLE_CURATED_LISTS.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-500">List</span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => { setCuratedFilter(null); setIndex(0); setKept([]); setSkipped([]); }}
+              className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors ${
+                curatedFilter === null
+                  ? 'border-amber-300 bg-amber-300 text-stone-950'
+                  : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
+              }`}
+            >
+              All
+            </button>
+            {AVAILABLE_CURATED_LISTS.map(([id]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setCuratedFilter(id); setIndex(0); setKept([]); setSkipped([]); }}
+                className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors ${
+                  curatedFilter === id
+                    ? 'border-amber-300 bg-amber-300 text-stone-950'
+                    : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
+                }`}
+              >
+                {CURATED_LIST_LABELS[id] ?? id}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isDone ? (
         <div className="py-8 text-center">
