@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
 import Section from '@/components/results/Section';
@@ -266,12 +266,26 @@ function RatingBucketModal({
   onClose: () => void;
   onSelectFilm: (film: RatingBucketFilm) => void;
 }) {
+  useEffect(() => {
+    if (!bucket) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bucket, onClose]);
+
   if (!bucket) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="relative flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-yellow-400/20 bg-[#161616] shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${bucket.label} rating bucket`}
+        className="relative flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-yellow-400/20 bg-[#161616] shadow-2xl"
+      >
         <header className="flex items-start justify-between gap-4 border-b border-white/[0.06] px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300/70">Rating bucket</p>
