@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import supabase_ops, task_manager
 from app.config import backend_git_sha, settings
+from app.services import dashboard_settings
 from app.services.run_log import RUNS_DIR
 
 logger = logging.getLogger("letterboxd_wrapped.admin")
@@ -196,6 +197,7 @@ async def admin_login(request: Request):
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
     _require_admin(request)
+    await dashboard_settings.load_worker_control_state()
     runs = await _load_analysis_runs(limit=limit)
     if settings.supabase_enabled:
         watchlist_runs = await _load_watchlist_runs_supabase(limit=limit)
@@ -217,6 +219,7 @@ async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
             "date_night_runs": date_night_runs,
             "worker_status": worker_status,
             "worker_enabled": settings.desktop_worker_enabled,
+            "settings_store": dashboard_settings.settings_store_status(),
             "key": request.query_params.get("key"),
         },
     )
@@ -262,8 +265,10 @@ async def admin_api_runs(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
 async def admin_api_worker(request: Request):
     """JSON API for desktop worker dashboard status."""
     _require_admin(request)
+    await dashboard_settings.load_worker_control_state()
     return {
         "enabled": settings.desktop_worker_enabled,
+        "settings_store": dashboard_settings.settings_store_status(),
         "status": task_manager.get_worker_status(
             settings.worker_heartbeat_max_age_seconds,
             expected_protocol_version=settings.worker_protocol_version,
@@ -286,11 +291,25 @@ async def admin_api_worker_control(request: Request):
         control = task_manager.set_worker_desired_state(str(body.get("desired_state") or ""))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error_code": "invalid_desired_state", "message": str(exc)}) from exc
-    return {"ok": True, "control": control}
+    store = await dashboard_settings.save_worker_control_state()
+    return {"ok": True, "control": control, "settings_store": store}
 
 
 @router.post("/admin/api/worker/restart")
 async def admin_api_worker_restart(request: Request):
     """Request a supervisor-managed child restart by bumping the restart token."""
     _require_admin(request)
-    return {"ok": True, "control": task_manager.request_worker_restart()}
+    control = task_manager.request_worker_restart()
+    store = await dashboard_settings.save_worker_control_state()
+    return {"ok": True, "control": control, "settings_store": store}
+
+
+@router.get("/admin/api/settings")
+async def admin_api_settings(request: Request):
+    """JSON API for durable admin/dashboard settings."""
+    _require_admin(request)
+    await dashboard_settings.load_worker_control_state()
+    return {
+        "settings_store": dashboard_settings.settings_store_status(),
+        "worker_control": task_manager.get_worker_control_state(),
+    }

@@ -6,11 +6,13 @@
  * Reuses the ShareModal backdrop pattern (fixed overlay + click-to-close).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { PersonAvatarPlaceholder, PosterImage } from '@/components/results/Placeholders';
 import type { PersonFilm } from '../types';
+
+const INITIAL_POSTER_PAGE = 9;
 
 interface PersonFilmsModalProps {
   open: boolean;
@@ -23,6 +25,7 @@ interface PersonFilmsModalProps {
 export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
   const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
   const [profileFailed, setProfileFailed] = useState(false);
+  const [posterPage, setPosterPage] = useState(1);
 
   useEffect(() => {
     if (open) setProfileFailed(false);
@@ -39,12 +42,17 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
   }, [open, onClose]);
 
   // Highest-rated first, then by year desc; unrated films sink to the bottom.
-  const sorted = [...films].sort((a, b) => {
-    const ra = a.user_rating ?? -1;
-    const rb = b.user_rating ?? -1;
-    if (rb !== ra) return rb - ra;
-    return (b.year ?? '').localeCompare(a.year ?? '');
-  });
+  const sorted = useMemo(() => {
+    return [...films].sort((a, b) => {
+      const ra = a.user_rating ?? -1;
+      const rb = b.user_rating ?? -1;
+      if (rb !== ra) return rb - ra;
+      return (b.year ?? '').localeCompare(a.year ?? '');
+    });
+  }, [films]);
+  const visibleCount = posterPage * INITIAL_POSTER_PAGE;
+  const visibleFilms = sorted.slice(0, visibleCount);
+  const hasMoreFilms = sorted.length > visibleFilms.length;
 
   return (
     <AnimatePresence>
@@ -58,6 +66,9 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
             onClick={onClose}
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${name} film shelf`}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -111,7 +122,7 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
 
             {/* Film grid */}
             <div className="overflow-y-auto p-5 grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {sorted.map((f) => {
+              {visibleFilms.map((f) => {
                 const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
                 return (
                   <div key={`${f.title}-${f.year}`} className="space-y-1.5">
@@ -130,6 +141,15 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                   </div>
                 );
               })}
+              {hasMoreFilms && (
+                <button
+                  type="button"
+                  onClick={() => setPosterPage((p) => p + 1)}
+                  className="col-span-full rounded-lg bg-slate-800/70 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  Show more films
+                </button>
+              )}
             </div>
           </motion.div>
         </div>

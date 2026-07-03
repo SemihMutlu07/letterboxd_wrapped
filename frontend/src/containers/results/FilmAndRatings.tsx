@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
 import Section from '@/components/results/Section';
@@ -257,7 +257,9 @@ type RatingBucket = {
   films: RatingBucketFilm[];
 };
 
-function RatingBucketModal({
+const INITIAL_POSTER_PAGE = 12;
+
+export function RatingBucketModal({
   bucket,
   onClose,
   onSelectFilm,
@@ -266,12 +268,32 @@ function RatingBucketModal({
   onClose: () => void;
   onSelectFilm: (film: RatingBucketFilm) => void;
 }) {
+  const [posterPage, setPosterPage] = useState(1);
+
+  useEffect(() => {
+    if (!bucket) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [bucket, onClose]);
+
   if (!bucket) return null;
+
+  const visibleCount = posterPage * INITIAL_POSTER_PAGE;
+  const visibleFilms = bucket.films.slice(0, visibleCount);
+  const hasMoreFilms = bucket.films.length > visibleFilms.length;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="relative flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-yellow-400/20 bg-[#161616] shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${bucket.label} rating bucket`}
+        className="relative flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-yellow-400/20 bg-[#161616] shadow-2xl"
+      >
         <header className="flex items-start justify-between gap-4 border-b border-white/[0.06] px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300/70">Rating bucket</p>
@@ -290,7 +312,7 @@ function RatingBucketModal({
           </button>
         </header>
         <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto p-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {bucket.films.map((film) => {
+          {visibleFilms.map((film) => {
             const poster = getPosterUrl(film.poster_path, 'grid');
             return (
               <button
@@ -313,6 +335,17 @@ function RatingBucketModal({
             );
           })}
         </div>
+        {hasMoreFilms && (
+          <div className="border-t border-white/[0.06] px-5 py-3">
+            <button
+              type="button"
+              onClick={() => setPosterPage((p) => p + 1)}
+              className="w-full rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-colors py-2.5"
+            >
+              Show more films
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -23,7 +23,7 @@
         </div>
         <div>
           <h1 class="text-sm font-bold text-white">MoviesWrapped <span class="text-orange-400">Admin</span></h1>
-          <p class="text-[10px] text-slate-500 uppercase tracking-wider">Local Debug Dashboard</p>
+          <p class="text-[10px] text-slate-500 uppercase tracking-wider">Supabase Ops Dashboard</p>
         </div>
       </div>
       <div class="flex items-center gap-3 text-xs">
@@ -46,7 +46,7 @@
 
     <!-- WORKER TAB -->
     <div id="panel-worker" class="space-y-6 hidden">
-      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3">
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Desktop Worker</p>
           <p id="worker-online" class="text-2xl font-black {% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-600{% endif %}">
@@ -57,6 +57,15 @@
           <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Job Control</p>
           <p id="worker-desired-state" class="text-2xl font-black {% if worker_status.control.desired_state == 'pause' %}text-amber-400{% else %}text-emerald-400{% endif %}">
             {{ "Paused" if worker_status.control.desired_state == "pause" else "Run" }}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Settings Store</p>
+          <p id="worker-settings-store" class="text-2xl font-black {% if settings_store.persistent %}text-emerald-400{% else %}text-amber-400{% endif %}">
+            {{ "Durable" if settings_store.persistent else "Memory" }}
+          </p>
+          <p id="worker-settings-detail" class="mt-1 text-[10px] text-slate-500">
+            {{ settings_store.table or "process state" }}
           </p>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
@@ -93,6 +102,9 @@
             <h2 class="text-sm font-bold text-white">Remote Control</h2>
             <p id="worker-control-summary" class="text-xs text-slate-500 mt-1">
               Desired state: {{ worker_status.control.desired_state }} · restart token {{ worker_status.control.restart_token }}
+            </p>
+            <p id="worker-settings-summary" class="text-xs text-slate-500 mt-1">
+              Settings: {{ settings_store.source }}{% if settings_store.last_saved_at %} · saved {{ settings_store.last_saved_at[:19].replace("T", " ") }}{% endif %}
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -370,7 +382,7 @@
     </div>
 
     <div class="text-center text-[10px] text-slate-600 pt-4 pb-8">
-      MoviesWrapped Admin · Local debug dashboard
+      MoviesWrapped Admin · Durable ops dashboard
     </div>
   </main>
 
@@ -580,6 +592,7 @@
         if (!response.ok) return;
         const body = await response.json();
         const status = body.status || {};
+        const store = body.settings_store || {};
         const online = Boolean(body.enabled && status.online);
         const label = !body.enabled ? 'Disabled' : online ? 'Live' : 'Offline';
         const header = document.getElementById('worker-header-status');
@@ -597,6 +610,22 @@
         desiredNode.textContent = desiredState === 'pause' ? 'Paused' : 'Run';
         desiredNode.className = `text-2xl font-black ${desiredState === 'pause' ? 'text-amber-400' : 'text-emerald-400'}`;
         document.getElementById('worker-control-summary').textContent = `Desired state: ${desiredState} · restart token ${control.restart_token ?? '—'}`;
+        const storeNode = document.getElementById('worker-settings-store');
+        const storeDetail = document.getElementById('worker-settings-detail');
+        const settingsSummary = document.getElementById('worker-settings-summary');
+        const persistent = Boolean(store.persistent);
+        if (storeNode) {
+          storeNode.textContent = persistent ? 'Durable' : 'Memory';
+          storeNode.className = `text-2xl font-black ${persistent ? 'text-emerald-400' : 'text-amber-400'}`;
+        }
+        if (storeDetail) storeDetail.textContent = store.table || 'process state';
+        if (settingsSummary) {
+          const saved = store.last_saved_at ? ` · saved ${shortTime(store.last_saved_at)}` : '';
+          const loaded = store.last_loaded_at ? ` · loaded ${shortTime(store.last_loaded_at)}` : '';
+          const saveState = store.last_save_ok === false ? ' · save failed' : '';
+          settingsSummary.textContent = `Settings: ${store.source || 'memory'}${saved || loaded}${saveState}`;
+          settingsSummary.className = `text-xs mt-1 ${store.last_save_ok === false ? 'text-red-300' : 'text-slate-500'}`;
+        }
 
         const supervisor = status.supervisor || {};
         const childStatus = supervisor.child_status || 'unknown';

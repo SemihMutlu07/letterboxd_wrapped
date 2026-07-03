@@ -5,7 +5,7 @@
  * Opened from clicking a language row in LanguagesLeaderboard.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
@@ -17,6 +17,8 @@ interface Film {
   poster_path?: string;
 }
 
+const INITIAL_POSTER_PAGE = 12;
+
 interface LangModalProps {
   open: boolean;
   onClose: () => void;
@@ -27,6 +29,8 @@ interface LangModalProps {
 }
 
 export default function LangModal({ open, onClose, language, languageLabel, count, films }: LangModalProps) {
+  const [posterPage, setPosterPage] = useState(1);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -35,6 +39,10 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  const visibleCount = posterPage * INITIAL_POSTER_PAGE;
+  const visibleFilms = films.slice(0, visibleCount);
+  const hasMoreFilms = films.length > visibleFilms.length;
 
   return (
     <AnimatePresence>
@@ -48,6 +56,9 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
             onClick={onClose}
           />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${languageLabel || language} films`}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -76,7 +87,7 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
             {/* Film grid */}
             <div className="overflow-y-auto flex-1 p-5">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {films.map((f, idx) => {
+              {visibleFilms.map((f, idx) => {
                 const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w154') : null;
                 return (
                   <div
@@ -97,6 +108,15 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
                 );
               })}
               </div>
+              {hasMoreFilms && (
+                <button
+                  type="button"
+                  onClick={() => setPosterPage((p) => p + 1)}
+                  className="mt-4 w-full rounded-lg bg-slate-800/70 py-2.5 text-xs font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  Show more films
+                </button>
+              )}
               {count > films.length && (
                 <div className="text-xs text-slate-500 italic pt-2">
                   + {count - films.length} more in your diary

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -26,10 +25,10 @@ def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in _HEAVY_KEYS}
 
 
-def _mirror_to_supabase(payload: dict[str, Any]) -> None:
+async def _mirror_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort copy of the run log to Supabase ops_runs so the admin dashboard
     survives Render restarts (local runs/ is ephemeral there). No-op without env."""
-    supabase_ops.insert("ops_runs", {
+    await supabase_ops.insert("ops_runs", {
         "username": payload.get("username"),
         "ok": payload.get("ok"),
         "total_films": payload.get("total_films"),
@@ -119,13 +118,10 @@ def persist_run(
             ok,
             payload["total_films"],
         )
-        # Durable mirror so the admin dashboard survives Render restarts. Offloaded
-        # to a thread so the 5s network call never blocks the event loop.
+        # Durable mirror so the admin dashboard survives Render restarts. Fired
+        # off in the background so the network call never blocks the caller.
         if settings.supabase_enabled:
-            try:
-                asyncio.get_running_loop().run_in_executor(None, _mirror_to_supabase, payload)
-            except RuntimeError:
-                _mirror_to_supabase(payload)
+            supabase_ops.fire_and_forget(_mirror_to_supabase(payload))
         return path
     except Exception as exc:
         logger.warning("Failed to persist run for %s: %s", username, exc)

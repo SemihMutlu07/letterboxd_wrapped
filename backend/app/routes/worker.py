@@ -15,6 +15,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from app import task_manager
 from app.task_manager import claim_next_watchlist_job
 from app.config import backend_git_sha, settings
+from app.services import dashboard_settings
 from app.services.run_log import persist_run
 from app.services.worker_monitor import log_worker_event
 
@@ -103,7 +104,7 @@ async def worker_startup(request: Request, x_worker_token: str | None = Header(d
     except Exception:
         body = {}
     task_manager.record_worker_startup(body if isinstance(body, dict) else {})
-    log_worker_event("startup", body if isinstance(body, dict) else {})
+    await log_worker_event("startup", body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -116,7 +117,7 @@ async def worker_shutdown(request: Request, x_worker_token: str | None = Header(
     except Exception:
         body = {}
     task_manager.record_worker_shutdown(body if isinstance(body, dict) else {})
-    log_worker_event("shutdown", body if isinstance(body, dict) else {})
+    await log_worker_event("shutdown", body if isinstance(body, dict) else {})
     return {"ok": True}
 
 
@@ -138,6 +139,7 @@ async def worker_control(
 ):
     """Supervisor control poll. Does not update Python worker heartbeat."""
     _require_worker_token(x_worker_token)
+    await dashboard_settings.load_worker_control_state()
     return task_manager.record_supervisor_poll(last_seen_restart_token)
 
 
@@ -155,6 +157,7 @@ async def worker_supervisor_report(request: Request, x_worker_token: str | None 
 async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     """Claim the oldest queued scrape job, or return {job: null} if none."""
     _require_worker_token(x_worker_token)
+    await dashboard_settings.load_worker_control_state()
     if task_manager.is_worker_paused():
         return {"job": None, "paused": True, "desired_state": "pause"}
     mismatch = _worker_version_mismatch()
@@ -248,7 +251,7 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
             telemetry=_task_telemetry(task),
         )
     logger.info("Worker completed scrape job %s", task_id)
-    log_worker_event("job_completed", {
+    await log_worker_event("job_completed", {
         "task_id": task_id,
         "username": task.username if task else _request_username(body, stats),
         "total_films": stats.get("total_films"),
@@ -297,7 +300,7 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
             telemetry=_task_telemetry(task),
         )
     logger.warning("Worker reported scrape job %s failed: %s", task_id, message)
-    log_worker_event("job_failed", {
+    await log_worker_event("job_failed", {
         "task_id": task_id,
         "username": task.username if task else _request_username(body),
         "error_message": message,
@@ -313,6 +316,7 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
 async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)):
     """Claim the oldest queued watchlist/date-night scrape job, or return {job: null}."""
     _require_worker_token(x_worker_token)
+    await dashboard_settings.load_worker_control_state()
     if task_manager.is_worker_paused():
         return {"job": None, "paused": True, "desired_state": "pause"}
     mismatch = _worker_version_mismatch()

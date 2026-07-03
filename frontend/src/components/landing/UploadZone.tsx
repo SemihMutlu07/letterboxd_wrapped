@@ -217,7 +217,7 @@ export default function UploadZone({ onFiles }: Props) {
           multiple
           accept=".zip,.csv,.CSV"
           onChange={(e) => onFiles(e.target.files)}
-          className="hidden"
+          className="sr-only"
         />
         <input
           ref={(el) => {

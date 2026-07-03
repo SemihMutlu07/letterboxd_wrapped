@@ -26,6 +26,7 @@ from app.services.recommender import (
     discover_date_night_recommendations,
     enrich_films,
 )
+from app.services import dashboard_settings
 from app.services.scraper import merge_scraped_films
 
 logger = logging.getLogger("letterboxd_wrapped.recommend")
@@ -38,9 +39,9 @@ ENRICH_TIMEOUT = 90  # seconds per enrich operation
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 
 
-def _mirror_date_night_to_supabase(payload: dict[str, Any]) -> None:
+async def _mirror_date_night_to_supabase(payload: dict[str, Any]) -> None:
     """Best-effort mirror of date night recommendation run to Supabase."""
-    supabase_ops.insert("ops_date_night_runs", {
+    await supabase_ops.insert("ops_date_night_runs", {
         "usernames": payload.get("usernames"),
         "ok": payload.get("ok"),
         "payload": payload,
@@ -79,10 +80,7 @@ def _persist_date_night_run(
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if settings.supabase_enabled:
-            try:
-                asyncio.get_running_loop().run_in_executor(None, _mirror_date_night_to_supabase, payload)
-            except RuntimeError:
-                _mirror_date_night_to_supabase(payload)
+            supabase_ops.fire_and_forget(_mirror_date_night_to_supabase(payload))
     except Exception as exc:
         logger.warning("Failed to persist date night run: %s", exc)
 
@@ -101,6 +99,7 @@ async def date_night(request: Request, payload: UserPairRequest):
             detail={"error_code": "same_username", "message": "Enter two different Letterboxd usernames."},
         )
 
+    await dashboard_settings.load_worker_control_state()
     if task_manager.is_worker_paused():
         _persist_date_night_run([first, second], None, [], request, ok=False, error_message="worker_paused")
         raise _worker_paused_exception()

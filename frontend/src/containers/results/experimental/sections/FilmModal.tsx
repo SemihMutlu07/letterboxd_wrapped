@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 interface FilmModalProps {
@@ -23,6 +23,15 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
   const diff = ((film.rating ?? 0) - (film.communityRating ?? 0)).toFixed(1);
   const diffSign = parseFloat(diff) > 0 ? '+' : '';
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   return (
     <AnimatePresence>
       {open && (
@@ -37,6 +46,9 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
         >
           <motion.div
             key="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={film.title}
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}

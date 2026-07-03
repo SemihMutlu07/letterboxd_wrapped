@@ -252,6 +252,7 @@ async def test_watchlist_compare_success(client: AsyncClient):
         "year": "2022",
         "slug": "/film/aftersun/",
         "poster_url": "https://img/aftersun.jpg",
+        "poster_path": "",
         "popularity": None,
         "vote_average": None,
         "vote_count": None,
@@ -378,11 +379,14 @@ async def test_date_night_success(client: AsyncClient):
         from app.models.recommend import FilmRecommendation
         return [FilmRecommendation(title="Past Lives", year="2023", reason="Matched because you both lean toward Romance", poster_path="/past.jpg")]
 
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
     with (
         patch("app.routes.recommend.task_manager.is_worker_online", return_value=True),
         patch("app.routes.recommend.task_manager.create_date_night_job", return_value="test-id"),
-        patch("app.routes.recommend.task_manager.get_task_state", return_value=_done_task(scraped_data)),
-        patch("app.routes.recommend.asyncio.sleep"),
+        patch("app.routes.recommend._await_worker_job", return_value=("done", scraped_data)),
+        patch("app.routes.recommend.asyncio.to_thread", side_effect=fake_to_thread),
         patch("app.routes.recommend.enrich_films", side_effect=fake_enrich),
         patch("app.routes.recommend.discover_date_night_recommendations", side_effect=fake_discover),
     ):
