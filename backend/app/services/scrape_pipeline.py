@@ -137,6 +137,11 @@ async def scrape_and_analyze(
                     "Watched Date": "",
                     "Likes": r.get("like_count") if r.get("like_count") is not None else "",
                     "Slug": r.get("slug", ""),
+                    "ReviewUrl": r.get("review_url") or "",
+                    "LikesUrl": r.get("likes_url") or "",
+                    "WordCount": r.get("word_count", 0),
+                    "TextLength": r.get("text_length", 0),
+                    "HasLikesPage": bool(r.get("has_likes_page")),
                 }
                 for r in sources.reviews
             ]

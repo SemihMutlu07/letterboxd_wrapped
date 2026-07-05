@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { CalendarDays, Clapperboard, Clock3, Gauge, HeartHandshake, Share2, Star, UserRound, UsersRound } from 'lucide-react';
 import ShareModal from '@/components/ShareModal';
 import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
@@ -27,7 +28,6 @@ import { useRafThrottle } from '@/hooks/useRafThrottle';
 import { useLazyMount } from '@/hooks/useIntersectionObserver';
 
 // Import all the section components
-import HeroStats from '@/containers/results/HeroStats';
 import { FilmHistory, RatingsBar } from '@/containers/results/FilmAndRatings';
 import QuickFacts from '@/containers/results/QuickFacts';
 import RewatchChampions from '@/containers/results/RewatchChampions';
@@ -673,104 +673,35 @@ function ResultsContent({
 
   return (
     <>
-      <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
-        {/* Header */}
-        <header className="text-center py-4 md:py-10">
-          <h1
-            className="text-[clamp(32px,6vw,72px)] font-black mb-4 leading-[0.95] tracking-tighter"
-            style={{
-              fontFamily: 'var(--theme-font-display)',
-              color:
-                theme === 'current' ? '#fff'
-                : theme === 'vhs' ? '#f0e6d8'
-                : theme === 'apple' ? '#1D1D1F'
-                : '#e8e0d8',
-            }}
-          >
-            Your{' '}
-            <span
-              className="bg-clip-text text-transparent"
-              style={{
-                backgroundImage: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']}${theme === 'current' ? ', #d946ef' : ''})`,
-              }}
-            >
-              Letterboxd
-            </span>{' '}
-            Wrapped
-          </h1>
-          <p
-            className="text-xl mb-2"
-            style={{
-              color:
-                theme === 'current' ? '#d1d5db'
-                : theme === 'vhs' ? '#d4955a'
-                : theme === 'apple' ? '#6E6E73'
-                : '#8a8a8a',
-            }}
-          >
-            A comprehensive analysis of your cinematic journey.
-          </p>
-          <p
-            className="text-center text-lg"
-            style={{
-              color:
-                theme === 'current' ? '#9ca3af'
-                : theme === 'vhs' ? '#d4955a'
-                : theme === 'apple' ? '#86868B'
-                : '#6a6a6a',
-            }}
-          >
-            {dateRangeText}
-          </p>
-          {username && (
-            <div className="mt-3">
-              <span
-                className="inline-block px-3 py-1 text-sm rounded-full"
-                style={{
-                  background:
-                    theme === 'current' ? 'rgba(51,65,85,0.6)'
-                    : theme === 'apple' ? '#F2F2F7'
-                    : 'rgba(0,0,0,0.06)',
-                  border: `1px solid ${
-                    theme === 'current' ? 'rgba(51,65,85,0.6)'
-                    : theme === 'apple' ? 'rgba(0,0,0,0.08)'
-                    : 'rgba(0,0,0,0.1)'
-                  }`,
-                  color:
-                    theme === 'current' ? '#cbd5e1'
-                    : theme === 'vhs' ? '#d4955a'
-                    : theme === 'apple' ? '#1D1D1F'
-                    : '#8a8a8a',
-                }}
-              >
-                @{username}
-              </span>
-            </div>
-          )}
+      <main className="relative z-10 mx-auto max-w-7xl space-y-4 px-3 py-3 text-[#fff7ed] md:space-y-6 md:px-8 md:py-6">
+        <DossierHero
+          theme={theme}
+          accent={config.cssVars['--theme-accent']}
+          accent2={config.cssVars['--theme-accent-2']}
+          username={username}
+          dateRangeText={dateRangeText}
+          totalFilms={stats.total_films}
+          avgRating={stats.average_rating}
+          runtimeHours={runtimeHours}
+          topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
+          timePct={timePct}
+          favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
+          favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
+          cineScore={cineScore}
+          onClickFilms={handleFilmsClick}
+          onClickAvgRating={handleAvgRatingClick}
+          onClickGenre={handleGenreClick}
+          onClickDirector={handleDirectorClick}
+          onClickDecade={handleDecadeClick}
+          onShare={() => {
+            setShowShareModal(true);
+            trackEvent('share_export_started');
+          }}
+        />
 
-          {/* Theme Switcher */}
-          <div className="mt-6">
-            <ThemeSwitcher />
-          </div>
-        </header>
-
-        {/* Hero Stats */}
-        <SectionContainer theme={theme}>
-          <HeroStats
-            totalFilms={stats.total_films}
-            avgRating={stats.average_rating}
-            hoursWatched={runtimeHours}
-            topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
-            timePct={timePct}
-            favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
-            favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
-            onClickFilms={handleFilmsClick}
-            onClickAvgRating={handleAvgRatingClick}
-            onClickGenre={handleGenreClick}
-            onClickDirector={handleDirectorClick}
-            onClickDecade={handleDecadeClick}
-          />
-        </SectionContainer>
+        <div className="flex justify-center rounded-full border border-[#f5d7a8]/[0.08] bg-black/20 px-3 py-2 backdrop-blur-sm">
+          <ThemeSwitcher />
+        </div>
 
         {/* 1. Directors & Cast */}
         <div className="grid grid-cols-1 gap-6">
@@ -779,18 +710,37 @@ function ResultsContent({
         </div>
 
         {/* Share teaser — visible after directors/cast while users are engaged */}
-        <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-          <div>
-            <p className="text-sm font-semibold text-white">Ready to share your year?</p>
-            <p className="text-xs text-slate-500 mt-0.5">Turn your stats into a shareable card.</p>
+        <div className="relative overflow-hidden rounded-[22px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 px-5 py-4 shadow-2xl shadow-black/20">
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-10 border-r border-[#f5d7a8]/[0.08] bg-black/20">
+            <div className="grid h-full grid-rows-5 gap-2 px-2 py-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="rounded-[2px] border border-[#f5d7a8]/[0.12] bg-[#f5d7a8]/[0.06]" />
+              ))}
+            </div>
           </div>
+          <div className="relative z-10 ml-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#d8b56d]">Export the dossier</p>
+            <p className="mt-1 text-sm text-[#b6a99a]">Turn your stats into a shareable card, then keep exploring with a friend.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
           <button
             onClick={() => { setShowShareModal(true); trackEvent('share_export_started'); }}
-            className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:scale-105"
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-extrabold uppercase tracking-[0.12em] transition-all hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
             style={{ background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`, color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614' }}
           >
-            Share your Wrapped →
+            <Share2 className="h-4 w-4" />
+            Share
           </button>
+          <Link
+            href="/watchlist-compare"
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#f5d7a8]/[0.14] bg-black/20 px-4 py-2 text-sm font-bold text-[#fff7ed] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+          >
+            <UsersRound className="h-4 w-4 text-[#64b4bf]" />
+            Compare
+          </Link>
+          </div>
+          </div>
         </div>
 
         {/* 3. Rating Outliers */}
@@ -847,30 +797,41 @@ function ResultsContent({
         </SectionContainer>
 
         {/* Share button */}
-        <div className="flex flex-col items-center my-8 gap-3">
+        <div className="my-8 flex flex-col items-center gap-3 rounded-[24px] border border-[#f5d7a8]/[0.1] bg-[#120f0d]/75 px-5 py-6 text-center">
           <button
             onClick={() => {
               setShowShareModal(true);
               trackEvent('share_export_started');
             }}
-            className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
+            className="flex items-center gap-2 rounded-full px-8 py-4 text-base font-extrabold uppercase tracking-[0.14em] shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl"
             style={{
               background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`,
               color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614',
             }}
           >
-            <div
-              className="w-6 h-6 rounded"
-              style={{
-                background: theme === 'current' ? '#fff' : 'var(--theme-bg)',
-              }}
-            />
+            <Share2 className="h-5 w-5" />
             Share Your Wrapped
           </button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link
+              href="/watchlist-compare"
+              className="inline-flex items-center gap-2 rounded-full border border-[#f5d7a8]/[0.12] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#b6a99a] transition-colors hover:text-[#fff7ed]"
+            >
+              <UsersRound className="h-4 w-4 text-[#64b4bf]" />
+              Watchlist compare
+            </Link>
+            <Link
+              href="/date-night"
+              className="inline-flex items-center gap-2 rounded-full border border-[#f5d7a8]/[0.12] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#b6a99a] transition-colors hover:text-[#fff7ed]"
+            >
+              <HeartHandshake className="h-4 w-4 text-[#7bbf86]" />
+              Date night
+            </Link>
+          </div>
           <p
-            className="text-xs text-center"
+            className="max-w-xl text-center text-xs"
             style={{
-              color: theme === 'current' ? '#64748b' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
+              color: theme === 'current' ? '#9b8d7d' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
             }}
           >
             Your raw files are never stored. Only anonymous, aggregated usage stats are kept to improve the product.
@@ -878,16 +839,16 @@ function ResultsContent({
         </div>
 
         {/* Beta credits + contact */}
-        <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
-          <p className="text-xs text-slate-600">
+        <div className="mt-12 space-y-3 border-t border-[#f5d7a8]/[0.08] pt-8 text-center">
+          <p className="text-xs text-[#8d7f70]">
             Thanks to our beta testers — Mete, Mehlika Ceylin Aydoğan, Salih Emre Padır,
             Mert Efe Şentürk, Deniz and Ayberk — for the invaluable feedback.
           </p>
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-[#8d7f70]">
             Questions or feedback?{' '}
             <a
               href="mailto:semihmutlu220@gmail.com"
-              className="underline underline-offset-2 hover:text-slate-400 transition-colors"
+              className="underline underline-offset-2 transition-colors hover:text-[#fff7ed]"
             >
               Get in touch
             </a>
@@ -919,6 +880,228 @@ function ResultsContent({
         films={modalFilms}
       />
     </>
+  );
+}
+
+function DossierHero({
+  theme,
+  accent,
+  accent2,
+  username,
+  dateRangeText,
+  totalFilms,
+  avgRating,
+  runtimeHours,
+  topGenre,
+  timePct,
+  favoriteDirector,
+  favoriteDecade,
+  cineScore,
+  onClickFilms,
+  onClickAvgRating,
+  onClickGenre,
+  onClickDirector,
+  onClickDecade,
+  onShare,
+}: {
+  theme: string;
+  accent: string;
+  accent2: string;
+  username?: string | null;
+  dateRangeText: string;
+  totalFilms: number;
+  avgRating?: number | null;
+  runtimeHours: number;
+  topGenre: string;
+  timePct: string;
+  favoriteDirector: { name: string; count: number };
+  favoriteDecade: { name: string; count: number };
+  cineScore: number;
+  onClickFilms?: () => void;
+  onClickAvgRating?: () => void;
+  onClickGenre?: () => void;
+  onClickDirector?: () => void;
+  onClickDecade?: () => void;
+  onShare: () => void;
+}) {
+  const heroAccent = theme === 'current' ? '#ff7a1a' : accent;
+  const heroAccent2 = theme === 'current' ? '#64b4bf' : accent2;
+  const textColor = theme === 'apple' ? '#1D1D1F' : '#fff7ed';
+  const mutedColor = theme === 'apple' ? '#5f5f66' : '#b6a99a';
+  const panelBg = theme === 'apple' ? 'rgba(255,255,255,0.86)' : 'rgba(28,23,19,0.76)';
+  const borderColor = theme === 'apple' ? 'rgba(38,38,38,0.12)' : 'rgba(255,247,237,0.12)';
+  const hoursLabel = `${Math.round(Math.max(0, runtimeHours)).toLocaleString()}h`;
+  const avgRatingLabel = typeof avgRating === 'number' && Number.isFinite(avgRating)
+    ? `${avgRating.toFixed(1)}★`
+    : 'N/A';
+
+  const heroStats = [
+    {
+      label: 'Films',
+      value: totalFilms.toLocaleString(),
+      detail: 'watched archive',
+      icon: Clapperboard,
+      onClick: onClickFilms,
+    },
+    {
+      label: 'Avg rating',
+      value: avgRatingLabel,
+      detail: 'personal signal',
+      icon: Star,
+      onClick: onClickAvgRating,
+    },
+    {
+      label: 'Screen time',
+      value: hoursLabel,
+      detail: `${timePct} of waking time`,
+      icon: Clock3,
+    },
+    {
+      label: 'Top genre',
+      value: topGenre,
+      detail: 'dominant shelf',
+      icon: Gauge,
+      onClick: onClickGenre,
+    },
+  ];
+
+  return (
+    <section className="relative isolate overflow-hidden rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f] px-3 py-3 shadow-2xl shadow-black/30 md:rounded-[34px] md:px-6 md:py-6">
+      <div
+        className="absolute inset-0 -z-20"
+        style={{
+          background:
+            theme === 'apple'
+              ? 'linear-gradient(135deg, #f6f1e8 0%, #faf8f2 46%, #e8edf0 100%)'
+              : 'radial-gradient(circle at 18% 12%, rgba(218, 79, 43, 0.28), transparent 30%), radial-gradient(circle at 82% 22%, rgba(62, 147, 166, 0.18), transparent 28%), linear-gradient(135deg, #18110e 0%, #241712 48%, #0c0c0b 100%)',
+        }}
+      />
+      <div className="absolute inset-0 -z-10 opacity-[0.18] [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:42px_42px]" />
+      <div className="absolute inset-y-0 left-0 hidden w-12 border-r border-white/[0.08] bg-black/20 md:block">
+        <div className="grid h-full grid-rows-12 gap-3 px-3 py-4">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="rounded-[2px] border border-orange-100/15 bg-orange-50/10" />
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:ml-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:gap-6">
+        <div className="rounded-[20px] border p-4 md:rounded-[22px] md:p-7" style={{ background: panelBg, borderColor }}>
+          <div className="mb-6 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] md:text-xs md:tracking-[0.22em]" style={{ color: mutedColor }}>
+            <span className="inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor }}>
+              <CalendarDays className="h-3.5 w-3.5" />
+              {dateRangeText}
+            </span>
+            {username && (
+              <span className="inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5 normal-case tracking-normal" style={{ borderColor, color: textColor }}>
+                <UserRound className="h-3.5 w-3.5" />
+                @{username}
+              </span>
+            )}
+          </div>
+
+          <div className="max-w-3xl">
+            <p className="mb-3 text-xs font-black uppercase tracking-[0.28em] md:tracking-[0.34em]" style={{ color: heroAccent }}>
+              Personal cinema dossier
+            </p>
+            <h1 className="text-[clamp(42px,8vw,104px)] font-black leading-[0.86] tracking-normal" style={{ fontFamily: 'var(--theme-font-display)', color: textColor }}>
+              Letterboxd
+              <span className="block" style={{ color: heroAccent }}>
+                Wrapped
+              </span>
+            </h1>
+            <p className="mt-5 max-w-2xl text-sm leading-6 md:text-base" style={{ color: mutedColor }}>
+              Your year in film, cut as an editorial dossier: pace, taste, obsessions, outliers, and the people who kept showing up in the credits.
+            </p>
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-end gap-3">
+            <button
+              type="button"
+              onClick={onShare}
+              className="inline-flex min-h-12 items-center gap-2 rounded-full px-5 py-3 text-sm font-extrabold uppercase tracking-[0.14em] transition-transform hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400 active:scale-[0.98]"
+              style={{ background: `linear-gradient(135deg, ${heroAccent}, ${heroAccent2})`, color: theme === 'apple' ? '#fff' : '#1b120e' }}
+            >
+              <Share2 className="h-4 w-4" />
+              Share
+            </button>
+            <Link
+              href="/watchlist-compare"
+              className="inline-flex min-h-12 items-center gap-2 rounded-full border px-5 py-3 text-sm font-bold text-left transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+              style={{ borderColor, color: textColor }}
+            >
+              <UsersRound className="h-4 w-4" style={{ color: heroAccent2 }} />
+              Compare lists
+            </Link>
+            <button
+              type="button"
+              onClick={onClickDecade}
+              className="min-h-12 rounded-full border px-5 py-3 text-left text-sm font-bold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+              style={{ borderColor, color: textColor }}
+            >
+              <span className="block text-[10px] uppercase tracking-[0.2em]" style={{ color: mutedColor }}>Peak decade</span>
+              {favoriteDecade.name} · {favoriteDecade.count.toLocaleString()} films
+            </button>
+            <button
+              type="button"
+              onClick={onClickDirector}
+              className="min-h-12 rounded-full border px-5 py-3 text-left text-sm font-bold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+              style={{ borderColor, color: textColor }}
+            >
+              <span className="block text-[10px] uppercase tracking-[0.2em]" style={{ color: mutedColor }}>Director pull</span>
+              {favoriteDirector.name}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[20px] border p-4 sm:col-span-2 md:rounded-[22px] md:p-5" style={{ background: panelBg, borderColor }}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.28em]" style={{ color: mutedColor }}>Cinema scale</p>
+                <p className="mt-1 text-sm" style={{ color: mutedColor }}>Breadth of taste across countries, eras, languages, genres, and directors.</p>
+              </div>
+              <div className="text-left sm:text-right">
+                <div className="text-[clamp(44px,6vw,76px)] font-black leading-none tabular-nums" style={{ color: textColor }}>
+                  {cineScore}
+                </div>
+                <div className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: heroAccent }}>out of 100</div>
+              </div>
+            </div>
+            <div className="mt-5 h-3 overflow-hidden rounded-full bg-black/25">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${Math.max(0, Math.min(100, cineScore))}%`, background: `linear-gradient(90deg, ${heroAccent}, #d8b56d, ${heroAccent2})` }}
+              />
+            </div>
+          </div>
+
+          {heroStats.map(({ label, value, detail, icon: Icon, onClick }) => {
+            const className = "group min-h-[148px] rounded-[20px] border p-4 text-left transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400";
+            const style = { background: panelBg, borderColor, color: textColor };
+            const content = (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-black uppercase tracking-[0.22em]" style={{ color: mutedColor }}>{label}</span>
+                  <Icon className="h-4 w-4" style={{ color: heroAccent }} />
+                </div>
+                <div className="mt-5 text-[clamp(28px,4vw,46px)] font-black leading-none tabular-nums break-words">{value}</div>
+                <div className="mt-3 text-xs font-bold uppercase tracking-[0.16em]" style={{ color: mutedColor }}>{detail}</div>
+              </>
+            );
+            return onClick ? (
+              <button key={label} type="button" onClick={onClick} className={className} style={style}>
+                {content}
+              </button>
+            ) : (
+              <div key={label} className={className} style={style}>
+                {content}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
 

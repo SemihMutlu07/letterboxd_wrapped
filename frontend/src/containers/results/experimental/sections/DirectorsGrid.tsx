@@ -195,10 +195,15 @@ export function SectionShell({
     ? ratedTabTooltip
     : ratedTabHint;
   return (
-    <div className="bg-[#1a1a1a]/80 border border-white/8 rounded-2xl p-5 md:p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="text-base font-bold text-white">{title}</h3>
-        <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
+    <div className="relative overflow-hidden rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 p-5 shadow-2xl shadow-black/20 md:p-6">
+      <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(90deg,rgba(245,215,168,.05)_1px,transparent_1px)] [background-size:34px_34px]" />
+      <div className="relative z-10 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f5d7a8]/[0.08] pb-4">
+        <div>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-[0.28em] text-[#d8b56d]">Credits index</p>
+          <h3 className="text-xl font-black tracking-normal text-[#fff7ed]">{title}</h3>
+        </div>
+        <div className="flex items-center gap-1 rounded-full border border-[#f5d7a8]/[0.12] bg-black/25 p-0.5">
           <button
             className={toggleClass(mode === 'most_watched')}
             onClick={() => onToggle('most_watched')}
@@ -217,6 +222,7 @@ export function SectionShell({
         </div>
       </div>
       {children}
+      </div>
     </div>
   );
 }
@@ -256,7 +262,7 @@ export function PersonCard({
 
   return (
     <div
-      className={`relative flex flex-col items-center gap-2 group text-center ${interactive ? 'cursor-pointer' : ''}`}
+      className={`group relative flex min-h-[204px] flex-col items-center gap-2 rounded-2xl border border-[#f5d7a8]/[0.08] bg-black/15 p-3 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#f5d7a8]/[0.2] hover:bg-[#241712]/60 ${interactive ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400' : ''}`}
       {...(interactive
         ? {
             role: 'button',
@@ -274,7 +280,7 @@ export function PersonCard({
     >
       {/* Avatar */}
       <div
-        className="relative w-28 h-28 md:w-32 md:h-32 rounded-2xl overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
+        className="relative h-28 w-28 overflow-hidden rounded-xl ring-2 ring-[#f5d7a8]/10 transition-all duration-200 group-hover:ring-[#ff8a3d]/40 md:h-32 md:w-32"
       >
         {showImage && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -306,10 +312,10 @@ export function PersonCard({
       </div>
       {/* Name + stat */}
       <div className="space-y-0.5">
-        <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2">{name}</p>
-        <p className="text-sm md:text-base text-slate-200">{primaryStat}</p>
+        <p className="line-clamp-2 text-sm font-bold leading-tight text-[#fff7ed] md:text-base">{name}</p>
+        <p className="text-sm text-[#d8b56d] md:text-base">{primaryStat}</p>
         {secondaryStat && (
-          <p className="text-xs md:text-sm text-slate-300">{secondaryStat}</p>
+          <p className="text-xs text-[#b6a99a] md:text-sm">{secondaryStat}</p>
         )}
       </div>
     </div>

@@ -191,6 +191,18 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         rename_map["Likes"] = "like_count"
     if "Slug" in df.columns:
         rename_map["Slug"] = "slug"
+    if "ReviewUrl" in df.columns:
+        rename_map["ReviewUrl"] = "review_url"
+    if "LikesUrl" in df.columns:
+        rename_map["LikesUrl"] = "likes_url"
+    # Namespaced to avoid colliding with the token-count "word_count"/"char_length"
+    # columns computed later in this function from the review text itself.
+    if "WordCount" in df.columns:
+        rename_map["WordCount"] = "scraped_word_count"
+    if "TextLength" in df.columns:
+        rename_map["TextLength"] = "scraped_text_length"
+    if "HasLikesPage" in df.columns:
+        rename_map["HasLikesPage"] = "has_likes_page"
 
     df = df.rename(columns=rename_map)
 
@@ -210,12 +222,26 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
 
     reviews_list = []
     for _, row in with_text.iterrows():
+        text = str(row.get("review") or "")
         reviews_list.append({
             "title": str(row.get("title") or ""),
             "year": str(row.get("year") or ""),
-            "text": str(row.get("review") or ""),
+            "text": text,
             "likes": int(row.get("like_count")) if pd.notna(row.get("like_count")) else 0,
             "rating": float(row.get("rating")) if pd.notna(row.get("rating")) else None,
+            "slug": str(row.get("slug")) if pd.notna(row.get("slug")) and row.get("slug") else None,
+            "date": str(row.get("date")) if pd.notna(row.get("date")) and row.get("date") else None,
+            "review_url": str(row.get("review_url")) if pd.notna(row.get("review_url")) and row.get("review_url") else None,
+            "likes_url": str(row.get("likes_url")) if pd.notna(row.get("likes_url")) and row.get("likes_url") else None,
+            "word_count": (
+                int(row.get("scraped_word_count")) if pd.notna(row.get("scraped_word_count"))
+                else len(text.split())
+            ),
+            "text_length": (
+                int(row.get("scraped_text_length")) if pd.notna(row.get("scraped_text_length"))
+                else len(text)
+            ),
+            "has_likes_page": bool(row.get("has_likes_page")) if pd.notna(row.get("has_likes_page")) else False,
         })
 
     if reviews_with_text == 0:
@@ -379,6 +405,7 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
                     "title": str(row.get("title", "")),
                     "year": str(row.get("year", "")),
                     "slug": str(row.get("slug", "")),
+                    "review_url": str(row.get("review_url")) if pd.notna(row.get("review_url")) and row.get("review_url") else None,
                     "like_count": int(row["_likes"]),
                     "rating": (float(row["rating"]) if "rating" in row and pd.notna(row.get("rating")) else None),
                     "review_date": (

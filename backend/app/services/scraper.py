@@ -73,6 +73,7 @@ HEADERS = {
 }
 PAGE_DELAY = float(os.getenv("LETTERBOXD_PAGE_DELAY", "0.25"))
 MAX_PAGES = 60    # safety cap (~3000 films)
+LIKES_FALLBACK_MAX = int(os.getenv("LETTERBOXD_LIKES_FALLBACK_MAX", "25"))
 
 
 def _is_cloudflare_block(body: str) -> bool:
@@ -507,15 +508,17 @@ def _rating_from_svg_label(label: str) -> Optional[float]:
     return full + half
 
 
-def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
+def _parse_review_cards(soup: BeautifulSoup, username: str = "") -> list[dict]:
     """Parse Letterboxd review list HTML into review dicts.
 
     Targets the per-review <article class="production-viewing"> cards used on
     /{username}/reviews/films/page/N/. Like counts come from the
-    LikeComponent's data-count attribute on the same card.
+    LikeComponent's data-count attribute on the same card (best-effort — see
+    `_sync_fetch_like_count` for the /likes/ page fallback when absent).
 
     Returns dicts shaped like:
-        {title, year, slug, rating, review_text, date, like_count}
+        {title, year, slug, rating, review_text, date, like_count,
+         review_url, likes_url, word_count, text_length, has_likes_page}
     """
     reviews: list[dict] = []
     for article in soup.select("article.production-viewing"):
@@ -528,11 +531,16 @@ def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
         # Title from the primaryname heading
         headline = article.select_one("h2.primaryname a") or article.select_one("h2 a")
         title = headline.get_text(strip=True) if headline else ""
-        if not slug and headline:
-            href = str(headline.get("href") or "")
+        href = str(headline.get("href") or "") if headline else ""
+        if not slug and href:
             m = re.search(r"/film/([^/]+)/?", href)
             if m:
                 slug = m.group(1)
+
+        # The headline href (e.g. "/{username}/film/{slug}/") is itself the
+        # user's review permalink on Letterboxd — no separate review URL exists.
+        review_url = f"{BASE_URL}{href}" if href else None
+        likes_url = f"{BASE_URL}/{username}/film/{slug}/likes/" if (username and slug) else None
 
         # Year — comes from <span class="releasedate">
         year_el = article.select_one("span.releasedate")
@@ -578,8 +586,32 @@ def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
                 "review_text": review_text,
                 "date": date,
                 "like_count": like_count,
+                "review_url": review_url,
+                "likes_url": likes_url,
+                "word_count": len(review_text.split()) if review_text else 0,
+                "text_length": len(review_text),
+                "has_likes_page": bool(slug),
             })
     return reviews
+
+
+def _sync_fetch_like_count(session: "cloudscraper.CloudScraper", username: str, slug: str) -> int:
+    """Fetch the liker count from a review's /likes/ page. Best-effort fallback
+
+    for when the inline LikeComponent data-count is absent. Any failure (404,
+    network error, unparseable page) must resolve to 0 likes, never raise —
+    a missing likes page means "nobody has liked this yet", not an error.
+    """
+    url = f"{BASE_URL}/{username}/film/{slug}/likes/"
+    try:
+        r = _fetch(session, url, timeout=10)
+        if r.status_code != 200:
+            return 0
+        soup = BeautifulSoup(r.text, "html.parser")
+        likers = soup.select("li.person-summary, ul.avatars li, li.griditem")
+        return len(likers)
+    except Exception:
+        return 0
 
 
 def _sync_scrape_reviews(
@@ -590,8 +622,9 @@ def _sync_scrape_reviews(
 ) -> list[dict]:
     """Single-pass scraper for /{username}/reviews/films/page/N/.
 
-    Walks pages until an empty/404 response. Never hits per-review like pages;
-    like counts come from data-count on each card (best-effort).
+    Walks pages until an empty/404 response. Like counts come from data-count
+    on each card first; reviews still missing a count get a best-effort
+    /likes/ page fetch afterward, capped at LIKES_FALLBACK_MAX.
     """
     owns_session = session is None
     logger.info("Starting review scrape for %s (max_pages=%d)", username, max_pages)
@@ -615,7 +648,7 @@ def _sync_scrape_reviews(
                 break
 
             soup = BeautifulSoup(r.text, "html.parser")
-            reviews = _parse_review_cards(soup)
+            reviews = _parse_review_cards(soup, username=username)
             _trace(
                 trace_callback,
                 "reviews_page",
@@ -626,6 +659,16 @@ def _sync_scrape_reviews(
                 break
             all_reviews.extend(reviews)
             time.sleep(PAGE_DELAY)
+
+        fallback_count = 0
+        for review in all_reviews:
+            if review["like_count"] is not None or not review.get("slug"):
+                continue
+            if fallback_count >= LIKES_FALLBACK_MAX:
+                break
+            time.sleep(PAGE_DELAY)
+            review["like_count"] = _sync_fetch_like_count(s, username, review["slug"])
+            fallback_count += 1
     finally:
         if owns_session:
             s.close()

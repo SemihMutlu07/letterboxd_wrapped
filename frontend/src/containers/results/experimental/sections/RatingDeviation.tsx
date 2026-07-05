@@ -139,16 +139,19 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
         }}
         userAvg={userAvg}
       />
-      <div className="bg-[#1a1a1a]/80 border border-white/8 rounded-2xl p-5 md:p-6 space-y-5">
+      <div className="relative overflow-hidden rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 p-5 shadow-2xl shadow-black/20 md:p-6">
+        <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(90deg,rgba(245,215,168,.05)_1px,transparent_1px)] [background-size:34px_34px]" />
+        <div className="relative z-10 space-y-5">
         {/* Header */}
-        <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#f5d7a8]/[0.08] pb-4">
           <div>
-            <h3 className="text-base font-bold text-white">Your Rating Outliers</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.28em] text-[#d8b56d]">Contact sheet</p>
+            <h3 className="text-xl font-black tracking-normal text-[#fff7ed]">Your Rating Outliers</h3>
+            <p className="mt-0.5 text-xs text-[#b6a99a]">
               Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
             </p>
           </div>
-          <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
+          <div className="flex items-center gap-1 rounded-full border border-[#f5d7a8]/[0.12] bg-black/25 p-0.5">
             <SubtabButton active={tab === 'higher'} color="green" onClick={() => handleTabChange('higher')}>
               Rated Higher
             </SubtabButton>
@@ -160,7 +163,7 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
 
         {/* Empty state */}
         {shown.length === 0 && (
-          <p className="text-sm text-slate-500 italic text-center py-8">
+          <p className="text-sm text-[#8d7f70] italic text-center py-8">
             {tab === 'higher'
               ? 'No films rated above your average.'
               : 'No films rated below your average.'}
@@ -192,12 +195,13 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
                 setVisible((v) => v + PAGE_SIZE);
                 trackShowMore('rating_deviation');
               }}
-              className="text-xs font-semibold px-4 py-2 rounded-full border border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
+              className="rounded-full border border-[#f5d7a8]/[0.14] px-4 py-2 text-xs font-semibold text-[#b6a99a] transition-colors hover:border-[#ff8a3d]/50 hover:text-[#fff7ed]"
             >
               Show {Math.min(list.length - visible, PAGE_SIZE)} more
             </button>
           </div>
         )}
+        </div>
       </div>
     </>
   );

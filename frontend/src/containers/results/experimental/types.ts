@@ -27,8 +27,13 @@ export interface StatsData {
   decades: { decade: string; count: number }[];
   rating_distribution: Record<string, number>;
   most_common_rating?: number;
+  rating_personality?: string;
   day_of_week_pattern?: { weekday: number; weekend: number };
   monthly_viewing_habits?: { month: string; count: number }[];
+  story_analytics?: {
+    viewing_season?: string;
+    most_active_day?: string;
+  };
   favorite_decade?: { name: string; count: number };
   sinefil_meter?: {
     score: number;
@@ -189,6 +194,7 @@ export interface StatsData {
       title: string;
       year: string;
       slug?: string;
+      review_url?: string | null;
       like_count: number;
       rating?: number | null;
       review_date?: string;
@@ -205,6 +211,13 @@ export interface StatsData {
       text?: string;
       likes?: number;
       rating?: number | null;
+      slug?: string | null;
+      date?: string | null;
+      review_url?: string | null;
+      likes_url?: string | null;
+      word_count?: number;
+      text_length?: number;
+      has_likes_page?: boolean;
     }[];
   };
 }

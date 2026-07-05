@@ -5,7 +5,15 @@ import Section from '@/components/results/Section';
 import type { StatsData } from '../types';
 
 type Props = { stats: StatsData };
-type ReviewSort = 'likes' | 'length';
+type ReviewSort = 'likes' | 'length' | 'recent' | 'gems';
+/** Minimum word count for a 0-like review to count as a "hidden gem". */
+const GEM_MIN_WORDS = 40;
+
+function reviewWordCount(review: { text?: string; word_count?: number }): number {
+  if (review.word_count != null) return review.word_count;
+  const text = review.text?.trim() ?? '';
+  return text ? text.split(/\s+/).length : 0;
+}
 
 const WORD_PALETTE = [
   'bg-orange-500/25 text-orange-200',
@@ -41,9 +49,21 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   const reviewsWithLikesData = ra.reviews_with_likes_data ?? null;
 
   const allReviews = (ra.reviews ?? []);
+  const hasDates = allReviews.some((r) => r.date);
+  const isGem = (r: (typeof allReviews)[number]) =>
+    (r.likes ?? 0) === 0 && reviewWordCount(r) >= GEM_MIN_WORDS;
   const sortedReviews = [...allReviews].sort((a, b) => {
     if (reviewSort === 'likes') {
       return (b.likes ?? 0) - (a.likes ?? 0);
+    }
+    if (reviewSort === 'recent') {
+      return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
+    }
+    if (reviewSort === 'gems') {
+      const aGem = isGem(a);
+      const bGem = isGem(b);
+      if (aGem !== bGem) return aGem ? -1 : 1;
+      return reviewWordCount(b) - reviewWordCount(a);
     }
     return (b.text?.length ?? 0) - (a.text?.length ?? 0);
   });
@@ -230,6 +250,14 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                 <ReviewSortButton active={reviewSort === 'length'} onClick={() => setReviewSort('length')}>
                   Longest
                 </ReviewSortButton>
+                <ReviewSortButton active={reviewSort === 'gems'} onClick={() => setReviewSort('gems')}>
+                  Hidden gems
+                </ReviewSortButton>
+                {hasDates && (
+                  <ReviewSortButton active={reviewSort === 'recent'} onClick={() => setReviewSort('recent')}>
+                    Recent
+                  </ReviewSortButton>
+                )}
               </div>
             </div>
             <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -303,7 +331,7 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
   const [expanded, setExpanded] = useState(false);
   const text = review.text ?? '';
   const likes = review.likes ?? 0;
-  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const wordCount = reviewWordCount(review);
   const isLong = text.length > 260;
 
   return (

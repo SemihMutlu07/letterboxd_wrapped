@@ -1,0 +1,66 @@
+{
+  "generated_at": "2026-07-05T10:21:45.514176Z",
+  "source": "supabase.analysis_runs local fixture export",
+  "users": {
+    "semihmutsuz": {
+      "found": true,
+      "file": "semihmutsuz.json",
+      "id": "8dfcc32d-2815-435b-b466-9f24cb047648",
+      "username": "semihmutsuz",
+      "finished_at": "2026-07-04T12:10:55.647+00:00",
+      "total_films": 692,
+      "sinefil_meter": 68,
+      "cinematic_persona": "Emotional Masochist",
+      "average_rating": 3.44,
+      "total_countries": 56
+    },
+    "emirermis": {
+      "found": true,
+      "file": "emirermis.json",
+      "id": "546a02fc-2ddf-4531-96c6-cef2e50654ac",
+      "username": "emirermis",
+      "finished_at": "2026-07-05T09:59:07.598+00:00",
+      "total_films": 715,
+      "sinefil_meter": 67,
+      "cinematic_persona": "Emotional Masochist",
+      "average_rating": 3.73,
+      "total_countries": 48
+    },
+    "mertefesenturk": {
+      "found": true,
+      "file": "mertefesenturk.json",
+      "id": "6c27d4d2-5b37-4aa8-bd1a-8d6545a0db07",
+      "username": "mertefesenturk",
+      "finished_at": "2026-07-05T09:59:15.887+00:00",
+      "total_films": 823,
+      "sinefil_meter": 67,
+      "cinematic_persona": "Emotional Masochist",
+      "average_rating": 3.47,
+      "total_countries": 42
+    },
+    "baris_saydam": {
+      "found": true,
+      "file": "baris_saydam.json",
+      "id": "b373f57c-c8d2-4575-928c-f2d7ea7d372a",
+      "username": "baris_saydam",
+      "finished_at": "2026-07-02T10:53:55.362+00:00",
+      "total_films": 4321,
+      "sinefil_meter": 71,
+      "cinematic_persona": "Emotional Masochist",
+      "average_rating": 2.69,
+      "total_countries": 107
+    },
+    "isilaykolik": {
+      "found": true,
+      "file": "isilaykolik.json",
+      "id": "bd551b97-7ac1-418f-acf7-0eb5a6d487ff",
+      "username": "isilaykolik",
+      "finished_at": "2026-06-30T21:05:19.98+00:00",
+      "total_films": 951,
+      "sinefil_meter": 67,
+      "cinematic_persona": "Emotional Masochist",
+      "average_rating": 4.12,
+      "total_countries": 61
+    }
+  }
+}

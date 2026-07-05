@@ -9,8 +9,8 @@ const containerVariants = {
 };
 
 export const typography = {
-  sectionTitle: 'text-2xl md:text-[2.25rem] font-bold leading-tight',
-  caption: 'text-sm md:text-base opacity-80',
+  sectionTitle: 'text-xl md:text-[1.9rem] font-black leading-tight tracking-normal text-[#fff7ed]',
+  caption: 'text-sm md:text-base text-[#b6a99a]',
 };
 
 type SectionProps = {
@@ -31,9 +31,9 @@ export default function Section({
   className = '',
 }: SectionProps) {
   const variants = {
-    default: 'bg-slate-800/30 backdrop-blur-sm border border-slate-700/50',
-    highlight: 'bg-gradient-to-r from-orange-500/10 to-pink-500/10 border border-orange-500/30',
-    subtle: 'bg-slate-900/50',
+    default: 'relative overflow-hidden border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 shadow-2xl shadow-black/20 backdrop-blur-sm before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(90deg,rgba(245,215,168,0.05)_1px,transparent_1px),linear-gradient(rgba(245,215,168,0.035)_1px,transparent_1px)] before:bg-[size:42px_42px]',
+    highlight: 'relative overflow-hidden border border-[#ff8a3d]/30 bg-[linear-gradient(135deg,rgba(255,138,61,0.14),rgba(68,152,164,0.09))] shadow-2xl shadow-black/20',
+    subtle: 'relative overflow-hidden border border-[#f5d7a8]/[0.09] bg-[#120f0d]/80',
   } as const;
 
   return (
@@ -42,20 +42,24 @@ export default function Section({
       whileInView="visible"
       viewport={{ once: true, amount: 0.2 }}
       variants={containerVariants}
-      className={`${variants[variant]} rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-8 ${className}`}
+      className={`${variants[variant]} rounded-[20px] md:rounded-[28px] p-4 sm:p-5 md:p-8 ${className}`}
     >
-      {title && (
-        <div className="flex items-start gap-3 md:gap-4 mb-4 md:mb-6">
+      <div className="relative z-10">
+        {title && (
+          <div className="mb-4 flex items-start gap-3 border-b border-[#f5d7a8]/[0.08] pb-4 md:mb-6 md:gap-4">
           {icon && <div className="text-2xl md:text-3xl shrink-0">{icon}</div>}
           <div className="min-w-0">
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.28em] text-[#d8b56d]">
+              Dossier note
+            </p>
             <h2 className={typography.sectionTitle}>{title}</h2>
             {subtitle && <p className={`${typography.caption} mt-1`}>{subtitle}</p>}
           </div>
         </div>
-      )}
-      {children}
+        )}
+        {children}
+      </div>
     </motion.section>
   );
 }
-
 

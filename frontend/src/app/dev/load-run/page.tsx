@@ -10,6 +10,7 @@ import {
   type CachedRunPreview,
 } from '@/lib/supabase/analysis_runs';
 import { resultPath } from '@/lib/routes';
+import { getLocalFixtureByUsername, getLocalFixturePreviews } from '@/lib/experiment-fixtures';
 
 /**
  * Dev-only harness: load a cached analysis run from Supabase into
@@ -17,7 +18,6 @@ import { resultPath } from '@/lib/routes';
  * zero scraping. Experiment-branch tooling for persona/roast/story work.
  */
 export default function LoadRunPage() {
-  const [username, setUsername] = useState('semihmutsuz');
   const [status, setStatus] = useState<string | null>(null);
   const [run, setRun] = useState<CachedAnalysisRun | null>(null);
   const [accounts, setAccounts] = useState<CachedRunPreview[]>([]);
@@ -26,7 +26,18 @@ export default function LoadRunPage() {
     getRecentAnalysisRuns()
       .then(setAccounts)
       .catch((err: unknown) => {
-        setStatus(err instanceof Error ? err.message : 'Could not list cached accounts.');
+        getLocalFixturePreviews()
+          .then((fixtures) => {
+            setAccounts(fixtures);
+            setStatus(
+              err instanceof Error
+                ? `Supabase unavailable, showing local fixtures. ${err.message}`
+                : 'Supabase unavailable, showing local fixtures.',
+            );
+          })
+          .catch(() => {
+            setStatus(err instanceof Error ? err.message : 'Could not list cached accounts.');
+          });
       });
   }, []);
 
@@ -41,13 +52,13 @@ export default function LoadRunPage() {
     );
   }
 
-  const handleLoad = async (name?: string) => {
-    const clean = (name ?? username).trim().replace(/^@/, '').toLowerCase();
+  const handleLoad = async (name: string) => {
+    const clean = name.trim().replace(/^@/, '').toLowerCase();
     if (!clean) return;
     setStatus('Fetching latest cached run…');
     setRun(null);
     try {
-      const cached = await getLatestAnalysisRunByUsername(clean);
+      const cached = await getLatestAnalysisRunByUsername(clean) ?? await getLocalFixtureByUsername(clean);
       if (!cached) {
         setStatus(`No completed run found for @${clean}. Run a real analysis once, then reuse it here.`);
         return;
@@ -62,6 +73,17 @@ export default function LoadRunPage() {
       setStatus('Loaded into sessionStorage. Opening results…');
       window.location.href = resultPath(clean);
     } catch (err) {
+      const localFixture = await getLocalFixtureByUsername(clean);
+      if (localFixture) {
+        const details = getDetailsFromSummary(localFixture.summary);
+        if (details) {
+          sessionStorage.setItem('letterboxdStats', JSON.stringify(details));
+          setRun(localFixture);
+          setStatus('Loaded local fixture into sessionStorage. Opening results…');
+          window.location.href = resultPath(clean);
+          return;
+        }
+      }
       setStatus(err instanceof Error ? err.message : 'Unexpected error while loading the cached run.');
     }
   };
@@ -77,23 +99,6 @@ export default function LoadRunPage() {
           </p>
         </header>
 
-        <div className="flex gap-2">
-          <input
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') void handleLoad(); }}
-            placeholder="semihmutsuz"
-            className="w-full border border-stone-700 bg-[#171411] px-4 py-3 text-sm text-stone-100 focus:border-amber-400 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => void handleLoad()}
-            className="shrink-0 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 hover:bg-amber-200"
-          >
-            Load
-          </button>
-        </div>
-
         {accounts.length > 0 && (
           <section>
             <p className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">
@@ -104,7 +109,7 @@ export default function LoadRunPage() {
                 <button
                   key={acc.id}
                   type="button"
-                  onClick={() => { setUsername(acc.username); void handleLoad(acc.username); }}
+                  onClick={() => { void handleLoad(acc.username); }}
                   className="border border-stone-800 bg-[#171411] px-4 py-3 text-left transition-colors hover:border-amber-400/60"
                 >
                   <span className="flex items-baseline justify-between gap-3">

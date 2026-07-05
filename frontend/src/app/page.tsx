@@ -1,5 +1,5 @@
-import LetterboxdLanding from '@/components/LetterboxdLanding';
+import ExperimentAccountPicker from '@/components/ExperimentAccountPicker';
 
 export default function Home() {
-  return <LetterboxdLanding />;
+  return <ExperimentAccountPicker />;
 }

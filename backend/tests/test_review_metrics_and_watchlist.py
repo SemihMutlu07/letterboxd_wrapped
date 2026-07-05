@@ -66,6 +66,67 @@ def test_compute_review_metrics_works_without_likes_column():
     assert metrics["reviews_with_text"] == 1
 
 
+def test_compute_review_metrics_reviews_list_carries_new_fields():
+    df = pd.DataFrame([
+        {
+            "Date": "2024-01-01",
+            "Name": "Aftersun",
+            "Year": "2022",
+            "Rating": 4.0,
+            "Rewatch": "",
+            "Review": "Quiet, devastating.",
+            "Tags": "",
+            "Watched Date": "",
+            "Likes": 4,
+            "Slug": "aftersun",
+            "ReviewUrl": "https://letterboxd.com/u/film/aftersun/",
+            "LikesUrl": "https://letterboxd.com/u/film/aftersun/likes/",
+            "WordCount": 2,
+            "TextLength": 19,
+            "HasLikesPage": True,
+        }
+    ])
+
+    metrics = compute_review_metrics(df)
+
+    review = metrics["reviews"][0]
+    assert review["slug"] == "aftersun"
+    assert review["date"] == "2024-01-01"
+    assert review["review_url"] == "https://letterboxd.com/u/film/aftersun/"
+    assert review["likes_url"] == "https://letterboxd.com/u/film/aftersun/likes/"
+    assert review["word_count"] == 2
+    assert review["text_length"] == 19
+    assert review["has_likes_page"] is True
+
+
+def test_compute_review_metrics_reviews_list_falls_back_without_new_columns():
+    """Old CSVs (pre-enrichment) lack the new columns entirely — reviews_list
+    must still populate word_count/text_length by computing from the text,
+    and the rest of the new fields must be None/False rather than erroring."""
+    df = pd.DataFrame([
+        {
+            "Date": "2024-01-01",
+            "Name": "Just A Film",
+            "Year": "2024",
+            "Rating": 3.5,
+            "Rewatch": "",
+            "Review": "It exists.",
+            "Tags": "",
+            "Watched Date": "",
+        }
+    ])
+
+    metrics = compute_review_metrics(df)
+
+    review = metrics["reviews"][0]
+    assert review["slug"] is None
+    assert review["review_url"] is None
+    assert review["likes_url"] is None
+    assert review["has_likes_page"] is False
+    assert review["word_count"] == len("It exists.".split())
+    assert review["text_length"] == len("It exists.")
+
+
 def test_compare_watchlist_sets_caps_buckets_and_reports_truncation():
     first = [
         {"title": f"Film {i}", "year": "2000", "slug": f"film-{i}"} for i in range(120)

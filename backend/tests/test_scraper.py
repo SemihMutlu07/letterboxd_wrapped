@@ -161,6 +161,45 @@ def test_parse_review_cards_extracts_fields_and_likes():
     assert second["like_count"] is None  # no LikeComponent present
 
 
+def test_parse_review_cards_derives_permalink_and_normalized_fields():
+    html = """
+    <article class="production-viewing">
+      <div data-component-class="LazyPoster" data-item-slug="aftersun"></div>
+      <div class="body">
+        <header><div class="topline">
+          <h2 class="primaryname"><a href="/semihmutsuz/film/aftersun/">Aftersun</a></h2>
+          <span class="releasedate">2022</span>
+        </div></header>
+        <div class="js-review-body body-text"><p>Quiet, devastating stuff.</p></div>
+      </div>
+    </article>
+    <article class="production-viewing">
+      <div class="body">
+        <header><div class="topline">
+          <h2 class="primaryname"><a>No Link Here</a></h2>
+        </div></header>
+      </div>
+    </article>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    reviews = scraper._parse_review_cards(soup, username="semihmutsuz")
+
+    first = reviews[0]
+    assert first["review_url"] == "https://letterboxd.com/semihmutsuz/film/aftersun/"
+    assert first["likes_url"] == "https://letterboxd.com/semihmutsuz/film/aftersun/likes/"
+    assert first["has_likes_page"] is True
+    assert first["word_count"] == 3
+    assert first["text_length"] == len("Quiet, devastating stuff.")
+
+    # No headline link/slug at all → no permalink, no likes page.
+    second = reviews[1]
+    assert second["review_url"] is None
+    assert second["likes_url"] is None
+    assert second["has_likes_page"] is False
+    assert second["word_count"] == 0
+    assert second["text_length"] == 0
+
+
 def test_rating_from_svg_label_handles_halves():
     assert scraper._rating_from_svg_label("★★★½") == 3.5
     assert scraper._rating_from_svg_label("★★★★") == 4.0
@@ -201,6 +240,82 @@ def test_sync_scrape_reviews_walks_pages_and_stops_on_empty(monkeypatch):
     assert len(reviews) == 1
     assert reviews[0]["title"] == "X"
     assert reviews[0]["like_count"] == 3
+
+
+def test_sync_scrape_reviews_fetches_likes_fallback_when_count_missing(monkeypatch):
+    """A review with no inline LikeComponent should get a best-effort /likes/
+    page fetch, and a fallback fetch that 404s must resolve to 0 — never raise."""
+    page_html = """
+    <article class="production-viewing">
+      <div data-component-class="LazyPoster" data-item-slug="no-likes-component"></div>
+      <div class="body">
+        <header><div class="topline">
+          <h2 class="primaryname"><a href="/u/film/no-likes-component/">No Likes Component</a></h2>
+          <span class="releasedate">2024</span>
+        </div></header>
+        <div class="js-review-body body-text"><p>ok</p></div>
+      </div>
+    </article>
+    """
+    session = WatchlistSession([
+        FakeResponse(200, page_html),
+        FakeResponse(200, "<main></main>"),  # empty page → stop paging
+        FakeResponse(404, ""),  # likes fallback fetch → treated as 0
+    ])
+
+    monkeypatch.setattr(scraper, "_new_session", lambda: session)
+    monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+
+    reviews = scraper._sync_scrape_reviews("u", 5)
+
+    assert len(reviews) == 1
+    assert reviews[0]["like_count"] == 0
+    assert session.urls[-1] == "https://letterboxd.com/u/film/no-likes-component/likes/"
+
+
+def test_sync_fetch_like_count_never_raises_on_error(monkeypatch):
+    class BoomSession:
+        def get(self, url, timeout):
+            raise ConnectionError("network down")
+
+    assert scraper._sync_fetch_like_count(BoomSession(), "u", "some-slug") == 0
+
+
+def test_sync_scrape_reviews_caps_likes_fallback_fetches(monkeypatch):
+    """Only LIKES_FALLBACK_MAX reviews get a fallback fetch; the rest keep
+    like_count None (treated as 0 downstream) rather than hammering the site."""
+    def card(slug):
+        return f"""
+        <article class="production-viewing">
+          <div data-component-class="LazyPoster" data-item-slug="{slug}"></div>
+          <div class="body">
+            <header><div class="topline">
+              <h2 class="primaryname"><a href="/u/film/{slug}/">{slug}</a></h2>
+              <span class="releasedate">2024</span>
+            </div></header>
+            <div class="js-review-body body-text"><p>ok</p></div>
+          </div>
+        </article>
+        """
+
+    page_html = "".join(card(f"film-{i}") for i in range(3))
+    session = WatchlistSession([
+        FakeResponse(200, page_html),
+        FakeResponse(200, "<main></main>"),
+        FakeResponse(200, ""),  # only 1 fallback fetch allowed through the cap
+    ])
+
+    monkeypatch.setattr(scraper, "_new_session", lambda: session)
+    monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+    monkeypatch.setattr(scraper, "LIKES_FALLBACK_MAX", 1)
+
+    reviews = scraper._sync_scrape_reviews("u", 5)
+
+    assert len(reviews) == 3
+    fetched = [r for r in reviews if r["like_count"] is not None]
+    assert len(fetched) == 1  # cap respected — the rest stay None
 
 
 def test_sync_scrape_profile_sources_skips_reviews_by_default(monkeypatch):

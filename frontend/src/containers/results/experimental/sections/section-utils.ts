@@ -68,8 +68,8 @@ export const LB_GREEN = '#00c030';
 /** Toggle button styles — returns className strings for the two-button segmented control. */
 export function toggleClass(active: boolean): string {
   return active
-    ? 'px-3 py-1 rounded-full text-xs font-semibold bg-[#00c030]/20 text-[#00c030] border border-[#00c030]/30 transition-colors'
-    : 'px-3 py-1 rounded-full text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors';
+    ? 'px-3 py-1 rounded-full text-xs font-bold bg-[#ff8a3d]/20 text-[#ffd49a] border border-[#ff8a3d]/35 transition-colors'
+    : 'px-3 py-1 rounded-full text-xs font-semibold text-[#b6a99a] hover:text-[#fff7ed] transition-colors';
 }
 
 /** Letterboxd-style star rating display. */
