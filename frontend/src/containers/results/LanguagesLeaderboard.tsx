@@ -81,8 +81,8 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
                 paddingAngle={2}
                 stroke="rgba(15,23,42,0.9)"
                 strokeWidth={2}
-                onClick={(entry: Row) => handleLanguageClick(entry.language)}
-                onMouseEnter={(entry: Row) => setHoveredLanguage(entry.language)}
+                onClick={(entry) => handleLanguageClick((entry as unknown as Row).language)}
+                onMouseEnter={(entry) => setHoveredLanguage((entry as unknown as Row).language)}
                 onMouseLeave={() => setHoveredLanguage(null)}
               >
                 {sortedData.map((entry, i) => (
@@ -96,9 +96,10 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
               </Pie>
               <Tooltip
                 cursor={false}
-                content={({ active, payload }: { active?: boolean; payload?: Array<{ payload: Row }> }) => {
+                content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
-                  const row = payload[0].payload;
+                  const row = payload[0]?.payload as Row | undefined;
+                  if (!row) return null;
                   const name = LANGUAGE_LABEL[row.language] || row.language.toUpperCase();
                   const pct = total ? Math.round((row.count / total) * 100) : 0;
                   return (

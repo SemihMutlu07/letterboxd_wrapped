@@ -65,14 +65,15 @@ export function FilmHistory({
             />
             <Tooltip
               cursor={{ stroke: primary, strokeWidth: 2, strokeDasharray: '5 5', strokeOpacity: 0.7 }}
-              content={({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string | number }) =>
-                active && payload?.length ? (
+              content={({ active, payload, label }) => {
+                const count = Number(payload?.[0]?.value ?? 0);
+                return active && payload?.length ? (
                   <div className="bg-slate-900/95 backdrop-blur-sm p-2 md:p-3 rounded-lg border border-orange-500/40 text-white shadow-2xl">
                     <p className="font-bold text-sm md:text-lg mb-1">{String(label)}</p>
-                    <p className="text-orange-400 font-semibold text-xs md:text-sm">{`${payload[0].value} films`}</p>
+                    <p className="text-orange-400 font-semibold text-xs md:text-sm">{`${count} films`}</p>
                   </div>
-                ) : null
-              }
+                ) : null;
+              }}
             />
             <Line
               type="monotone"
