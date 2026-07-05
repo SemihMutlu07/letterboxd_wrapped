@@ -14,5 +14,5 @@ if (probe.state === 'letterboxd') {
 }
 
 console.error(`[dev] Port ${port} is already occupied by a non-Movies Wrapped service (${probe.detail}).`);
-console.error('[dev] Stop that process, or choose an explicit pair: BACKEND_PORT=8002 npm run dev');
+console.error('[dev] Stop that process, or choose an explicit pair: BACKEND_PORT=8002 bun run dev');
 process.exit(1);

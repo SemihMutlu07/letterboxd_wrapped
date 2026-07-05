@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { motion } from "framer-motion";
-import { Clapperboard, Film, Gauge, Loader2, Sparkles, Star, UsersRound } from "lucide-react";
+import { Clapperboard, Film, Gauge, Loader2, Search, Sparkles, Star, UsersRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import {
@@ -31,6 +32,7 @@ export default function ExperimentAccountPicker() {
   const [accounts, setAccounts] = useState<ExperimentAccount[]>([]);
   const [status, setStatus] = useState("Loading local fixtures...");
   const [loadingUser, setLoadingUser] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     getLocalFixturePreviews()
@@ -49,6 +51,28 @@ export default function ExperimentAccountPicker() {
     return loadingLines[idx];
   }, [loadingUser]);
 
+  const normalizedQuery = useMemo(
+    () => query.trim().replace(/^@/, "").replace(/^https?:\/\/letterboxd\.com\//i, "").split("/")[0].toLowerCase(),
+    [query],
+  );
+
+  const filteredAccounts = useMemo(() => {
+    if (!normalizedQuery) return accounts;
+    return accounts.filter((account) => {
+      const displayName = account.displayName.toLowerCase();
+      return account.username.includes(normalizedQuery) || displayName.includes(normalizedQuery);
+    });
+  }, [accounts, normalizedQuery]);
+
+  const primaryMatch = useMemo(() => {
+    if (!normalizedQuery) return null;
+    return (
+      accounts.find((account) => account.username === normalizedQuery) ??
+      filteredAccounts[0] ??
+      null
+    );
+  }, [accounts, filteredAccounts, normalizedQuery]);
+
   const handleOpen = async (username: string, mode: "dossier" | "story") => {
     setLoadingUser(username);
     setStatus(`Preparing @${username}...`);
@@ -59,6 +83,19 @@ export default function ExperimentAccountPicker() {
       setLoadingUser(null);
       setStatus(err instanceof Error ? err.message : "Could not open this fixture.");
     }
+  };
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!primaryMatch || loadingUser) {
+      setStatus(
+        normalizedQuery
+          ? `No bundled experiment fixture found for @${normalizedQuery}. Choose one of the cached accounts below.`
+          : "Type one of the bundled experiment accounts or choose a card below.",
+      );
+      return;
+    }
+    void handleOpen(primaryMatch.username, "dossier");
   };
 
   return (
@@ -85,14 +122,47 @@ export default function ExperimentAccountPicker() {
           </div>
 
           <div className="rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/80 p-5 shadow-2xl shadow-black/25">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-[#d8b56d]">No username input</p>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-[#d8b56d]">Known accounts only</p>
             <p className="mt-2 text-sm leading-6 text-[#d6c6b4]">
-              This branch does not scrape or call the desktop worker from the first screen. It only opens known cached accounts.
+              Type or choose a cached profile. This branch does not scrape or call the desktop worker from the first screen.
             </p>
+            <form onSubmit={handleSearchSubmit} className="mt-4">
+              <label htmlFor="experiment-account" className="sr-only">
+                Search bundled experiment account
+              </label>
+              <div className="flex items-center gap-2 rounded-full border border-[#f5d7a8]/[0.14] bg-black/20 px-3 py-2 focus-within:border-[#ff8a3d]/60">
+                <Search className="h-4 w-4 text-[#d8b56d]" />
+                <input
+                  id="experiment-account"
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="semihmutsuz"
+                  autoComplete="off"
+                  disabled={Boolean(loadingUser)}
+                  className="min-w-0 flex-1 bg-transparent text-sm font-bold text-[#fff7ed] placeholder:text-[#8d7f70] focus:outline-none disabled:cursor-wait"
+                />
+                <button
+                  type="submit"
+                  disabled={Boolean(loadingUser) || !primaryMatch}
+                  className="rounded-full bg-[#ff8a3d] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#0d111f] transition-opacity disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-200"
+                >
+                  Open
+                </button>
+              </div>
+            </form>
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#8d7f70]">
-              <span className="rounded-full border border-[#f5d7a8]/[0.12] px-3 py-1">fixture</span>
-              <span className="rounded-full border border-[#f5d7a8]/[0.12] px-3 py-1">story-ready</span>
-              <span className="rounded-full border border-[#f5d7a8]/[0.12] px-3 py-1">workerless</span>
+              {accounts.map((account) => (
+                <button
+                  key={account.username}
+                  type="button"
+                  onClick={() => setQuery(account.username)}
+                  disabled={Boolean(loadingUser)}
+                  className="rounded-full border border-[#f5d7a8]/[0.12] px-3 py-1 transition-colors hover:border-[#f5d7a8]/[0.28] hover:text-[#d8b56d] disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+                >
+                  @{account.username}
+                </button>
+              ))}
             </div>
           </div>
         </header>
@@ -117,7 +187,7 @@ export default function ExperimentAccountPicker() {
         )}
 
         <section className="grid flex-1 gap-4 py-6 md:grid-cols-2 xl:grid-cols-5">
-          {accounts.map((account, index) => (
+          {filteredAccounts.map((account, index) => (
             <motion.div
               key={account.username}
               initial={{ opacity: 0, y: 18 }}
@@ -186,6 +256,12 @@ export default function ExperimentAccountPicker() {
             </motion.div>
           ))}
         </section>
+
+        {accounts.length > 0 && filteredAccounts.length === 0 && (
+          <div className="rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/80 p-6 text-sm text-[#d6c6b4]">
+            No bundled fixture matches <span className="font-black text-[#fff7ed]">@{normalizedQuery}</span>. Use one of the cached accounts above.
+          </div>
+        )}
 
         <footer className="border-t border-[#f5d7a8]/[0.08] py-4 text-xs text-[#8d7f70]">
           {status}

@@ -6,6 +6,7 @@
     "dev:frontend": "bunx next dev --turbopack",
     "dev:backend": "node scripts/check-backend-port.mjs && cd ../backend && (python3 -c \"import fastapi, uvicorn, aiohttp, aiofiles, dotenv, pydantic_settings, pandas, numpy\" >/dev/null 2>&1 || python3 -m pip install -r requirements.txt) && python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload",
     "dev": "node scripts/dev.mjs",
+    "dev:full": "START_BACKEND=1 node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

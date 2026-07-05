@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -27,17 +27,39 @@ vi.mock('@/lib/experiment-fixtures', () => ({
 }));
 
 describe('ExperimentAccountPicker', () => {
-  it('shows only fixed account cards with two actions each, no username input', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows fixed account cards and a local-only account search', async () => {
     vi.mocked(experimentFixtures.getLocalFixturePreviews).mockResolvedValue(ACCOUNTS);
 
     render(<ExperimentAccountPicker />);
 
     for (const account of ACCOUNTS) {
-      await screen.findByText(`@${account.username}`);
+      expect(await screen.findAllByText(`@${account.username}`)).not.toHaveLength(0);
     }
-    expect(document.querySelectorAll('input')).toHaveLength(0);
+    expect(screen.getByLabelText('Search bundled experiment account')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Open Dossier' })).toHaveLength(5);
     expect(screen.getAllByRole('button', { name: 'Open Story' })).toHaveLength(5);
+  });
+
+  it('filters to bundled accounts and opens the selected dossier from the search', async () => {
+    vi.mocked(experimentFixtures.getLocalFixturePreviews).mockResolvedValue(ACCOUNTS);
+    vi.mocked(experimentFixtures.openExperimentAccount).mockResolvedValue(undefined);
+
+    render(<ExperimentAccountPicker />);
+
+    const input = await screen.findByLabelText('Search bundled experiment account');
+    await userEvent.type(input, 'emir');
+
+    expect(screen.getAllByRole('button', { name: 'Open Dossier' })).toHaveLength(1);
+    expect(screen.getAllByText('@emirermis')).not.toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    await vi.waitFor(() => {
+      expect(experimentFixtures.openExperimentAccount).toHaveBeenCalledWith('emirermis');
+    });
   });
 
   it('opens story mode for the clicked account', async () => {
@@ -45,7 +67,7 @@ describe('ExperimentAccountPicker', () => {
     vi.mocked(experimentFixtures.openExperimentStory).mockResolvedValue(undefined);
 
     render(<ExperimentAccountPicker />);
-    await screen.findByText('@semihmutsuz');
+    await screen.findAllByText('@semihmutsuz');
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Open Story' })[0]);
     await vi.waitFor(() => {
