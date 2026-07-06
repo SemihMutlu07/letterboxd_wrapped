@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Section from '@/components/results/Section';
 import type { StatsData } from '../types';
 
@@ -24,6 +24,8 @@ const WORD_PALETTE = [
   'bg-rose-500/20 text-rose-200',
 ];
 
+const INITIAL_REVIEW_PAGE = 9;
+
 function scaledWordSize(count: number, max: number): string {
   if (max <= 0) return 'text-sm';
   const ratio = count / max;
@@ -37,44 +39,55 @@ function scaledWordSize(count: number, max: number): string {
 export default function ReviewAnalysisSection({ stats }: Props) {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [reviewSort, setReviewSort] = useState<ReviewSort>('likes');
+  const [reviewPage, setReviewPage] = useState(1);
 
   const ra = stats.review_analysis;
-  if (!ra || ra.reviews_with_text === 0) return null;
 
-  const topWords = (ra.word_frequency ?? []).slice(0, 12);
+  const topWords = useMemo(() => (ra?.word_frequency ?? []).slice(0, 12), [ra?.word_frequency]);
   const topWordsMax = topWords[0]?.count ?? 0;
-  const avgWords = Math.round(ra.avg_review_length_words ?? 0);
-  const topLiked = (ra.top_liked_reviews ?? []).filter((r) => r.like_count > 0).slice(0, 3);
-  const totalLikes = ra.total_review_likes ?? null;
-  const reviewsWithLikesData = ra.reviews_with_likes_data ?? null;
+  const avgWords = Math.round(ra?.avg_review_length_words ?? 0);
+  const topLiked = useMemo(
+    () => (ra?.top_liked_reviews ?? []).filter((r) => r.like_count > 0).slice(0, 3),
+    [ra?.top_liked_reviews],
+  );
+  const totalLikes = ra?.total_review_likes ?? null;
+  const reviewsWithLikesData = ra?.reviews_with_likes_data ?? null;
 
-  const allReviews = (ra.reviews ?? []);
+  const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
   const hasDates = allReviews.some((r) => r.date);
-  const isGem = (r: (typeof allReviews)[number]) =>
-    (r.likes ?? 0) === 0 && reviewWordCount(r) >= GEM_MIN_WORDS;
-  const sortedReviews = [...allReviews].sort((a, b) => {
-    if (reviewSort === 'likes') {
-      return (b.likes ?? 0) - (a.likes ?? 0);
-    }
-    if (reviewSort === 'recent') {
-      return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
-    }
-    if (reviewSort === 'gems') {
-      const aGem = isGem(a);
-      const bGem = isGem(b);
-      if (aGem !== bGem) return aGem ? -1 : 1;
-      return reviewWordCount(b) - reviewWordCount(a);
-    }
-    return (b.text?.length ?? 0) - (a.text?.length ?? 0);
-  });
-  const filteredReviews = selectedWord
-    ? allReviews.filter((r) => r.text?.toLowerCase().includes(selectedWord.toLowerCase()))
-    : [];
+  const sortedReviews = useMemo(() => {
+    const isGem = (r: (typeof allReviews)[number]) =>
+      (r.likes ?? 0) === 0 && reviewWordCount(r) >= GEM_MIN_WORDS;
+    return [...allReviews].sort((a, b) => {
+      if (reviewSort === 'likes') {
+        return (b.likes ?? 0) - (a.likes ?? 0);
+      }
+      if (reviewSort === 'recent') {
+        return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
+      }
+      if (reviewSort === 'gems') {
+        const aGem = isGem(a);
+        const bGem = isGem(b);
+        if (aGem !== bGem) return aGem ? -1 : 1;
+        return reviewWordCount(b) - reviewWordCount(a);
+      }
+      return (b.text?.length ?? 0) - (a.text?.length ?? 0);
+    });
+  }, [allReviews, reviewSort]);
+  const filteredReviews = useMemo(() => {
+    if (!selectedWord) return [];
+    return allReviews.filter((r) => r.text?.toLowerCase().includes(selectedWord.toLowerCase()));
+  }, [allReviews, selectedWord]);
 
-  const subtitleParts = [`${ra.reviews_with_text} reviews with text`];
+  const visibleReviewCount = reviewPage * INITIAL_REVIEW_PAGE;
+  const paginatedSortedReviews = sortedReviews.slice(0, visibleReviewCount);
+  const hasMoreReviews = sortedReviews.length > paginatedSortedReviews.length;
+  const subtitleParts = ra ? [`${ra.reviews_with_text} reviews with text`] : [];
   if (totalLikes !== null && totalLikes > 0) {
     subtitleParts.push(`${totalLikes} total likes`);
   }
+
+  if (!ra || ra.reviews_with_text === 0) return null;
 
   return (
     <Section title="Your Reviews" subtitle={subtitleParts.join(' · ')}>
@@ -244,27 +257,36 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                 </p>
               </div>
               <div className="flex rounded-full border border-slate-700/60 bg-slate-900/60 p-0.5">
-                <ReviewSortButton active={reviewSort === 'likes'} onClick={() => setReviewSort('likes')}>
+                <ReviewSortButton active={reviewSort === 'likes'} onClick={() => { setReviewSort('likes'); setReviewPage(1); }}>
                   Most liked
                 </ReviewSortButton>
-                <ReviewSortButton active={reviewSort === 'length'} onClick={() => setReviewSort('length')}>
+                <ReviewSortButton active={reviewSort === 'length'} onClick={() => { setReviewSort('length'); setReviewPage(1); }}>
                   Longest
                 </ReviewSortButton>
-                <ReviewSortButton active={reviewSort === 'gems'} onClick={() => setReviewSort('gems')}>
+                <ReviewSortButton active={reviewSort === 'gems'} onClick={() => { setReviewSort('gems'); setReviewPage(1); }}>
                   Hidden gems
                 </ReviewSortButton>
                 {hasDates && (
-                  <ReviewSortButton active={reviewSort === 'recent'} onClick={() => setReviewSort('recent')}>
+                  <ReviewSortButton active={reviewSort === 'recent'} onClick={() => { setReviewSort('recent'); setReviewPage(1); }}>
                     Recent
                   </ReviewSortButton>
                 )}
               </div>
             </div>
             <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {sortedReviews.map((review, idx) => (
+              {paginatedSortedReviews.map((review, idx) => (
                 <FullReviewCard key={`${review.title}-${review.year}-${idx}`} review={review} />
               ))}
             </ul>
+            {hasMoreReviews && (
+              <button
+                type="button"
+                onClick={() => setReviewPage((p) => p + 1)}
+                className="mt-4 w-full rounded-lg bg-slate-800/70 py-2.5 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+              >
+                Show more reviews
+              </button>
+            )}
           </div>
         )}
       </div>

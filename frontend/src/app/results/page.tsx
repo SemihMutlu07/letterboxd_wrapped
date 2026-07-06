@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { CalendarDays, Clapperboard, Clock3, Gauge, HeartHandshake, Share2, Star, UserRound, UsersRound } from 'lucide-react';
-import ShareModal from '@/components/ShareModal';
+import dynamic from 'next/dynamic';
+import { CalendarDays, Clapperboard, Clock3, Gauge, Share2, Star, UserRound, UsersRound } from 'lucide-react';
 import type { ShareCardData } from '@/components/share/types';
 import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
+
+const ShareModal = dynamic(() => import('@/components/ShareModal'), { ssr: false, loading: () => null });
 
 import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
 import ReviewAnalysisSection from '@/containers/results/experimental/sections/ReviewAnalysisSection';
@@ -733,7 +735,7 @@ function ResultsContent({
             Share
           </button>
           <Link
-            href="/watchlist-compare"
+            href="/watchlist"
             className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#f5d7a8]/[0.14] bg-black/20 px-4 py-2 text-sm font-bold text-[#fff7ed] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
           >
             <UsersRound className="h-4 w-4 text-[#64b4bf]" />
@@ -747,7 +749,13 @@ function ResultsContent({
         <RatingDeviation stats={stats} />
 
         {/* 4. Your Reviews — promoted: it's the most personal section */}
-        {stats.review_analysis && <ReviewAnalysisSection stats={stats} />}
+        {stats.review_analysis ? (
+          <ReviewAnalysisSection stats={stats} />
+        ) : (
+          <div className="rounded-[22px] border border-[#f5d7a8]/[0.1] bg-[#17120f]/70 p-6 text-center text-sm text-[#b6a99a]">
+            This dossier has no written reviews yet.
+          </div>
+        )}
 
         {/* Film History */}
         <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
@@ -814,17 +822,17 @@ function ResultsContent({
           </button>
           <div className="flex flex-wrap justify-center gap-2">
             <Link
-              href="/watchlist-compare"
+              href="/watchlist"
               className="inline-flex items-center gap-2 rounded-full border border-[#f5d7a8]/[0.12] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#b6a99a] transition-colors hover:text-[#fff7ed]"
             >
               <UsersRound className="h-4 w-4 text-[#64b4bf]" />
               Watchlist compare
             </Link>
             <Link
-              href="/date-night"
+              href="/watchlist"
               className="inline-flex items-center gap-2 rounded-full border border-[#f5d7a8]/[0.12] px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#b6a99a] transition-colors hover:text-[#fff7ed]"
             >
-              <HeartHandshake className="h-4 w-4 text-[#7bbf86]" />
+              <UsersRound className="h-4 w-4 text-[#7bbf86]" />
               Date night
             </Link>
           </div>
@@ -1026,7 +1034,7 @@ function DossierHero({
               Share
             </button>
             <Link
-              href="/watchlist-compare"
+              href="/watchlist"
               className="inline-flex min-h-12 items-center gap-2 rounded-full border px-5 py-3 text-sm font-bold text-left transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
               style={{ borderColor, color: textColor }}
             >

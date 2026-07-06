@@ -5,7 +5,7 @@
  * Opened from clicking a language row in LanguagesLeaderboard.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
@@ -26,7 +26,15 @@ interface LangModalProps {
   films: Film[];
 }
 
+const INITIAL_POSTER_PAGE = 15;
+
 export default function LangModal({ open, onClose, language, languageLabel, count, films }: LangModalProps) {
+  const [posterPage, setPosterPage] = useState(1);
+
+  useEffect(() => {
+    if (open) setPosterPage(1);
+  }, [open, language]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -35,6 +43,17 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  const sorted = useMemo(() => {
+    return [...films].sort((a, b) => {
+      const ratingDiff = (b.your_rating ?? -1) - (a.your_rating ?? -1);
+      if (ratingDiff !== 0) return ratingDiff;
+      return (b.year ?? 0) - (a.year ?? 0);
+    });
+  }, [films]);
+  const visibleCount = posterPage * INITIAL_POSTER_PAGE;
+  const visibleFilms = sorted.slice(0, visibleCount);
+  const hasMoreFilms = sorted.length > visibleFilms.length;
 
   return (
     <AnimatePresence>
@@ -79,7 +98,7 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
             {/* Film grid */}
             <div className="overflow-y-auto flex-1 p-5">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {films.map((f, idx) => {
+              {visibleFilms.map((f, idx) => {
                 const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w154') : null;
                 return (
                   <div
@@ -99,6 +118,15 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
                   </div>
                 );
               })}
+              {hasMoreFilms && (
+                <button
+                  type="button"
+                  onClick={() => setPosterPage((p) => p + 1)}
+                  className="col-span-full rounded-lg bg-slate-800/70 py-2.5 text-xs font-bold text-slate-300 transition-colors hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+                >
+                  Show more films
+                </button>
+              )}
               </div>
               {count > films.length && (
                 <div className="text-xs text-slate-500 italic pt-2">

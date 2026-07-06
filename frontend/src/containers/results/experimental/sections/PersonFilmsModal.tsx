@@ -6,7 +6,7 @@
  * Reuses the ShareModal backdrop pattern (fixed overlay + click-to-close).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { PersonAvatarPlaceholder, PosterImage } from '@/components/results/Placeholders';
@@ -20,12 +20,18 @@ interface PersonFilmsModalProps {
   profilePath?: string;
 }
 
+const INITIAL_POSTER_PAGE = 12;
+
 export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
   const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
   const [profileFailed, setProfileFailed] = useState(false);
+  const [posterPage, setPosterPage] = useState(1);
 
   useEffect(() => {
-    if (open) setProfileFailed(false);
+    if (open) {
+      setProfileFailed(false);
+      setPosterPage(1);
+    }
   }, [open, profileUrl]);
 
   // Close on Escape
@@ -39,12 +45,17 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
   }, [open, onClose]);
 
   // Highest-rated first, then by year desc; unrated films sink to the bottom.
-  const sorted = [...films].sort((a, b) => {
-    const ra = a.user_rating ?? -1;
-    const rb = b.user_rating ?? -1;
-    if (rb !== ra) return rb - ra;
-    return (b.year ?? '').localeCompare(a.year ?? '');
-  });
+  const sorted = useMemo(() => {
+    return [...films].sort((a, b) => {
+      const ra = a.user_rating ?? -1;
+      const rb = b.user_rating ?? -1;
+      if (rb !== ra) return rb - ra;
+      return (b.year ?? '').localeCompare(a.year ?? '');
+    });
+  }, [films]);
+  const visibleCount = posterPage * INITIAL_POSTER_PAGE;
+  const visibleFilms = sorted.slice(0, visibleCount);
+  const hasMoreFilms = sorted.length > visibleFilms.length;
 
   return (
     <AnimatePresence>
@@ -121,7 +132,7 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
 
             {/* Film grid */}
             <div className="grid grid-cols-2 gap-4 overflow-y-auto bg-[linear-gradient(90deg,rgba(245,215,168,0.035)_1px,transparent_1px)] bg-[size:42px_42px] p-5 sm:grid-cols-3">
-              {sorted.map((f) => {
+              {visibleFilms.map((f) => {
                 const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
                 return (
                   <div key={`${f.title}-${f.year}`} className="space-y-1.5">
@@ -140,6 +151,15 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                   </div>
                 );
               })}
+              {hasMoreFilms && (
+                <button
+                  type="button"
+                  onClick={() => setPosterPage((p) => p + 1)}
+                  className="col-span-full rounded-lg bg-[#241712]/80 py-2.5 text-xs font-bold text-[#d6c6b4] transition-colors hover:bg-[#2d1d16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+                >
+                  Show more films
+                </button>
+              )}
             </div>
           </motion.div>
         </div>

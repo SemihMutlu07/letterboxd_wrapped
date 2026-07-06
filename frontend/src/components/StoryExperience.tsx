@@ -15,7 +15,88 @@ import { resultPath } from '@/lib/routes';
 
 const SLIDE_MS = 6000;
 
-type Slide = { key: string; body: ReactNode };
+type StoryMedia = {
+  type: 'poster' | 'profile';
+  url: string;
+  alt: string;
+};
+
+type Slide = {
+  key: string;
+  body: ReactNode;
+  media?: StoryMedia[];
+  accent?: string;
+  visual?: 'mosaic' | 'hero' | 'portrait' | 'strip';
+};
+
+function tmdbCdn(path: string | null | undefined, size = 'w780'): string | null {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  const clean = path.replace(/^\/+/, '').replace(/^t\/p\/[^/]+\//, '');
+  return `https://image.tmdb.org/t/p/${size}/${clean}`;
+}
+
+function posterMedia(film: { title?: string; poster_path?: string | null } | null | undefined, size = 'w780'): StoryMedia | null {
+  const url = tmdbCdn(film?.poster_path, size);
+  if (!url) return null;
+  return { type: 'poster', url, alt: `${film?.title ?? 'Film'} poster` };
+}
+
+function profileMedia(person: { name?: string; profile_path?: string | null } | null | undefined): StoryMedia | null {
+  const url = tmdbCdn(person?.profile_path, 'h632');
+  if (!url) return null;
+  return { type: 'profile', url, alt: `${person?.name ?? 'Person'} portrait` };
+}
+
+function compactMedia(items: Array<StoryMedia | null | undefined>, limit = 8): StoryMedia[] {
+  const seen = new Set<string>();
+  const output: StoryMedia[] = [];
+  for (const item of items) {
+    if (!item || seen.has(item.url)) continue;
+    seen.add(item.url);
+    output.push(item);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function filmByTitle(stats: StatsData, title?: string | null) {
+  if (!title) return null;
+  const clean = title.toLowerCase();
+  return (stats.all_films ?? []).find((film) => film.title?.toLowerCase() === clean) ?? null;
+}
+
+function topRatedPosters(stats: StatsData, limit = 8) {
+  return compactMedia(
+    [...(stats.all_films ?? [])]
+      .filter((film) => film.poster_path)
+      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+      .map((film) => posterMedia(film)),
+    limit,
+  );
+}
+
+function genrePosters(stats: StatsData, genre?: string, limit = 8) {
+  return compactMedia(
+    (stats.all_films ?? [])
+      .filter((film) => !genre || film.genres?.includes(genre))
+      .map((film) => posterMedia(film)),
+    limit,
+  );
+}
+
+function personFilmPosters(stats: StatsData, name?: string, role: 'director' | 'actor' = 'director', limit = 6) {
+  const clean = name?.toLowerCase();
+  if (!clean) return [];
+  return compactMedia(
+    (stats.all_films ?? [])
+      .filter((film) => role === 'director'
+        ? film.director?.toLowerCase() === clean
+        : film.cast?.some((actor) => actor.toLowerCase() === clean))
+      .map((film) => posterMedia(film, 'w500')),
+    limit,
+  );
+}
 
 function Label({ children }: { children: ReactNode }) {
   return <p className="font-mono text-xs uppercase tracking-[0.22em] text-amber-300">{children}</p>;
@@ -32,9 +113,15 @@ function Sub({ children, className = '' }: { children: ReactNode; className?: st
 function buildSlides(stats: StatsData): Slide[] {
   const slides: Slide[] = [];
   const username = stats.scraped_username;
+  const broadPosters = topRatedPosters(stats, 10);
+  const directorName = stats.most_watched_director?.name ?? stats.top_directors?.[0]?.name;
+  const topActor = stats.top_actors?.[0];
 
   slides.push({
     key: 'intro',
+    media: broadPosters,
+    accent: '#f59e0b',
+    visual: 'mosaic',
     body: (
       <>
         <Label>Movies Wrapped</Label>
@@ -52,6 +139,12 @@ function buildSlides(stats: StatsData): Slide[] {
     const d = stats.days_watched;
     slides.push({
       key: 'volume',
+      media: compactMedia([
+        posterMedia(stats.longest_film ? filmByTitle(stats, stats.longest_film.title) : null),
+        ...broadPosters,
+      ], 8),
+      accent: '#f97316',
+      visual: 'strip',
       body: (
         <>
           <Label>The count</Label>
@@ -77,6 +170,9 @@ function buildSlides(stats: StatsData): Slide[] {
   if (peakMonth || stats.story_analytics?.viewing_season) {
     slides.push({
       key: 'rhythm',
+      media: broadPosters.slice(1, 9),
+      accent: '#22c55e',
+      visual: 'mosaic',
       body: (
         <>
           <Label>Your rhythm</Label>
@@ -97,6 +193,9 @@ function buildSlides(stats: StatsData): Slide[] {
   if (stats.favorite_genre?.name) {
     slides.push({
       key: 'genre',
+      media: genrePosters(stats, stats.favorite_genre.name, 8),
+      accent: '#38bdf8',
+      visual: 'mosaic',
       body: (
         <>
           <Label>Where you kept returning</Label>
@@ -108,9 +207,16 @@ function buildSlides(stats: StatsData): Slide[] {
   }
 
   if (stats.most_watched_director?.name) {
-    const topActor = stats.top_actors?.[0];
+    const directorProfile = stats.top_directors?.find((d) => d.name === stats.most_watched_director?.name);
     slides.push({
       key: 'director',
+      media: compactMedia([
+        profileMedia(directorProfile),
+        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 5),
+        profileMedia(topActor),
+      ], 7),
+      accent: '#ef4444',
+      visual: 'portrait',
       body: (
         <>
           <Label>Your comfort zone had subtitles</Label>
@@ -129,6 +235,12 @@ function buildSlides(stats: StatsData): Slide[] {
   if (stats.average_rating != null) {
     slides.push({
       key: 'taste',
+      media: compactMedia([
+        posterMedia(stats.rating_outlier_film),
+        ...broadPosters,
+      ], 7),
+      accent: '#eab308',
+      visual: 'hero',
       body: (
         <>
           <Label>The verdicts</Label>
@@ -144,6 +256,12 @@ function buildSlides(stats: StatsData): Slide[] {
   if (stats.rating_personality || stats.most_common_rating != null) {
     slides.push({
       key: 'rating-personality',
+      media: compactMedia([
+        posterMedia(stats.rating_outlier_film),
+        ...topRatedPosters(stats, 8),
+      ], 7),
+      accent: '#a3e635',
+      visual: 'strip',
       body: (
         <>
           <Label>How you judge</Label>
@@ -170,6 +288,12 @@ function buildSlides(stats: StatsData): Slide[] {
     const longestLikes = longest.likes ?? 0;
     slides.push({
       key: 'review-personality',
+      media: compactMedia([
+        posterMedia(filmByTitle(stats, longest.title)),
+        ...broadPosters,
+      ], 6),
+      accent: '#fb7185',
+      visual: 'hero',
       body: (
         <>
           <Label>Your longest word</Label>
@@ -190,6 +314,11 @@ function buildSlides(stats: StatsData): Slide[] {
   if (stats.sinefil_meter?.score != null) {
     slides.push({
       key: 'sinefil',
+      media: compactMedia([
+        ...genrePosters(stats, undefined, 10),
+      ], 10),
+      accent: '#67e8f9',
+      visual: 'mosaic',
       body: (
         <>
           <Label>How deep the rabbit hole goes</Label>
@@ -203,6 +332,13 @@ function buildSlides(stats: StatsData): Slide[] {
   if (stats.cinematic_persona?.persona) {
     slides.push({
       key: 'persona',
+      media: compactMedia([
+        profileMedia(topActor),
+        profileMedia(stats.top_directors?.[0]),
+        ...broadPosters,
+      ], 8),
+      accent: '#c084fc',
+      visual: 'portrait',
       body: (
         <>
           <Label>Which makes you</Label>
@@ -215,11 +351,18 @@ function buildSlides(stats: StatsData): Slide[] {
 
   slides.push({
     key: 'outro',
+    media: compactMedia([
+      profileMedia(topActor),
+      profileMedia(stats.top_directors?.find((d) => d.name === directorName) ?? stats.top_directors?.[0]),
+      ...broadPosters,
+    ], 9),
+    accent: '#fbbf24',
+    visual: 'mosaic',
     body: (
       <>
         <Label>That&apos;s the short version</Label>
         <Big>The full picture waits.</Big>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <div className="relative z-40 mt-8 flex flex-wrap items-center justify-center gap-3">
           <a
             href={resultPath(username)}
             className="inline-block bg-amber-300 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 hover:bg-amber-200"
@@ -239,6 +382,141 @@ function buildSlides(stats: StatsData): Slide[] {
   });
 
   return slides;
+}
+
+function StoryVisual({ slide }: { slide: Slide }) {
+  const media = slide.media ?? [];
+  const accent = slide.accent ?? '#f59e0b';
+  const hero = media[0];
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `radial-gradient(circle at 18% 18%, ${accent}42, transparent 30%), radial-gradient(circle at 80% 12%, rgba(103,232,249,0.20), transparent 26%), linear-gradient(145deg,#090806 0%,#17120f 48%,#050505 100%)`,
+        }}
+      />
+
+      {hero && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={hero.url}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
+        />
+      )}
+
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.78),rgba(0,0,0,0.18)_52%,rgba(0,0,0,0.76))]" />
+      <div className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(245,215,168,.16)_1px,transparent_1px),linear-gradient(90deg,rgba(245,215,168,.12)_1px,transparent_1px)] [background-size:42px_42px]" />
+
+      {media.length > 0 && (
+        <motion.div
+          key={`visual-${slide.key}`}
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.02 }}
+          transition={{ duration: 0.65, ease: 'easeOut' }}
+          className="absolute inset-y-[9vh] right-[-8vw] hidden w-[58vw] max-w-[760px] md:block"
+        >
+          {slide.visual === 'portrait' ? (
+            <PortraitStack media={media} accent={accent} />
+          ) : slide.visual === 'strip' ? (
+            <PosterStrip media={media} accent={accent} />
+          ) : slide.visual === 'hero' ? (
+            <HeroPoster media={media} accent={accent} />
+          ) : (
+            <PosterMosaic media={media} accent={accent} />
+          )}
+        </motion.div>
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black via-black/50 to-transparent" />
+    </div>
+  );
+}
+
+function PosterMosaic({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  return (
+    <div className="grid h-full rotate-[-4deg] grid-cols-3 gap-3">
+      {media.slice(0, 9).map((item, index) => (
+        <motion.div
+          key={`${item.url}-${index}`}
+          initial={{ y: index % 2 ? 40 : -30 }}
+          animate={{ y: index % 2 ? -18 : 18 }}
+          transition={{ duration: 7 + index, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+          className="relative overflow-hidden rounded-[18px] border border-white/10 bg-stone-950 shadow-2xl"
+          style={{ boxShadow: index === 4 ? `0 0 70px ${accent}55` : undefined }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={item.url} alt={item.alt} className="h-full w-full object-cover" loading="lazy" />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function PosterStrip({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  return (
+    <div className="flex h-full rotate-[5deg] items-center gap-4">
+      {media.slice(0, 7).map((item, index) => (
+        <motion.div
+          key={`${item.url}-${index}`}
+          initial={{ y: index % 2 ? 46 : -28 }}
+          animate={{ y: index % 2 ? -20 : 26 }}
+          transition={{ duration: 6 + index * 0.4, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+          className="relative aspect-[2/3] h-[70%] shrink-0 overflow-hidden rounded-[20px] border border-white/10 bg-black shadow-2xl"
+          style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={item.url} alt={item.alt} className="h-full w-full object-cover" loading="lazy" />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function HeroPoster({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  const [first, ...rest] = media;
+  if (!first) return null;
+  return (
+    <div className="relative h-full">
+      <div className="absolute right-[20%] top-1/2 aspect-[2/3] h-[82%] -translate-y-1/2 rotate-[3deg] overflow-hidden rounded-[28px] border border-white/15 bg-black shadow-2xl" style={{ boxShadow: `0 0 100px ${accent}55` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={first.url} alt={first.alt} className="h-full w-full object-cover" loading="lazy" />
+      </div>
+      <div className="absolute bottom-0 right-0 flex gap-3">
+        {rest.slice(0, 4).map((item, index) => (
+          <div key={`${item.url}-${index}`} className="aspect-[2/3] h-40 overflow-hidden rounded-2xl border border-white/10 bg-black shadow-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={item.url} alt={item.alt} className="h-full w-full object-cover" loading="lazy" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PortraitStack({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  const [first, ...rest] = media;
+  if (!first) return null;
+  return (
+    <div className="relative h-full">
+      <div className="absolute right-[24%] top-1/2 aspect-[3/4] h-[78%] -translate-y-1/2 overflow-hidden rounded-[34px] border border-white/15 bg-black shadow-2xl" style={{ boxShadow: `0 0 90px ${accent}55` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={first.url} alt={first.alt} className="h-full w-full object-cover" loading="lazy" />
+      </div>
+      <div className="absolute bottom-8 right-4 grid grid-cols-3 gap-3">
+        {rest.slice(0, 6).map((item, index) => (
+          <div key={`${item.url}-${index}`} className="aspect-[2/3] h-28 overflow-hidden rounded-xl border border-white/10 bg-black shadow-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={item.url} alt={item.alt} className="h-full w-full object-cover" loading="lazy" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function StoryExperience() {
@@ -289,10 +567,14 @@ export default function StoryExperience() {
 
   return (
     <main className="relative min-h-screen select-none overflow-hidden bg-[#0f0d0b]">
+      <AnimatePresence mode="wait">
+        <StoryVisual key={`bg-${slides[index].key}`} slide={slides[index]} />
+      </AnimatePresence>
+
       {/* Story progress bars */}
-      <div className="absolute inset-x-0 top-0 z-20 flex gap-1 p-3">
+      <div className="absolute inset-x-0 top-0 z-40 flex gap-1 p-3">
         {slides.map((slide, i) => (
-          <div key={slide.key} className="h-0.5 flex-1 overflow-hidden bg-stone-800">
+          <div key={slide.key} className="h-0.5 flex-1 overflow-hidden bg-stone-700/70">
             {i < index && <div className="h-full w-full bg-amber-300" />}
             {i === index && (
               <motion.div
@@ -308,15 +590,15 @@ export default function StoryExperience() {
       </div>
 
       {/* Slide */}
-      <div className="grid min-h-screen place-items-center px-8 text-center">
+      <div className="relative z-20 grid min-h-screen place-items-center px-5 py-14 text-center md:place-items-center md:px-10 md:text-left">
         <AnimatePresence mode="wait">
           <motion.div
             key={slides[index].key}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -24 }}
+            initial={{ opacity: 0, y: 28, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -22, scale: 1.01 }}
             transition={{ duration: 0.45, ease: 'easeOut' }}
-            className="max-w-xl"
+            className="w-full max-w-xl justify-self-center rounded-[28px] border border-white/10 bg-black/42 px-5 py-6 shadow-2xl shadow-black/40 backdrop-blur-md md:ml-[8vw] md:justify-self-start md:px-8 md:py-8"
           >
             {slides[index].body}
           </motion.div>
@@ -328,13 +610,13 @@ export default function StoryExperience() {
         type="button"
         aria-label="Previous slide"
         onClick={() => setIndex((i) => Math.max(i - 1, 0))}
-        className="absolute inset-y-0 left-0 z-10 w-1/3 cursor-w-resize"
+        className={`absolute inset-y-0 left-0 w-1/3 cursor-w-resize ${isLast ? 'z-10' : 'z-30'}`}
       />
       <button
         type="button"
         aria-label="Next slide"
         onClick={() => setIndex((i) => Math.min(i + 1, slides.length - 1))}
-        className="absolute inset-y-0 right-0 z-10 w-2/3 cursor-e-resize"
+        className={`absolute inset-y-0 right-0 w-2/3 cursor-e-resize ${isLast ? 'z-10' : 'z-30'}`}
       />
     </main>
   );
