@@ -3,17 +3,12 @@
 import React, { useMemo, useState } from 'react';
 import Section from '@/components/results/Section';
 import type { StatsData } from '../types';
+import { reviewCharLength, reviewDateLabel, reviewWordCount } from '@/lib/reviews';
 
 type Props = { stats: StatsData };
 type ReviewSort = 'likes' | 'length' | 'recent' | 'gems';
 /** Minimum word count for a 0-like review to count as a "hidden gem". */
 const GEM_MIN_WORDS = 40;
-
-function reviewWordCount(review: { text?: string; word_count?: number }): number {
-  if (review.word_count != null) return review.word_count;
-  const text = review.text?.trim() ?? '';
-  return text ? text.split(/\s+/).length : 0;
-}
 
 const WORD_PALETTE = [
   'bg-orange-500/25 text-orange-200',
@@ -71,7 +66,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         if (aGem !== bGem) return aGem ? -1 : 1;
         return reviewWordCount(b) - reviewWordCount(a);
       }
-      return (b.text?.length ?? 0) - (a.text?.length ?? 0);
+      return reviewCharLength(b) - reviewCharLength(a);
     });
   }, [allReviews, reviewSort]);
   const filteredReviews = useMemo(() => {
@@ -302,6 +297,7 @@ function FilteredReviewCard({ review }: { review: ReviewItem }) {
   const text = review.text ?? '';
   // ponytail: char-length proxy for "needs a toggle"; line-clamp-3 ≈ ~200 chars
   const isLong = text.length > 200;
+  const date = reviewDateLabel(review);
 
   return (
     <li className="rounded-lg bg-slate-800/50 p-3 hover:bg-slate-800/80 transition-colors">
@@ -309,7 +305,10 @@ function FilteredReviewCard({ review }: { review: ReviewItem }) {
         <p className="font-semibold text-orange-100 text-sm truncate">{review.title}</p>
         <span className="shrink-0 text-xs font-mono text-slate-400">♥ {review.likes || 0}</span>
       </div>
-      <p className="text-xs text-slate-400 mb-2">{review.year || '—'}</p>
+      <p className="text-xs text-slate-400 mb-2">
+        {review.year || '—'}
+        {date ? ` · ${date}` : ''}
+      </p>
       <p className={`text-xs text-slate-300 leading-relaxed ${expanded ? 'whitespace-pre-line' : 'line-clamp-3'}`}>
         {text}
       </p>
@@ -354,6 +353,8 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
   const text = review.text ?? '';
   const likes = review.likes ?? 0;
   const wordCount = reviewWordCount(review);
+  const charCount = reviewCharLength(review);
+  const date = reviewDateLabel(review);
   const isLong = text.length > 260;
 
   return (
@@ -363,8 +364,10 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
           <p className="truncate text-sm font-semibold text-slate-100">{review.title}</p>
           <p className="mt-0.5 text-xs text-slate-500">
             {review.year || '—'}
+            {date ? ` · ${date}` : ''}
             {review.rating != null ? ` · ★ ${review.rating.toFixed(1)}` : ''}
             {wordCount > 0 ? ` · ${wordCount} words` : ''}
+            {charCount > 0 ? ` · ${charCount.toLocaleString()} chars` : ''}
           </p>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${

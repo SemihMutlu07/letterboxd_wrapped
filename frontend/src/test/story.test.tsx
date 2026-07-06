@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -20,6 +20,7 @@ const STATS = {
 
 describe('StoryPage', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     sessionStorage.clear();
   });
 
@@ -52,9 +53,26 @@ describe('StoryPage', () => {
 
     await userEvent.click(next);
     expect(await screen.findByText(/Open the dossier/i)).toBeInTheDocument();
+    expect(screen.getByText('Back')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Back'));
+    expect(await screen.findByText('Emotional Masochist')).toBeInTheDocument();
+    await userEvent.click(next);
     // Outro is the last slide — further taps must not crash or move past it.
     await userEvent.click(next);
     expect(screen.getByText(/Open the dossier/i)).toBeInTheDocument();
+  });
+
+  it('can pause and resume the story timeline', async () => {
+    sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
+    render(<StoryPage />);
+    expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText('Pause story'));
+    expect(screen.getByLabelText('Resume story')).toBeInTheDocument();
+    expect(screen.getByText('@semihmutsuz')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText('Resume story'));
+    expect(screen.getByLabelText('Pause story')).toBeInTheDocument();
   });
 });
 
@@ -70,8 +88,8 @@ describe('buildSlides', () => {
       review_analysis: {
         total_words_written: 500,
         reviews: [
-          { title: 'Aftersun', text: 'short', text_length: 5, likes: 3 },
-          { title: 'Memories of Underdevelopment', text: 'a much longer review body', text_length: 240, likes: 0 },
+          { title: 'Aftersun', text: 'short actual text', text_length: 5000, likes: 3 },
+          { title: 'Memories of Underdevelopment', text: 'a much longer review body by actual character count', text_length: 10, likes: 0 },
         ],
       },
     };

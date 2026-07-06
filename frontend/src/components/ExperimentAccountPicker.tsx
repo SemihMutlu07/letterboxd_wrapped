@@ -8,6 +8,7 @@ import type { LucideIcon } from "lucide-react";
 
 import {
   getLocalFixturePreviews,
+  openLiveExperimentAccount,
   openExperimentAccount,
   openExperimentStory,
   type ExperimentAccount,
@@ -32,13 +33,14 @@ export default function ExperimentAccountPicker() {
   const [accounts, setAccounts] = useState<ExperimentAccount[]>([]);
   const [status, setStatus] = useState("Loading local fixtures...");
   const [loadingUser, setLoadingUser] = useState<string | null>(null);
+  const [loadingMode, setLoadingMode] = useState<"cached" | "live" | null>(null);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
     getLocalFixturePreviews()
       .then((fixtures) => {
         setAccounts(fixtures);
-        setStatus(`${fixtures.length} cached dossiers ready. No scrape, no desktop worker.`);
+        setStatus(`${fixtures.length} cached dossiers ready. Live Scrape Lab can use the desktop worker for other public profiles.`);
       })
       .catch((err: unknown) => {
         setStatus(err instanceof Error ? err.message : "Could not load experiment fixtures.");
@@ -73,29 +75,65 @@ export default function ExperimentAccountPicker() {
     );
   }, [accounts, filteredAccounts, normalizedQuery]);
 
+  const isValidLiveUsername = /^[a-z0-9_]+$/.test(normalizedQuery);
+  const canLiveScrape = Boolean(normalizedQuery && isValidLiveUsername && !primaryMatch);
+
   const handleOpen = async (username: string, mode: "dossier" | "story") => {
     setLoadingUser(username);
+    setLoadingMode("cached");
     setStatus(`Preparing @${username}...`);
     try {
       await new Promise((resolve) => setTimeout(resolve, 450));
       await (mode === "story" ? openExperimentStory(username) : openExperimentAccount(username));
     } catch (err) {
       setLoadingUser(null);
+      setLoadingMode(null);
       setStatus(err instanceof Error ? err.message : "Could not open this fixture.");
+    }
+  };
+
+  const handleLiveOpen = async (mode: "dossier" | "story") => {
+    if (!normalizedQuery || !isValidLiveUsername || loadingUser) {
+      setStatus("Type a valid public Letterboxd username for Live Scrape Lab.");
+      return;
+    }
+
+    setLoadingUser(normalizedQuery);
+    setLoadingMode("live");
+    setStatus(`Live Scrape Lab queued @${normalizedQuery}. Backend/desktop worker may take a moment.`);
+    try {
+      await openLiveExperimentAccount(normalizedQuery, mode, (progress) => {
+        const message = progress.message || progress.stage;
+        if (message) setStatus(`Live Scrape Lab: ${message}`);
+      });
+    } catch (err) {
+      setLoadingUser(null);
+      setLoadingMode(null);
+      setStatus(err instanceof Error ? err.message : "Live scrape failed.");
     }
   };
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!primaryMatch || loadingUser) {
+    if (primaryMatch && !loadingUser) {
+      void handleOpen(primaryMatch.username, "dossier");
+      return;
+    }
+    if (canLiveScrape && !loadingUser) {
+      void handleLiveOpen("dossier");
+      return;
+    }
+    if (loadingUser) return;
+    if (!isValidLiveUsername && normalizedQuery) {
+      setStatus("Letterboxd usernames can only contain lowercase letters, numbers, and underscores.");
+    } else {
       setStatus(
         normalizedQuery
-          ? `No bundled experiment fixture found for @${normalizedQuery}. Choose one of the cached accounts below.`
-          : "Type one of the bundled experiment accounts or choose a card below.",
+          ? `No bundled fixture found for @${normalizedQuery}. Use Live Scrape Lab or choose a cached account below.`
+          : "Type a cached account or any public Letterboxd username.",
       );
       return;
     }
-    void handleOpen(primaryMatch.username, "dossier");
   };
 
   return (
@@ -122,9 +160,9 @@ export default function ExperimentAccountPicker() {
           </div>
 
           <div className="rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/80 p-5 shadow-2xl shadow-black/25">
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-[#d8b56d]">Known accounts only</p>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-[#d8b56d]">Cached + Live Scrape Lab</p>
             <p className="mt-2 text-sm leading-6 text-[#d6c6b4]">
-              Type or choose a cached profile. This branch does not scrape or call the desktop worker from the first screen.
+              Choose a bundled profile for instant fixtures, or type any public username to use the backend/desktop-worker scrape flow.
             </p>
             <form onSubmit={handleSearchSubmit} className="mt-4">
               <label htmlFor="experiment-account" className="sr-only">
@@ -144,12 +182,32 @@ export default function ExperimentAccountPicker() {
                 />
                 <button
                   type="submit"
-                  disabled={Boolean(loadingUser) || !primaryMatch}
+                  disabled={Boolean(loadingUser) || (!primaryMatch && !canLiveScrape)}
                   className="rounded-full bg-[#ff8a3d] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#0d111f] transition-opacity disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-200"
                 >
-                  Open
+                  {primaryMatch ? "Open" : "Scrape"}
                 </button>
               </div>
+              {canLiveScrape && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleLiveOpen("dossier")}
+                    disabled={Boolean(loadingUser)}
+                    className="rounded-full border border-[#f5d7a8]/[0.16] bg-black/20 px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#fff7ed] transition-colors hover:border-[#f5d7a8]/[0.32] disabled:cursor-wait disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+                  >
+                    Live Dossier
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleLiveOpen("story")}
+                    disabled={Boolean(loadingUser)}
+                    className="rounded-full bg-[#64b4bf] px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-[#0d111f] transition-colors disabled:cursor-wait disabled:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-200"
+                  >
+                    Live Story
+                  </button>
+                </div>
+              )}
             </form>
             <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[#8d7f70]">
               {accounts.map((account) => (
@@ -182,6 +240,7 @@ export default function ExperimentAccountPicker() {
             <p className="mt-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#ffd49a]">
               <Loader2 className="h-4 w-4 animate-spin" />
               {loadingCopy}
+              {loadingMode === "live" ? " Backend/desktop worker scrape is running." : ""}
             </p>
           </motion.div>
         )}

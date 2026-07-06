@@ -22,6 +22,7 @@ const ACCOUNTS = ['semihmutsuz', 'emirermis', 'mertefesenturk', 'baris_saydam', 
 
 vi.mock('@/lib/experiment-fixtures', () => ({
   getLocalFixturePreviews: vi.fn(),
+  openLiveExperimentAccount: vi.fn(),
   openExperimentAccount: vi.fn(),
   openExperimentStory: vi.fn(),
 }));
@@ -31,7 +32,7 @@ describe('ExperimentAccountPicker', () => {
     vi.clearAllMocks();
   });
 
-  it('shows fixed account cards and a local-only account search', async () => {
+  it('shows fixed account cards and the experiment search', async () => {
     vi.mocked(experimentFixtures.getLocalFixturePreviews).mockResolvedValue(ACCOUNTS);
 
     render(<ExperimentAccountPicker />);
@@ -72,6 +73,28 @@ describe('ExperimentAccountPicker', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Open Story' })[0]);
     await vi.waitFor(() => {
       expect(experimentFixtures.openExperimentStory).toHaveBeenCalledWith('semihmutsuz');
+    });
+  });
+
+  it('uses Live Scrape Lab for a non-fixture username', async () => {
+    vi.mocked(experimentFixtures.getLocalFixturePreviews).mockResolvedValue(ACCOUNTS);
+    vi.mocked(experimentFixtures.openLiveExperimentAccount).mockResolvedValue(undefined);
+
+    render(<ExperimentAccountPicker />);
+
+    const input = await screen.findByLabelText('Search bundled experiment account');
+    await userEvent.type(input, 'newpublicuser');
+
+    expect(screen.getByRole('button', { name: 'Scrape' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Live Story' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Live Story' }));
+    await vi.waitFor(() => {
+      expect(experimentFixtures.openLiveExperimentAccount).toHaveBeenCalledWith(
+        'newpublicuser',
+        'story',
+        expect.any(Function),
+      );
     });
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { resultPath } from "@/lib/routes";
+import { scrapeProfile, type ScrapeProgress } from "@/lib/api";
 import { getDetailsFromSummary, type CachedAnalysisRun, type CachedRunPreview } from "@/lib/supabase/analysis_runs";
 
 type FixtureIndexRow = Omit<CachedRunPreview, "started_at"> & {
@@ -130,4 +131,26 @@ export async function openExperimentAccount(username: string) {
 export async function openExperimentStory(username: string) {
   const cached = await loadExperimentAccount(username);
   window.location.href = `/experiment/story?u=${encodeURIComponent(cached.username)}`;
+}
+
+export async function openLiveExperimentAccount(
+  username: string,
+  mode: "dossier" | "story",
+  onProgress?: (progress: ScrapeProgress) => void,
+) {
+  const clean = username.trim().replace(/^@/, "").toLowerCase();
+  if (!/^[a-z0-9_]+$/.test(clean)) {
+    throw new Error("Letterboxd usernames can only contain lowercase letters, numbers, and underscores.");
+  }
+
+  const result = await scrapeProfile(clean, undefined, onProgress);
+  const returnedUsername = String(result.stats?.scraped_username || clean).toLowerCase();
+  if (returnedUsername && returnedUsername !== clean) {
+    throw new Error(`Username mismatch: requested @${clean}, got @${returnedUsername}`);
+  }
+
+  sessionStorage.setItem("letterboxdStats", JSON.stringify(result.stats));
+  sessionStorage.setItem("username", clean);
+  sessionStorage.setItem("lb_username", clean);
+  window.location.href = mode === "story" ? "/story" : resultPath(clean);
 }
