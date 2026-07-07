@@ -66,17 +66,14 @@ export default function ExperimentAccountPicker() {
     });
   }, [accounts, normalizedQuery]);
 
-  const primaryMatch = useMemo(() => {
+  const exactMatch = useMemo(() => {
     if (!normalizedQuery) return null;
-    return (
-      accounts.find((account) => account.username === normalizedQuery) ??
-      filteredAccounts[0] ??
-      null
-    );
-  }, [accounts, filteredAccounts, normalizedQuery]);
+    return accounts.find((account) => account.username === normalizedQuery) ?? null;
+  }, [accounts, normalizedQuery]);
 
   const isValidLiveUsername = /^[a-z0-9_]+$/.test(normalizedQuery);
-  const canLiveScrape = Boolean(normalizedQuery && isValidLiveUsername && !primaryMatch);
+  const hasPartialFixtureMatches = Boolean(normalizedQuery && !exactMatch && filteredAccounts.length > 0);
+  const canLiveScrape = Boolean(normalizedQuery && isValidLiveUsername && !exactMatch);
 
   const handleOpen = async (username: string, mode: "dossier" | "story") => {
     setLoadingUser(username);
@@ -115,11 +112,11 @@ export default function ExperimentAccountPicker() {
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (primaryMatch && !loadingUser) {
-      void handleOpen(primaryMatch.username, "dossier");
+    if (exactMatch && !loadingUser) {
+      void handleOpen(exactMatch.username, "dossier");
       return;
     }
-    if (canLiveScrape && !loadingUser) {
+    if (canLiveScrape && !hasPartialFixtureMatches && !loadingUser) {
       void handleLiveOpen("dossier");
       return;
     }
@@ -129,7 +126,9 @@ export default function ExperimentAccountPicker() {
     } else {
       setStatus(
         normalizedQuery
-          ? `No bundled fixture found for @${normalizedQuery}. Use Live Scrape Lab or choose a cached account below.`
+          ? hasPartialFixtureMatches
+            ? `Showing cached matches for "${normalizedQuery}". Pick a card, type the full username, or use Live Scrape Lab.`
+            : `No bundled fixture found for @${normalizedQuery}. Use Live Scrape Lab or choose a cached account below.`
           : "Type a cached account or any public Letterboxd username.",
       );
       return;
@@ -182,10 +181,10 @@ export default function ExperimentAccountPicker() {
                 />
                 <button
                   type="submit"
-                  disabled={Boolean(loadingUser) || (!primaryMatch && !canLiveScrape)}
+                  disabled={Boolean(loadingUser) || (!exactMatch && !canLiveScrape)}
                   className="rounded-full bg-[#ff8a3d] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[#0d111f] transition-opacity disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-200"
                 >
-                  {primaryMatch ? "Open" : "Scrape"}
+                  {exactMatch ? "Open" : "Scrape"}
                 </button>
               </div>
               {canLiveScrape && (

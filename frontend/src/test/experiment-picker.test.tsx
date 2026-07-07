@@ -52,7 +52,7 @@ describe('ExperimentAccountPicker', () => {
     render(<ExperimentAccountPicker />);
 
     const input = await screen.findByLabelText('Search bundled experiment account');
-    await userEvent.type(input, 'emir');
+    await userEvent.type(input, 'emirermis');
 
     expect(screen.getAllByRole('button', { name: 'Open Dossier' })).toHaveLength(1);
     expect(screen.getAllByText('@emirermis')).not.toHaveLength(0);
@@ -61,6 +61,21 @@ describe('ExperimentAccountPicker', () => {
     await vi.waitFor(() => {
       expect(experimentFixtures.openExperimentAccount).toHaveBeenCalledWith('emirermis');
     });
+  });
+
+  it('filters partial fixture queries without auto-opening on submit', async () => {
+    vi.mocked(experimentFixtures.getLocalFixturePreviews).mockResolvedValue(ACCOUNTS);
+
+    render(<ExperimentAccountPicker />);
+
+    const input = await screen.findByLabelText('Search bundled experiment account');
+    await userEvent.type(input, 'emir');
+
+    expect(screen.getAllByRole('button', { name: 'Open Dossier' })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Scrape' }));
+    expect(experimentFixtures.openExperimentAccount).not.toHaveBeenCalled();
+    expect(experimentFixtures.openLiveExperimentAccount).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Showing cached matches for "emir"/i)).toBeInTheDocument();
   });
 
   it('opens story mode for the clicked account', async () => {

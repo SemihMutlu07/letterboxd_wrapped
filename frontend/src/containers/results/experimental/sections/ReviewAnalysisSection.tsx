@@ -49,7 +49,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   const reviewsWithLikesData = ra?.reviews_with_likes_data ?? null;
 
   const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
-  const hasDates = allReviews.some((r) => r.date);
+  const hasDates = allReviews.some((r) => reviewDateLabel(r));
   const sortedReviews = useMemo(() => {
     const isGem = (r: (typeof allReviews)[number]) =>
       (r.likes ?? 0) === 0 && reviewWordCount(r) >= GEM_MIN_WORDS;
@@ -58,7 +58,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         return (b.likes ?? 0) - (a.likes ?? 0);
       }
       if (reviewSort === 'recent') {
-        return new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime();
+        return new Date(reviewDateLabel(b) ?? 0).getTime() - new Date(reviewDateLabel(a) ?? 0).getTime();
       }
       if (reviewSort === 'gems') {
         const aGem = isGem(a);
@@ -367,7 +367,7 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
             {date ? ` · ${date}` : ''}
             {review.rating != null ? ` · ★ ${review.rating.toFixed(1)}` : ''}
             {wordCount > 0 ? ` · ${wordCount} words` : ''}
-            {charCount > 0 ? ` · ${charCount.toLocaleString()} chars` : ''}
+            {!date && charCount > 0 ? ` · ${charCount.toLocaleString()} chars` : ''}
           </p>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${

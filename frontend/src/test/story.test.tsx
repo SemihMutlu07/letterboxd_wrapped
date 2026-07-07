@@ -54,6 +54,7 @@ describe('StoryPage', () => {
     await userEvent.click(next);
     expect(await screen.findByText(/Open the dossier/i)).toBeInTheDocument();
     expect(screen.getByText('Back')).toBeInTheDocument();
+    expect(screen.getByLabelText('Pause story')).toBeDisabled();
     await userEvent.click(screen.getByText('Back'));
     expect(await screen.findByText('Emotional Masochist')).toBeInTheDocument();
     await userEvent.click(next);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import type { StatsData } from '@/containers/results/experimental/types';
@@ -552,6 +552,7 @@ export default function StoryExperience() {
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const elapsedRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -569,6 +570,7 @@ export default function StoryExperience() {
 
   const goToSlide = useCallback((nextIndex: number) => {
     setIndex(Math.max(0, Math.min(nextIndex, slides.length - 1)));
+    elapsedRef.current = 0;
     setProgress(0);
     setIsPaused(false);
   }, [slides.length]);
@@ -577,21 +579,23 @@ export default function StoryExperience() {
   const goPrevious = useCallback(() => goToSlide(index - 1), [goToSlide, index]);
 
   useEffect(() => {
+    elapsedRef.current = isLast ? SLIDE_MS : 0;
     setProgress(isLast ? 100 : 0);
   }, [index, isLast]);
 
   useEffect(() => {
     if (slides.length === 0 || isLast || isPaused) return;
     let frame = 0;
-    const start = performance.now();
-    const startProgress = progress;
-    const remaining = SLIDE_MS * (1 - startProgress / 100);
+    let previous = performance.now();
 
     const tick = (now: number) => {
-      const elapsed = now - start;
-      const nextProgress = Math.min(100, startProgress + (elapsed / SLIDE_MS) * 100);
+      const delta = Math.max(0, now - previous);
+      previous = now;
+      elapsedRef.current = Math.min(SLIDE_MS, elapsedRef.current + delta);
+      const nextProgress = (elapsedRef.current / SLIDE_MS) * 100;
       setProgress(nextProgress);
-      if (elapsed >= remaining) {
+      if (elapsedRef.current >= SLIDE_MS) {
+        elapsedRef.current = 0;
         setIndex((i) => Math.min(i + 1, slides.length - 1));
         return;
       }
@@ -600,7 +604,6 @@ export default function StoryExperience() {
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, slides.length, isLast, isPaused]);
 
   useEffect(() => {
@@ -666,7 +669,8 @@ export default function StoryExperience() {
         type="button"
         aria-label={isPaused ? 'Resume story' : 'Pause story'}
         onClick={() => !isLast && setIsPaused((v) => !v)}
-        className="absolute right-4 top-8 z-50 rounded-full border border-white/15 bg-black/55 px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-stone-200 shadow-xl backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+        disabled={isLast}
+        className="absolute right-4 top-8 z-50 rounded-full border border-white/15 bg-black/55 px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-stone-200 shadow-xl backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 disabled:cursor-default disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
       >
         {isPaused ? 'Resume' : 'Pause'}
       </button>
@@ -692,13 +696,13 @@ export default function StoryExperience() {
         type="button"
         aria-label="Previous slide"
         onClick={goPrevious}
-        className="absolute inset-y-0 left-0 z-30 w-1/3 cursor-w-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+        className={`absolute inset-y-0 left-0 w-1/3 cursor-w-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${isLast ? 'z-20' : 'z-30'}`}
       />
       <button
         type="button"
         aria-label="Next slide"
         onClick={goNext}
-        className="absolute inset-y-0 right-0 z-30 w-2/3 cursor-e-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+        className={`absolute inset-y-0 right-0 w-2/3 cursor-e-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${isLast ? 'z-20' : 'z-30'}`}
       />
 
       {isLast && (
