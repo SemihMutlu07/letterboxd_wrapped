@@ -16,7 +16,6 @@ import type { StatsData, PersonFilm } from '@/containers/results/experimental/ty
 import PersonFilmsModal from '@/containers/results/experimental/sections/PersonFilmsModal';
 
 import { ThemeProvider, useTheme } from '@/lib/theme';
-import ThemeSwitcher from '@/components/ThemeSwitcher';
 import ThemeWrapper from '@/components/ThemeWrapper';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
@@ -750,10 +749,6 @@ export function ResultsContent({
             </div>
           )}
 
-          {/* Theme Switcher */}
-          <div className="mt-6">
-            <ThemeSwitcher />
-          </div>
         </header>
 
         {/* Hero Stats */}

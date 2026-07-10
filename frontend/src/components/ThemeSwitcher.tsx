@@ -5,8 +5,7 @@ import { useTheme, type DesignTheme } from '@/lib/theme';
 
 const OPTIONS: { id: DesignTheme; label: string }[] = [
   { id: 'current', label: '1 · Current' },
-  { id: 'vhs', label: '2 · VHS' },
-  { id: 'classic-bw', label: '3 · B&W Classic' },
+  // VHS and B&W Classic themes removed from selection.
   // Apple theme disabled: contrast/readability issues on light bg need a redesign pass.
   // { id: 'apple', label: '4 · Apple' },
 ];
