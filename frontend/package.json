@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev:frontend": "next dev --turbopack",
-    "dev:backend": "node scripts/check-backend-port.mjs && cd ../backend && (python -c \"import fastapi, uvicorn, aiohttp, aiofiles, dotenv, pydantic_settings, pandas, numpy\" >/dev/null 2>&1 || python -m pip install -r requirements.txt) && python -m uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT:-8000} --reload",
+    "dev:backend": "node scripts/check-backend-port.mjs && node scripts/run-backend.mjs",
     "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
