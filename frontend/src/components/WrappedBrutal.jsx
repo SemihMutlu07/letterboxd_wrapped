@@ -598,9 +598,40 @@ function Outliers({ stats }) {
   );
 }
 
+function DecadeModal({ decade, films, onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(16,15,12,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 24 }}>
+      <Box onClick={(e) => e.stopPropagation()} sh={8} style={{ maxWidth: 480, width: "100%", padding: 0, overflow: "hidden" }}>
+        <div style={{ background: T.lime, borderBottom: `2.5px solid ${T.ink}`, padding: "18px 20px" }}>
+          <Label color={T.ink} style={{ fontSize: 9.5 }}>RELEASE DECADE</Label>
+          <div className="flex items-baseline justify-between" style={{ marginTop: 6 }}>
+            <span style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 32, color: T.ink }}>{decade}s</span>
+            <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 14, color: T.ink }}>{films.length} films</span>
+          </div>
+        </div>
+        <div style={{ padding: "16px 20px", maxHeight: 380, overflowY: "auto" }}>
+          {films.map((f) => (
+            <div key={f.title} style={{ padding: "12px 0", borderBottom: `1px solid ${T.ink}22`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 14, color: T.ink }}>{f.title || "—"}</div>
+                <div style={{ fontFamily: MONO, fontSize: 9.5, color: T.muted, marginTop: 2 }}>{f.year || "—"}</div>
+              </div>
+              <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: T.ink }}>{formatRating(f.your_rating ?? 0)}★</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "14px 20px", borderTop: `1.5px solid ${T.ink}22`, textAlign: "center" }}>
+          <Btn onClick={onClose} color={T.lime}>Close</Btn>
+        </div>
+      </Box>
+    </div>
+  );
+}
+
 /* ---------- film history (line + info tooltip) ---------- */
 function FilmHistory({ stats }) {
   const [hi, setHi] = useState(null);
+  const [selectedDecade, setSelectedDecade] = useState(null);
   const history = (stats?.decades || []).map(d => [d.decade, d.count]);
   const W = 640, H = 210, pad = 34;
   const maxV = Math.max(...history.map(([, v]) => v), 1);
@@ -609,9 +640,15 @@ function FilmHistory({ stats }) {
   const path = history.map(([, v], i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(v)}`).join(" ");
   const gridLines = [0, Math.round(maxV * 0.25), Math.round(maxV * 0.5), Math.round(maxV * 0.75), maxV];
 
+  const getFilmsForDecade = (decade) => {
+    return (stats?.rated_films || [])
+      .filter(f => f.year && Math.floor(f.year / 10) * 10 === decade)
+      .sort((a, b) => (b.your_rating ?? 0) - (a.your_rating ?? 0));
+  };
+
   return (
     <section style={{ marginBottom: 28 }}>
-      <Eyebrow note={`${history.length} decades on screen`} info="Each point is a release decade. Height = how many films you logged from that era. Hover a point for the exact count.">film history</Eyebrow>
+      <Eyebrow note={`${history.length} decades on screen`} info="Each point is a release decade. Height = how many films you logged from that era. Hover a point for the exact count. Click to see all films from that decade.">film history</Eyebrow>
       <Box style={{ padding: "18px 20px" }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%" }} onMouseLeave={() => setHi(null)}>
           {gridLines.map((g) => (
@@ -622,7 +659,7 @@ function FilmHistory({ stats }) {
           ))}
           {history.length > 1 && <path d={path} fill="none" stroke={T.ink} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />}
           {history.map(([d, v], i) => (
-            <g key={d} onMouseEnter={() => setHi(i)} style={{ cursor: "pointer" }}>
+            <g key={d} onMouseEnter={() => setHi(i)} onClick={() => setSelectedDecade(d)} style={{ cursor: "pointer" }}>
               <rect x={x(i) - 18} y={0} width={36} height={H} fill="transparent" />
               <rect x={x(i) - (hi === i ? 6 : 4)} y={y(v) - (hi === i ? 6 : 4)} width={hi === i ? 12 : 8} height={hi === i ? 12 : 8} fill={hi === i ? T.lime : T.card} stroke={T.ink} strokeWidth="2.5" />
               <text x={x(i)} y={H - 10} fontSize="9" fontFamily={MONO} fill={hi === i ? T.ink : T.muted} fontWeight={hi === i ? 700 : 400} textAnchor="middle">{d}</text>
@@ -636,6 +673,13 @@ function FilmHistory({ stats }) {
           ))}
         </svg>
       </Box>
+      {selectedDecade !== null && (
+        <DecadeModal
+          decade={selectedDecade}
+          films={getFilmsForDecade(selectedDecade)}
+          onClose={() => setSelectedDecade(null)}
+        />
+      )}
     </section>
   );
 }
@@ -690,7 +734,7 @@ function LangModal({ lang, count, films, color, onClose }) {
             <div key={f.title} className="flex items-center justify-between" style={{ padding: "10px 0", borderBottom: `1px solid ${T.ink}22` }}>
               <div>
                 <span style={{ fontFamily: SERIF, fontWeight: 700, fontSize: 14, color: T.ink }}>{f.title || "—"}</span>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: T.muted, marginLeft: 8 }}>{f.release_year || "—"}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: T.muted, marginLeft: 8 }}>{f.year || "—"}</span>
               </div>
               <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: T.ink }}>{formatRating(f.your_rating ?? 0)}★</span>
             </div>
