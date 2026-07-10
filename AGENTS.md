@@ -21,4 +21,4 @@ making any change:
   backend only; Supabase uses the anon (publishable) key only.
 - Commit messages in English, conventional commits (`feat:`, `fix:`, ...).
 - Before claiming done: `cd frontend && npx tsc --noEmit` and
-  `cd backend && python3 -m pytest` must pass.
+  `cd backend && python -m pytest` must pass.
