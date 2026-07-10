@@ -61,7 +61,7 @@ Frontend:
 
 Backend:
 - Preferred: `npm run dev:backend` (from frontend scripts; defaults to port 8000, override with `BACKEND_PORT`)
-- Alternative: `cd backend && python3 app/main.py` (port 8000)
+- Alternative: `cd backend && python app/main.py` (port 8000)
 
 Both:
 - `npm run dev` (sets `NEXT_PUBLIC_API_BASE` from `BACKEND_PORT` and refuses to start if that port is already a different service)
