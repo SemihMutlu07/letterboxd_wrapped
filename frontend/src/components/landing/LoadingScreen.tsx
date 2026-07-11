@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Film, X } from 'lucide-react';
+import { PosterGuessGame, type PosterGameProps } from '@/components/landing/PosterGuessGame';
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -20,10 +21,10 @@ type Props = {
   typicalSeconds?: number;
   /** Live scrape trace events from /api/progress — real discovery feed. */
   events?: { stage?: string; message?: string; metrics?: Record<string, unknown>; elapsed_seconds?: number }[];
-  /** Guess-your-stat game (wait UX B). */
-  onGuess?: (n: number) => void;
-  guess?: number | null;
-  reveal?: { guess: number; actual: number } | null;
+  /** Pixelated poster guessing game, shown while scraping. */
+  posterGame?: PosterGameProps | null;
+  /** Set once the scrape/analysis is done — shows a "See Wrapped" button instead of auto-redirecting. */
+  resultReady?: string | null;
 };
 
 const FUN_MESSAGES = [
@@ -63,13 +64,11 @@ export default function LoadingScreen({
   estimatedFilms,
   typicalSeconds,
   events,
-  onGuess,
-  guess,
-  reveal,
+  posterGame,
+  resultReady,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [funMessageIndex, setFunMessageIndex] = useState(0);
-  const [guessInput, setGuessInput] = useState('');
   const isScrape = mode === 'scrape';
 
   useEffect(() => {
@@ -155,58 +154,21 @@ export default function LoadingScreen({
           </div>
         )}
 
-        {/* Guess-your-stat game (wait UX B) — reveal vs your guess at the end */}
-        {isScrape && reveal && (
-          <div className="mb-5 rounded-2xl border border-orange-400/30 bg-orange-500/10 p-4">
-            <p className="text-[10px] uppercase tracking-wider text-orange-300/80 mb-1">Tahmin vs gerçek</p>
-            <p className="text-lg font-bold">
-              Sen <span className="tabular-nums">{reveal.guess.toLocaleString()}</span> · Gerçek{' '}
-              <span className="tabular-nums text-orange-300">{reveal.actual.toLocaleString()}</span>
-            </p>
-            <p className="mt-1 text-sm text-slate-400">
-              {reveal.actual === reveal.guess
-                ? 'Tam isabet. 🎯'
-                : `${Math.abs(reveal.actual - reveal.guess).toLocaleString()} film ${reveal.actual > reveal.guess ? 'fazla çıktı' : 'az çıktı'}.`}
-            </p>
+        {isScrape && posterGame && (
+          <div className="mb-5">
+            <PosterGuessGame {...posterGame} />
           </div>
         )}
 
-        {isScrape && !reveal && guess == null && onGuess && (
-          <form
-            className="mb-5 flex flex-wrap items-center justify-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const n = parseInt(guessInput, 10);
-              if (Number.isFinite(n) && n >= 0) onGuess(n);
+        {resultReady && (
+          <button
+            onClick={() => {
+              window.location.href = resultReady;
             }}
+            className="mb-5 w-full rounded-xl bg-orange-500 px-6 py-3 text-base font-bold text-white shadow-lg shadow-orange-500/25 transition hover:bg-orange-400 active:scale-[0.98]"
           >
-            <label htmlFor="film-guess" className="text-sm text-slate-300">Kaç film logladın dersin?</label>
-            <input
-              id="film-guess"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={guessInput}
-              onChange={(e) => setGuessInput(e.target.value)}
-              placeholder="?"
-              className="w-24 rounded-lg border border-slate-600 bg-slate-900/60 px-3 py-1.5 text-center text-white outline-none focus:border-orange-400"
-            />
-            <button type="submit" className="rounded-lg bg-orange-500/90 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-orange-500">
-              Tahmin et
-            </button>
-          </form>
-        )}
-
-        {isScrape && !reveal && guess != null && (
-          <p className="mb-5 text-sm text-orange-300/90">
-            Tahminin: <span className="font-bold tabular-nums">{guess.toLocaleString()}</span> — birazdan görürüz.
-          </p>
-        )}
-
-        {isScrape && !reveal && (
-          <p className="mb-5 text-sm text-slate-400 italic transition-opacity duration-500">
-            {FUN_MESSAGES[funMessageIndex]}
-          </p>
+            See Wrapped
+          </button>
         )}
 
         {/* Progress + remaining time */}

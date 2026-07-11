@@ -67,6 +67,19 @@ h1, h2, h3 {
   animation: blob 10s infinite;
 }
 
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.8); }
+  65% { transform: scale(0.88); }
+  100% { transform: scale(1); }
+}
+
+@keyframes float-up-fade {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(1); }
+  20% { opacity: 1; transform: translate(-50%, -10px) scale(1.6); }
+  100% { opacity: 0; transform: translate(-50%, -56px) scale(1.4); }
+}
+
 /* Recharts: ensure slice colors are not overridden by text color */
 .recharts-wrapper .recharts-sector { 
   fill-opacity: 1 !important; 
