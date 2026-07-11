@@ -22,6 +22,23 @@ function matchesQuery(text: string, query: string): boolean {
   return normalized.split(/[^a-z0-9]+/).some((word) => word.startsWith(query));
 }
 
+// Progressively unmasks title letters (left to right) as wrong guesses pile up,
+// so the player has fully "spelled out" the title by the last guess before reveal.
+function buildHint(title: string, wrongGuesses: number, maxLevel: number): string {
+  if (wrongGuesses <= 0) return '';
+  const totalLetters = title.split('').filter((c) => /[a-zA-Z0-9]/.test(c)).length;
+  const revealCount = Math.min(totalLetters, Math.ceil((wrongGuesses / maxLevel) * totalLetters));
+  let revealed = 0;
+  return title
+    .split('')
+    .map((c) => {
+      if (!/[a-zA-Z0-9]/.test(c)) return c;
+      revealed += 1;
+      return revealed <= revealCount ? c : '_';
+    })
+    .join('');
+}
+
 export type PosterGameProps = {
   movie: PosterGameMovie;
   level: number;
@@ -37,6 +54,7 @@ export function PosterGuessGame({
   movie,
   level,
   maxLevel,
+  wrongGuesses,
   score,
   onWrongGuess,
   onCorrectGuess,
@@ -47,7 +65,11 @@ export function PosterGuessGame({
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [justScored, setJustScored] = useState(false);
-  const { canvasRef, loaded, error } = usePixelatedImage(movie.poster_path, level, maxLevel);
+  const { canvasRef, loaded, error } = usePixelatedImage(movie.poster_path, level, maxLevel, revealedAnswer);
+  const hint = useMemo(
+    () => buildHint(movie.title, wrongGuesses, maxLevel),
+    [movie.title, wrongGuesses, maxLevel],
+  );
 
   useEffect(() => {
     setGuess('');
@@ -137,7 +159,7 @@ export function PosterGuessGame({
       </div>
 
       <div className="mb-4 flex justify-center">
-        <div className="relative h-[220px] w-[220px] overflow-hidden rounded-lg border border-slate-600 bg-slate-900/60">
+        <div className="relative h-[330px] w-[220px] overflow-hidden rounded-lg border border-slate-600 bg-slate-900/60">
           {!error && (
             <canvas
               ref={canvasRef}
@@ -209,8 +231,13 @@ export function PosterGuessGame({
         </div>
       )}
 
-      {feedback === 'wrong' && (
-        <p className="mt-2 text-center text-xs text-orange-300/80">Not quite — poster sharpened.</p>
+      {feedback === 'wrong' && !revealedAnswer && (
+        <div className="mt-2 text-center">
+          <p className="text-xs text-orange-300/80">Not quite — poster sharpened.</p>
+          {hint && (
+            <p className="mt-1 font-mono text-sm tracking-widest text-orange-200/90">{hint}</p>
+          )}
+        </div>
       )}
     </div>
   );
