@@ -16,17 +16,38 @@ import ErrorBanner from '@/components/ErrorBanner';
 import LoadingScreen from '@/components/landing/LoadingScreen';
 import UploadZone from '@/components/landing/UploadZone';
 import ExportInstructions from '@/components/landing/ExportInstructions';
+import { POSTER_GAME_MOVIES, type PosterGameMovie } from '@/lib/posterGameData';
+
+const POSTER_GAME_MAX_LEVEL = 5;
+
+function drawShuffledMovie(deckRef: React.MutableRefObject<PosterGameMovie[]>, indexRef: React.MutableRefObject<number>): PosterGameMovie {
+  if (indexRef.current >= deckRef.current.length) {
+    const shuffled = [...POSTER_GAME_MOVIES];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    deckRef.current = shuffled;
+    indexRef.current = 0;
+  }
+  const movie = deckRef.current[indexRef.current];
+  indexRef.current += 1;
+  return movie;
+}
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
-  // Guess-your-stat game (wait UX B). Ref so the in-flight scrape handler reads the
-  // latest guess (it's submitted mid-scrape, after the handler's closure is fixed).
-  const [guess, setGuessState] = useState<number | null>(null);
-  const [reveal, setReveal] = useState<{ guess: number; actual: number } | null>(null);
-  const guessRef = useRef<number | null>(null);
-  const setGuess = useCallback((n: number) => { guessRef.current = n; setGuessState(n); }, []);
+  // Pixelated poster guessing game, shown while scraping.
+  const [posterRound, setPosterRound] = useState<PosterGameMovie | null>(null);
+  const [posterLevel, setPosterLevel] = useState(0);
+  const [posterScore, setPosterScore] = useState(0);
+  const [posterWrongGuesses, setPosterWrongGuesses] = useState(0);
+  const [posterRevealed, setPosterRevealed] = useState(false);
+  const shuffledDeckRef = useRef<PosterGameMovie[]>([]);
+  const deckIndexRef = useRef(0);
+  const [resultReady, setResultReady] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
@@ -81,6 +102,39 @@ export default function LetterboxdLanding() {
       document.body.style.overflow = prevOverflow;
     };
   }, [showUploadModal]);
+
+  const drawNextRound = useCallback(() => {
+    const movie = drawShuffledMovie(shuffledDeckRef, deckIndexRef);
+    setPosterLevel(0);
+    setPosterWrongGuesses(0);
+    setPosterRevealed(false);
+    setPosterRound(movie);
+  }, []);
+
+  // Kick off the first poster round once scraping starts.
+  useEffect(() => {
+    if (isScraping && !posterRound) {
+      drawNextRound();
+    }
+  }, [isScraping, posterRound, drawNextRound]);
+
+  const handleWrongGuess = useCallback(() => {
+    setPosterWrongGuesses((prev) => prev + 1);
+    setPosterLevel((prev) => {
+      const next = Math.min(prev + 1, POSTER_GAME_MAX_LEVEL);
+      if (next >= POSTER_GAME_MAX_LEVEL) {
+        setPosterRevealed(true);
+        setTimeout(() => drawNextRound(), 2000);
+      }
+      return next;
+    });
+  }, [drawNextRound]);
+
+  const handleCorrectGuess = useCallback(() => {
+    setPosterScore((prev) => prev + 1);
+    setPosterRevealed(true);
+    setTimeout(() => drawNextRound(), 1200);
+  }, [drawNextRound]);
 
   const zipFiles = useCallback(async (files: FileList | File[]): Promise<File> => {
     const zip = new JSZip();
@@ -271,9 +325,14 @@ export default function LetterboxdLanding() {
 
     setIsScraping(true);
     setScrapeProgress(null);
-    setGuessState(null);
-    setReveal(null);
-    guessRef.current = null;
+    setPosterRound(null);
+    setPosterLevel(0);
+    setPosterScore(0);
+    setPosterWrongGuesses(0);
+    setPosterRevealed(false);
+    shuffledDeckRef.current = [];
+    deckIndexRef.current = 0;
+    setResultReady(null);
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape' });
 
@@ -312,15 +371,7 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      // If the user played the guess game, show the reveal briefly before redirect.
-      const actualFilms = result.stats.total_films ?? 0;
-      const playedGuess = guessRef.current;
-      if (playedGuess != null && actualFilms > 0) {
-        setReveal({ guess: playedGuess, actual: actualFilms });
-        setTimeout(() => { window.location.href = resultPath(username); }, 3500);
-      } else {
-        setTimeout(() => { window.location.href = resultPath(username); }, 100);
-      }
+      setResultReady(resultPath(username));
     } catch (err) {
       console.error('[scrape] analysis failed:', err);
       const normalized = normalizeError(err);
@@ -377,9 +428,14 @@ export default function LetterboxdLanding() {
     setIsUploading(false);
     setIsScraping(false);
     setScrapeProgress(null);
-    setGuessState(null);
-    setReveal(null);
-    guessRef.current = null;
+    setPosterRound(null);
+    setPosterLevel(0);
+    setPosterScore(0);
+    setPosterWrongGuesses(0);
+    setPosterRevealed(false);
+    shuffledDeckRef.current = [];
+    deckIndexRef.current = 0;
+    setResultReady(null);
     setError(null);
   }, []);
 
@@ -391,9 +447,21 @@ export default function LetterboxdLanding() {
         mode="scrape"
         typicalSeconds={30}
         events={scrapeProgress?.trace_events}
-        onGuess={setGuess}
-        guess={guess}
-        reveal={reveal}
+        posterGame={
+          posterRound
+            ? {
+                movie: posterRound,
+                level: posterLevel,
+                maxLevel: POSTER_GAME_MAX_LEVEL,
+                wrongGuesses: posterWrongGuesses,
+                score: posterScore,
+                onWrongGuess: handleWrongGuess,
+                onCorrectGuess: handleCorrectGuess,
+                revealedAnswer: posterRevealed,
+              }
+            : null
+        }
+        resultReady={resultReady}
       />
     );
   }
