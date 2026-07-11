@@ -84,7 +84,7 @@ async def process_comprehensive_letterboxd_data(
         if task_id:
             task_manager.update_task_progress(task_id, stage, message, progress, total)
         else:
-            print(f"\U0001f4ca {stage}: {message} ({progress}/{total})")
+            print(f"[{stage}] {message} ({progress}/{total})")
 
     # -----------------------------------------------------------------------
     # 1. LOAD CSV DATA
@@ -536,7 +536,7 @@ async def process_comprehensive_letterboxd_data(
     )
 
     if os.getenv("DEBUG_CINEMA_SCALE"):
-        print(f"\U0001f3ac Cinema Scale: score={stats['sinefil_meter']['score']}, "
+        print(f"[Cinema Scale] score={stats['sinefil_meter']['score']}, "
               f"breakdown={stats['sinefil_meter']['breakdown']}")
 
     # -----------------------------------------------------------------------
