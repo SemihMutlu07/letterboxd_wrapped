@@ -79,7 +79,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   if (!ra || ra.reviews_with_text === 0) return null;
 
   return (
-    <Section title="Your Reviews" subtitle={subtitleParts.join(' · ')} animateMode="mount">
+    <Section title="Your Reviews" subtitle={subtitleParts.join(' · ')}>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 items-start w-full">
         <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
           <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{ra.reviews_with_text}</p>

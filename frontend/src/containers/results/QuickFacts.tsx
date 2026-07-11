@@ -86,7 +86,7 @@ export default function QuickFacts({
   })();
 
   return (
-    <Section title="Quick Facts" subtitle="Your viewing at a glance" animateMode="mount">
+    <Section title="Quick Facts" subtitle="Your viewing at a glance">
       <div className="grid gap-3">
         {/* Top row — stack vertically on phones, side-by-side from sm: up */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

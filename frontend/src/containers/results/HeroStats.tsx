@@ -48,7 +48,7 @@ export default function HeroStats({
           <StatCard value={topGenre} label="Top Genre" color="text-purple-500" onClick={onClickGenre} />
         </div>
 
-        <Section variant="default" className="bg-slate-800/30" animateMode="mount">
+        <Section variant="default" className="bg-slate-800/30">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 lg:gap-6">
             <button
               type="button"

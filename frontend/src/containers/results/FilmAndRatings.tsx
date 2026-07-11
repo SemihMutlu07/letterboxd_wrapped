@@ -28,7 +28,7 @@ export function FilmHistory({
 }) {
   const primary = '#f97316';
   return (
-    <Section title="Film History" subtitle="Your journey through cinema decades" animateMode="mount">
+    <Section title="Film History" subtitle="Your journey through cinema decades">
       <div className="w-full h-56 md:h-72 lg:h-80 px-2 md:px-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart 
@@ -151,7 +151,7 @@ export function RatingsBar({
   };
   return (
     <>
-      <Section title="Rating Patterns" subtitle="How you rate films" animateMode="mount">
+      <Section title="Rating Patterns" subtitle="How you rate films">
         {mostCommonRating != null && (
           <div className="mb-3 flex items-center gap-2">
             <span className="text-xs uppercase tracking-wider text-slate-500 font-medium">Most given rating</span>

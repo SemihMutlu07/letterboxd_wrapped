@@ -25,7 +25,7 @@ import { readResultUsernameFromLocation, resultPath } from '@/lib/routes';
 import { initPostHog, flushQueue } from '@/lib/posthog';
 import { saveConsentDecisionToDb } from '@/lib/consentFlow';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
-import SlideDeck, { type Slide } from '@/components/results/SlideDeck';
+import { useLazyMount } from '@/hooks/useIntersectionObserver';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
@@ -695,7 +695,7 @@ export function ResultsContent({
     setModalOpen(true);
   };
 
-  const slides: Slide[] = [
+  const slides = [
     {
       id: 'hero',
       render: () => (
@@ -835,12 +835,12 @@ export function ResultsContent({
     },
     {
       id: 'film-history',
-      render: () => <FilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />,
+      render: () => <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />,
     },
     {
       id: 'ratings-bar',
       render: () => (
-        <RatingsBar
+        <LazyRatingsBar
           data={ratingsArr}
           max={ratingMax}
           isMobile={isMobile}
@@ -853,7 +853,7 @@ export function ResultsContent({
     {
       id: 'quick-facts',
       render: () => (
-        <QuickFacts
+        <LazyQuickFacts
           avgMinutes={stats.average_runtime || 0}
           totalCountries={stats.total_countries || 0}
           filmsPerWeek={quickMetrics.filmsPerWeek}
@@ -879,13 +879,13 @@ export function ResultsContent({
       : []),
     {
       id: 'languages',
-      render: () => <LanguagesLeaderboard data={(stats.top_languages ?? []).slice(0, 7)} allFilms={stats.all_films ?? []} />,
+      render: () => <LazyLanguages data={stats.top_languages ?? []} allFilms={stats.all_films ?? []} />,
     },
     {
       id: 'cinema-scale',
       render: () => (
         <SectionContainer theme={theme}>
-          <CinemaScale
+          <LazyCinemaScale
             type={stats.sinefil_meter?.type || 'Independent Cinephile'}
             description={stats.sinefil_meter?.description}
             score={cineScore || 50}
@@ -950,7 +950,11 @@ export function ResultsContent({
 
   return (
     <>
-      <SlideDeck slides={slides} />
+      <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
+        {slides.map((s) => (
+          <React.Fragment key={s.id}>{s.render()}</React.Fragment>
+        ))}
+      </main>
 
       <ShareModal
         open={showShareModal}
@@ -989,6 +993,150 @@ function SectionContainer({ theme, children }: { theme: string; children: React.
       border: theme === 'vhs' ? '1px solid rgba(212,149,90,0.2)' : '1px solid rgba(255,255,255,0.06)',
     }}>
       {children}
+    </div>
+  );
+}
+
+// ===================== LAZY LOADING COMPONENTS =====================
+
+function LazyLanguages({ data, allFilms }: { data: any[]; allFilms: any[] }) {
+  const { ref, shouldMount } = useLazyMount(100);
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <LanguagesLeaderboard data={data.slice(0, 7)} allFilms={allFilms} />
+      ) : (
+        <div className="h-64 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
+  const { ref, shouldMount } = useLazyMount(150);
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <FilmHistory data={data} max={max} isMobile={isMobile} />
+      ) : (
+        <div className="h-48 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+function LazyRatingsBar({
+  data,
+  max,
+  isMobile,
+  mostCommonRating,
+  allFilms,
+  userAvg,
+}: {
+  data: any[];
+  max: number;
+  isMobile: boolean;
+  mostCommonRating?: number;
+  allFilms: any[];
+  userAvg?: number | null;
+}) {
+  const { ref, shouldMount } = useLazyMount(200);
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <RatingsBar
+          data={data}
+          max={max}
+          isMobile={isMobile}
+          mostCommonRating={mostCommonRating}
+          allFilms={allFilms}
+          userAvg={userAvg}
+        />
+      ) : (
+        <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+function LazyQuickFacts({
+  avgMinutes,
+  totalCountries,
+  filmsPerWeek,
+  languageCount,
+  decadeSpan,
+  topCountry,
+  rewatchedCount,
+  totalFilms,
+  paceWindowDays,
+  paceWindowSource,
+  diaryFilmCount,
+  lifetimeFilmCount,
+}: {
+  avgMinutes: number;
+  totalCountries: number;
+  filmsPerWeek: number;
+  languageCount: number;
+  decadeSpan: number;
+  topCountry?: string;
+  rewatchedCount?: number;
+  totalFilms?: number;
+  paceWindowDays?: number;
+  paceWindowSource?: 'diary' | 'fallback';
+  diaryFilmCount?: number;
+  lifetimeFilmCount?: number;
+}) {
+  const { ref, shouldMount } = useLazyMount(250);
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <QuickFacts
+          avgMinutes={avgMinutes}
+          totalCountries={totalCountries}
+          filmsPerWeek={filmsPerWeek}
+          languageCount={languageCount}
+          decadeSpan={decadeSpan}
+          topCountry={topCountry}
+          rewatchedCount={rewatchedCount}
+          totalFilms={totalFilms}
+          paceWindowDays={paceWindowDays}
+          paceWindowSource={paceWindowSource}
+          diaryFilmCount={diaryFilmCount}
+          lifetimeFilmCount={lifetimeFilmCount}
+        />
+      ) : (
+        <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
+    </div>
+  );
+}
+
+function LazyCinemaScale({
+  type,
+  description,
+  score,
+  breakdown,
+}: {
+  type: string;
+  description?: string;
+  score: number;
+  breakdown?: {
+    geography: number;
+    temporal: number;
+    languages: number;
+    volume: number;
+    genres: number;
+    directors: number;
+  };
+}) {
+  const { ref, shouldMount } = useLazyMount(300);
+  return (
+    <div ref={ref}>
+      {shouldMount ? (
+        <CinemaScale type={type} description={description} score={score} breakdown={breakdown} />
+      ) : (
+        <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
+      )}
     </div>
   );
 }

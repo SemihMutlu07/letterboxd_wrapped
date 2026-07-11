@@ -87,11 +87,6 @@ describe('ResultsPage ShareModal dynamic loading', () => {
     render(<Harness />);
     expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
 
-    // The results page renders as a paginated slide deck; the share button
-    // lives on the final ("share-footer") slide, so navigate there first.
-    const slideNavButtons = screen.getAllByRole('button', { name: /go to slide \d+ of \d+/i });
-    await userEvent.click(slideNavButtons[slideNavButtons.length - 1]);
-
     const shareButtons = await waitFor(() => {
       const buttons = screen.getAllByRole('button', { name: /share your wrapped/i });
       expect(buttons.length).toBeGreaterThan(0);

@@ -44,7 +44,7 @@ export default function CinemaScale({
   ];
 
   return (
-    <Section title="Your Cinema Scale" subtitle="How adventurous is your film taste?" animateMode="mount">
+    <Section title="Your Cinema Scale" subtitle="How adventurous is your film taste?">
       <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 md:p-8 space-y-6">
         {/* Main Score Display */}
         <div className="text-center mb-6">
