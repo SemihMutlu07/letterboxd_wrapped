@@ -62,7 +62,7 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
   };
 
   return (
-    <Section title="Languages" subtitle="Your cinematic linguistic profile">
+    <Section title="Languages" subtitle="Your cinematic linguistic profile" animateMode="mount">
       <div className="grid w-full gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)] lg:items-center">
         <motion.div
           className="relative h-[260px] overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-950/40"

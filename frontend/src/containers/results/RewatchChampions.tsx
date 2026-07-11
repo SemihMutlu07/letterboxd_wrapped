@@ -29,7 +29,7 @@ export default function RewatchChampions({ films }: RewatchChampionsProps) {
   const canExpand = !expanded && films.length > COLLAPSED;
 
   return (
-    <Section title="Rewatch Champions" subtitle="Films you couldn't watch just once">
+    <Section title="Rewatch Champions" subtitle="Films you couldn't watch just once" animateMode="mount">
       <div className="grid gap-3">
         {shown.map((f) => {
           const posterUrl = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
