@@ -20,6 +20,8 @@ type SectionProps = {
   children: React.ReactNode;
   variant?: 'default' | 'highlight' | 'subtle';
   className?: string;
+  /** 'scroll' (default) reveals on scroll into view; 'mount' reveals immediately on mount (for use inside slides). */
+  animateMode?: 'scroll' | 'mount';
 };
 
 export default function Section({
@@ -29,6 +31,7 @@ export default function Section({
   children,
   variant = 'default',
   className = '',
+  animateMode = 'scroll',
 }: SectionProps) {
   const variants = {
     default: 'bg-slate-800/30 backdrop-blur-sm border border-slate-700/50',
@@ -36,11 +39,14 @@ export default function Section({
     subtle: 'bg-slate-900/50',
   } as const;
 
+  const revealProps =
+    animateMode === 'mount'
+      ? { initial: 'hidden', animate: 'visible' }
+      : { initial: 'hidden', whileInView: 'visible', viewport: { once: true, amount: 0.2 } };
+
   return (
     <motion.section
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      {...revealProps}
       variants={containerVariants}
       className={`${variants[variant]} rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-8 ${className}`}
     >

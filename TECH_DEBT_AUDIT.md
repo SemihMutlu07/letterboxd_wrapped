@@ -76,7 +76,7 @@ git merge --abort                       # if the merge isn't wanted on main
 git switch -c chore/integrate-runtime   # move the merge off main
 git checkout --conflict=diff3 frontend/src/components/landing/LoadingScreen.tsx
 # resolve the 3 conflicts, then:
-cd backend && python3 -m pytest -q      # must be fully green
+cd backend && python -m pytest -q      # must be fully green
 git switch main && git merge --ff-only chore/integrate-runtime
 ```
 

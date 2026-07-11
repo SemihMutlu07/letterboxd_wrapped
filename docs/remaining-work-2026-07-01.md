@@ -95,4 +95,4 @@ Features that would live here:
 
   cd frontend && npx tsc --noEmit
   cd frontend && npx vitest run
-  cd backend && python3 -m pytest
+  cd backend && python -m pytest

@@ -506,7 +506,7 @@ def update_task_progress(
         task.progress = progress
         task.total = total
         append_task_event(task_id, stage, message, metrics={"progress": progress, "total": total})
-    print(f"📊 [{task_id[:8]}] {stage}: {message} ({progress}/{total})")
+    print(f"[{task_id[:8]}] {stage}: {message} ({progress}/{total})")
 
 
 def set_task_running(task_id: str) -> None:

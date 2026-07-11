@@ -131,6 +131,19 @@ export function normalizeError(err: unknown): NormalizedError {
     };
   }
 
+  // Admin-paused desktop worker path
+  if (/desktop_worker_paused|desktop scraper is paused/i.test(raw)) {
+    return {
+      title: 'Desktop scraper paused',
+      message:
+        raw ||
+        'The desktop scraper is paused for maintenance.',
+      action:
+        'Use the export upload option for a complete Wrapped, or try again shortly.',
+      reason: 'desktop_worker_paused',
+    };
+  }
+
   // Scrape blocked by Letterboxd bot detection (cloud IP)
   if (/scrape_blocked|letterboxd is blocking|rate limit hit/i.test(raw)) {
     return {

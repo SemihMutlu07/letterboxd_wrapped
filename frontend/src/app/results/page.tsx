@@ -16,7 +16,6 @@ import type { StatsData, PersonFilm } from '@/containers/results/experimental/ty
 import PersonFilmsModal from '@/containers/results/experimental/sections/PersonFilmsModal';
 
 import { ThemeProvider, useTheme } from '@/lib/theme';
-import ThemeSwitcher from '@/components/ThemeSwitcher';
 import ThemeWrapper from '@/components/ThemeWrapper';
 import FeedbackFab, { FeedbackFabRef } from '@/components/FeedbackFab';
 import { searchPerson } from '@/lib/api';
@@ -26,7 +25,7 @@ import { readResultUsernameFromLocation, resultPath } from '@/lib/routes';
 import { initPostHog, flushQueue } from '@/lib/posthog';
 import { saveConsentDecisionToDb } from '@/lib/consentFlow';
 import { useRafThrottle } from '@/hooks/useRafThrottle';
-import { useLazyMount } from '@/hooks/useIntersectionObserver';
+import SlideDeck, { type Slide } from '@/components/results/SlideDeck';
 
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
@@ -673,145 +672,152 @@ export function ResultsContent({
     setModalOpen(true);
   };
 
-  return (
-    <>
-      <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
-        {/* Header */}
-        <header className="text-center py-4 md:py-10">
-          <h1
-            className="text-[clamp(32px,6vw,72px)] font-black mb-4 leading-[0.95] tracking-tighter"
-            style={{
-              fontFamily: 'var(--theme-font-display)',
-              color:
-                theme === 'current' ? '#fff'
-                : theme === 'vhs' ? '#f0e6d8'
-                : theme === 'apple' ? '#1D1D1F'
-                : '#e8e0d8',
-            }}
-          >
-            Your{' '}
-            <span
-              className="bg-clip-text text-transparent"
+  const slides: Slide[] = [
+    {
+      id: 'hero',
+      render: () => (
+        <div className="space-y-3 md:space-y-6">
+          <header className="text-center py-4 md:py-10">
+            <h1
+              className="text-[clamp(32px,6vw,72px)] font-black mb-4 leading-[0.95] tracking-tighter"
               style={{
-                backgroundImage: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']}${theme === 'current' ? ', #d946ef' : ''})`,
+                fontFamily: 'var(--theme-font-display)',
+                color:
+                  theme === 'current' ? '#fff'
+                  : theme === 'vhs' ? '#f0e6d8'
+                  : theme === 'apple' ? '#1D1D1F'
+                  : '#e8e0d8',
               }}
             >
-              Letterboxd
-            </span>{' '}
-            Wrapped
-          </h1>
-          <p
-            className="text-xl mb-2"
-            style={{
-              color:
-                theme === 'current' ? '#d1d5db'
-                : theme === 'vhs' ? '#d4955a'
-                : theme === 'apple' ? '#6E6E73'
-                : '#8a8a8a',
-            }}
-          >
-            A comprehensive analysis of your cinematic journey.
-          </p>
-          <p
-            className="text-center text-lg"
-            style={{
-              color:
-                theme === 'current' ? '#9ca3af'
-                : theme === 'vhs' ? '#d4955a'
-                : theme === 'apple' ? '#86868B'
-                : '#6a6a6a',
-            }}
-          >
-            {dateRangeText}
-          </p>
-          {username && (
-            <div className="mt-3">
+              Your{' '}
               <span
-                className="inline-block px-3 py-1 text-sm rounded-full"
+                className="bg-clip-text text-transparent"
                 style={{
-                  background:
-                    theme === 'current' ? 'rgba(51,65,85,0.6)'
-                    : theme === 'apple' ? '#F2F2F7'
-                    : 'rgba(0,0,0,0.06)',
-                  border: `1px solid ${
-                    theme === 'current' ? 'rgba(51,65,85,0.6)'
-                    : theme === 'apple' ? 'rgba(0,0,0,0.08)'
-                    : 'rgba(0,0,0,0.1)'
-                  }`,
-                  color:
-                    theme === 'current' ? '#cbd5e1'
-                    : theme === 'vhs' ? '#d4955a'
-                    : theme === 'apple' ? '#1D1D1F'
-                    : '#8a8a8a',
+                  backgroundImage: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']}${theme === 'current' ? ', #d946ef' : ''})`,
                 }}
               >
-                @{username}
-              </span>
+                Letterboxd
+              </span>{' '}
+              Wrapped
+            </h1>
+            <p
+              className="text-xl mb-2"
+              style={{
+                color:
+                  theme === 'current' ? '#d1d5db'
+                  : theme === 'vhs' ? '#d4955a'
+                  : theme === 'apple' ? '#6E6E73'
+                  : '#8a8a8a',
+              }}
+            >
+              A comprehensive analysis of your cinematic journey.
+            </p>
+            <p
+              className="text-center text-lg"
+              style={{
+                color:
+                  theme === 'current' ? '#9ca3af'
+                  : theme === 'vhs' ? '#d4955a'
+                  : theme === 'apple' ? '#86868B'
+                  : '#6a6a6a',
+              }}
+            >
+              {dateRangeText}
+            </p>
+            {username && (
+              <div className="mt-3">
+                <span
+                  className="inline-block px-3 py-1 text-sm rounded-full"
+                  style={{
+                    background:
+                      theme === 'current' ? 'rgba(51,65,85,0.6)'
+                      : theme === 'apple' ? '#F2F2F7'
+                      : 'rgba(0,0,0,0.06)',
+                    border: `1px solid ${
+                      theme === 'current' ? 'rgba(51,65,85,0.6)'
+                      : theme === 'apple' ? 'rgba(0,0,0,0.08)'
+                      : 'rgba(0,0,0,0.1)'
+                    }`,
+                    color:
+                      theme === 'current' ? '#cbd5e1'
+                      : theme === 'vhs' ? '#d4955a'
+                      : theme === 'apple' ? '#1D1D1F'
+                      : '#8a8a8a',
+                  }}
+                >
+                  @{username}
+                </span>
+              </div>
+            )}
+          </header>
+
+          <SectionContainer theme={theme}>
+            <HeroStats
+              totalFilms={stats.total_films}
+              avgRating={stats.average_rating}
+              hoursWatched={runtimeHours}
+              topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
+              timePct={timePct}
+              favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
+              favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
+              onClickFilms={handleFilmsClick}
+              onClickAvgRating={handleAvgRatingClick}
+              onClickGenre={handleGenreClick}
+              onClickDirector={handleDirectorClick}
+              onClickDecade={handleDecadeClick}
+            />
+          </SectionContainer>
+        </div>
+      ),
+    },
+    {
+      id: 'people',
+      render: () => (
+        <div className="space-y-3 md:space-y-6">
+          <div className="grid grid-cols-1 gap-6">
+            <DirectorsGrid stats={stats} onDirectorClick={(name) => handlePersonClick(name, true)} />
+            <CastGrid stats={stats} onActorClick={(name) => handlePersonClick(name, false)} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+            <div>
+              <p className="text-sm font-semibold text-white">Ready to share your year?</p>
+              <p className="text-xs text-slate-500 mt-0.5">Turn your stats into a shareable card.</p>
             </div>
-          )}
-
-          {/* Theme Switcher */}
-          <div className="mt-6">
-            <ThemeSwitcher />
+            <button
+              onClick={() => { setShowShareModal(true); trackEvent('share_export_started'); }}
+              className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:scale-105"
+              style={{ background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`, color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614' }}
+            >
+              Share your Wrapped →
+            </button>
           </div>
-        </header>
-
-        {/* Hero Stats */}
-        <SectionContainer theme={theme}>
-          <HeroStats
-            totalFilms={stats.total_films}
-            avgRating={stats.average_rating}
-            hoursWatched={runtimeHours}
-            topGenre={stats.top_genres?.[0]?.name || 'Unknown'}
-            timePct={timePct}
-            favoriteDirector={stats.top_directors?.[0] || { name: 'Unknown', count: 0 }}
-            favoriteDecade={stats.favorite_decade || { name: 'Unknown', count: 0 }}
-            onClickFilms={handleFilmsClick}
-            onClickAvgRating={handleAvgRatingClick}
-            onClickGenre={handleGenreClick}
-            onClickDirector={handleDirectorClick}
-            onClickDecade={handleDecadeClick}
-          />
-        </SectionContainer>
-
-        {/* 1. Directors & Cast */}
-        <div className="grid grid-cols-1 gap-6">
-          <DirectorsGrid stats={stats} onDirectorClick={(name) => handlePersonClick(name, true)} />
-          <CastGrid stats={stats} onActorClick={(name) => handlePersonClick(name, false)} />
         </div>
-
-        {/* Share teaser — visible after directors/cast while users are engaged */}
-        <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-2xl border border-white/[0.06] bg-white/[0.03]">
-          <div>
-            <p className="text-sm font-semibold text-white">Ready to share your year?</p>
-            <p className="text-xs text-slate-500 mt-0.5">Turn your stats into a shareable card.</p>
-          </div>
-          <button
-            onClick={() => { setShowShareModal(true); trackEvent('share_export_started'); }}
-            className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:scale-105"
-            style={{ background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`, color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614' }}
-          >
-            Share your Wrapped →
-          </button>
-        </div>
-
-        {/* 3. Rating Outliers */}
-        <RatingDeviation stats={stats} />
-
-        {/* 4. Your Reviews — promoted: it's the most personal section */}
-        {stats.review_analysis ? (
+      ),
+    },
+    {
+      id: 'rating-deviation',
+      render: () => <RatingDeviation stats={stats} />,
+    },
+    {
+      id: 'reviews',
+      render: () =>
+        stats.review_analysis ? (
           <ReviewAnalysisSection stats={stats} />
         ) : (
           <div className="rounded-xl bg-white/5 p-8 text-center text-slate-400">
             <p className="text-sm">Bu hesapta yazılı review bulunamadı.</p>
           </div>
-        )}
-
-        {/* Film History */}
-        <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
-
-        {/* Ratings Bar */}
-        <LazyRatingsBar
+        ),
+    },
+    {
+      id: 'film-history',
+      render: () => <FilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />,
+    },
+    {
+      id: 'ratings-bar',
+      render: () => (
+        <RatingsBar
           data={ratingsArr}
           max={ratingMax}
           isMobile={isMobile}
@@ -819,9 +825,12 @@ export function ResultsContent({
           allFilms={stats.all_films ?? []}
           userAvg={stats.average_rating}
         />
-
-        {/* Quick Facts */}
-        <LazyQuickFacts
+      ),
+    },
+    {
+      id: 'quick-facts',
+      render: () => (
+        <QuickFacts
           avgMinutes={stats.average_runtime || 0}
           totalCountries={stats.total_countries || 0}
           filmsPerWeek={quickMetrics.filmsPerWeek}
@@ -835,73 +844,90 @@ export function ResultsContent({
           diaryFilmCount={quickMetrics.diaryFilmCount}
           lifetimeFilmCount={quickMetrics.lifetimeFilmCount}
         />
-
-        {/* Rewatch Champions — only when user has films watched 2+ times */}
-        {stats.rewatch_champions && stats.rewatch_champions.length > 0 && (
-          <RewatchChampions films={stats.rewatch_champions} />
-        )}
-
-        {/* Languages — moved lower; supporting info, not headline */}
-        <LazyLanguages data={stats.top_languages ?? []} allFilms={stats.all_films ?? []} />
-
-        {/* Cinema Scale */}
+      ),
+    },
+    ...(stats.rewatch_champions && stats.rewatch_champions.length > 0
+      ? [
+          {
+            id: 'rewatch-champions',
+            render: () => <RewatchChampions films={stats.rewatch_champions} />,
+          },
+        ]
+      : []),
+    {
+      id: 'languages',
+      render: () => <LanguagesLeaderboard data={(stats.top_languages ?? []).slice(0, 7)} allFilms={stats.all_films ?? []} />,
+    },
+    {
+      id: 'cinema-scale',
+      render: () => (
         <SectionContainer theme={theme}>
-          <LazyCinemaScale
+          <CinemaScale
             type={stats.sinefil_meter?.type || 'Independent Cinephile'}
             description={stats.sinefil_meter?.description}
             score={cineScore || 50}
             breakdown={stats.sinefil_meter?.breakdown}
           />
         </SectionContainer>
-
-        {/* Share button */}
-        <div className="flex flex-col items-center my-8 gap-3">
-          <button
-            onClick={() => {
-              setShowShareModal(true);
-              trackEvent('share_export_started');
-            }}
-            className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
-            style={{
-              background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`,
-              color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614',
-            }}
-          >
-            <div
-              className="w-6 h-6 rounded"
-              style={{
-                background: theme === 'current' ? '#fff' : 'var(--theme-bg)',
+      ),
+    },
+    {
+      id: 'share-footer',
+      render: () => (
+        <div className="space-y-3 md:space-y-6">
+          <div className="flex flex-col items-center my-8 gap-3">
+            <button
+              onClick={() => {
+                setShowShareModal(true);
+                trackEvent('share_export_started');
               }}
-            />
-            Share Your Wrapped
-          </button>
-          <p
-            className="text-xs text-center"
-            style={{
-              color: theme === 'current' ? '#64748b' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
-            }}
-          >
-            Your raw files are never stored. Only anonymous, aggregated usage stats are kept to improve the product.
-          </p>
-        </div>
-
-        {/* Beta credits + contact */}
-        <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
-          <p className="text-xs text-slate-600">
-            Thanks to our beta testers — Mete, Mehlika Ceylin Aydoğan, Salih Emre Padır,
-            Mert Efe Şentürk, Deniz and Ayberk — for the invaluable feedback.
-          </p>
-          <p className="text-xs text-slate-600">
-            Questions or feedback?{' '}
-            <a
-              href="mailto:semihmutlu220@gmail.com"
-              className="underline underline-offset-2 hover:text-slate-400 transition-colors"
+              className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
+              style={{
+                background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`,
+                color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614',
+              }}
             >
-              Get in touch
-            </a>
-          </p>
+              <div
+                className="w-6 h-6 rounded"
+                style={{
+                  background: theme === 'current' ? '#fff' : 'var(--theme-bg)',
+                }}
+              />
+              Share Your Wrapped
+            </button>
+            <p
+              className="text-xs text-center"
+              style={{
+                color: theme === 'current' ? '#64748b' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
+              }}
+            >
+              Your raw files are never stored. Only anonymous, aggregated usage stats are kept to improve the product.
+            </p>
+          </div>
+
+          <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
+            <p className="text-xs text-slate-600">
+              Thanks to our beta testers — Mete, Mehlika Ceylin Aydoğan, Salih Emre Padır,
+              Mert Efe Şentürk, Deniz and Ayberk — for the invaluable feedback.
+            </p>
+            <p className="text-xs text-slate-600">
+              Questions or feedback?{' '}
+              <a
+                href="mailto:semihmutlu220@gmail.com"
+                className="underline underline-offset-2 hover:text-slate-400 transition-colors"
+              >
+                Get in touch
+              </a>
+            </p>
+          </div>
         </div>
-      </main>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <SlideDeck slides={slides} />
 
       <ShareModal
         open={showShareModal}
@@ -942,162 +968,3 @@ function SectionContainer({ theme, children }: { theme: string; children: React.
   );
 }
 
-// ===================== LAZY LOADING COMPONENTS =====================
-
-// Lazy wrapper for Languages
-function LazyLanguages({
-  data,
-  allFilms,
-}: {
-  data: any[];
-  allFilms: any[];
-}) {
-  const { ref, shouldMount } = useLazyMount(100);
-
-  return (
-    <div ref={ref}>
-      {shouldMount ? (
-        <LanguagesLeaderboard data={data.slice(0,7)} allFilms={allFilms} />
-      ) : (
-        <div className="h-64 bg-slate-800/30 rounded-2xl animate-pulse" />
-      )}
-    </div>
-  );
-}
-
-// Lazy wrapper for Film History
-function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
-  const { ref, shouldMount } = useLazyMount(150);
-
-  return (
-    <div ref={ref}>
-      {shouldMount ? (
-        <FilmHistory data={data} max={max} isMobile={isMobile} />
-      ) : (
-        <div className="h-48 bg-slate-800/30 rounded-2xl animate-pulse" />
-      )}
-    </div>
-  );
-}
-
-// Lazy wrapper for Ratings Bar
-function LazyRatingsBar({
-  data,
-  max,
-  isMobile,
-  mostCommonRating,
-  allFilms,
-  userAvg,
-}: {
-  data: any[];
-  max: number;
-  isMobile: boolean;
-  mostCommonRating?: number;
-  allFilms: any[];
-  userAvg?: number | null;
-}) {
-  const { ref, shouldMount } = useLazyMount(200);
-
-  return (
-    <div ref={ref}>
-      {shouldMount ? (
-        <RatingsBar
-          data={data}
-          max={max}
-          isMobile={isMobile}
-          mostCommonRating={mostCommonRating}
-          allFilms={allFilms}
-          userAvg={userAvg}
-        />
-      ) : (
-        <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
-      )}
-    </div>
-  );
-}
-
-// Lazy wrapper for Quick Facts
-function LazyQuickFacts({
-  avgMinutes,
-  totalCountries,
-  filmsPerWeek,
-  languageCount,
-  decadeSpan,
-  topCountry,
-  rewatchedCount,
-  totalFilms,
-  paceWindowDays,
-  paceWindowSource,
-  diaryFilmCount,
-  lifetimeFilmCount,
-}: {
-  avgMinutes: number;
-  totalCountries: number;
-  filmsPerWeek: number;
-  languageCount: number;
-  decadeSpan: number;
-  topCountry?: string;
-  rewatchedCount?: number;
-  totalFilms?: number;
-  paceWindowDays?: number;
-  paceWindowSource?: 'diary' | 'fallback';
-  diaryFilmCount?: number;
-  lifetimeFilmCount?: number;
-}) {
-  const { ref, shouldMount } = useLazyMount(250);
-
-  return (
-    <div ref={ref}>
-      {shouldMount ? (
-        <QuickFacts
-          avgMinutes={avgMinutes}
-          totalCountries={totalCountries}
-          filmsPerWeek={filmsPerWeek}
-          languageCount={languageCount}
-          decadeSpan={decadeSpan}
-          topCountry={topCountry}
-          rewatchedCount={rewatchedCount}
-          totalFilms={totalFilms}
-          paceWindowDays={paceWindowDays}
-          paceWindowSource={paceWindowSource}
-          diaryFilmCount={diaryFilmCount}
-          lifetimeFilmCount={lifetimeFilmCount}
-        />
-      ) : (
-        <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />
-      )}
-    </div>
-  );
-}
-
-// Lazy wrapper for Cinema Scale
-function LazyCinemaScale({
-  type,
-  description,
-  score,
-  breakdown,
-}: {
-  type: string;
-  description?: string;
-  score: number;
-  breakdown?: {
-    geography: number;
-    temporal: number;
-    languages: number;
-    volume: number;
-    genres: number;
-    directors: number;
-  };
-}) {
-  const { ref, shouldMount } = useLazyMount(300);
-
-  return (
-    <div ref={ref}>
-      {shouldMount ? (
-        <CinemaScale type={type} description={description} score={score} breakdown={breakdown} />
-      ) : (
-        <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
-      )}
-    </div>
-  );
-}
