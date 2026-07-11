@@ -38,9 +38,16 @@ def _admin_secret() -> str:
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
 DATE_NIGHT_RUNS_DIR = Path("date_night_runs")
 
-# Row limit shared by the initial dashboard render and the JS poll endpoint.
-# These MUST match, otherwise the table shrinks on the first poll (was 500 vs 50).
-DASHBOARD_RUNS_LIMIT = 500
+# Analysis-run cap, shared by the initial dashboard render and the JS poll
+# endpoint (these MUST match, else the table shrinks on the first poll).
+ANALYSIS_RUNS_LIMIT = 100
+# Watchlist / date-night keep their own smaller cap.
+SIDE_RUNS_LIMIT = 50
+
+
+def _clamp_analysis_limit(limit: int) -> int:
+    """Keep the requested analysis limit within 1..ANALYSIS_RUNS_LIMIT."""
+    return max(1, min(limit, ANALYSIS_RUNS_LIMIT))
 
 
 def _num(value: Any) -> float | None:
@@ -169,24 +176,47 @@ async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]
     return _payload_rows(await supabase_ops.select("ops_date_night_runs", _list_params(limit)))
 
 
-def _mark_consecutive_dupes(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    i = 0
-    while i < len(runs):
-        username = runs[i].get("username")
-        j = i + 1
-        while j < len(runs) and runs[j].get("username") == username:
-            j += 1
-        runs[i]["_run_count"] = j - i
-        for k in range(i + 1, j):
-            runs[k]["_skip"] = True
-        i = j
-    return runs
+def _group_runs_by_username(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group runs by case-insensitive username across the whole list.
+
+    Non-consecutive runs by the same user collapse into one group (unlike
+    _mark_consecutive_dupes). Runs with no username stay ungrouped — one group
+    each, never linked. Groups keep the order of their newest run (runs arrive
+    newest-first, so a group's first-seen run is its newest). Summary cards must
+    still count raw runs, not these groups.
+    """
+    groups: list[dict[str, Any]] = []
+    index: dict[str, dict[str, Any]] = {}
+    for run in runs:
+        raw = (run.get("username") or "").strip()
+        key = raw.casefold() if raw else None
+        group = index.get(key) if key is not None else None
+        if group is None:
+            group = {
+                "username": raw or None,
+                "run_count": 0,
+                "success_count": 0,
+                "fail_count": 0,
+                "latest": run,  # newest-first input → first seen is the newest
+                "children": [],
+            }
+            groups.append(group)
+            if key is not None:
+                index[key] = group
+        group["run_count"] += 1
+        if run.get("ok") is True:
+            group["success_count"] += 1
+        elif run.get("ok") is False:
+            group["fail_count"] += 1
+        group["children"].append(run)
+    return groups
 
 
-async def _load_analysis_runs(limit: int = DASHBOARD_RUNS_LIMIT) -> list[dict[str, Any]]:
+async def _load_analysis_runs(limit: int = ANALYSIS_RUNS_LIMIT) -> list[dict[str, Any]]:
+    limit = _clamp_analysis_limit(limit)
     if settings.supabase_enabled:
-        return _mark_consecutive_dupes(await _load_runs_supabase(limit))
-    return _mark_consecutive_dupes(_load_json_dir(RUNS_DIR, limit=limit))
+        return await _load_runs_supabase(limit)
+    return _load_json_dir(RUNS_DIR, limit=limit)
 
 
 @router.get("/admin", response_class=HTMLResponse)
@@ -195,16 +225,16 @@ async def admin_login(request: Request):
 
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
+async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
     _require_admin(request)
     await dashboard_settings.load_worker_control_state()
     runs = await _load_analysis_runs(limit=limit)
     if settings.supabase_enabled:
-        watchlist_runs = await _load_watchlist_runs_supabase(limit=limit)
-        date_night_runs = await _load_date_night_runs_supabase(limit=limit)
+        watchlist_runs = await _load_watchlist_runs_supabase(limit=SIDE_RUNS_LIMIT)
+        date_night_runs = await _load_date_night_runs_supabase(limit=SIDE_RUNS_LIMIT)
     else:
-        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=limit)
-        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=limit)
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=SIDE_RUNS_LIMIT)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=SIDE_RUNS_LIMIT)
     worker_status = task_manager.get_worker_status(
         settings.worker_heartbeat_max_age_seconds,
         expected_protocol_version=settings.worker_protocol_version,
@@ -215,6 +245,7 @@ async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
         {
             "request": request,
             "runs": runs,
+            "run_groups": _group_runs_by_username(runs),
             "watchlist_runs": watchlist_runs,
             "date_night_runs": date_night_runs,
             "worker_status": worker_status,
@@ -245,17 +276,19 @@ async def admin_run_detail(request: Request, filename: str):
 
 
 @router.get("/admin/api/runs")
-async def admin_api_runs(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
+async def admin_api_runs(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
     """JSON API for the admin dashboard."""
     _require_admin(request)
     if settings.supabase_enabled:
-        watchlist_runs = await _load_watchlist_runs_supabase(limit)
-        date_night_runs = await _load_date_night_runs_supabase(limit)
+        watchlist_runs = await _load_watchlist_runs_supabase(SIDE_RUNS_LIMIT)
+        date_night_runs = await _load_date_night_runs_supabase(SIDE_RUNS_LIMIT)
     else:
-        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit)
-        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit)
+        watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, SIDE_RUNS_LIMIT)
+        date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, SIDE_RUNS_LIMIT)
+    runs = await _load_analysis_runs(limit)
     return {
-        "runs": await _load_analysis_runs(limit),
+        "runs": runs,
+        "run_groups": _group_runs_by_username(runs),
         "watchlist_runs": watchlist_runs,
         "date_night_runs": date_night_runs,
     }

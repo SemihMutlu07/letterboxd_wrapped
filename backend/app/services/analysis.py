@@ -587,6 +587,7 @@ async def process_comprehensive_letterboxd_data(
                 "community_rating": _community_rating(row.get("vote_average")),
                 "average_rating": float(row.get("vote_average", 0)) / 2.0 if pd.notna(row.get("vote_average")) else None,
                 "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
+                "popularity": float(row.get("popularity", 0)) if pd.notna(row.get("popularity")) else 0.0,
             }
             for _, row in rated_rows.sort_values("rating", ascending=False).iterrows()
         ]
@@ -607,12 +608,15 @@ async def process_comprehensive_letterboxd_data(
             "rating": _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None,
             "cast": row.get("cast") if isinstance(row.get("cast"), list) else [],
             "average_rating": float(row.get("vote_average", 0)) / 2.0 if pd.notna(row.get("vote_average")) else None,
+            "popularity": float(row.get("popularity", 0)) if pd.notna(row.get("popularity")) else 0.0,
         }
         for _, row in analysis_df.iterrows()
     ]
 
     # Directors with ratings
     stats["directors_with_ratings"] = compute_directors_with_ratings(director_counts, analysis_df)
+    for row in stats["directors_with_ratings"]:
+        row["films"] = director_films_map.get(row["name"], [])
 
     # Backfill profile_paths for rated directors
     await resolve_profile_paths(
@@ -622,6 +626,8 @@ async def process_comprehensive_letterboxd_data(
 
     # Actors with ratings
     stats["actors_with_ratings"] = compute_actors_with_ratings(cast_counts, analysis_df, actor_profile_map)
+    for row in stats["actors_with_ratings"]:
+        row["films"] = actor_films_map.get(row["name"], [])
 
     # Backfill profile_paths for rated actors
     await resolve_profile_paths(

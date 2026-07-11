@@ -61,6 +61,8 @@ export interface StatsData {
   };
   /** Username when data came from scrape-profile path. */
   scraped_username?: string;
+  /** Public Letterboxd avatar from the profile overview (scrape path only). */
+  profile_avatar_url?: string;
   /** Data source for this Wrapped. "scrape" = full profile scrape, "csv" = upload. */
   source?: string;
   /** Number of films in the sample (scrape mode). */
@@ -90,6 +92,7 @@ export interface StatsData {
     avg_rating: number;
     rated_count: number;
     profile_path?: string;
+    films?: PersonFilm[];
   }[];
   /** Per-actor avg rating; only actors with rated_count >= 3 included. */
   actors_with_ratings?: {
@@ -98,6 +101,7 @@ export interface StatsData {
     avg_rating: number;
     rated_count: number;
     profile_path?: string;
+    films?: PersonFilm[];
   }[];
   /** Per-country avg rating; only countries with rated_count >= 5 included. */
   countries_with_ratings?: {
@@ -116,6 +120,7 @@ export interface StatsData {
     community_rating?: number | null;
     average_rating?: number | null;
     poster_path?: string;
+    popularity?: number;
   }[];
   /** Up to 4 films pinned as favorites on the user's Letterboxd profile page. */
   favorite_films?: {
@@ -169,6 +174,7 @@ export interface StatsData {
     rating?: number;
     cast?: string[];
     average_rating?: number | null;
+    popularity?: number;
   }[];
 
   /** Review text metrics from compute_review_metrics (review_analysis.py). */
@@ -193,6 +199,11 @@ export interface StatsData {
       rating?: number | null;
       review_date?: string;
       text_preview?: string;
+      poster_path?: string;
+      char_length?: number;
+      word_count?: number;
+      likers?: ReviewLiker[];
+      likers_complete?: boolean;
     }[];
     /** Sum of like_count across all reviews with HTML like data. */
     total_review_likes?: number | null;
@@ -205,6 +216,19 @@ export interface StatsData {
       text?: string;
       likes?: number;
       rating?: number | null;
+      poster_path?: string;
+      review_path?: string;
+      char_length?: number;
+      word_count?: number;
+      likers?: ReviewLiker[];
+      likers_complete?: boolean;
     }[];
   };
+}
+
+/** A public Letterboxd user who liked a review (scrape path only). */
+export interface ReviewLiker {
+  username: string;
+  display_name: string;
+  avatar_url?: string | null;
 }

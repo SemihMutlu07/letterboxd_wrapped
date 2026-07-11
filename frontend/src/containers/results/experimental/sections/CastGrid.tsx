@@ -84,7 +84,7 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
       return (stats.actors_with_ratings ?? [])
         .slice()
         .sort((a, b) => b.avg_rating - a.avg_rating)
-        .map((a) => ({ ...a, films: filmsByName.get(a.name) ?? [] }));
+        .map((a) => ({ ...a, films: a.films ?? filmsByName.get(a.name) ?? [] }));
     }
     // Most watched — pull profile_paths from actors_with_ratings if available
     const profileMap = new Map(
@@ -144,19 +144,7 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
         profilePath={selected?.profile_path}
       />
 
-      {/* Show more disabled — showing exactly 4 per user request */}
-
-      {/* Scoring explanation */}
-      <div className="mt-3 text-center">
-        <p className="text-[11px] md:text-xs text-slate-500 italic leading-relaxed max-w-lg mx-auto">
-          <strong className="text-slate-400 not-italic">Highest Rated</strong> sorts by{' '}
-          <em>your</em> average rating across films you&apos;ve rated for each{' '}
-          {mode === 'highest_rated' ? 'actor' : 'person'} (minimum 3 rated films).
-          {mode === 'most_watched' && hasRatings && (
-            <> Switch to <strong className="text-slate-400 not-italic">Highest Rated</strong> to see avg ratings.</>
-          )}
-        </p>
-      </div>
+      {/* Showing exactly four people in each mode. */}
     </SectionShell>
   );
 }

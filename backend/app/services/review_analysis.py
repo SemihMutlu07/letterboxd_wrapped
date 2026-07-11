@@ -157,6 +157,70 @@ def _guess_language(text: str) -> str:
     return "en"
 
 
+def _title_key(title: Any) -> str:
+    return str(title or "").strip().casefold()
+
+
+def _year_key(year: Any) -> Optional[str]:
+    try:
+        return str(int(float(year)))
+    except (TypeError, ValueError):
+        return None
+
+
+def enrich_scraped_reviews(
+    review_analysis: Dict[str, Any],
+    scraped_reviews: list[dict],
+    all_films: list[dict],
+) -> Dict[str, Any]:
+    """Merge scraped liker identities and poster paths into the review payload.
+
+    Mutates, for every entry in review_analysis['reviews'] and
+    ['top_liked_reviews']: poster_path (matched from all_films by normalized
+    title+year — no new TMDB call), likers, likers_complete, review_path,
+    char_length, word_count. An unmatched review keeps an empty, complete liker
+    set (there is nothing to crawl) and a blank poster_path.
+    """
+    scraped_by_ty: dict = {}
+    scraped_by_t: dict = {}
+    for r in scraped_reviews:
+        t = _title_key(r.get("title"))
+        scraped_by_ty.setdefault((t, _year_key(r.get("year"))), r)
+        scraped_by_t.setdefault(t, r)
+
+    poster_by_ty: dict = {}
+    poster_by_t: dict = {}
+    for f in all_films:
+        path = f.get("poster_path")
+        if not isinstance(path, str) or not path:
+            continue
+        t = _title_key(f.get("title"))
+        poster_by_ty.setdefault((t, _year_key(f.get("year"))), path)
+        poster_by_t.setdefault(t, path)
+
+    def _enrich(review: dict) -> None:
+        t = _title_key(review.get("title"))
+        y = _year_key(review.get("year"))
+        scraped = scraped_by_ty.get((t, y)) or scraped_by_t.get(t)
+        text = (scraped.get("review_text") if scraped else None) or review.get("text") or review.get("text_preview") or ""
+        review["char_length"] = len(text)
+        review["word_count"] = len(text.split())
+        if scraped:
+            review["review_path"] = scraped.get("review_path", "")
+            review["likers"] = scraped.get("likers", [])
+            review["likers_complete"] = scraped.get("likers_complete", True)
+        else:
+            review["likers"] = []
+            review["likers_complete"] = True
+        review["poster_path"] = poster_by_ty.get((t, y)) or poster_by_t.get(t) or ""
+
+    for review in review_analysis.get("reviews", []):
+        _enrich(review)
+    for review in review_analysis.get("top_liked_reviews", []):
+        _enrich(review)
+    return review_analysis
+
+
 def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     """
     Compute text analysis metrics from a Letterboxd reviews.csv DataFrame.

@@ -5,6 +5,27 @@
 - **Fork-based**: Contributors fork the repo and work on their own fork. No direct pushes except by repo owner.
 - **Owner branches**: Owner may use `main`, `desktop_server` (worker sync), or short-lived feature branches locally.
 
+## Non-negotiable owner test and production flow
+
+The following rules are strict release invariants. They must not be bypassed, reordered, or treated as optional:
+
+1. Use exactly the two established local worktrees for the current workflow; a third checkout is not required.
+2. `/home/parkermutsuz/dev/letterboxd_wrapped` tracks `main`. Pull the latest `origin/main` here and use it for automated checks plus local feature and regression testing.
+3. `/home/parkermutsuz/dev/letterboxd_wrapped-experiment` tracks `experiment`. Keep independent design and product experiments isolated here until they are deliberately promoted to `main`.
+4. The release order is `experiment` (when applicable) → `main` → automated checks → manual local feature testing → explicit production/desktop-worker push.
+5. Never deploy directly from `experiment`.
+6. Never push to production before both automated checks and manual testing pass on the exact `main` revision being deployed.
+7. Pulling, updating, or testing `main` never implicitly authorizes a production push. Production deployment must be a separate, explicit user-approved operation.
+
+Before promoting the tested `main` revision to production, confirm the working tree is clean and run:
+
+```bash
+cd frontend && npx tsc --noEmit
+cd ../backend && python -m pytest
+```
+
+Any failed, skipped, stale, or uncertain check blocks the production/desktop-worker push until it is rerun successfully on the exact deployment revision. Exceptions require updating this repository contract explicitly; they must never be improvised during a release.
+
 ## Workflow for external PRs
 
 1. Contributor forks → creates a feature branch (e.g. `feat/widget-redesign`)

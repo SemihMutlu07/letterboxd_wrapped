@@ -61,14 +61,14 @@ export default function HeroStats({
               </span>
               <div className="text-3xl md:text-4xl lg:text-5xl font-black text-orange-500 mb-2">{timePct}</div>
               <div className="text-sm md:text-base uppercase tracking-wider opacity-80 font-medium text-orange-200">
-                of your time spent watching films
+                of your waking time spent on films
               </div>
               {timeInfoOpen && (
                 <div
                   className="absolute inset-0 z-10 flex items-center rounded-xl bg-slate-900/95 backdrop-blur-sm border border-orange-500/30 p-3 text-left shadow-2xl cursor-pointer"
                 >
                   <p className="text-[11px] leading-snug text-orange-100/90 normal-case tracking-normal font-normal">
-                    We compared the hours you spent watching films to how many hours you were awake over the same period (~16 waking hours a day). It&apos;s a rough sense of how much of your year went to the screen — capped at 100%.
+                    Your film hours divided by ~16 waking hours per day in your Letterboxd activity window. Capped at 100%.
                   </p>
                 </div>
               )}

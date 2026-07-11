@@ -275,12 +275,12 @@
               <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
             </tr></thead>
             <tbody id="analysis-runs">
-              {% for run in runs %}{% if not run._skip %}
-              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+              {% macro run_row(run, badge_count=0, group_idx=none, child=false) %}
+              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors{% if child %} hidden{% endif %}"{% if child %} data-group-child="{{ group_idx }}"{% endif %}>
                 <td class="px-4 py-2.5">
                   <div class="flex items-center gap-2">
                     <a href="/admin/run/{{ run._filename }}?key={{ key }}" class="text-orange-400 hover:text-orange-300 font-medium">@{{ run.username or "anon" }}</a>
-                    {% if run._run_count > 1 %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-mono">×{{ run._run_count }}</span>{% endif %}
+                    {% if badge_count > 1 %}<button type="button" onclick="toggleRunGroup({{ group_idx }})" data-group-toggle="{{ group_idx }}" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-mono hover:bg-slate-600 cursor-pointer">×{{ badge_count }}</button>{% endif %}
                     {% if run.username %}
                     <a
                       href="https://letterboxd.com/{{ run.username | urlencode }}/"
@@ -308,7 +308,12 @@
                   {% if run.ok is sameas false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
                 </td>
               </tr>
-              {% endif %}{% endfor %}
+              {% endmacro %}
+              {% for group in run_groups %}
+              {% set gidx = loop.index %}
+              {{ run_row(group.latest, badge_count=group.run_count, group_idx=gidx) }}
+              {% if group.run_count > 1 %}{% for child in group.children[1:] %}{{ run_row(child, group_idx=gidx, child=true) }}{% endfor %}{% endif %}
+              {% endfor %}
             </tbody>
           </table>
         </div>
@@ -504,7 +509,46 @@
       document.getElementById('analysis-avg-films').textContent = avgFilms;
     }
 
-    function renderAnalysisRuns(runs) {
+    function runRowHtml(run, badgeCount, groupIdx, isChild) {
+      const status = run.ok === false
+        ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>'
+        : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>';
+      const score = run.sinefil_meter?.score ?? '—';
+      const error = run.error_stage || run.error_type || run.error_message || '—';
+      const filename = encodeURIComponent(run._filename || '');
+      const countBadge = badgeCount > 1
+        ? `<button type="button" onclick="toggleRunGroup(${groupIdx})" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-mono hover:bg-slate-600 cursor-pointer">×${badgeCount}</button>`
+        : '';
+      return `
+        <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors${isChild ? ' hidden' : ''}"${isChild ? ` data-group-child="${groupIdx}"` : ''}>
+          <td class="px-4 py-2.5">
+            <div class="flex items-center gap-2">
+              <a href="/admin/run/${filename}?key=${encodeURIComponent(adminKey || '')}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
+              ${countBadge}
+              ${letterboxdProfileLink(run.username)}
+            </div>
+          </td>
+          <td class="px-4 py-2.5 text-slate-400">${escapeHtml(run.source)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.total_films ?? '—'}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${escapeHtml(score)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.duration_seconds)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.queue_wait_seconds)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.scrape_seconds)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.analysis_seconds)}</td>
+          <td class="px-4 py-2.5 text-slate-300">${fmtBottleneck(run)}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.duration_seconds_per_film ?? '—'}</td>
+          <td class="px-4 py-2.5 text-slate-400">${escapeHtml(error)}</td>
+          <td class="px-4 py-2.5 text-slate-500">${shortTime(run._mtime)}</td>
+          <td class="px-4 py-2.5 text-center">${status}</td>
+        </tr>
+      `;
+    }
+
+    function toggleRunGroup(idx) {
+      document.querySelectorAll(`[data-group-child="${idx}"]`).forEach(row => row.classList.toggle('hidden'));
+    }
+
+    function renderAnalysisRuns(runs, groups) {
       const tbody = document.getElementById('analysis-runs');
       if (!tbody) return;
       updateAnalysisCards(runs || []);
@@ -512,37 +556,15 @@
         tbody.innerHTML = '<tr><td colspan="13" class="px-4 py-6 text-center text-slate-600">No analysis runs recorded yet.</td></tr>';
         return;
       }
-      tbody.innerHTML = runs.filter(run => !run._skip).map(run => {
-        const status = run.ok === false
-          ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>'
-          : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>';
-        const score = run.sinefil_meter?.score ?? '—';
-        const error = run.error_stage || run.error_type || run.error_message || '—';
-        const filename = encodeURIComponent(run._filename || '');
-        const countBadge = run._run_count > 1 ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-mono">×${run._run_count}</span>` : '';
-        return `
-          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
-            <td class="px-4 py-2.5">
-              <div class="flex items-center gap-2">
-                <a href="/admin/run/${filename}?key=${encodeURIComponent(adminKey || '')}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
-                ${letterboxdProfileLink(run.username)}
-                ${countBadge}
-              </div>
-            </td>
-            <td class="px-4 py-2.5 text-slate-400">${escapeHtml(run.source)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.total_films ?? '—'}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${escapeHtml(score)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.duration_seconds)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.queue_wait_seconds)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.scrape_seconds)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${fmtSeconds(run.analysis_seconds)}</td>
-            <td class="px-4 py-2.5 text-slate-300">${fmtBottleneck(run)}</td>
-            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${run.duration_seconds_per_film ?? '—'}</td>
-            <td class="px-4 py-2.5 text-slate-400">${escapeHtml(error)}</td>
-            <td class="px-4 py-2.5 text-slate-500">${shortTime(run._mtime)}</td>
-            <td class="px-4 py-2.5 text-center">${status}</td>
-          </tr>
-        `;
+      tbody.innerHTML = (groups || []).map((group, i) => {
+        const idx = i + 1;
+        const rows = [runRowHtml(group.latest, group.run_count, idx, false)];
+        if (group.run_count > 1) {
+          for (const child of group.children.slice(1)) {
+            rows.push(runRowHtml(child, group.run_count, idx, true));
+          }
+        }
+        return rows.join('');
       }).join('');
     }
 
@@ -738,7 +760,7 @@
         const response = await fetch(`/admin/api/runs`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
         if (!response.ok) return;
         const body = await response.json();
-        renderAnalysisRuns(body.runs || []);
+        renderAnalysisRuns(body.runs || [], body.run_groups || []);
         renderWatchlistRuns(body.watchlist_runs || []);
         renderDateNightRuns(body.date_night_runs || []);
         const counts = document.getElementById('header-counts');

@@ -1,0 +1,79 @@
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import RatingDeviation from './RatingDeviation';
+import type { StatsData } from '../types';
+
+vi.mock('@/lib/analytics', () => ({
+  getPosterUrl: () => null,
+  getTmdbImageUrl: () => null,
+  trackEvent: vi.fn(),
+  trackConsentedEvent: vi.fn(),
+}));
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
+type RatedFilm = NonNullable<StatsData['rated_films']>[number];
+
+function statsWith(ratedFilms: RatedFilm[]): StatsData {
+  // average_rating (global) is intentionally far from every film's community
+  // rating so a test can prove the delta uses per-film community, not the avg.
+  return { average_rating: 3.5, rated_films: ratedFilms } as StatsData;
+}
+
+function higherFilm(title: string, yourRating: number, community: number): RatedFilm {
+  return { title, your_rating: yourRating, community_rating: community, average_rating: community };
+}
+
+describe('RatingDeviation outliers', () => {
+  it('measures delta against each film\'s own community rating, not the global average', () => {
+    const films = [
+      higherFilm('Pick', 5, 3.0),
+      higherFilm('A', 4.5, 4.0),
+      higherFilm('B', 4, 3.6),
+      higherFilm('C', 5, 4.2),
+      higherFilm('D', 4, 3.8),
+    ];
+    render(<RatingDeviation stats={statsWith(films)} />);
+    // Caption reflects the film's community rating (3.0), not the 3.5 global avg.
+    expect(screen.getByText(/★ 5\.0 vs community 3\.0/)).toBeInTheDocument();
+    expect(screen.queryByText(/vs avg/)).toBeNull();
+  });
+
+  it('excludes films with no community rating', () => {
+    const films = [
+      higherFilm('Keep1', 5, 3.0),
+      higherFilm('Keep2', 4.5, 3.5),
+      higherFilm('Keep3', 4, 3.2),
+      higherFilm('Keep4', 5, 4.0),
+      higherFilm('Keep5', 4, 3.4),
+      // No community data → must be dropped, never shown.
+      { title: 'Dropped', your_rating: 4, community_rating: null, average_rating: null },
+    ];
+    render(<RatingDeviation stats={statsWith(films)} />);
+    expect(screen.queryByText('Dropped')).toBeNull();
+    // Each card renders one "vs community" caption → 5 valid higher films.
+    expect(screen.getAllByText(/vs community/).length).toBe(5);
+  });
+
+  it('caps each tab at 6 films with no show-more control', () => {
+    const films = Array.from({ length: 8 }, (_, i) =>
+      higherFilm(`Film${i + 1}`, 5, 5 - (i + 1) * 0.1),
+    );
+    render(<RatingDeviation stats={statsWith(films)} />);
+    expect(screen.getAllByText(/vs community/).length).toBe(6);
+    expect(screen.queryByRole('button', { name: /more/i })).toBeNull();
+  });
+});

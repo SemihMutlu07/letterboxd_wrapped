@@ -24,7 +24,6 @@ import {
   gateOk,
   gateFail,
   trackSectionViewed,
-  trackShowMore,
   trackItemClicked,
   formatDelta,
   LB_GREEN,
@@ -59,6 +58,7 @@ interface EnrichedFilm {
   rating: number;
   /** TMDB community rating on the 0–5 scale. */
   communityRating: number;
+  popularity: number;
   poster_path?: string;
   /** rating − communityRating: how far your score diverges from the crowd. */
   delta: number;
@@ -69,7 +69,7 @@ interface EnrichedFilm {
 }
 
 type SubTab = 'higher' | 'lower';
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 6;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -82,7 +82,6 @@ export default function RatingDeviation({ stats }: { stats: StatsData }) {
 
 function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   const [tab, setTab] = useState<SubTab>('higher');
-  const [visible, setVisible] = useState(PAGE_SIZE);
   const [selectedFilm, setSelectedFilm] = useState<EnrichedFilm | null>(null);
 
   const userAvg = stats.average_rating;
@@ -98,33 +97,35 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
       allFilmsLookup.set(f.title, f);
     });
 
-    const films: EnrichedFilm[] = (stats.rated_films ?? []).map((f) => {
+    const films: EnrichedFilm[] = (stats.rated_films ?? []).flatMap((f) => {
       const enrichedData = allFilmsLookup.get(f.title);
-      return {
+      const communityRating = f.community_rating ?? f.average_rating;
+      const yourRating = f.your_rating ?? f.rating;
+      if (communityRating == null || communityRating <= 0 || yourRating == null) return [];
+      return [{
         title: f.title,
         year: f.year,
         poster_path: f.poster_path,
-        rating: f.your_rating ?? 0,
-        communityRating: f.average_rating ?? 0,
-        delta: Math.round(((f.your_rating ?? 0) - userAvg) * 10) / 10,
+        rating: yourRating,
+        communityRating,
+        popularity: f.popularity ?? enrichedData?.popularity ?? 0,
+        delta: Math.round((yourRating - communityRating) * 10) / 10,
         director: enrichedData?.director,
         runtime: enrichedData?.runtime,
         language: enrichedData?.language,
-      };
+      }];
     });
     return {
-      higher: films.filter((f) => f.delta > 0).sort((a, b) => b.delta - a.delta),
-      lower: films.filter((f) => f.delta < 0).sort((a, b) => a.delta - b.delta),
+      higher: films.filter((f) => f.delta > 0).sort((a, b) => (b.delta - a.delta) || (b.popularity - a.popularity)),
+      lower: films.filter((f) => f.delta < 0).sort((a, b) => (a.delta - b.delta) || (b.popularity - a.popularity)),
     };
   }, [stats.rated_films, stats.all_films]);
 
   const list = tab === 'higher' ? higher : lower;
-  const shown = list.slice(0, visible);
-  const hasMore = visible < list.length;
+  const shown = list.slice(0, PAGE_SIZE);
 
   const handleTabChange = (next: SubTab) => {
     setTab(next);
-    setVisible(PAGE_SIZE);
   };
 
   return (
@@ -185,19 +186,6 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
           </div>
         )}
 
-        {hasMore && (
-          <div className="flex justify-center pt-1">
-            <button
-              onClick={() => {
-                setVisible((v) => v + PAGE_SIZE);
-                trackShowMore('rating_deviation');
-              }}
-              className="text-xs font-semibold px-4 py-2 rounded-full border border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
-            >
-              Show {Math.min(list.length - visible, PAGE_SIZE)} more
-            </button>
-          </div>
-        )}
       </div>
     </>
   );
@@ -295,7 +283,7 @@ function FilmPosterCard({
       <div className="min-w-0 px-0.5 space-y-0.5">
         <p className="text-xs font-medium text-white leading-tight line-clamp-1">{film.title}</p>
         <p className="text-[10px] sm:text-[11px] text-slate-400 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-          ★ {film.rating.toFixed(1)} vs avg {userAvg.toFixed(1)}
+          ★ {film.rating.toFixed(1)} vs community {film.communityRating.toFixed(1)}
         </p>
       </div>
     </div>

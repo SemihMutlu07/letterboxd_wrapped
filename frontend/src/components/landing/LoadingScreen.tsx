@@ -108,9 +108,9 @@ export default function LoadingScreen({
 
   return (
     <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
-      {/* Giant rotating fun message — big, unexpected, attention-grabbing */}
+      {/* Keep the rotating prompt in one place, above the loading container. */}
       {isScrape && (
-        <div className="mb-5 text-center">
+        <div className="mb-3 max-w-xl text-center">
           <p
             key={funMessageIndex}
             className="text-lg md:text-xl font-semibold italic leading-snug tracking-tight text-white/80 transition-opacity duration-500"
@@ -120,7 +120,7 @@ export default function LoadingScreen({
         </div>
       )}
 
-      <div className="relative w-full max-w-xl text-center rounded-3xl border border-slate-700/70 bg-slate-800/55 p-8 md:p-10 backdrop-blur-sm">
+      <div className="relative w-full max-w-xl text-center rounded-3xl border border-slate-700/70 bg-slate-800/55 p-5 md:p-6 backdrop-blur-sm">
         {onCancel && (
           <button
             onClick={onCancel}
@@ -131,11 +131,11 @@ export default function LoadingScreen({
           </button>
         )}
 
-        <div className="mx-auto mb-6 h-14 w-14 rounded-2xl bg-orange-500/15 border border-orange-400/35 flex items-center justify-center">
-          <Film className="h-7 w-7 text-orange-300 animate-pulse" />
+        <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-orange-500/15 border border-orange-400/35 flex items-center justify-center">
+          <Film className="h-5 w-5 text-orange-300 animate-pulse" />
         </div>
-        <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-3">{displayTitle}</h1>
-        <p className="text-slate-300 mb-2">{displayMessage}</p>
+        <h1 className="text-2xl md:text-3xl font-black tracking-tight mb-1.5">{displayTitle}</h1>
+        <p className="text-sm text-slate-300 mb-2">{displayMessage}</p>
 
         {/* Live discovery feed — real counts/stages streamed from the scrape */}
         {isScrape && (liveFilms > 0 || recentEvents.length > 0) && (
@@ -196,7 +196,7 @@ export default function LoadingScreen({
           )}
         </div>
 
-        <p className="text-sm text-slate-400">{displayDetail}</p>
+        <p className="text-xs text-slate-400">{displayDetail}</p>
 
         {elapsed > typical && (
           <p className="mt-3 text-xs text-amber-300/90 animate-pulse">

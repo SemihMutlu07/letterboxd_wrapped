@@ -208,7 +208,7 @@ describe('RatingDeviation', () => {
     expect(grid?.className).toContain('grid-cols-2');
     expect(grid?.className).not.toContain('grid-cols-1');
 
-    const caption = screen.getByText(/5\.0 vs avg 3\.2/i);
+    const caption = screen.getByText(/5\.0 vs community 3\.2/i);
     expect(caption.className).toContain('whitespace-nowrap');
     expect(caption.className).toContain('text-ellipsis');
   });

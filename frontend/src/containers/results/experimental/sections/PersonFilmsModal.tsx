@@ -20,10 +20,11 @@ interface PersonFilmsModalProps {
   name: string;
   films: PersonFilm[];
   profilePath?: string;
+  profileImageUrl?: string;
 }
 
-export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
-  const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
+export default function PersonFilmsModal({ open, onClose, name, films, profilePath, profileImageUrl }: PersonFilmsModalProps) {
+  const profileUrl = profileImageUrl || (profilePath ? getTmdbImageUrl(profilePath, 'h632') : null);
   const [profileFailed, setProfileFailed] = useState(false);
   const [posterPage, setPosterPage] = useState(1);
 

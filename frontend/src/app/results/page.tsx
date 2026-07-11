@@ -573,7 +573,12 @@ export function ResultsContent({
         year: f.year ? String(f.year) : undefined,
         poster_path: f.poster_path,
         user_rating: f.rating ?? null,
-      }))
+      })).sort((a: PersonFilm, b: PersonFilm) => {
+        const ratingDiff = (b.user_rating ?? -1) - (a.user_rating ?? -1);
+        if (ratingDiff !== 0) return ratingDiff;
+        const yearDiff = Number(b.year ?? 0) - Number(a.year ?? 0);
+        return yearDiff || a.title.localeCompare(b.title);
+      })
     );
     setModalOpen(true);
   };
@@ -611,6 +616,12 @@ export function ResultsContent({
           poster_path: f.poster_path,
           user_rating: f.rating,
         }))
+        .sort((a: PersonFilm, b: PersonFilm) => {
+          const ratingDiff = (b.user_rating ?? -1) - (a.user_rating ?? -1);
+          if (ratingDiff !== 0) return ratingDiff;
+          const yearDiff = Number(b.year ?? 0) - Number(a.year ?? 0);
+          return yearDiff || a.title.localeCompare(b.title);
+        })
     );
     setModalOpen(true);
   };
@@ -628,6 +639,12 @@ export function ResultsContent({
           poster_path: f.poster_path,
           user_rating: f.rating ?? null,
         }))
+        .sort((a: PersonFilm, b: PersonFilm) => {
+          const ratingDiff = (b.user_rating ?? -1) - (a.user_rating ?? -1);
+          if (ratingDiff !== 0) return ratingDiff;
+          const yearDiff = Number(b.year ?? 0) - Number(a.year ?? 0);
+          return yearDiff || a.title.localeCompare(b.title);
+        })
     );
     setModalOpen(true);
   };
@@ -668,6 +685,12 @@ export function ResultsContent({
           poster_path: f.poster_path,
           user_rating: f.rating ?? null,
         }))
+        .sort((a: PersonFilm, b: PersonFilm) => {
+          const ratingDiff = (b.user_rating ?? -1) - (a.user_rating ?? -1);
+          if (ratingDiff !== 0) return ratingDiff;
+          const yearDiff = Number(b.year ?? 0) - Number(a.year ?? 0);
+          return yearDiff || a.title.localeCompare(b.title);
+        })
     );
     setModalOpen(true);
   };
@@ -951,6 +974,8 @@ export function ResultsContent({
         onClose={() => setModalOpen(false)}
         name={modalTitle}
         films={modalFilms}
+        profileImageUrl={modalTitle === 'All Watched Films' ? stats.profile_avatar_url : undefined}
+        profilePath={undefined}
       />
     </>
   );

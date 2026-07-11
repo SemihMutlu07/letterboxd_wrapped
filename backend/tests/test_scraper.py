@@ -179,6 +179,136 @@ def test_parse_review_cards_extracts_fields_and_likes():
     assert second["like_count"] is None  # no LikeComponent present
 
 
+def test_parse_review_cards_preserves_exact_review_path_with_rewatch_suffix():
+    # The heading href is the review permalink; a rewatch keeps a trailing index
+    # like /user/film/slug/2/ which must survive so we can hit its /likes/ page.
+    html = """
+    <article class="production-viewing">
+      <div data-component-class="LazyPoster" data-item-slug="stalker"></div>
+      <div class="body"><header><div class="topline">
+        <h2 class="primaryname"><a href="/semihmutsuz/film/stalker/2/">Stalker</a></h2>
+        <span class="releasedate">1979</span>
+      </div></header></div>
+    </article>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    reviews = scraper._parse_review_cards(soup)
+    assert reviews[0]["slug"] == "stalker"
+    assert reviews[0]["review_path"] == "/semihmutsuz/film/stalker/2/"
+
+
+def test_parse_liker_cards_extracts_identity_and_validates_avatar_host():
+    html = """
+    <ul>
+      <li><div class="person-summary">
+        <a href="/alice/" class="avatar"><img src="https://a.ltrbxd.com/av/alice.jpg" alt="Alice"></a>
+        <a href="/alice/" class="name">Alice A</a>
+      </div></li>
+      <li><div class="person-summary">
+        <a href="/bob/" class="avatar"><img src="https://evil.com/bob.jpg" alt="Bob"></a>
+        <a href="/bob/" class="name">Bob</a>
+      </div></li>
+    </ul>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    likers = scraper._parse_liker_cards(soup)
+    assert likers[0] == {"username": "alice", "display_name": "Alice A",
+                         "avatar_url": "https://a.ltrbxd.com/av/alice.jpg"}
+    # Foreign-host avatar is dropped to None, but the identity is still captured.
+    assert likers[1]["username"] == "bob"
+    assert likers[1]["avatar_url"] is None
+
+
+def test_scrape_review_likers_skips_http_when_no_likes(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("must not fetch when like_count == 0")
+    monkeypatch.setattr(scraper, "_fetch", boom)
+    likers, complete = scraper._scrape_review_likers("/u/film/x/", 0, object())
+    assert likers == []
+    assert complete is True
+
+
+def test_scrape_review_likers_parses_and_uses_exact_path(monkeypatch):
+    page = """
+    <li><div class="person-summary">
+      <a href="/alice/" class="name">Alice</a>
+      <img src="https://a.ltrbxd.com/av/alice.jpg" alt="Alice">
+    </div></li>
+    """
+    session = WatchlistSession([FakeResponse(200, page)])
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+    likers, complete = scraper._scrape_review_likers("/semihmutsuz/film/stalker/2/", 1, session)
+    assert session.urls == ["https://letterboxd.com/semihmutsuz/film/stalker/2/likes/"]
+    assert [l["username"] for l in likers] == ["alice"]
+    assert complete is True
+
+
+def test_scrape_review_likers_follows_pagination(monkeypatch):
+    p1 = """
+    <div class="person-summary"><a href="/a/" class="name">A</a></div>
+    <div class="paginate-nextprev"><a class="next" href="/x/likes/page/2/">Older</a></div>
+    """
+    p2 = """<div class="person-summary"><a href="/b/" class="name">B</a></div>"""
+    session = WatchlistSession([FakeResponse(200, p1), FakeResponse(200, p2)])
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+    likers, complete = scraper._scrape_review_likers("/u/film/x/", 5, session)
+    assert session.urls == [
+        "https://letterboxd.com/u/film/x/likes/",
+        "https://letterboxd.com/u/film/x/likes/page/2/",
+    ]
+    assert [l["username"] for l in likers] == ["a", "b"]
+    assert complete is True
+
+
+def test_scrape_review_likers_partial_on_http_error(monkeypatch):
+    p1 = """
+    <div class="person-summary"><a href="/a/" class="name">A</a></div>
+    <div class="paginate-nextprev"><a class="next" href="/x/likes/page/2/">Older</a></div>
+    """
+    session = WatchlistSession([FakeResponse(200, p1), FakeResponse(429, "")])
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+    likers, complete = scraper._scrape_review_likers("/u/film/x/", 9, session)
+    assert [l["username"] for l in likers] == ["a"]  # keep what we found
+    assert complete is False  # but flag it incomplete
+
+
+def test_sync_scrape_reviews_attaches_likers_and_survives_one_failure(monkeypatch):
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+    rev_p1 = """
+    <article class="production-viewing">
+      <div data-component-class="LazyPoster" data-item-slug="a"></div>
+      <div class="body"><header><div class="topline">
+        <h2 class="primaryname"><a href="/u/film/a/">A</a></h2><span class="releasedate">2020</span>
+      </div></header><p data-component-class="LikeComponent" data-count="2"></p></div>
+    </article>
+    <article class="production-viewing">
+      <div data-component-class="LazyPoster" data-item-slug="b"></div>
+      <div class="body"><header><div class="topline">
+        <h2 class="primaryname"><a href="/u/film/b/">B</a></h2><span class="releasedate">2021</span>
+      </div></header><p data-component-class="LikeComponent" data-count="5"></p></div>
+    </article>
+    """
+    b_likes = """<div class="person-summary"><a href="/fan/" class="name">Fan</a></div>"""
+    traces: list[tuple] = []
+    session = WatchlistSession([
+        FakeResponse(200, rev_p1),   # reviews page 1
+        FakeResponse(200, ""),       # reviews page 2 → empty, stop paging
+        FakeResponse(403, ""),       # A's likers → blocked (partial)
+        FakeResponse(200, b_likes),  # B's likers → ok
+    ])
+    reviews = scraper._sync_scrape_reviews(
+        "u", 5, session=session, include_likers=True,
+        trace_callback=lambda stage, msg, data: traces.append((stage, data)),
+    )
+    assert [r["title"] for r in reviews] == ["A", "B"]
+    # A's crawl failed but did not abort B's.
+    assert reviews[0]["likers"] == [] and reviews[0]["likers_complete"] is False
+    assert [l["username"] for l in reviews[1]["likers"]] == ["fan"]
+    assert reviews[1]["likers_complete"] is True
+    done = [d for s, d in traces if s == "review_likers_done"][0]
+    assert done["review_likers_total"] == 2 and done["review_likers_completed"] == 1
+
+
 def test_rating_from_svg_label_handles_halves():
     assert scraper._rating_from_svg_label("★★★½") == 3.5
     assert scraper._rating_from_svg_label("★★★★") == 4.0
@@ -248,7 +378,7 @@ def test_sync_scrape_profile_sources_includes_reviews_when_flagged(monkeypatch):
     monkeypatch.setattr(
         scraper,
         "_sync_scrape_reviews",
-        lambda u, m, session=None: [{"title": "X", "like_count": 7, "review_text": "ok"}],
+        lambda u, m, session=None, include_likers=False: [{"title": "X", "like_count": 7, "review_text": "ok"}],
     )
 
     result = scraper._sync_scrape_profile_sources("semihmutsuz", 5, include_reviews=True)
@@ -262,7 +392,7 @@ async def test_scrape_profile_sources_runs_sources_in_parallel(monkeypatch):
                         lambda u, p, s=None, t=None: [{"title": "D", "year": "2024", "rating": None, "watch_date": "2024-01-01"}])
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
                         lambda u, p, s=None, t=None: [{"title": "G", "year": "2024", "rating": 4.0, "watch_date": ""}])
-    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (42, 7, []))
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (42, 7, [], None))
 
     result = await scraper.scrape_profile_sources("semihmutsuz", 5)
 
@@ -280,7 +410,7 @@ async def test_scrape_profile_sources_raises_when_both_film_sources_fail(monkeyp
         raise ValueError(f"User '{u}' not found")
     monkeypatch.setattr(scraper, "_sync_scrape_diary", boom)
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid", boom)
-    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (0, 0, []))
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (0, 0, [], None))
 
     with pytest.raises(ValueError, match="not found"):
         await scraper.scrape_profile_sources("ghost", 5)
@@ -293,7 +423,7 @@ async def test_scrape_profile_sources_survives_one_source_failing(monkeypatch):
                         lambda u, p, s=None, t=None: (_ for _ in ()).throw(ValueError("rate limit")))
     monkeypatch.setattr(scraper, "_sync_scrape_films_grid",
                         lambda u, p, s=None, t=None: [{"title": "G", "year": "2024", "rating": 4.0, "watch_date": ""}])
-    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (10, 0, []))
+    monkeypatch.setattr(scraper, "_sync_scrape_overview", lambda u, s=None, t=None: (10, 0, [], None))
 
     result = await scraper.scrape_profile_sources("semihmutsuz", 5)
 
@@ -360,3 +490,32 @@ def test_diary_to_csv_dicts_keeps_undated_films_in_watched():
     assert rated_titles == {"Dated", "Undated"}
     # ...but only the dated film feeds the diary timeline.
     assert diary_titles == {"Dated"}
+
+
+# ── Profile avatar extraction (trust boundary) ──────────────────────────────
+# The avatar URL is scraped from an untrusted page and later surfaced to the
+# browser / persisted. Only an https URL on Letterboxd's own CDN may pass —
+# anything else (http downgrade, attacker-controlled host) must be dropped.
+
+def _overview_avatar(monkeypatch, avatar_src: str) -> str | None:
+    html = f'<div id="avatar-large"><img src="{avatar_src}"></div>'
+    monkeypatch.setattr(scraper, "_fetch", lambda s, url, timeout=10: FakeResponse(200, html))
+    _, _, _, avatar_url = scraper._sync_scrape_overview("semihmutsuz", session=object())
+    return avatar_url
+
+
+def test_overview_captures_https_letterboxd_avatar(monkeypatch):
+    src = "https://a.ltrbxd.com/resized/avatar/upload/1/2/3/avtr.jpg"
+    assert _overview_avatar(monkeypatch, src) == src
+
+
+def test_overview_rejects_non_https_avatar(monkeypatch):
+    # http downgrade — reject even on the correct host.
+    assert _overview_avatar(monkeypatch, "http://a.ltrbxd.com/resized/avtr.jpg") is None
+
+
+def test_overview_rejects_foreign_host_avatar(monkeypatch):
+    # https but attacker-controlled host must not be surfaced/persisted.
+    assert _overview_avatar(monkeypatch, "https://evil.com/avtr.jpg") is None
+    # A look-alike suffix must not slip past the host check either.
+    assert _overview_avatar(monkeypatch, "https://ltrbxd.com.evil.com/avtr.jpg") is None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import re
@@ -49,6 +50,23 @@ def _safe_username(username: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9_-]", "_", (username or "anon").lower()) or "anon"
 
 
+def _redact_third_party_likers(stats: dict[str, Any]) -> dict[str, Any]:
+    """Deep-copy stats and drop liker identities before writing to disk.
+
+    Liker names/avatars belong to third parties and must not land in the
+    durable run log. Aggregate signals (like_count, likers_complete) are kept.
+    The task result returned to the requesting user is left untouched.
+    """
+    redacted = copy.deepcopy(stats)
+    review_analysis = redacted.get("review_analysis")
+    if isinstance(review_analysis, dict):
+        for key in ("reviews", "top_liked_reviews"):
+            for review in review_analysis.get(key, []) or []:
+                if isinstance(review, dict) and "likers" in review:
+                    review["likers"] = []
+    return redacted
+
+
 def persist_run(
     username: Optional[str],
     source: str,
@@ -70,7 +88,7 @@ def persist_run(
 ) -> Optional[Path]:
     """Best-effort run log under runs/{username}-{iso-ts}-{task}.json."""
     try:
-        stats = stats or {}
+        stats = _redact_third_party_likers(stats or {})
         telemetry = telemetry or {}
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
 

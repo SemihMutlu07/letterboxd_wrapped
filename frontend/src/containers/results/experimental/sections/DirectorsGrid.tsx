@@ -14,6 +14,7 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { getProfileUrl } from '@/lib/analytics';
 import type { StatsData, PersonFilm } from '../types';
 import type { GateResult, SectionToggle } from './section-utils';
@@ -93,7 +94,7 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
       return (stats.directors_with_ratings ?? [])
         .slice()
         .sort((a, b) => b.avg_rating - a.avg_rating)
-        .map((d) => ({ ...d, films: filmsByName.get(d.name) ?? [] }));
+        .map((d) => ({ ...d, films: d.films ?? filmsByName.get(d.name) ?? [] }));
     }
     // Most watched — merge profile_path from directors_with_ratings if present
     const profileMap = new Map(
@@ -153,19 +154,7 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
         profilePath={selected?.profile_path}
       />
 
-      {/* Show more disabled — showing exactly 4 per user request */}
-
-      {/* Scoring explanation */}
-      <div className="mt-3 text-center">
-        <p className="text-[11px] md:text-xs text-slate-500 italic leading-relaxed max-w-lg mx-auto">
-          <strong className="text-slate-400 not-italic">Highest Rated</strong> sorts by{' '}
-          <em>your</em> average rating across films you&apos;ve rated for each{' '}
-          {mode === 'highest_rated' ? 'director' : 'person'} (minimum 3 rated films).
-          {mode === 'most_watched' && hasRatings && (
-            <> Switch to <strong className="text-slate-400 not-italic">Highest Rated</strong> to see avg ratings.</>
-          )}
-        </p>
-      </div>
+      {/* Showing exactly four people in each mode. */}
     </SectionShell>
   );
 }
@@ -253,10 +242,20 @@ export function PersonCard({
   }, [profilePath, imageUrl, name]);
 
   const interactive = Boolean(onShowFilms);
+  const reduceMotion = useReducedMotion();
 
   return (
-    <div
-      className={`relative flex flex-col items-center gap-2 group text-center ${interactive ? 'cursor-pointer' : ''}`}
+    <motion.div
+      whileInView={interactive && !reduceMotion ? {
+        boxShadow: ['0 0 0 0 rgba(251,146,60,0)', '0 0 0 3px rgba(251,146,60,.32)', '0 0 0 0 rgba(251,146,60,0)'],
+      } : undefined}
+      viewport={{ once: true, amount: 0.65 }}
+      transition={{ duration: 0.8, ease: 'easeOut' }}
+      className={`relative flex flex-col items-center gap-2 group rounded-xl border p-2 text-center transition-colors duration-200 ${
+        interactive
+          ? 'cursor-pointer border-white/10 hover:border-orange-400/50 focus-visible:border-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40'
+          : 'border-transparent'
+      }`}
       {...(interactive
         ? {
             role: 'button',
@@ -312,7 +311,7 @@ export function PersonCard({
           <p className="text-xs md:text-sm text-slate-300">{secondaryStat}</p>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 

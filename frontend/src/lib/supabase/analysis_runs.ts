@@ -47,9 +47,28 @@ function buildPreview(details: Record<string, unknown>, schemaVersion: string): 
     };
 }
 
+/** Drop third-party liker names/avatars from the copy we persist.
+ * Aggregate signals (likes / likers_complete) are kept; the live result the
+ * user sees in this session is untouched. */
+function redactLikers(details: unknown): void {
+    if (!details || typeof details !== "object") return;
+    const ra = (details as Record<string, unknown>).review_analysis;
+    if (!ra || typeof ra !== "object") return;
+    for (const key of ["reviews", "top_liked_reviews"] as const) {
+        const list = (ra as Record<string, unknown>)[key];
+        if (!Array.isArray(list)) continue;
+        for (const review of list) {
+            if (review && typeof review === "object" && "likers" in review) {
+                (review as Record<string, unknown>).likers = [];
+            }
+        }
+    }
+}
+
 /** Build summary payload: details (full results) + preview (small subset for listings). */
 export function buildSummaryForPersistence(stats: Record<string, unknown>): Record<string, unknown> {
     const sanitized = safeJsonSanitize(stats);
+    redactLikers(sanitized);
     const schema_version = "results_v1";
     const saved_at = new Date().toISOString();
 

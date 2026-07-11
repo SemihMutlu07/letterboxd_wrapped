@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from functools import partial
 import time
+from urllib.parse import urlparse
 
 import cloudscraper
 from bs4 import BeautifulSoup
@@ -47,6 +48,7 @@ class ProfileScrapeSources:
     film_count: int = 0
     reviews: list[dict] = field(default_factory=list)
     favorite_films: list[dict] = field(default_factory=list)  # up to 4 pinned profile favorites
+    profile_avatar_url: Optional[str] = None
 
 
 TraceCallback = Callable[[str, str, Optional[dict[str, Any]]], None]
@@ -507,6 +509,23 @@ def _rating_from_svg_label(label: str) -> Optional[float]:
     return full + half
 
 
+def _safe_letterboxd_avatar(candidate: Optional[str]) -> Optional[str]:
+    """Return the URL only if it is an https image on Letterboxd's own CDN.
+
+    Avatars are scraped from untrusted pages and later surfaced to the browser
+    (and, for the profile owner, persisted), so an http downgrade or an
+    attacker-controlled host must never pass this trust boundary.
+    """
+    if not candidate:
+        return None
+    candidate = candidate.strip()
+    parsed = urlparse(candidate)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme == "https" and (hostname == "ltrbxd.com" or hostname.endswith(".ltrbxd.com")):
+        return candidate
+    return None
+
+
 def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
     """Parse Letterboxd review list HTML into review dicts.
 
@@ -525,12 +544,12 @@ def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
         if poster:
             slug = str(poster.get("data-item-slug") or "")
 
-        # Title from the primaryname heading
+        # Title from the primaryname heading; its href is the review permalink.
         headline = article.select_one("h2.primaryname a") or article.select_one("h2 a")
         title = headline.get_text(strip=True) if headline else ""
-        if not slug and headline:
-            href = str(headline.get("href") or "")
-            m = re.search(r"/film/([^/]+)/?", href)
+        review_path = str(headline.get("href") or "") if headline else ""
+        if not slug and review_path:
+            m = re.search(r"/film/([^/]+)/?", review_path)
             if m:
                 slug = m.group(1)
 
@@ -574,6 +593,7 @@ def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
                 "title": title,
                 "year": year,
                 "slug": slug,
+                "review_path": review_path,
                 "rating": rating,
                 "review_text": review_text,
                 "date": date,
@@ -587,11 +607,14 @@ def _sync_scrape_reviews(
     max_pages: int,
     session: Optional[cloudscraper.CloudScraper] = None,
     trace_callback: Optional[TraceCallback] = None,
+    include_likers: bool = False,
 ) -> list[dict]:
     """Single-pass scraper for /{username}/reviews/films/page/N/.
 
-    Walks pages until an empty/404 response. Never hits per-review like pages;
-    like counts come from data-count on each card (best-effort).
+    Walks pages until an empty/404 response. Like counts come from data-count on
+    each card. When include_likers=True, each review with likes is followed to
+    its /likes/ page to collect public liker identities (serial, capped, and
+    failure-isolated: one review's crawl breaking never aborts the others).
     """
     owns_session = session is None
     logger.info("Starting review scrape for %s (max_pages=%d)", username, max_pages)
@@ -626,6 +649,9 @@ def _sync_scrape_reviews(
                 break
             all_reviews.extend(reviews)
             time.sleep(PAGE_DELAY)
+
+        if include_likers:
+            _crawl_likers_into(all_reviews, s, trace_callback)
     finally:
         if owns_session:
             s.close()
@@ -635,14 +661,125 @@ def _sync_scrape_reviews(
     return all_reviews
 
 
+def _crawl_likers_into(
+    reviews: list[dict],
+    session: "cloudscraper.CloudScraper",
+    trace_callback: Optional[TraceCallback] = None,
+) -> None:
+    """Attach `likers`/`likers_complete` to each review in place.
+
+    Reviews with no likes get an empty, complete result with no HTTP. One
+    review's crawl failing is isolated so the rest still complete.
+    """
+    total = 0
+    completed = 0
+    for review in reviews:
+        like_count = review.get("like_count")
+        if like_count and like_count > 0:
+            total += 1
+        try:
+            likers, complete = _scrape_review_likers(
+                review.get("review_path") or "", like_count, session, trace_callback
+            )
+        except Exception as exc:  # pragma: no cover - defensive, must not abort others
+            logger.warning("Liker crawl failed for %s: %s", review.get("review_path"), exc)
+            likers, complete = [], False
+        review["likers"] = likers
+        review["likers_complete"] = complete
+        if like_count and like_count > 0 and complete:
+            completed += 1
+    _trace(
+        trace_callback,
+        "review_likers_done",
+        "Review liker crawl completed",
+        {"review_likers_total": total, "review_likers_completed": completed},
+    )
+
+
+# Safety cap: a single popular review must never trigger an unbounded crawl.
+LIKER_MAX_PAGES = 20
+
+
+def _parse_liker_cards(soup: BeautifulSoup) -> list[dict]:
+    """Parse a review's /likes/ page into liker identity dicts.
+
+    Each `.person-summary` yields {username, display_name, avatar_url}. The
+    avatar passes the same CDN trust boundary as the profile avatar; a
+    foreign-host image is dropped to None while the public identity is kept.
+    """
+    likers: list[dict] = []
+    for summary in soup.select(".person-summary"):
+        link = summary.select_one('a[href^="/"]')
+        if not link:
+            continue
+        username = str(link.get("href") or "").strip("/").split("/")[0]
+        if not username:
+            continue
+        name_el = summary.select_one("a.name, .name")
+        img = summary.select_one("img[src]")
+        display_name = name_el.get_text(strip=True) if name_el else ""
+        if not display_name and img:
+            display_name = str(img.get("alt") or "").strip()
+        avatar_url = _safe_letterboxd_avatar(str(img.get("src") or "")) if img else None
+        likers.append({
+            "username": username,
+            "display_name": display_name,
+            "avatar_url": avatar_url,
+        })
+    return likers
+
+
+def _scrape_review_likers(
+    review_path: str,
+    like_count: Optional[int],
+    session: "cloudscraper.CloudScraper",
+    trace_callback: Optional[TraceCallback] = None,
+) -> tuple[list[dict], bool]:
+    """Crawl a single review's likers, serially and politely.
+
+    Returns (likers, complete). No HTTP is made when there are no likes.
+    On any transport/HTML failure (403/429/timeout/Cloudflare) the likers found
+    so far are kept and `complete` is False — the main analysis must never break
+    on a liker crawl. Pagination is followed up to LIKER_MAX_PAGES per review.
+    """
+    if not like_count or like_count <= 0:
+        return [], True
+
+    likers: list[dict] = []
+    complete = True
+    base = "/" + review_path.strip("/")
+    for page in range(1, LIKER_MAX_PAGES + 1):
+        url = f"{BASE_URL}{base}/likes/" if page == 1 else f"{BASE_URL}{base}/likes/page/{page}/"
+        try:
+            r = _fetch(session, url, timeout=10)
+        except Exception:
+            complete = False
+            break
+        if r.status_code != 200 or _is_cloudflare_block(r.text):
+            complete = False
+            break
+
+        soup = BeautifulSoup(r.text, "html.parser")
+        likers.extend(_parse_liker_cards(soup))
+        has_next = soup.select_one(".paginate-nextprev a.next") is not None
+        if not has_next or not soup.select_one(".person-summary"):
+            break
+        if page == LIKER_MAX_PAGES:
+            complete = False  # more pages exist but we stop at the safety cap
+            break
+        time.sleep(PAGE_DELAY)
+
+    return likers, complete
+
+
 def _sync_scrape_overview(
     username: str,
     session: Optional[cloudscraper.CloudScraper] = None,
     trace_callback: Optional[TraceCallback] = None,
-) -> tuple[int, int, list[dict]]:
-    """Fetch the profile overview; return (film_count, review_count, favorite_films).
+) -> tuple[int, int, list[dict], Optional[str]]:
+    """Fetch profile counts, favorites, and the public profile avatar.
 
-    Best-effort: returns (0, 0, []) on any failure — counts are provenance/UX only
+    Best-effort: returns empty values on failure — overview data is provenance/UX only
     and must never fail the scrape.
     """
     owns_session = session is None
@@ -652,10 +789,14 @@ def _sync_scrape_overview(
     film_count = 0
     review_count = 0
     favorite_films: list[dict] = []
+    profile_avatar_url: Optional[str] = None
     try:
         overview_resp = _fetch(s, f"{BASE_URL}/{username}/", timeout=10)
         if overview_resp.status_code == 200:
             soup = BeautifulSoup(overview_resp.text, "html.parser")
+            avatar = soup.select_one("#avatar-large img[src]") or soup.select_one(".profile-avatar img[src]")
+            if avatar:
+                profile_avatar_url = _safe_letterboxd_avatar(str(avatar.get("src") or ""))
             films_link = soup.select_one('a[href$="/films/"]')
             if films_link:
                 count_span = films_link.select_one(".value")
@@ -698,7 +839,7 @@ def _sync_scrape_overview(
     finally:
         if owns_session:
             s.close()
-    return film_count, review_count, favorite_films
+    return film_count, review_count, favorite_films, profile_avatar_url
 
 
 def _sync_scrape_profile_sources(
@@ -720,7 +861,7 @@ def _sync_scrape_profile_sources(
     session = _new_session()
     _warm_session(session)
     try:
-        film_count, review_count, favorite_films = _sync_scrape_overview(
+        film_count, review_count, favorite_films, profile_avatar_url = _sync_scrape_overview(
             username, session=session, trace_callback=trace_callback
         )
         if trace_callback:
@@ -733,9 +874,9 @@ def _sync_scrape_profile_sources(
         if include_reviews:
             try:
                 if trace_callback:
-                    reviews = _sync_scrape_reviews(username, max_pages, session=session, trace_callback=trace_callback)
+                    reviews = _sync_scrape_reviews(username, max_pages, session=session, trace_callback=trace_callback, include_likers=True)
                 else:
-                    reviews = _sync_scrape_reviews(username, max_pages, session=session)
+                    reviews = _sync_scrape_reviews(username, max_pages, session=session, include_likers=True)
             except Exception as exc:
                 # Reviews are best-effort — never fail the whole scrape because of them
                 logger.warning("Review scrape failed for %s: %s", username, exc)
@@ -750,6 +891,7 @@ def _sync_scrape_profile_sources(
             film_count=film_count,
             reviews=reviews,
             favorite_films=favorite_films,
+            profile_avatar_url=profile_avatar_url,
         )
     finally:
         session.close()
@@ -823,7 +965,7 @@ async def scrape_profile_sources(
     overview_fut = loop.run_in_executor(None, partial(_sync_scrape_overview, username, None, trace_callback))
     futures = [diary_fut, grid_fut, overview_fut]
     if include_reviews:
-        futures.append(loop.run_in_executor(None, partial(_sync_scrape_reviews, username, max_pages, None, trace_callback)))
+        futures.append(loop.run_in_executor(None, partial(_sync_scrape_reviews, username, max_pages, None, trace_callback, True)))
 
     results = await asyncio.gather(*futures, return_exceptions=True)
     diary_res, grid_res, overview_res = results[0], results[1], results[2]
@@ -842,9 +984,9 @@ async def scrape_profile_sources(
     diary = [] if diary_failed else diary_res
     grid = [] if grid_failed else grid_res
 
-    film_count, review_count, favorite_films = (0, 0, [])
+    film_count, review_count, favorite_films, profile_avatar_url = (0, 0, [], None)
     if not isinstance(overview_res, BaseException):
-        film_count, review_count, favorite_films = overview_res
+        film_count, review_count, favorite_films, profile_avatar_url = overview_res
 
     if isinstance(reviews_res, BaseException):
         logger.warning("Review scrape failed for %s: %s", username, reviews_res)
@@ -861,6 +1003,7 @@ async def scrape_profile_sources(
         film_count=film_count,
         reviews=reviews_res,
         favorite_films=favorite_films,
+        profile_avatar_url=profile_avatar_url,
     )
 
 
