@@ -145,7 +145,7 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <h3 className="text-base font-bold text-white">Your Rating Outliers</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-300 mt-0.5">
               Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
             </p>
           </div>

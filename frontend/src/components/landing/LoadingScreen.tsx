@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Film, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { PosterGuessGame, type PosterGameProps } from '@/components/landing/PosterGuessGame';
 
 function formatElapsed(seconds: number): string {
@@ -29,21 +29,22 @@ type Props = {
 
 const FUN_MESSAGES = [
   "naber?",
+  "nuri bilge ceylan, hakan taşıyan, müslüm gürses",
   "The drama çok kötü değil miydi?",
   "500 film altında izleyenlerin sonuç ekranı gelmiyormuş doğru mu?",
   "2 cümleden fazla inceleme atıyor musun ona bakıyoruz.",
+  "summer haklıydı",
   "bu loading ekranına kaç kere baktın hadi söyle",
   "Her yıl aynı filmi 5 kere izleyenler kulübü başkanı mısın?",
-  "Letterboxd'a film eklemek izlemekten daha eğlenceli geliyor sana da mı öyle?",
+  "jaz belgesel avangarde falan",
   "Şu ana kadar hiç 1 yıldız verdiğin film oldu mu?",
   "Enter the void mu izlesem yoksa 90 günlük yaz tatil mi?",
+  "gaspar noe izleyen çocuktan uzak durucan",
   "Senin favori filmine arkadaşın 'eh işte' dediğinde hissettiklerin.",
   "Daha önce bir filmi sırf posteri güzel diye izledin mi?",
   "3 saatlik filmleri 'bir ara izlerim' diye listeye eklemek.",
-  "IMDb puanı 8 üstü olup da sevmediğin tek film hangisi?",
+  "🖐️ absolute cinema 🖐️",
   "En çok hangi film için 'abartılıyor' dedin söyle.",
-  "Letterboxd'da takip ettiğin ve her yorumuna katıldığın kişi kim?",
-  "Bir filmi sırf popüler diye izlemeyenlerden misin yoksa tam tersi?",
   "Hangi filmi izlerken 'acaba bitse de uyusam' dedin?",
   "Hiç film arasında geçiş yapıp birini yarım bıraktın mı?",
   "Bir filmi en fazla kaç kere izledin?",
@@ -51,7 +52,6 @@ const FUN_MESSAGES = [
   "Şu listendeki filmlerin yarısını izlememiş olman çok normal.",
   "Haftada 10 film izleyenler var, sen kaçtasın?",
   "Filmi başlatıp 10 dakikada kapatanlardan mısın?",
-  "Bir film için 'bunu herkese izletmeliyim' dediğin anı hatırlıyor musun?",
   // Add more fun messages here
 ];
 
@@ -110,7 +110,7 @@ export default function LoadingScreen({
     <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
       {/* Keep the rotating prompt in one place, above the loading container. */}
       {isScrape && (
-        <div className="mb-3 max-w-xl text-center">
+        <div className="mt-1 mb-4 max-w-xl text-center">
           <p
             key={funMessageIndex}
             className="text-lg md:text-xl font-semibold italic leading-snug tracking-tight text-white/80 transition-opacity duration-500"
@@ -131,28 +131,30 @@ export default function LoadingScreen({
           </button>
         )}
 
-        <div className="mx-auto mb-3 h-10 w-10 rounded-xl bg-orange-500/15 border border-orange-400/35 flex items-center justify-center">
-          <Film className="h-5 w-5 text-orange-300 animate-pulse" />
-        </div>
         <h1 className="text-2xl md:text-3xl font-black tracking-tight mb-1.5">{displayTitle}</h1>
-        <p className="text-sm text-slate-300 mb-2">{displayMessage}</p>
+        {!isScrape && <p className="text-sm text-slate-300 mb-2">{displayMessage}</p>}
 
-        {/* Live discovery feed — real counts/stages streamed from the scrape */}
-        {isScrape && (liveFilms > 0 || recentEvents.length > 0) && (
-          <div className="mb-4 space-y-1.5">
-            {liveFilms > 0 && (
-              <p className="text-2xl font-black tabular-nums text-orange-300">
-                {liveFilms.toLocaleString()}{' '}
-                <span className="text-sm font-medium text-slate-400">films found</span>
-              </p>
-            )}
-            <ul className="space-y-0.5 text-xs text-slate-400">
-              {recentEvents.map((e, i) => (
-                <li key={i} className="transition-opacity duration-500">{e.message}</li>
-              ))}
-            </ul>
-          </div>
+        {/* Live film count — one line, pops on every increase */}
+        {isScrape && liveFilms > 0 && (
+          <p className="mb-2 text-2xl font-black tabular-nums text-orange-300">
+            <span key={liveFilms} className="inline-block animate-[score-pop_1.1s_ease-out]">
+              {liveFilms.toLocaleString()}
+            </span>{' '}
+            <span className="text-sm font-medium text-slate-400">films found</span>
+          </p>
         )}
+
+        {/* Status — two lines: elapsed/almost-there, then trouble hint if it's taking a while */}
+        <div className="mb-4 space-y-1">
+          <p className="text-xs text-orange-300 font-medium">
+            {remaining <= 0 ? 'Almost there... wrapping up' : displayDetail}
+          </p>
+          {elapsed > typical && (
+            <p className="text-xs text-amber-300/90 animate-pulse">
+              Having a little trouble — bigger libraries can take a bit longer. Hang tight.
+            </p>
+          )}
+        </div>
 
         {isScrape && posterGame && (
           <div className="mb-5">
@@ -189,20 +191,7 @@ export default function LoadingScreen({
               <span className="text-orange-300 font-medium">{formatElapsed(remaining)}</span>
             </div>
           )}
-          {remaining <= 0 && (
-            <div className="text-xs text-center text-orange-300 font-medium">
-              Almost there... wrapping up
-            </div>
-          )}
         </div>
-
-        <p className="text-xs text-slate-400">{displayDetail}</p>
-
-        {elapsed > typical && (
-          <p className="mt-3 text-xs text-amber-300/90 animate-pulse">
-            Having a little trouble — bigger libraries can take a bit longer. Hang tight.
-          </p>
-        )}
       </div>
     </div>
   );

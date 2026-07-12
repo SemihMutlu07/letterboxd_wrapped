@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import math
+import unicodedata
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -158,7 +159,12 @@ def _guess_language(text: str) -> str:
 
 
 def _title_key(title: Any) -> str:
-    return str(title or "").strip().casefold()
+    # NFC-normalize before casefolding: accented titles ("Amélie", "Léon") can
+    # reach this function pre-composed from one source (TMDB JSON) and
+    # decomposed (base char + combining accent) from another (scraped HTML),
+    # which look identical but fail a plain casefold() comparison.
+    normalized = unicodedata.normalize("NFC", str(title or ""))
+    return normalized.strip().casefold()
 
 
 def _year_key(year: Any) -> Optional[str]:

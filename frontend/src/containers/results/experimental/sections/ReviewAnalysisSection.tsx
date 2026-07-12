@@ -6,9 +6,14 @@ import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 import type { StatsData, ReviewLiker } from '../types';
 
-/** char length used for the "Longest" sort; falls back to raw text length. */
+/** char length; used as a "Longest" tie-break, falls back to raw text length. */
 function charLen(r: { char_length?: number; text?: string }): number {
   return r.char_length ?? r.text?.length ?? 0;
+}
+
+/** Word count for the "Longest" sort — matches the "N words" label shown on each card. */
+function wordCountOf(r: { word_count?: number; text?: string }): number {
+  return r.word_count ?? (r.text?.trim() ? r.text.trim().split(/\s+/).length : 0);
 }
 
 type Props = { stats: StatsData };
@@ -53,14 +58,32 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   const reviewsWithLikesData = ra?.reviews_with_likes_data ?? null;
 
   const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
+
+  // Most loyal fan: whoever liked the most of the user's distinct reviews.
+  const mostLoyalFan = useMemo(() => {
+    const counts = new Map<string, { liker: ReviewLiker; count: number }>();
+    for (const review of allReviews) {
+      for (const liker of review.likers ?? []) {
+        const entry = counts.get(liker.username);
+        if (entry) entry.count += 1;
+        else counts.set(liker.username, { liker, count: 1 });
+      }
+    }
+    let best: { liker: ReviewLiker; count: number } | null = null;
+    for (const entry of counts.values()) {
+      if (!best || entry.count > best.count) best = entry;
+    }
+    return best && best.count >= 2 ? best : null;
+  }, [allReviews]);
   const sortedReviews = useMemo(() => {
     return [...allReviews].sort((a, b) => {
       if (reviewSort === 'likes') {
         // Most liked, then longer review as the tie-break.
         return ((b.likes ?? 0) - (a.likes ?? 0)) || (charLen(b) - charLen(a));
       }
-      // Longest, strictly by char length, then title for a stable order.
-      return (charLen(b) - charLen(a)) || (a.title ?? '').localeCompare(b.title ?? '');
+      // Longest, by word count (matches the "N words" label on each card),
+      // char length as tie-break, then title for a stable order.
+      return (wordCountOf(b) - wordCountOf(a)) || (charLen(b) - charLen(a)) || (a.title ?? '').localeCompare(b.title ?? '');
     });
   }, [allReviews, reviewSort]);
   const filteredReviews = useMemo(() => {
@@ -103,6 +126,21 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                 Counts likes <em>received</em>, never likes you gave.
               </p>
             )}
+          </div>
+        )}
+
+        {mostLoyalFan && (
+          <div className="col-span-2 sm:col-span-1 bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0 flex items-center gap-3">
+            <LikerAvatar liker={mostLoyalFan.liker} />
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-orange-400 truncate">Your Most Loyal Fan!</p>
+              <p className="text-xs sm:text-sm text-slate-300 truncate">
+                {mostLoyalFan.liker.display_name || mostLoyalFan.liker.username}
+              </p>
+              <p className="text-[10px] sm:text-[11px] text-slate-500">
+                liked {mostLoyalFan.count} of your reviews
+              </p>
+            </div>
           </div>
         )}
       </div>

@@ -67,7 +67,7 @@ export default function HeroStats({
                 <div
                   className="absolute inset-0 z-10 flex items-center rounded-xl bg-slate-900/95 backdrop-blur-sm border border-orange-500/30 p-3 text-left shadow-2xl cursor-pointer"
                 >
-                  <p className="text-[11px] leading-snug text-orange-100/90 normal-case tracking-normal font-normal">
+                  <p className="text-xs md:text-sm leading-snug text-orange-100/90 normal-case tracking-normal font-normal">
                     Your film hours divided by ~16 waking hours per day in your Letterboxd activity window. Capped at 100%.
                   </p>
                 </div>

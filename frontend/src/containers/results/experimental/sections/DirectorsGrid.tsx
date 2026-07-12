@@ -232,6 +232,7 @@ export function PersonCard({
 
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
+  const [clicked, setClicked] = useState(false);
 
   useEffect(() => {
     if (!profilePath) {
@@ -246,11 +247,10 @@ export function PersonCard({
 
   return (
     <motion.div
-      whileInView={interactive && !reduceMotion ? {
+      animate={interactive && !reduceMotion && !clicked ? {
         boxShadow: ['0 0 0 0 rgba(251,146,60,0)', '0 0 0 3px rgba(251,146,60,.32)', '0 0 0 0 rgba(251,146,60,0)'],
       } : undefined}
-      viewport={{ once: true, amount: 0.65 }}
-      transition={{ duration: 0.8, ease: 'easeOut' }}
+      transition={{ duration: 0.8, ease: 'easeOut', repeat: Infinity, repeatDelay: 3 }}
       className={`relative flex flex-col items-center gap-2 group rounded-xl border p-2 text-center transition-colors duration-200 ${
         interactive
           ? 'cursor-pointer border-white/10 hover:border-orange-400/50 focus-visible:border-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40'
@@ -261,10 +261,14 @@ export function PersonCard({
             role: 'button',
             tabIndex: 0,
             'aria-label': `Show films with ${name}`,
-            onClick: onShowFilms,
+            onClick: () => {
+              setClicked(true);
+              onShowFilms!();
+            },
             onKeyDown: (e: React.KeyboardEvent) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
+                setClicked(true);
                 onShowFilms!();
               }
             },

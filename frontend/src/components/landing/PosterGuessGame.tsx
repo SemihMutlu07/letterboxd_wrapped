@@ -159,7 +159,7 @@ export function PosterGuessGame({
       </div>
 
       <div className="mb-4 flex justify-center">
-        <div className="relative h-[330px] w-[220px] overflow-hidden rounded-lg border border-slate-600 bg-slate-900/60">
+        <div className="relative h-[240px] w-[160px] sm:h-[330px] sm:w-[220px] overflow-hidden rounded-lg border border-slate-600 bg-slate-900/60">
           {!error && (
             <canvas
               ref={canvasRef}

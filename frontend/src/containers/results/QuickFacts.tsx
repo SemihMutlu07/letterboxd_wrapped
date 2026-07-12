@@ -46,6 +46,14 @@ function runtimeTier(avgMinutes: number): string {
   return 'Short & Sweet';
 }
 
+/** Tailwind color trio (icon/label/badge) — pace gets livelier as it climbs. */
+const PACE_COLORS: Record<string, { icon: string; label: string; badge: string }> = {
+  'Binge Watcher': { icon: 'text-rose-400', label: 'text-rose-300/90', badge: 'bg-rose-500/15 text-rose-300' },
+  Dedicated: { icon: 'text-amber-400', label: 'text-amber-300/90', badge: 'bg-amber-500/15 text-amber-300' },
+  Regular: { icon: 'text-sky-400', label: 'text-sky-300/90', badge: 'bg-sky-500/15 text-sky-300' },
+  Casual: { icon: 'text-slate-300', label: 'text-slate-300/90', badge: 'bg-slate-600/40 text-slate-200' },
+};
+
 export default function QuickFacts({
   avgMinutes,
   totalCountries,
@@ -60,6 +68,7 @@ export default function QuickFacts({
   lifetimeFilmCount,
 }: QuickFactsProps) {
   const pace = paceTier(filmsPerWeek);
+  const paceColors = PACE_COLORS[pace];
   const runtimeLabel = runtimeTier(avgMinutes);
 
   const paceExplainer = (() => {
@@ -91,22 +100,22 @@ export default function QuickFacts({
         {/* Top row — stack vertically on phones, side-by-side from sm: up */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <motion.div
-            className="flex items-center justify-between gap-2 bg-slate-800/40 border border-slate-700/40 rounded-xl px-3 py-2"
+            className="flex items-center justify-between gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-3 py-2"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0, duration: 0.3 }}
           >
             <div className="flex items-center gap-3 min-w-0">
-              <Clock className="w-5 h-5 text-slate-400 shrink-0" />
+              <Clock className="w-5 h-5 text-orange-400 shrink-0" />
               <div className="flex flex-col min-w-0">
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">avg runtime</span>
+                <span className="text-[10px] uppercase tracking-wider text-orange-300/90 font-medium">avg runtime</span>
                 <span className="text-xl font-black text-white leading-tight">
                   {Math.round(avgMinutes)}
-                  <span className="text-xs font-medium text-slate-400 ml-1">min</span>
+                  <span className="text-xs font-medium text-slate-300 ml-1">min</span>
                 </span>
               </div>
             </div>
-            <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 font-medium">
+            <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-300 font-medium">
               {runtimeLabel}
             </span>
           </motion.div>
@@ -119,21 +128,21 @@ export default function QuickFacts({
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-3 min-w-0">
-                <Gauge className="w-5 h-5 text-slate-400 shrink-0" />
+                <Gauge className={`w-5 h-5 shrink-0 ${paceColors.icon}`} />
                 <div className="flex flex-col min-w-0">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">pace</span>
+                  <span className={`text-[10px] uppercase tracking-wider font-medium ${paceColors.label}`}>pace</span>
                   <span className="text-xl font-black text-white leading-tight">
                     {filmsPerWeek.toFixed(1)}
-                    <span className="text-xs font-medium text-slate-400 ml-1">/week</span>
+                    <span className="text-xs font-medium text-slate-300 ml-1">/week</span>
                   </span>
                 </div>
               </div>
-              <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 font-medium">
+              <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full font-medium ${paceColors.badge}`}>
                 {pace}
               </span>
             </div>
             {paceExplainer && (
-              <p className="text-[10px] text-slate-500 leading-snug">{paceExplainer}</p>
+              <p className="text-[10px] text-slate-300/80 leading-snug">{paceExplainer}</p>
             )}
           </motion.div>
         </div>

@@ -700,7 +700,7 @@ export function ResultsContent({
       id: 'hero',
       render: () => (
         <div className="space-y-3 md:space-y-6">
-          <header className="text-center py-4 md:py-10">
+          <header className="text-center px-6 md:px-0 py-4 md:py-10">
             <h1
               className="text-[clamp(32px,6vw,72px)] font-black mb-4 leading-[0.95] tracking-tighter"
               style={{

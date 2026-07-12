@@ -69,7 +69,7 @@ export const LB_GREEN = '#00c030';
 export function toggleClass(active: boolean): string {
   return active
     ? 'px-3 py-1 rounded-full text-xs font-semibold bg-[#00c030]/20 text-[#00c030] border border-[#00c030]/30 transition-colors'
-    : 'px-3 py-1 rounded-full text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors';
+    : 'px-3 py-1 rounded-full text-xs font-semibold text-slate-200 border border-transparent hover:text-white hover:border-white/15 transition-colors';
 }
 
 /** Letterboxd-style star rating display. */
