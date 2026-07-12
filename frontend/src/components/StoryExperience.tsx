@@ -110,7 +110,7 @@ function Label({ children }: { children: ReactNode }) {
 }
 
 function Big({ children }: { children: ReactNode }) {
-  return <p className="mt-4 text-6xl font-black leading-none text-stone-50 sm:text-7xl">{children}</p>;
+  return <p className="mt-3 break-words hyphens-auto text-[clamp(2.1rem,10vw,4.5rem)] font-black leading-[0.95] text-stone-50 md:mt-4">{children}</p>;
 }
 
 function Sub({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -433,6 +433,29 @@ function StoryVisual({ slide }: { slide: Slide }) {
   );
 }
 
+function MobileMediaRail({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  const visible = media.slice(0, 6);
+  if (visible.length === 0) return null;
+  return (
+    <div className="mb-5 md:hidden">
+      <div className="flex min-h-[118px] items-end justify-center gap-2 overflow-hidden px-1">
+        {visible.map((item, index) => (
+          <div
+            key={`${item.url}-${index}`}
+            className="relative aspect-[2/3] h-[112px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black shadow-xl"
+            style={{
+              transform: `translateY(${index % 2 === 0 ? 0 : 12}px) rotate(${(index - 2) * 2}deg)`,
+              boxShadow: index === 0 ? `0 0 42px ${accent}55` : undefined,
+            }}
+          >
+            <StoryImage item={item} priority={index < 2} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StoryImage({ item, className = '', priority = false }: { item: StoryMedia; className?: string; priority?: boolean }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -676,7 +699,7 @@ export default function StoryExperience() {
       </button>
 
       {/* Slide */}
-      <div className="relative z-20 grid min-h-screen place-items-center px-5 py-14 text-center md:place-items-center md:px-10 md:text-left">
+      <div className="relative z-20 grid min-h-screen place-items-center px-4 pb-24 pt-16 text-center md:place-items-center md:px-10 md:py-14 md:text-left">
         <AnimatePresence mode="wait">
           <motion.div
             key={slides[index].key}
@@ -684,8 +707,9 @@ export default function StoryExperience() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -22, scale: 1.01 }}
             transition={{ duration: 0.45, ease: 'easeOut' }}
-            className="w-full max-w-xl justify-self-center rounded-[28px] border border-white/10 bg-black/42 px-5 py-6 shadow-2xl shadow-black/40 backdrop-blur-md md:ml-[8vw] md:justify-self-start md:px-8 md:py-8"
+            className="w-full max-w-xl justify-self-center rounded-[24px] border border-white/10 bg-black/55 px-4 py-5 shadow-2xl shadow-black/40 backdrop-blur-md sm:px-5 sm:py-6 md:ml-[8vw] md:justify-self-start md:rounded-[28px] md:bg-black/42 md:px-8 md:py-8"
           >
+            <MobileMediaRail media={slides[index].media ?? []} accent={slides[index].accent ?? '#f59e0b'} />
             {slides[index].body}
           </motion.div>
         </AnimatePresence>
