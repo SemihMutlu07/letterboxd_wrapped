@@ -17,7 +17,10 @@ function wordCountOf(r: { word_count?: number; text?: string }): number {
 }
 
 type Props = { stats: StatsData };
-type ReviewSort = 'likes' | 'length';
+type ReviewSort = 'likes' | 'length' | 'gems';
+
+/** A substantial review that has not received a public like yet. */
+const GEM_MIN_WORDS = 40;
 
 const WORD_PALETTE = [
   'bg-orange-500/25 text-orange-200',
@@ -77,6 +80,12 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   }, [allReviews]);
   const sortedReviews = useMemo(() => {
     return [...allReviews].sort((a, b) => {
+      if (reviewSort === 'gems') {
+        const aIsGem = (a.likes ?? 0) === 0 && wordCountOf(a) >= GEM_MIN_WORDS;
+        const bIsGem = (b.likes ?? 0) === 0 && wordCountOf(b) >= GEM_MIN_WORDS;
+        if (aIsGem !== bIsGem) return bIsGem ? 1 : -1;
+        return (wordCountOf(b) - wordCountOf(a)) || (charLen(b) - charLen(a)) || (a.title ?? '').localeCompare(b.title ?? '');
+      }
       if (reviewSort === 'likes') {
         // Most liked, then longer review as the tie-break.
         return ((b.likes ?? 0) - (a.likes ?? 0)) || (charLen(b) - charLen(a));
@@ -308,6 +317,12 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                   onClick={() => { setReviewSort('length'); setReviewPage(1); }}
                 >
                   Longest
+                </ReviewSortButton>
+                <ReviewSortButton
+                  active={reviewSort === 'gems'}
+                  onClick={() => { setReviewSort('gems'); setReviewPage(1); }}
+                >
+                  Hidden gems
                 </ReviewSortButton>
               </div>
             </div>
