@@ -31,7 +31,7 @@ const WORD_PALETTE = [
   'bg-rose-500/20 text-rose-200',
 ];
 
-const INITIAL_REVIEW_PAGE = 9;
+const INITIAL_REVIEW_PAGE = 3;
 
 function scaledWordSize(count: number, max: number): string {
   if (max <= 0) return 'text-sm';
@@ -59,6 +59,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   );
   const totalLikes = ra?.total_review_likes ?? null;
   const reviewsWithLikesData = ra?.reviews_with_likes_data ?? null;
+  const longestReview = ra?.longest_review ?? null;
 
   const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
 
@@ -150,6 +151,16 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                 liked {mostLoyalFan.count} of your reviews
               </p>
             </div>
+          </div>
+        )}
+
+        {longestReview && (
+          <div className="col-span-2 sm:col-span-1 bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+            <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{longestReview.length}</p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">chars in your longest review</p>
+            <p className="mt-2 text-[11px] text-slate-500 truncate">
+              {longestReview.title}{longestReview.year ? ` (${longestReview.year})` : ''}
+            </p>
           </div>
         )}
       </div>

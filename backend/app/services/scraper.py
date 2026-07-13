@@ -908,6 +908,15 @@ async def check_profile_exists(username: str) -> bool:
     return await loop.run_in_executor(None, partial(_sync_check_profile, username))
 
 
+async def scrape_avatar_only(username: str) -> Optional[str]:
+    """Fetch just the public profile avatar (single overview-page request), for
+    callers that already have film data and only need the portrait — e.g. the
+    CSV/ZIP upload path, which has no other reason to hit Letterboxd."""
+    loop = asyncio.get_event_loop()
+    _, _, _, avatar_url = await loop.run_in_executor(None, partial(_sync_scrape_overview, username))
+    return avatar_url
+
+
 async def scrape_diary(username: str, max_pages: int = MAX_PAGES) -> list[dict]:
     """
     Scrape a user's diary pages and return list of film dicts.

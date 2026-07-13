@@ -63,6 +63,10 @@ export interface StatsData {
   scraped_username?: string;
   /** Public Letterboxd avatar from the profile overview (scrape path only). */
   profile_avatar_url?: string;
+  /** Total points earned in the poster-guessing game shown during scraping. */
+  poster_game_score?: number;
+  /** Rounds played (correct + given-up) in the poster-guessing game. */
+  poster_game_rounds?: number;
   /** Data source for this Wrapped. "scrape" = full profile scrape, "csv" = upload. */
   source?: string;
   /** Number of films in the sample (scrape mode). */
@@ -205,6 +209,8 @@ export interface StatsData {
       likers?: ReviewLiker[];
       likers_complete?: boolean;
     }[];
+    /** The single longest review by character count. */
+    longest_review?: { title: string; year: string; length: number } | null;
     /** Sum of like_count across all reviews with HTML like data. */
     total_review_likes?: number | null;
     /** Number of reviews whose like_count was successfully parsed. */

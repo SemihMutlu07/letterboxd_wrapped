@@ -32,6 +32,7 @@ class TaskState:
     error_code: Optional[str] = None
     kind: str = "analyze"     # analyze | scrape | watchlist
     username: Optional[str] = None
+    avatar_only: bool = False  # scrape jobs: fetch just the profile avatar, skip full pipeline
     usernames: list = field(default_factory=list)  # watchlist jobs
     job_type: str = ""  # watchlist_compare | date_night
     claimed: bool = False     # scrape/watchlist jobs: True once a worker has taken it
@@ -66,13 +67,14 @@ def create_task_state() -> str:
     return task_id
 
 
-def create_scrape_job(username: str) -> str:
+def create_scrape_job(username: str, avatar_only: bool = False) -> str:
     """Queue a username scrape job for the desktop worker to claim."""
     task_id = str(uuid.uuid4())
     task = TaskState(
         task_id=task_id,
         kind="scrape",
         username=username,
+        avatar_only=avatar_only,
         stage="queued",
         message="Queued on desktop scraper",
     )

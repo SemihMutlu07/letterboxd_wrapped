@@ -19,6 +19,8 @@ import ExportInstructions from '@/components/landing/ExportInstructions';
 import { POSTER_GAME_MOVIES, type PosterGameMovie } from '@/lib/posterGameData';
 
 const POSTER_GAME_MAX_LEVEL = 5;
+// Points for a correct guess, indexed by how many wrong guesses/hints were used first.
+const POSTER_ROUND_POINTS = [100, 80, 60, 40, 20];
 
 function drawShuffledMovie(deckRef: React.MutableRefObject<PosterGameMovie[]>, indexRef: React.MutableRefObject<number>): PosterGameMovie {
   if (indexRef.current >= deckRef.current.length) {
@@ -45,6 +47,7 @@ export default function LetterboxdLanding() {
   const [posterScore, setPosterScore] = useState(0);
   const [posterWrongGuesses, setPosterWrongGuesses] = useState(0);
   const [posterRevealed, setPosterRevealed] = useState(false);
+  const [posterRoundsPlayed, setPosterRoundsPlayed] = useState(0);
   const shuffledDeckRef = useRef<PosterGameMovie[]>([]);
   const deckIndexRef = useRef(0);
   const [resultReady, setResultReady] = useState<string | null>(null);
@@ -124,6 +127,7 @@ export default function LetterboxdLanding() {
       const next = Math.min(prev + 1, POSTER_GAME_MAX_LEVEL);
       if (next >= POSTER_GAME_MAX_LEVEL) {
         setPosterRevealed(true);
+        setPosterRoundsPlayed((prev) => prev + 1);
         setTimeout(() => drawNextRound(), 2000);
       }
       return next;
@@ -131,10 +135,21 @@ export default function LetterboxdLanding() {
   }, [drawNextRound]);
 
   const handleCorrectGuess = useCallback(() => {
-    setPosterScore((prev) => prev + 1);
+    const points = POSTER_ROUND_POINTS[Math.min(posterWrongGuesses, POSTER_ROUND_POINTS.length - 1)];
+    setPosterScore((prev) => prev + points);
+    setPosterRoundsPlayed((prev) => prev + 1);
     setPosterRevealed(true);
     setTimeout(() => drawNextRound(), 1200);
-  }, [drawNextRound]);
+  }, [drawNextRound, posterWrongGuesses]);
+
+  // Only attach poster-game stats when the user actually played a round.
+  const withPosterGameStats = useCallback(
+    (stats: object) =>
+      posterRoundsPlayed > 0
+        ? { ...stats, poster_game_score: posterScore, poster_game_rounds: posterRoundsPlayed }
+        : stats,
+    [posterRoundsPlayed, posterScore]
+  );
 
   const zipFiles = useCallback(async (files: FileList | File[]): Promise<File> => {
     const zip = new JSZip();
@@ -273,7 +288,7 @@ export default function LetterboxdLanding() {
       if (detectedUsername) setUsername(detectedUsername);
       // Per-tab storage avoids the cross-tab race where a concurrent scrape's
       // result overwrites this tab's data on a shared localStorage key.
-      sessionStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+      sessionStorage.setItem('letterboxdStats', JSON.stringify(withPosterGameStats(result.stats)));
 
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, duration_ms: Math.round(durationMs) });
       trackFilmStats({ total_films: result.stats.total_films, total_countries: result.stats.total_countries, average_rating: result.stats.average_rating });
@@ -354,7 +369,7 @@ export default function LetterboxdLanding() {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
       }
       setUsername(username);
-      sessionStorage.setItem('letterboxdStats', JSON.stringify(result.stats));
+      sessionStorage.setItem('letterboxdStats', JSON.stringify(withPosterGameStats(result.stats)));
 
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method });
 
@@ -455,6 +470,7 @@ export default function LetterboxdLanding() {
                 maxLevel: POSTER_GAME_MAX_LEVEL,
                 wrongGuesses: posterWrongGuesses,
                 score: posterScore,
+                nextPoints: POSTER_ROUND_POINTS[Math.min(posterWrongGuesses, POSTER_ROUND_POINTS.length - 1)],
                 onWrongGuess: handleWrongGuess,
                 onCorrectGuess: handleCorrectGuess,
                 revealedAnswer: posterRevealed,

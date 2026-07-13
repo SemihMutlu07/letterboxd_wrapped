@@ -519,3 +519,19 @@ def test_overview_rejects_foreign_host_avatar(monkeypatch):
     assert _overview_avatar(monkeypatch, "https://evil.com/avtr.jpg") is None
     # A look-alike suffix must not slip past the host check either.
     assert _overview_avatar(monkeypatch, "https://ltrbxd.com.evil.com/avtr.jpg") is None
+
+
+async def test_scrape_avatar_only_returns_validated_avatar(monkeypatch):
+    """CSV/ZIP path's lightweight avatar job reuses the same overview fetch + trust-boundary check."""
+    _run_scraper_executor_inline(monkeypatch)
+    src = "https://a.ltrbxd.com/resized/avatar/upload/1/2/3/avtr.jpg"
+    html = f'<div id="avatar-large"><img src="{src}"></div>'
+    monkeypatch.setattr(scraper, "_fetch", lambda s, url, timeout=10: FakeResponse(200, html))
+    assert await scraper.scrape_avatar_only("semihmutsuz") == src
+
+
+async def test_scrape_avatar_only_returns_none_when_unavailable(monkeypatch):
+    """No avatar element on the page must not raise — CSV path treats this as 'no avatar'."""
+    _run_scraper_executor_inline(monkeypatch)
+    monkeypatch.setattr(scraper, "_fetch", lambda s, url, timeout=10: FakeResponse(200, "<div></div>"))
+    assert await scraper.scrape_avatar_only("semihmutsuz") is None

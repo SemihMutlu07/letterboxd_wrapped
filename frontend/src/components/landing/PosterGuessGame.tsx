@@ -45,6 +45,8 @@ export type PosterGameProps = {
   maxLevel: number;
   wrongGuesses: number;
   score: number;
+  /** Points the player will earn if their next guess is correct. */
+  nextPoints: number;
   onWrongGuess: () => void;
   onCorrectGuess: () => void;
   revealedAnswer: boolean;
@@ -56,6 +58,7 @@ export function PosterGuessGame({
   maxLevel,
   wrongGuesses,
   score,
+  nextPoints,
   onWrongGuess,
   onCorrectGuess,
   revealedAnswer,
@@ -65,6 +68,7 @@ export function PosterGuessGame({
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [justScored, setJustScored] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState(0);
   const { canvasRef, loaded, error } = usePixelatedImage(movie.poster_path, level, maxLevel, revealedAnswer);
   const hint = useMemo(
     () => buildHint(movie.title, wrongGuesses, maxLevel),
@@ -96,6 +100,7 @@ export function PosterGuessGame({
     if (isFuzzyMatch(value, movie.title, movie.aliases)) {
       setFeedback(null);
       setSuggestionsOpen(false);
+      setEarnedPoints(nextPoints);
       setJustScored(true);
       setTimeout(() => setJustScored(false), 1100);
       onCorrectGuess();
@@ -151,8 +156,14 @@ export function PosterGuessGame({
             Score: {score}
           </span>
           {justScored && (
-            <span className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 text-base font-bold text-orange-300 animate-[float-up-fade_1.1s_ease-out]">
-              +1
+            <span
+              className={`pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 whitespace-nowrap font-bold animate-[float-up-fade_1.1s_ease-out] ${
+                earnedPoints >= 100
+                  ? 'text-2xl text-amber-300 drop-shadow-[0_0_6px_rgba(252,211,77,0.7)]'
+                  : 'text-base text-orange-300'
+              }`}
+            >
+              {earnedPoints >= 100 ? `PERFECT +${earnedPoints}` : `+${earnedPoints}`}
             </span>
           )}
         </span>

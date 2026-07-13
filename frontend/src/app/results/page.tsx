@@ -835,7 +835,15 @@ export function ResultsContent({
     },
     {
       id: 'film-history',
-      render: () => <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />,
+      render: () => (
+        <LazyFilmHistory
+          data={decadeData}
+          max={decadeMax}
+          isMobile={isMobile}
+          allFilms={stats.all_films ?? []}
+          userAvg={stats.average_rating}
+        />
+      ),
     },
     {
       id: 'ratings-bar',
@@ -866,6 +874,8 @@ export function ResultsContent({
           paceWindowSource={quickMetrics.paceWindowSource}
           diaryFilmCount={quickMetrics.diaryFilmCount}
           lifetimeFilmCount={quickMetrics.lifetimeFilmCount}
+          posterGameScore={stats.poster_game_score}
+          posterGameRounds={stats.poster_game_rounds}
         />
       ),
     },
@@ -1012,12 +1022,24 @@ function LazyLanguages({ data, allFilms }: { data: any[]; allFilms: any[] }) {
   );
 }
 
-function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
+function LazyFilmHistory({
+  data,
+  max,
+  isMobile,
+  allFilms,
+  userAvg,
+}: {
+  data: any[];
+  max: number;
+  isMobile: boolean;
+  allFilms: any[];
+  userAvg?: number | null;
+}) {
   const { ref, shouldMount } = useLazyMount(150);
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <FilmHistory data={data} max={max} isMobile={isMobile} />
+        <FilmHistory data={data} max={max} isMobile={isMobile} allFilms={allFilms} userAvg={userAvg} />
       ) : (
         <div className="h-48 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}
@@ -1072,6 +1094,8 @@ function LazyQuickFacts({
   paceWindowSource,
   diaryFilmCount,
   lifetimeFilmCount,
+  posterGameScore,
+  posterGameRounds,
 }: {
   avgMinutes: number;
   totalCountries: number;
@@ -1085,6 +1109,8 @@ function LazyQuickFacts({
   paceWindowSource?: 'diary' | 'fallback';
   diaryFilmCount?: number;
   lifetimeFilmCount?: number;
+  posterGameScore?: number;
+  posterGameRounds?: number;
 }) {
   const { ref, shouldMount } = useLazyMount(250);
   return (
@@ -1103,6 +1129,8 @@ function LazyQuickFacts({
           paceWindowSource={paceWindowSource}
           diaryFilmCount={diaryFilmCount}
           lifetimeFilmCount={lifetimeFilmCount}
+          posterGameScore={posterGameScore}
+          posterGameRounds={posterGameRounds}
         />
       ) : (
         <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />

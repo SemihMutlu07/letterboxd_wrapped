@@ -41,7 +41,7 @@ from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     scrape_and_analyze,
 )
-from app.services.scraper import scrape_watchlist, scrape_profile_sources
+from app.services.scraper import scrape_watchlist, scrape_profile_sources, scrape_avatar_only
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -384,17 +384,21 @@ async def _trace_flush_loop(session: aiohttp.ClientSession, cfg: WorkerConfig, t
 async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
     task_id = job["task_id"]
     username = job["username"]
+    avatar_only = bool(job.get("avatar_only"))
     started = monotonic()
     trace = TraceBuffer()
     trace.add(
         "worker_received",
         "Worker received scrape job",
-        {"username": username, "scrape_transport": "direct_cloudscraper"},
+        {"username": username, "scrape_transport": "direct_cloudscraper", "avatar_only": avatar_only},
     )
     trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace))
-    logger.info("Processing scrape job %s for @%s", task_id, username)
+    logger.info("Processing %s job %s for @%s", "avatar" if avatar_only else "scrape", task_id, username)
     try:
-        stats = await scrape_and_analyze(session, username, trace_callback=trace.add)
+        if avatar_only:
+            stats = {"profile_avatar_url": await scrape_avatar_only(username)}
+        else:
+            stats = await scrape_and_analyze(session, username, trace_callback=trace.add)
     except Exception as exc:  # noqa: BLE001 — any failure must report back, not crash the loop
         message = _failure_message(username, exc)
         duration_seconds = round(monotonic() - started, 1)

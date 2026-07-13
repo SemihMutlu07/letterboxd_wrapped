@@ -47,6 +47,34 @@ def _find_csv_files(directory: Path) -> dict:
     return csv_found
 
 
+AVATAR_JOB_TIMEOUT_SECONDS = 20
+AVATAR_JOB_POLL_SECONDS = 1
+
+
+async def _fetch_avatar_best_effort(username: str) -> Optional[str]:
+    """Queue a lightweight avatar-only job on the desktop worker and wait briefly
+    for it. Best-effort: any failure or timeout just yields None (frontend already
+    falls back to a placeholder), it must never fail the CSV/ZIP analysis."""
+    if not settings.desktop_worker_enabled:
+        return None
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        return None
+    try:
+        job_task_id = task_manager.create_scrape_job(username, avatar_only=True)
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + AVATAR_JOB_TIMEOUT_SECONDS
+        while loop.time() < deadline:
+            job = task_manager.get_task_state(job_task_id)
+            if job is None or job.status == "failed":
+                return None
+            if job.status == "done":
+                return (job.result or {}).get("stats", {}).get("profile_avatar_url")
+            await asyncio.sleep(AVATAR_JOB_POLL_SECONDS)
+    except Exception:
+        logger.warning("Avatar fetch failed for @%s", username, exc_info=True)
+    return None
+
+
 async def _run_analysis(
     task_id: str,
     session,
@@ -57,6 +85,8 @@ async def _run_analysis(
     try:
         task_manager.set_task_running(task_id)
         stats = await process_comprehensive_letterboxd_data(session, csv_files, task_id)
+        if username:
+            stats["profile_avatar_url"] = await _fetch_avatar_best_effort(username)
         task_manager.set_task_done(task_id, {"status": "success", "stats": stats})
         persist_run(username, "upload", stats, ok=True, task_id=task_id)
     except Exception as exc:

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Gauge, Globe, Languages, CalendarRange } from 'lucide-react';
+import { Clock, Gauge, Globe, Languages, CalendarRange, Trophy } from 'lucide-react';
 import Section from '@/components/results/Section';
 
 interface QuickFactsProps {
@@ -23,6 +23,10 @@ interface QuickFactsProps {
   diaryFilmCount?: number;
   /** Total films marked as watched (lifetime, including pre-Letterboxd). */
   lifetimeFilmCount?: number;
+  /** Total points earned in the poster-guessing game shown during scraping. */
+  posterGameScore?: number;
+  /** Rounds played in the poster-guessing game; chip only renders when > 0. */
+  posterGameRounds?: number;
 }
 
 function formatYears(days: number): string {
@@ -66,10 +70,13 @@ export default function QuickFacts({
   paceWindowSource,
   diaryFilmCount,
   lifetimeFilmCount,
+  posterGameScore,
+  posterGameRounds,
 }: QuickFactsProps) {
   const pace = paceTier(filmsPerWeek);
   const paceColors = PACE_COLORS[pace];
   const runtimeLabel = runtimeTier(avgMinutes);
+  const showPosterGame = !!posterGameRounds && posterGameRounds > 0;
 
   const paceExplainer = (() => {
     if (!paceWindowDays) return null;
@@ -148,7 +155,7 @@ export default function QuickFacts({
         </div>
 
         {/* Bottom row — compact stat chips */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className={`grid grid-cols-1 gap-2 ${showPosterGame ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
           <motion.div
             className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/15 rounded-lg px-3 py-2"
             initial={{ opacity: 0, y: 20 }}
@@ -192,6 +199,21 @@ export default function QuickFacts({
               decades on screen
             </span>
           </motion.div>
+
+          {showPosterGame && (
+            <motion.div
+              className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/15 rounded-lg px-3 py-2"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25, duration: 0.3 }}
+            >
+              <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-amber-400 text-xl font-black leading-none shrink-0">{posterGameScore ?? 0}</span>
+              <span className="text-[11px] uppercase tracking-wider text-amber-300/80 font-medium leading-tight">
+                poster game score
+              </span>
+            </motion.div>
+          )}
         </div>
       </div>
     </Section>

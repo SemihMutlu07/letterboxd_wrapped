@@ -174,7 +174,7 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     if job is None:
         return {"job": None}
     logger.info("Worker claimed scrape job %s for @%s", job.task_id, job.username)
-    return {"job": {"task_id": job.task_id, "username": job.username}}
+    return {"job": {"task_id": job.task_id, "username": job.username, "avatar_only": job.avatar_only}}
 
 
 @router.post("/scrape/{task_id}/event")
