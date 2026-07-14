@@ -67,9 +67,10 @@ export function FilmHistory({
   };
 
   const renderDot = (props: any) => {
-    const { cx, cy, payload } = props;
+    const { cx, cy, payload, key } = props;
     return (
       <circle
+        key={key}
         cx={cx}
         cy={cy}
         r={isMobile ? 3 : 4}
