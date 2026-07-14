@@ -58,22 +58,22 @@ describe('ReviewAnalysisSection', () => {
   it('renders only the first page of written reviews initially', () => {
     renderSection();
     const cards = screen.getAllByText(/Review text for film/);
-    expect(cards.length).toBe(9);
+    expect(cards.length).toBe(3);
   });
 
   it('expands reviews on "Show more reviews" click', async () => {
     renderSection();
-    expect(screen.getAllByText(/Review text for film/).length).toBe(9);
+    expect(screen.getAllByText(/Review text for film/).length).toBe(3);
     await userEvent.click(screen.getByRole('button', { name: /Show more reviews/i }));
-    expect(screen.getAllByText(/Review text for film/).length).toBe(18);
+    expect(screen.getAllByText(/Review text for film/).length).toBe(6);
   });
 
   it('resets pagination when sort changes', async () => {
     renderSection();
     await userEvent.click(screen.getByRole('button', { name: /Show more reviews/i }));
-    expect(screen.getAllByText(/Review text for film/).length).toBe(18);
+    expect(screen.getAllByText(/Review text for film/).length).toBe(6);
     await userEvent.click(screen.getByRole('button', { name: /Longest/i }));
-    expect(screen.getAllByText(/Review text for film/).length).toBe(9);
+    expect(screen.getAllByText(/Review text for film/).length).toBe(3);
   });
 
   it('filters reviews by selected word', async () => {
@@ -92,6 +92,6 @@ describe('ReviewAnalysisSection', () => {
   it('keeps the review list paginated when sort changes', async () => {
     renderSection();
     await userEvent.click(screen.getByRole('button', { name: /Longest/i }));
-    expect(screen.getAllByText(/Review text for film/).length).toBe(9);
+    expect(screen.getAllByText(/Review text for film/).length).toBe(3);
   });
 });

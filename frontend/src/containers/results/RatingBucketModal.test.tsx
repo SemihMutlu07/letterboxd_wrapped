@@ -27,7 +27,6 @@ describe('RatingBucketModal', () => {
       <RatingBucketModal
         bucket={{ rating: 4, label: '4★', films: buildFilms(25) }}
         onClose={() => {}}
-        onSelectFilm={() => {}}
       />
     );
     const posters = screen.getAllByAltText(/poster/i);

@@ -106,32 +106,21 @@ h1, h2, h3 {
   fill-opacity: 1 !important;
 }
 
-.recharts-pie .recharts-sector:nth-child(1) { fill: #f97316 !important; }
-.recharts-pie .recharts-sector:nth-child(2) { fill: #a855f7 !important; }
-.recharts-pie .recharts-sector:nth-child(3) { fill: #3b82f6 !important; }
-.recharts-pie .recharts-sector:nth-child(4) { fill: #10b981 !important; }
-.recharts-pie .recharts-sector:nth-child(5) { fill: #eab308 !important; }
-.recharts-pie .recharts-sector:nth-child(6) { fill: #059669 !important; }
-.recharts-pie .recharts-sector:nth-child(7) { fill: #ec4899 !important; }
-.recharts-pie .recharts-sector:nth-child(8) { fill: #22c55e !important; }
-
-/* Additional force rules for pie chart colors */
 .recharts-pie .recharts-cell {
   fill-opacity: 1 !important;
 }
 
-.recharts-pie .recharts-cell:nth-child(1) { fill: #f97316 !important; }
-.recharts-pie .recharts-cell:nth-child(2) { fill: #a855f7 !important; }
-.recharts-pie .recharts-cell:nth-child(3) { fill: #3b82f6 !important; }
-.recharts-pie .recharts-cell:nth-child(4) { fill: #10b981 !important; }
-.recharts-pie .recharts-cell:nth-child(5) { fill: #eab308 !important; }
-.recharts-pie .recharts-cell:nth-child(6) { fill: #059669 !important; }
-.recharts-pie .recharts-cell:nth-child(7) { fill: #ec4899 !important; }
-.recharts-pie .recharts-cell:nth-child(8) { fill: #22c55e !important; }
-
 /* Override any global color inheritance */
 .recharts-pie * {
   fill-opacity: 1 !important;
+}
+
+/* Remove the default browser focus outline shown on click inside charts */
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus,
+.recharts-surface:focus,
+.recharts-surface *:focus {
+  outline: none !important;
 }
 
 /* ===================== EXPORT MODE CSS ===================== */

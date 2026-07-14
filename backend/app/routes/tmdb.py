@@ -53,6 +53,49 @@ async def search_tmdb_person(request: Request, name: str, role: str | None = Non
         raise HTTPException(status_code=500, detail=f"TMDB API error: {exc}") from exc
 
 
+@router.get("/api/tmdb/movie/search")
+async def search_tmdb_movie(request: Request, title: str, year: int | None = None):
+    """Search TMDB for a movie by title (and optional year) and return its poster image URL."""
+    if not title:
+        raise HTTPException(status_code=400, detail="Title parameter is required")
+
+    session = request.app.state.aiohttp_session
+    try:
+        params: dict = {"query": title, "include_adult": "false"}
+        if year:
+            params["year"] = year
+
+        movie_data = await tmdb_get(session, "search/movie", params)
+        results = movie_data.get("results", []) if movie_data else []
+
+        if not results and year:
+            movie_data = await tmdb_get(session, "search/movie", {"query": title, "include_adult": "false"})
+            results = movie_data.get("results", []) if movie_data else []
+
+        if not results:
+            return {"found": False, "message": "No movie found"}
+
+        movie = results[0]
+        poster_path = movie.get("poster_path")
+        if poster_path:
+            return {
+                "found": True,
+                "movie_id": movie.get("id"),
+                "title": movie.get("title"),
+                "poster_path": poster_path,
+                "url": f"https://image.tmdb.org/t/p/w300{poster_path}",
+            }
+        return {
+            "found": False,
+            "movie_id": movie.get("id"),
+            "title": movie.get("title"),
+            "message": "No poster image available",
+        }
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"TMDB API error: {exc}") from exc
+
+
 @router.get("/tmdb-proxy/{path:path}")
 async def tmdb_proxy(path: str, request: Request):
     """Proxy TMDB images to avoid CORS issues."""

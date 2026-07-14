@@ -16,6 +16,21 @@ function wordCountOf(r: { word_count?: number; text?: string }): number {
   return r.word_count ?? (r.text?.trim() ? r.text.trim().split(/\s+/).length : 0);
 }
 
+/** A review whose text is nothing but a pasted link (or empty once the link is stripped)
+ * carries no readable opinion — it's noise in "All written reviews", not a short review. */
+function isLinkOnlyReview(r: { text?: string }): boolean {
+  const stripped = (r.text ?? '').replace(/https?:\/\/\S+|www\.\S+/gi, '').trim();
+  return (r.text?.trim().length ?? 0) > 0 && stripped.length === 0;
+}
+
+/** "1 word" / "5 words", or a plain tag for near-empty reviews so a "1 words" count
+ * doesn't read like a broken label. */
+function wordCountLabel(count: number): string | null {
+  if (count <= 0) return null;
+  if (count < 3) return 'short review';
+  return `${count} word${count === 1 ? '' : 's'}`;
+}
+
 type Props = { stats: StatsData };
 type ReviewSort = 'likes' | 'length' | 'gems';
 
@@ -79,8 +94,12 @@ export default function ReviewAnalysisSection({ stats }: Props) {
     }
     return best && best.count >= 2 ? best : null;
   }, [allReviews]);
+  // Reviews that are just a pasted link carry no readable opinion — leave them
+  // out of "All written reviews" instead of showing a hollow "1 words" card.
+  const writtenReviews = useMemo(() => allReviews.filter((r) => !isLinkOnlyReview(r)), [allReviews]);
+  const hiddenLinkOnlyCount = allReviews.length - writtenReviews.length;
   const sortedReviews = useMemo(() => {
-    return [...allReviews].sort((a, b) => {
+    return [...writtenReviews].sort((a, b) => {
       if (reviewSort === 'gems') {
         const aIsGem = (a.likes ?? 0) === 0 && wordCountOf(a) >= GEM_MIN_WORDS;
         const bIsGem = (b.likes ?? 0) === 0 && wordCountOf(b) >= GEM_MIN_WORDS;
@@ -95,7 +114,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
       // char length as tie-break, then title for a stable order.
       return (wordCountOf(b) - wordCountOf(a)) || (charLen(b) - charLen(a)) || (a.title ?? '').localeCompare(b.title ?? '');
     });
-  }, [allReviews, reviewSort]);
+  }, [writtenReviews, reviewSort]);
   const filteredReviews = useMemo(() => {
     if (!selectedWord) return [];
     return allReviews.filter((r) => r.text?.toLowerCase().includes(selectedWord.toLowerCase()));
@@ -139,21 +158,6 @@ export default function ReviewAnalysisSection({ stats }: Props) {
           </div>
         )}
 
-        {mostLoyalFan && (
-          <div className="col-span-2 sm:col-span-1 bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0 flex items-center gap-3">
-            <LikerAvatar liker={mostLoyalFan.liker} />
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm font-bold text-orange-400 truncate">Your Most Loyal Fan!</p>
-              <p className="text-xs sm:text-sm text-slate-300 truncate">
-                {mostLoyalFan.liker.display_name || mostLoyalFan.liker.username}
-              </p>
-              <p className="text-[10px] sm:text-[11px] text-slate-500">
-                liked {mostLoyalFan.count} of your reviews
-              </p>
-            </div>
-          </div>
-        )}
-
         {longestReview && (
           <div className="col-span-2 sm:col-span-1 bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
             <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{longestReview.length}</p>
@@ -164,6 +168,39 @@ export default function ReviewAnalysisSection({ stats }: Props) {
           </div>
         )}
       </div>
+
+      {mostLoyalFan && (
+        <div className="mt-3 w-full rounded-xl border border-orange-400/40 bg-gradient-to-r from-orange-500/15 via-slate-800/60 to-slate-800/40 p-4 sm:p-5 flex items-center justify-between gap-4 shadow-[0_0_24px_-8px_rgba(251,146,60,0.35)]">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="relative shrink-0">
+              <LikerAvatar liker={mostLoyalFan.liker} size="lg" />
+              <span
+                aria-hidden="true"
+                className="absolute -top-2 -right-2 text-lg drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+              >
+                👑
+              </span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-orange-300">
+                Your Most Loyal Fan
+              </p>
+              <p className="text-base sm:text-lg font-bold text-white truncate">
+                {mostLoyalFan.liker.display_name || mostLoyalFan.liker.username}
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-3xl sm:text-4xl font-black text-orange-300 tabular-nums leading-none">
+              {mostLoyalFan.count}
+            </p>
+            <p className="mt-1 text-[10px] sm:text-xs text-slate-400 whitespace-nowrap">
+              review{mostLoyalFan.count === 1 ? '' : 's'} liked
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3 items-start mt-4 w-full">
 
         {topWords.length > 0 && (
@@ -188,9 +225,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-slate-500">
-              Generic review words (film, izledim, güzel…) are filtered so distinctive vocabulary surfaces.
-            </p>
+            
           </div>
         )}
 
@@ -213,7 +248,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
               ))}
             </ul>
             {filteredReviews.length > 6 && (
-              <p className="mt-2 text-[11px] text-slate-500">
+              <p className="mt-2 text-[11px] text-slate-300">
                 Showing 6 of {filteredReviews.length} reviews
               </p>
             )}
@@ -239,7 +274,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 transition-colors duration-150 ease-out hover:bg-slate-800/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400">
               <div className="flex items-baseline gap-3">
                 <p className="text-xs uppercase tracking-widest text-orange-300">Top 3 most-liked reviews</p>
-                <p className="text-[11px] text-slate-500">tap to expand</p>
+                <p className="text-[11px] text-slate-300">tap to expand</p>
               </div>
               <svg
                 aria-hidden="true"
@@ -312,8 +347,11 @@ export default function ReviewAnalysisSection({ stats }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-widest text-orange-300">All written reviews</p>
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-slate-300">
                   Sort without extra scraping — likes come from the review listing page.
+                  {hiddenLinkOnlyCount > 0
+                    ? ` ${hiddenLinkOnlyCount} link-only review${hiddenLinkOnlyCount === 1 ? '' : 's'} hidden.`
+                    : ''}
                 </p>
               </div>
               <div className="flex rounded-full border border-slate-700/60 bg-slate-900/60 p-0.5">
@@ -373,8 +411,11 @@ function ReviewPoster({ posterPath, title }: { posterPath?: string; title: strin
 }
 
 /** One liker's avatar (image if on the Letterboxd CDN, else initials). */
-function LikerAvatar({ liker }: { liker: ReviewLiker }) {
+function LikerAvatar({ liker, size = 'sm' }: { liker: ReviewLiker; size?: 'sm' | 'lg' }) {
   const label = liker.display_name || liker.username;
+  const dims = size === 'lg' ? 'h-12 w-12 sm:h-14 sm:w-14' : 'h-6 w-6';
+  const textSize = size === 'lg' ? 'text-base sm:text-lg' : 'text-[9px]';
+  const ring = size === 'lg' ? 'ring-2 ring-orange-400/60' : 'ring-2 ring-slate-900';
   if (liker.avatar_url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -383,14 +424,14 @@ function LikerAvatar({ liker }: { liker: ReviewLiker }) {
         alt={label}
         title={label}
         loading="lazy"
-        className="h-6 w-6 rounded-full object-cover ring-2 ring-slate-900"
+        className={`${dims} rounded-full object-cover ${ring}`}
       />
     );
   }
   return (
     <span
       title={label}
-      className="grid h-6 w-6 place-items-center rounded-full bg-slate-700 text-[9px] font-bold text-slate-200 ring-2 ring-slate-900"
+      className={`grid ${dims} place-items-center rounded-full bg-slate-700 ${textSize} font-bold text-slate-200 ${ring}`}
     >
       {(label || '?').charAt(0).toUpperCase()}
     </span>
@@ -526,40 +567,57 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
   const text = review.text ?? '';
   const likes = review.likes ?? 0;
   const wordCount = review.word_count ?? (text.trim() ? text.trim().split(/\s+/).length : 0);
+  const wordLabel = wordCountLabel(wordCount);
   const isLong = text.length > 260;
+  const href = review.review_path ? `https://letterboxd.com${review.review_path}` : null;
+
+  const Wrapper = href ? 'a' : 'div';
 
   return (
-    <li className="flex gap-3 rounded-xl border border-white/[0.04] bg-slate-900/45 p-4 transition-colors hover:bg-slate-900/70">
-      <ReviewPoster posterPath={review.poster_path} title={review.title} />
-      <div className="min-w-0 flex-1">
-        <header className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-100">{review.title}</p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              {review.year || '—'}
-              {review.rating != null ? ` · ★ ${review.rating.toFixed(1)}` : ''}
-              {wordCount > 0 ? ` · ${wordCount} words` : ''}
-            </p>
-          </div>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
-            likes > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-800 text-slate-500'
-          }`}>
-            {likes > 0 ? `♥ ${likes}` : 'Not yet liked'}
-          </span>
-        </header>
-        <p className={`mt-3 text-sm leading-relaxed text-slate-300 ${expanded ? 'whitespace-pre-line' : 'line-clamp-4'}`}>
-          {text}
-        </p>
-        {isLong && (
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-2 text-[11px] font-bold text-orange-300 transition-colors hover:text-orange-200"
-          >
-            {expanded ? 'Show less' : 'Read more'}
-          </button>
-        )}
-      </div>
+    <li>
+      <Wrapper
+        {...(href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {})}
+        className={`flex gap-3 rounded-xl border border-white/10 bg-slate-900/60 p-4 transition-colors duration-150 ${
+          href ? 'cursor-pointer hover:border-orange-400/30 hover:bg-slate-900/90' : 'hover:bg-slate-900/80'
+        }`}
+      >
+        <ReviewPoster posterPath={review.poster_path} title={review.title} />
+        <div className="min-w-0 flex-1">
+          <header className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={`truncate text-sm font-semibold text-slate-100 ${href ? 'transition-colors duration-150 group-hover:text-orange-200' : ''}`}>
+                {review.title}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-400">
+                {review.year || '—'}
+                {review.rating != null ? ` · ★ ${review.rating.toFixed(1)}` : ''}
+                {wordLabel ? ` · ${wordLabel}` : ''}
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+              likes > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-800 text-slate-400'
+            }`}>
+              {likes > 0 ? `♥ ${likes}` : 'Not yet liked'}
+            </span>
+          </header>
+          <p className={`mt-3 text-sm leading-relaxed text-slate-200 ${expanded ? 'whitespace-pre-line' : 'line-clamp-4'}`}>
+            {text}
+          </p>
+          {isLong && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setExpanded((v) => !v);
+              }}
+              className="relative z-10 mt-2 text-[11px] font-bold text-orange-300 transition-colors hover:text-orange-200"
+            >
+              {expanded ? 'Show less' : 'Read more'}
+            </button>
+          )}
+        </div>
+      </Wrapper>
     </li>
   );
 }

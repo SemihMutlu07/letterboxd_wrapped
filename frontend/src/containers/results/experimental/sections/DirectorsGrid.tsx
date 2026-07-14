@@ -14,7 +14,7 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { getProfileUrl } from '@/lib/analytics';
 import type { StatsData, PersonFilm } from '../types';
 import type { GateResult, SectionToggle } from './section-utils';
@@ -50,7 +50,7 @@ interface DirectorCard {
   films?: PersonFilm[];
 }
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 5;
 const EXPANDED_MAX = 8;
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
       ratedTabHint={!hasRatings ? 'Ratings data not available in this export' : undefined}
       ratedTabTooltip="Your average rating across films you&apos;ve rated for each director (minimum 3 rated films)"
     >
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {shown.map((d) => (
           <PersonCard
             key={d.name}
@@ -185,9 +185,10 @@ export function SectionShell({
     : ratedTabHint;
   return (
     <div className="bg-[#1a1a1a]/80 border border-white/8 rounded-2xl p-5 md:p-6 space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="text-base font-bold text-white">{title}</h3>
-        <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div />
+        <h3 className="text-lg md:text-xl font-extrabold text-white text-center justify-self-center">{title}</h3>
+        <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full justify-self-end">
           <button
             className={toggleClass(mode === 'most_watched')}
             onClick={() => onToggle('most_watched')}
@@ -232,7 +233,7 @@ export function PersonCard({
 
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
-  const [clicked, setClicked] = useState(false);
+  const [, setClicked] = useState(false);
 
   useEffect(() => {
     if (!profilePath) {
@@ -243,18 +244,11 @@ export function PersonCard({
   }, [profilePath, imageUrl, name]);
 
   const interactive = Boolean(onShowFilms);
-  const reduceMotion = useReducedMotion();
 
   return (
     <motion.div
-      animate={interactive && !reduceMotion && !clicked ? {
-        boxShadow: ['0 0 0 0 rgba(251,146,60,0)', '0 0 0 3px rgba(251,146,60,.32)', '0 0 0 0 rgba(251,146,60,0)'],
-      } : undefined}
-      transition={{ duration: 0.8, ease: 'easeOut', repeat: Infinity, repeatDelay: 3 }}
-      className={`relative flex flex-col items-center gap-2 group rounded-xl border p-2 text-center transition-colors duration-200 ${
-        interactive
-          ? 'cursor-pointer border-white/10 hover:border-orange-400/50 focus-visible:border-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40'
-          : 'border-transparent'
+      className={`relative flex flex-col items-center gap-2 group rounded-xl p-2 text-center hover:z-20 focus-within:z-20 ${
+        interactive ? 'cursor-pointer focus-visible:outline-none' : ''
       }`}
       {...(interactive
         ? {
@@ -276,43 +270,72 @@ export function PersonCard({
         : {})}
     >
       {/* Avatar */}
-      <div
-        className="relative w-28 h-28 md:w-32 md:h-32 rounded-2xl overflow-hidden ring-2 ring-white/5 group-hover:ring-white/20 transition-all duration-200"
+      <motion.div
+        className="relative w-28 h-28 md:w-32 md:h-32 rounded-2xl overflow-hidden bg-gradient-to-b from-slate-700 to-slate-900"
+        style={{ transformOrigin: '50% 100%' }}
+        initial={false}
+        whileHover={{
+          scale: 1.15,
+          boxShadow: '0 18px 34px -8px rgba(0,0,0,0.55)',
+        }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       >
         {showImage && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl!}
-            alt={name}
-            loading="lazy"
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-              imageLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
-            onLoad={() => {
-              setImageLoaded(true);
-              setImageError(false);
-            }}
-            onError={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              if (!retried && imageUrl) {
-                setRetried(true);
-                img.src = `${imageUrl}?retry=1`;
-              } else {
-                setImageError(true);
+          <>
+            {/* Blurred backdrop: same photo, scaled + blurred, so the fill behind the
+                un-cropped image always matches the subject's own colors. */}
+            <img
+              src={imageUrl!}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              className={`absolute inset-0 w-full h-full object-cover scale-150 blur-2xl saturate-150 brightness-75 transition-opacity duration-300 ${
+                imageLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+            {/* Image starts zoomed in (cropped) and eases down to its natural scale on
+                hover, so the parts cut off by object-cover smoothly slide into view
+                instead of snapping — object-fit itself never changes. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <motion.img
+              src={imageUrl!}
+              alt={name}
+              loading="lazy"
+              className="absolute inset-0 w-full h-full object-cover"
+              initial={false}
+              animate={{ opacity: imageLoaded ? 1 : 0, scale: 1.12 }}
+              whileHover={{ scale: 1 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              onLoad={() => {
                 setImageLoaded(true);
-                img.style.display = 'none';
-              }
-            }}
-          />
+                setImageError(false);
+              }}
+              onError={(e) => {
+                const img = e.currentTarget as HTMLImageElement;
+                if (!retried && imageUrl) {
+                  setRetried(true);
+                  img.src = `${imageUrl}?retry=1`;
+                } else {
+                  setImageError(true);
+                  setImageLoaded(true);
+                  img.style.display = 'none';
+                }
+              }}
+            />
+          </>
         )}
         {showFallback && <PersonAvatarPlaceholder />}
-      </div>
-      {/* Name + stat */}
-      <div className="space-y-0.5">
-        <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2">{name}</p>
-        <p className="text-sm md:text-base text-slate-200">{primaryStat}</p>
+      </motion.div>
+      {/* Name + stat — count reveals on hover instead of sitting there statically */}
+      <div className="space-y-0.5 w-full text-center">
+        <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2 text-center">{name}</p>
+        <p className="text-sm md:text-base text-slate-200 text-center opacity-0 -translate-y-1 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-y-0">
+          {primaryStat}
+        </p>
         {secondaryStat && (
-          <p className="text-xs md:text-sm text-slate-300">{secondaryStat}</p>
+          <p className="text-xs md:text-sm text-slate-300 text-center opacity-0 -translate-y-1 transition-all duration-300 delay-75 ease-out group-hover:opacity-100 group-hover:translate-y-0">
+            {secondaryStat}
+          </p>
         )}
       </div>
     </motion.div>

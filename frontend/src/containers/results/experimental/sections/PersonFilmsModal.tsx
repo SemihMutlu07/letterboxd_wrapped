@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { PersonAvatarPlaceholder, PosterImage } from '@/components/results/Placeholders';
+import { getGenreStyle } from '@/components/results/Cards';
 import type { PersonFilm } from '../types';
 
 const INITIAL_POSTER_PAGE = 9;
@@ -21,12 +22,15 @@ interface PersonFilmsModalProps {
   films: PersonFilm[];
   profilePath?: string;
   profileImageUrl?: string;
+  genre?: string;
 }
 
-export default function PersonFilmsModal({ open, onClose, name, films, profilePath, profileImageUrl }: PersonFilmsModalProps) {
+export default function PersonFilmsModal({ open, onClose, name, films, profilePath, profileImageUrl, genre }: PersonFilmsModalProps) {
   const profileUrl = profileImageUrl || (profilePath ? getTmdbImageUrl(profilePath, 'h632') : null);
   const [profileFailed, setProfileFailed] = useState(false);
   const [posterPage, setPosterPage] = useState(1);
+  const genreStyle = genre ? getGenreStyle(genre) : null;
+  const GenreIcon = genreStyle?.icon;
 
   useEffect(() => {
     if (open) setProfileFailed(false);
@@ -87,7 +91,11 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
               <div className="absolute inset-0 bg-gradient-to-r from-[#141414] via-[#141414]/90 to-[#141414]/55" />
               <div className="relative z-10 flex h-full items-end justify-between gap-4 px-5 py-5">
                 <div className="flex min-w-0 flex-1 items-end gap-4">
-                  <div className="h-28 w-20 flex-shrink-0 overflow-hidden rounded-2xl bg-slate-800 ring-1 ring-white/10 shadow-2xl">
+                  <div
+                    className={`h-28 w-20 flex-shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-2xl ${
+                      genreStyle && !(profileUrl && !profileFailed) ? `${genreStyle.bg} ${genreStyle.border} border` : 'bg-slate-800'
+                    }`}
+                  >
                     {profileUrl && !profileFailed ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -97,12 +105,16 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                         className="h-full w-full object-cover"
                         onError={() => setProfileFailed(true)}
                       />
+                    ) : genreStyle && GenreIcon ? (
+                      <div className="flex h-full w-full items-center justify-center" title={genre} aria-label={genre}>
+                        <GenreIcon className={`h-8 w-8 ${genreStyle.text}`} strokeWidth={1.75} />
+                      </div>
                     ) : (
                       <PersonAvatarPlaceholder />
                     )}
                   </div>
                   <div className="min-w-0 pb-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-300/70">
+                    <p className={`text-xs font-semibold uppercase tracking-[0.22em] ${genreStyle ? genreStyle.soft : 'text-orange-300/70'}`}>
                       Film shelf
                     </p>
                     <p className="mt-1 text-2xl font-black leading-tight text-white md:text-3xl">{name}</p>
@@ -127,7 +139,7 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                 const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
                 return (
                   <div key={`${f.title}-${f.year}`} className="space-y-1.5">
-                    <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-zinc-800 ring-1 ring-white/10 transition-all duration-150 hover:scale-[1.02] hover:ring-orange-400/30 hover:shadow-2xl hover:shadow-black/40">
+                    <div className={`relative aspect-[2/3] rounded-lg overflow-hidden bg-zinc-800 ring-1 ring-white/10 transition-all duration-150 hover:scale-[1.02] hover:shadow-2xl hover:shadow-black/40 ${genreStyle ? genreStyle.ring : 'hover:ring-orange-400/30'}`}>
                       <PosterImage src={poster} alt={`${f.title} poster`} />
                       {f.user_rating != null && (
                         <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-[10px] font-bold text-yellow-400">
