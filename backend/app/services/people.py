@@ -352,7 +352,7 @@ async def compute_actor_profiles(
                 actor_films_map.setdefault(actor, []).append(film_info)
 
     top_actors_with_profiles: List[Dict[str, Any]] = []
-    for name, count in cast_counts.most_common(4):
+    for name, count in cast_counts.most_common(5):
         profile_path: Optional[str] = None
         search_source: Optional[str] = None
         try:
@@ -382,7 +382,7 @@ async def compute_actor_profiles(
 
     remaining_actors = [
         {"name": n, "count": c, "films": actor_films_map.get(n, [])}
-        for n, c in cast_counts.most_common(20)[4:]
+        for n, c in cast_counts.most_common(20)[5:]
     ]
 
     return {

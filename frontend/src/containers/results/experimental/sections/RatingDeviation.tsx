@@ -15,6 +15,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 import FilmModal from './FilmModal';
@@ -149,11 +150,11 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
               Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
             </p>
           </div>
-          <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
-            <SubtabButton active={tab === 'higher'} color="green" onClick={() => handleTabChange('higher')}>
+          <div className="relative flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
+            <SubtabButton active={tab === 'higher'} color="green" arrow="up" onClick={() => handleTabChange('higher')}>
               Rated Higher
             </SubtabButton>
-            <SubtabButton active={tab === 'lower'} color="red" onClick={() => handleTabChange('lower')}>
+            <SubtabButton active={tab === 'lower'} color="red" arrow="down" onClick={() => handleTabChange('lower')}>
               Rated Lower
             </SubtabButton>
           </div>
@@ -171,12 +172,15 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
         {/* Film grid */}
         {shown.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3 md:gap-4">
-            {shown.map((film) => (
+            {shown.map((film, idx) => (
               <FilmPosterCard
                 key={`${film.title}-${film.year}`}
                 film={film}
                 userAvg={userAvg}
                 polarity={tab}
+                // With md:grid-cols-5, a 6th card would sit alone on its own row
+                // and expand the box — only show it once lg:grid-cols-6 fits it.
+                className={idx === 5 ? 'hidden lg:flex' : undefined}
                 onOpenModal={(f) => {
                   setSelectedFilm(f);
                   trackItemClicked('rating_deviation', 'film');
@@ -198,11 +202,13 @@ function FilmPosterCard({
   userAvg,
   polarity,
   onOpenModal,
+  className,
 }: {
   film: EnrichedFilm;
   userAvg: number;
   polarity: SubTab;
   onOpenModal?: (film: EnrichedFilm) => void;
+  className?: string;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -222,7 +228,7 @@ function FilmPosterCard({
   return (
     <div
       onClick={handleClick}
-      className="flex min-w-0 flex-col gap-1.5 text-left group cursor-default"
+      className={`min-w-0 flex-col gap-1.5 text-left group cursor-default ${className ?? 'flex'}`}
     >
       {/* Poster */}
       <div
@@ -295,11 +301,13 @@ function FilmPosterCard({
 function SubtabButton({
   active,
   color,
+  arrow,
   onClick,
   children,
 }: {
   active: boolean;
   color: 'green' | 'red';
+  arrow: 'up' | 'down';
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -307,14 +315,34 @@ function SubtabButton({
   return (
     <button
       onClick={onClick}
-      className="px-3 py-1 min-h-[44px] rounded-full text-xs font-semibold transition-colors"
-      style={
-        active
-          ? { background: accent + '26', color: accent, border: `1px solid ${accent}4d` }
-          : { color: '#cbd5e1' }
-      }
+      className="relative flex items-center gap-1 px-3 py-1 min-h-[44px] rounded-full text-xs font-semibold"
+      style={{ color: active ? accent : '#cbd5e1' }}
     >
-      {children}
+      {active && (
+        <motion.span
+          layoutId="ratingTogglePill"
+          className="absolute inset-0 rounded-full"
+          style={{ background: accent + '26', border: `1px solid ${accent}4d` }}
+          transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+        />
+      )}
+      <span className="relative flex items-center gap-1">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {active && (
+            <motion.span
+              key={arrow}
+              initial={{ opacity: 0, y: arrow === 'up' ? 4 : -4, scale: 0.6 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: arrow === 'up' ? 4 : -4, scale: 0.6 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              className="inline-block leading-none"
+            >
+              {arrow === 'up' ? '▲' : '▼'}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        {children}
+      </span>
     </button>
   );
 }

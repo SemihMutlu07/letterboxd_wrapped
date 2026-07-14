@@ -43,7 +43,7 @@ export default function RootLayout({
           media="(prefers-color-scheme: light)"
       />  
       </head>  
-        <body className={`${manrope.variable} ${syne.variable} bg-slate-900 text-white antialiased`}>
+        <body className={`${manrope.variable} ${syne.variable} bg-[#1e252d] text-white antialiased`}>
           <ErrorBoundary>
             {children}
             <Suspense fallback={null}>
