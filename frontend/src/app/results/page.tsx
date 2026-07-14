@@ -30,7 +30,6 @@ import { useLazyMount } from '@/hooks/useIntersectionObserver';
 // Import all the section components
 import HeroStats from '@/containers/results/HeroStats';
 import { FilmHistory, RatingsBar } from '@/containers/results/FilmAndRatings';
-import QuickFacts from '@/containers/results/QuickFacts';
 import RewatchChampions from '@/containers/results/RewatchChampions';
 import CinemaScale from '@/containers/results/CinemaScale';
 
@@ -337,36 +336,6 @@ export default function ResultsPage() {
   }, [runtimeHours, actualRangeDays]);
 
   const cineScore = useMemo(() => Math.max(0, Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats))), [stats]);
-  const quickMetrics = useMemo(() => {
-    const safeRange = Math.max(1, actualRangeDays);
-    // Pace honesty: when the user has a Letterboxd diary window, count only films
-    // actually logged in that window — total_films also includes pre-Letterboxd
-    // backfill (e.g. movies the user watched years before joining and ticked off
-    // retroactively), which would deflate pace if used as the numerator.
-    const diaryCount = stats?.diary_film_count ?? 0;
-    const lifetimeCount = stats?.total_films ?? 0;
-    const paceNumerator = diaryCount > 0 ? diaryCount : lifetimeCount;
-    const filmsPerWeek = (paceNumerator / safeRange) * 7;
-    const languageCount = stats?.top_languages?.length ?? 0;
-    const decadeSpan = (stats?.decades ?? []).filter((d) => d.count > 0).length;
-
-    // 'diary' when backend gave us an actual earliest_date from the diary CSV
-    // (so the window is real); 'fallback' when we defaulted to 365 days.
-    const paceWindowSource: 'diary' | 'fallback' =
-      stats?.data_timeline?.earliest_date && stats?.data_timeline?.latest_date
-        ? 'diary'
-        : 'fallback';
-
-    return {
-      filmsPerWeek,
-      languageCount,
-      decadeSpan,
-      paceWindowDays: safeRange,
-      paceWindowSource,
-      diaryFilmCount: diaryCount,
-      lifetimeFilmCount: lifetimeCount,
-    };
-  }, [stats?.total_films, stats?.diary_film_count, stats?.top_languages, stats?.decades, stats?.data_timeline, actualRangeDays]);
 
   // Build top actors & directors list, ensuring no duplicate person across both roles
   const topActors = useMemo(() => {
@@ -517,7 +486,6 @@ export default function ResultsPage() {
           isMobile={isMobile}
           ratingsArr={ratingsArr}
           ratingMax={ratingMax}
-          quickMetrics={quickMetrics}
           cineScore={cineScore}
           showShareModal={showShareModal}
           setShowShareModal={setShowShareModal}
@@ -547,7 +515,6 @@ export function ResultsContent({
   isMobile,
   ratingsArr,
   ratingMax,
-  quickMetrics,
   cineScore,
   showShareModal,
   setShowShareModal,
@@ -834,25 +801,6 @@ export function ResultsContent({
         />
       ),
     },
-    {
-      id: 'quick-facts',
-      render: () => (
-        <LazyQuickFacts
-          avgMinutes={stats.average_runtime || 0}
-          totalCountries={stats.total_countries || 0}
-          filmsPerWeek={quickMetrics.filmsPerWeek}
-          languageCount={quickMetrics.languageCount}
-          decadeSpan={quickMetrics.decadeSpan}
-          topCountry={stats.top_countries?.[0]?.name}
-          rewatchedCount={stats.rewatched_count}
-          totalFilms={stats.total_films}
-          paceWindowDays={quickMetrics.paceWindowDays}
-          paceWindowSource={quickMetrics.paceWindowSource}
-          diaryFilmCount={quickMetrics.diaryFilmCount}
-          lifetimeFilmCount={quickMetrics.lifetimeFilmCount}
-        />
-      ),
-    },
     ...(stats.rewatch_champions && stats.rewatch_champions.length > 0
       ? [
           {
@@ -874,6 +822,11 @@ export function ResultsContent({
             description={stats.sinefil_meter?.description}
             score={cineScore || 50}
             breakdown={stats.sinefil_meter?.breakdown}
+            topCountries={(stats.top_countries || []).map((c: { name: string }) => c.name)}
+            topLanguages={(stats.top_languages || []).map((l: { name: string }) => l.name)}
+            topGenres={(stats.top_genres || []).map((g: { name: string }) => g.name)}
+            topDirectors={(stats.top_directors || []).map((d: { name: string }) => d.name)}
+            favoriteDecade={stats.favorite_decade?.name}
           />
         </SectionContainer>
       ),
@@ -1044,63 +997,16 @@ function LazyRatingsBar({
   );
 }
 
-function LazyQuickFacts({
-  avgMinutes,
-  totalCountries,
-  filmsPerWeek,
-  languageCount,
-  decadeSpan,
-  topCountry,
-  rewatchedCount,
-  totalFilms,
-  paceWindowDays,
-  paceWindowSource,
-  diaryFilmCount,
-  lifetimeFilmCount,
-}: {
-  avgMinutes: number;
-  totalCountries: number;
-  filmsPerWeek: number;
-  languageCount: number;
-  decadeSpan: number;
-  topCountry?: string;
-  rewatchedCount?: number;
-  totalFilms?: number;
-  paceWindowDays?: number;
-  paceWindowSource?: 'diary' | 'fallback';
-  diaryFilmCount?: number;
-  lifetimeFilmCount?: number;
-}) {
-  const { ref, shouldMount } = useLazyMount(250);
-  return (
-    <div ref={ref}>
-      {shouldMount ? (
-        <QuickFacts
-          avgMinutes={avgMinutes}
-          totalCountries={totalCountries}
-          filmsPerWeek={filmsPerWeek}
-          languageCount={languageCount}
-          decadeSpan={decadeSpan}
-          topCountry={topCountry}
-          rewatchedCount={rewatchedCount}
-          totalFilms={totalFilms}
-          paceWindowDays={paceWindowDays}
-          paceWindowSource={paceWindowSource}
-          diaryFilmCount={diaryFilmCount}
-          lifetimeFilmCount={lifetimeFilmCount}
-        />
-      ) : (
-        <div className="h-40 bg-slate-800/30 rounded-2xl animate-pulse" />
-      )}
-    </div>
-  );
-}
-
 function LazyCinemaScale({
   type,
   description,
   score,
   breakdown,
+  topCountries,
+  topLanguages,
+  topGenres,
+  topDirectors,
+  favoriteDecade,
 }: {
   type: string;
   description?: string;
@@ -1113,12 +1019,27 @@ function LazyCinemaScale({
     genres: number;
     directors: number;
   };
+  topCountries?: string[];
+  topLanguages?: string[];
+  topGenres?: string[];
+  topDirectors?: string[];
+  favoriteDecade?: string;
 }) {
   const { ref, shouldMount } = useLazyMount(300);
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <CinemaScale type={type} description={description} score={score} breakdown={breakdown} />
+        <CinemaScale
+          type={type}
+          description={description}
+          score={score}
+          breakdown={breakdown}
+          topCountries={topCountries}
+          topLanguages={topLanguages}
+          topGenres={topGenres}
+          topDirectors={topDirectors}
+          favoriteDecade={favoriteDecade}
+        />
       ) : (
         <div className="h-32 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}

@@ -6,11 +6,7 @@ import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import LangModal from '@/containers/results/experimental/sections/LangModal';
 
-const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
-const PieChart = dynamic(() => import('recharts').then(m => m.PieChart), { ssr: false });
-const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false });
-const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false });
-const Tooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false });
+const LanguagesPieChart = dynamic(() => import('@/containers/results/LanguagesPieChart'), { ssr: false });
 
 const COLORS = ['#f97316', '#a855f7', '#3b82f6', '#10b981', '#eab308', '#059669', '#ec4899'];
 
@@ -70,47 +66,16 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={sortedData}
-                dataKey="count"
-                nameKey="language"
-                innerRadius={70}
-                outerRadius={104}
-                paddingAngle={2}
-                stroke="rgba(15,23,42,0.9)"
-                strokeWidth={2}
-                onClick={(entry: Row) => handleLanguageClick(entry.language)}
-                onMouseEnter={(entry: Row) => setHoveredLanguage(entry.language)}
-                onMouseLeave={() => setHoveredLanguage(null)}
-              >
-                {sortedData.map((entry, i) => (
-                  <Cell
-                    key={entry.language}
-                    fill={COLORS[i % COLORS.length]}
-                    opacity={!hoveredLanguage || hoveredLanguage === entry.language ? 1 : 0.38}
-                    className="cursor-pointer transition-opacity duration-150"
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                cursor={false}
-                content={({ active, payload }: { active?: boolean; payload?: Array<{ payload: Row }> }) => {
-                  if (!active || !payload?.length) return null;
-                  const row = payload[0].payload;
-                  const name = LANGUAGE_LABEL[row.language] || row.language.toUpperCase();
-                  const pct = total ? Math.round((row.count / total) * 100) : 0;
-                  return (
-                    <div className="rounded-xl border border-orange-500/30 bg-slate-950/95 px-3 py-2 text-sm shadow-2xl">
-                      <p className="font-bold text-white">{name}</p>
-                      <p className="text-orange-300">{row.count} films · {pct}%</p>
-                    </div>
-                  );
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <LanguagesPieChart
+            sortedData={sortedData}
+            colors={COLORS}
+            total={total}
+            hoveredLanguage={hoveredLanguage}
+            onHover={setHoveredLanguage}
+            onLeave={() => setHoveredLanguage(null)}
+            onSliceClick={handleLanguageClick}
+            languageLabel={LANGUAGE_LABEL}
+          />
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
             <div className="text-center">
               <p className="text-4xl font-black text-white">{sortedData.length}</p>
