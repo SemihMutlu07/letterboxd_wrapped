@@ -198,6 +198,23 @@ export async function searchPerson(name: string, role: 'director' | 'actor' = 'd
   }
 }
 
+// Search for a movie in TMDB by title (and optional year), returning its poster URL
+export async function searchMovie(title: string, year?: number) {
+  const params = new URLSearchParams({ title });
+  if (year) params.set('year', String(year));
+  const url = `${API_BASE}/api/tmdb/movie/search?${params.toString()}`;
+  try {
+    const r = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error(`TMDB movie search ${r.status}`);
+    const data = await r.json();
+    if (!data || typeof data !== 'object') throw new Error('Invalid response from TMDB movie search');
+    return data;
+  } catch (error) {
+    const enhancedError = handleApiError(error, 'TMDB movie search');
+    return { found: false, message: enhancedError.message, title, url: null, error: enhancedError.message };
+  }
+}
+
 export type ScrapeTraceEvent = {
   stage?: string;
   message?: string;

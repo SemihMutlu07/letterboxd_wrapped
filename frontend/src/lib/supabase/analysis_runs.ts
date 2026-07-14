@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabase } from "@/lib/supabaseClient";
+import { getSupabase, safeSupabaseCall } from "@/lib/supabaseClient";
 
 /** Ensures object is JSON-serializable (no functions, undefined, etc.). */
 function safeJsonSanitize(obj: unknown): Record<string, unknown> {
@@ -198,5 +198,44 @@ export async function finishAnalysis(input: AnalysisFinishInput) {
     if (error) {
         throw error;
     }
-    
+
+}
+
+/** Minimum number of scored runs before we trust a percentile enough to show it. */
+const MIN_SAMPLE_SIZE = 10;
+
+/**
+ * Percentile of `score` among all persisted sinefil_meter values, i.e. the share of
+ * users this score is more adventurous than. Returns null on error or if the sample
+ * is too small to be meaningful (avoids "beats 100%" claims off a handful of rows).
+ */
+export async function getSinefilPercentile(score: number): Promise<number | null> {
+    const supabase = getSupabase();
+
+    type CountResponse = { data: unknown; error: unknown; count?: number | null };
+
+    const [totalResult, belowResult] = await Promise.all([
+        safeSupabaseCall(() =>
+            supabase
+                .from("analysis_runs")
+                .select("*", { head: true, count: "exact" })
+                .not("sinefil_meter", "is", null)
+        ) as Promise<CountResponse>,
+        safeSupabaseCall(() =>
+            supabase
+                .from("analysis_runs")
+                .select("*", { head: true, count: "exact" })
+                .not("sinefil_meter", "is", null)
+                .lt("sinefil_meter", score)
+        ) as Promise<CountResponse>,
+    ]);
+
+    if (totalResult.error || belowResult.error) return null;
+
+    const total = totalResult.count ?? 0;
+    const below = belowResult.count ?? 0;
+
+    if (total < MIN_SAMPLE_SIZE) return null;
+
+    return Math.round((below / total) * 100);
 }
