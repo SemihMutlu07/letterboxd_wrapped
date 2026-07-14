@@ -487,10 +487,10 @@ export default function ResultsPage() {
     }
   }, [stats, cineScore]);
 
-  if (loading) return <div className="min-h-screen bg-slate-900" />;
+  if (loading) return <div className="min-h-screen bg-[#1e252d]" />;
   if (!stats || (typeof stats === 'object' && Object.keys(stats).length === 0)) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+      <div className="min-h-screen bg-[#1e252d] flex items-center justify-center text-white">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-4">No data found</h2>
           <p className="text-gray-400">
@@ -563,9 +563,11 @@ export function ResultsContent({
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalFilms, setModalFilms] = useState<PersonFilm[]>([]);
+  const [modalGenre, setModalGenre] = useState<string | undefined>(undefined);
 
   const handleFilmsClick = () => {
     if (!stats?.all_films) return;
+    setModalGenre(undefined);
     setModalTitle('All Watched Films');
     setModalFilms(
       stats.all_films.map((f: any) => ({
@@ -585,6 +587,7 @@ export function ResultsContent({
 
   const handlePersonClick = (name: string, isDirector: boolean) => {
     if (!stats?.all_films) return;
+    setModalGenre(undefined);
     setModalTitle(isDirector ? `Films by ${name}` : `Films starring ${name}`);
     const filteredFilms = stats.all_films
       .filter((f: any) => {
@@ -606,6 +609,7 @@ export function ResultsContent({
 
   const handleAvgRatingClick = () => {
     if (!stats?.all_films) return;
+    setModalGenre(undefined);
     setModalTitle('Your Rated Films');
     setModalFilms(
       stats.all_films
@@ -629,6 +633,7 @@ export function ResultsContent({
   const handleGenreClick = () => {
     const genre = stats?.top_genres?.[0]?.name;
     if (!genre || !stats?.all_films) return;
+    setModalGenre(genre);
     setModalTitle(`${genre} Films`);
     setModalFilms(
       stats.all_films
@@ -652,6 +657,7 @@ export function ResultsContent({
   const handleDirectorClick = () => {
     const director = stats?.top_directors?.[0]?.name || stats?.most_watched_director?.name;
     if (!director || !stats?.all_films) return;
+    setModalGenre(undefined);
     setModalTitle(`Films by ${director}`);
     setModalFilms(
       stats.all_films
@@ -672,6 +678,7 @@ export function ResultsContent({
     const startYear = parseInt(decade);
     if (isNaN(startYear)) return;
     const endYear = startYear + 9;
+    setModalGenre(undefined);
     setModalTitle(`Films from the ${decade}`);
     setModalFilms(
       stats.all_films
@@ -747,35 +754,12 @@ export function ResultsContent({
             >
               {dateRangeText}
             </p>
-            {username && (
-              <div className="mt-3">
-                <span
-                  className="inline-block px-3 py-1 text-sm rounded-full"
-                  style={{
-                    background:
-                      theme === 'current' ? 'rgba(51,65,85,0.6)'
-                      : theme === 'apple' ? '#F2F2F7'
-                      : 'rgba(0,0,0,0.06)',
-                    border: `1px solid ${
-                      theme === 'current' ? 'rgba(51,65,85,0.6)'
-                      : theme === 'apple' ? 'rgba(0,0,0,0.08)'
-                      : 'rgba(0,0,0,0.1)'
-                    }`,
-                    color:
-                      theme === 'current' ? '#cbd5e1'
-                      : theme === 'vhs' ? '#d4955a'
-                      : theme === 'apple' ? '#1D1D1F'
-                      : '#8a8a8a',
-                  }}
-                >
-                  @{username}
-                </span>
-              </div>
-            )}
           </header>
 
           <SectionContainer theme={theme}>
             <HeroStats
+              username={username}
+              avatarUrl={stats.profile_avatar_url}
               totalFilms={stats.total_films}
               avgRating={stats.average_rating}
               hoursWatched={runtimeHours}
@@ -980,6 +964,7 @@ export function ResultsContent({
         films={modalFilms}
         profileImageUrl={modalTitle === 'All Watched Films' ? stats.profile_avatar_url : undefined}
         profilePath={undefined}
+        genre={modalGenre}
       />
     </>
   );

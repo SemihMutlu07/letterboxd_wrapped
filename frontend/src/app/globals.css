@@ -134,6 +134,14 @@ h1, h2, h3 {
   fill-opacity: 1 !important;
 }
 
+/* Remove the default browser focus outline shown on click inside charts */
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus,
+.recharts-surface:focus,
+.recharts-surface *:focus {
+  outline: none !important;
+}
+
 /* ===================== EXPORT MODE CSS ===================== */
 /* This class is applied during export to ensure visual parity */
 .export-mode {

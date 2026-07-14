@@ -3,7 +3,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { motion, Variants } from 'framer-motion';
-import { Heart, User } from 'lucide-react';
+import {
+  Heart,
+  User,
+  Zap,
+  Compass,
+  Sparkles,
+  Laugh,
+  Fingerprint,
+  Film,
+  Drama,
+  Users,
+  Wand2,
+  Landmark,
+  Skull,
+  Music,
+  Search,
+  Rocket,
+  Swords,
+  Mountain,
+  Tv,
+  type LucideIcon,
+} from 'lucide-react';
 import { searchPerson } from '@/lib/api';
 import { getTmdbImageUrl } from '@/lib/analytics';
 
@@ -72,6 +93,61 @@ export const StatCard: React.FC<{
       </div>
     </div>
   </motion.div>
+  );
+});
+
+const GENRE_STYLES: Record<string, { bg: string; border: string; text: string; hoverBg: string; ring: string; soft: string; icon: LucideIcon }> = {
+  action: { bg: 'bg-red-500/10', border: 'border-red-500/20', text: 'text-red-500', hoverBg: 'hover:bg-red-500/20', ring: 'hover:ring-red-400/30', soft: 'text-red-300/70', icon: Zap },
+  adventure: { bg: 'bg-lime-500/10', border: 'border-lime-500/20', text: 'text-lime-500', hoverBg: 'hover:bg-lime-500/20', ring: 'hover:ring-lime-400/30', soft: 'text-lime-300/70', icon: Compass },
+  animation: { bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-500', hoverBg: 'hover:bg-sky-500/20', ring: 'hover:ring-sky-400/30', soft: 'text-sky-300/70', icon: Sparkles },
+  comedy: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/20', text: 'text-yellow-500', hoverBg: 'hover:bg-yellow-500/20', ring: 'hover:ring-yellow-400/30', soft: 'text-yellow-300/70', icon: Laugh },
+  crime: { bg: 'bg-slate-500/10', border: 'border-slate-500/20', text: 'text-slate-300', hoverBg: 'hover:bg-slate-500/20', ring: 'hover:ring-slate-400/30', soft: 'text-slate-400/70', icon: Fingerprint },
+  documentary: { bg: 'bg-teal-500/10', border: 'border-teal-500/20', text: 'text-teal-500', hoverBg: 'hover:bg-teal-500/20', ring: 'hover:ring-teal-400/30', soft: 'text-teal-300/70', icon: Film },
+  drama: { bg: 'bg-purple-500/10', border: 'border-purple-500/20', text: 'text-purple-500', hoverBg: 'hover:bg-purple-500/20', ring: 'hover:ring-purple-400/30', soft: 'text-purple-300/70', icon: Drama },
+  family: { bg: 'bg-green-500/10', border: 'border-green-500/20', text: 'text-green-500', hoverBg: 'hover:bg-green-500/20', ring: 'hover:ring-green-400/30', soft: 'text-green-300/70', icon: Users },
+  fantasy: { bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-500', hoverBg: 'hover:bg-violet-500/20', ring: 'hover:ring-violet-400/30', soft: 'text-violet-300/70', icon: Wand2 },
+  history: { bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-500', hoverBg: 'hover:bg-amber-500/20', ring: 'hover:ring-amber-400/30', soft: 'text-amber-300/70', icon: Landmark },
+  horror: { bg: 'bg-rose-500/10', border: 'border-rose-500/20', text: 'text-rose-500', hoverBg: 'hover:bg-rose-500/20', ring: 'hover:ring-rose-400/30', soft: 'text-rose-300/70', icon: Skull },
+  music: { bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20', text: 'text-fuchsia-500', hoverBg: 'hover:bg-fuchsia-500/20', ring: 'hover:ring-fuchsia-400/30', soft: 'text-fuchsia-300/70', icon: Music },
+  musical: { bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20', text: 'text-fuchsia-500', hoverBg: 'hover:bg-fuchsia-500/20', ring: 'hover:ring-fuchsia-400/30', soft: 'text-fuchsia-300/70', icon: Music },
+  mystery: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', text: 'text-indigo-500', hoverBg: 'hover:bg-indigo-500/20', ring: 'hover:ring-indigo-400/30', soft: 'text-indigo-300/70', icon: Search },
+  romance: { bg: 'bg-pink-500/10', border: 'border-pink-500/20', text: 'text-pink-500', hoverBg: 'hover:bg-pink-500/20', ring: 'hover:ring-pink-400/30', soft: 'text-pink-300/70', icon: Heart },
+  'science fiction': { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-500', hoverBg: 'hover:bg-cyan-500/20', ring: 'hover:ring-cyan-400/30', soft: 'text-cyan-300/70', icon: Rocket },
+  'sci-fi': { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-500', hoverBg: 'hover:bg-cyan-500/20', ring: 'hover:ring-cyan-400/30', soft: 'text-cyan-300/70', icon: Rocket },
+  thriller: { bg: 'bg-orange-500/10', border: 'border-orange-500/20', text: 'text-orange-500', hoverBg: 'hover:bg-orange-500/20', ring: 'hover:ring-orange-400/30', soft: 'text-orange-300/70', icon: Fingerprint },
+  war: { bg: 'bg-stone-500/10', border: 'border-stone-500/20', text: 'text-stone-300', hoverBg: 'hover:bg-stone-500/20', ring: 'hover:ring-stone-400/30', soft: 'text-stone-300/70', icon: Swords },
+  western: { bg: 'bg-orange-700/10', border: 'border-orange-700/20', text: 'text-orange-400', hoverBg: 'hover:bg-orange-700/20', ring: 'hover:ring-orange-500/30', soft: 'text-orange-300/70', icon: Mountain },
+  'tv movie': { bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-500', hoverBg: 'hover:bg-blue-500/20', ring: 'hover:ring-blue-400/30', soft: 'text-blue-300/70', icon: Tv },
+};
+
+const DEFAULT_GENRE_STYLE = { bg: 'bg-slate-800/60', border: 'border-slate-700/60', text: 'text-purple-500', hoverBg: 'hover:bg-slate-800/90', ring: 'hover:ring-purple-400/30', soft: 'text-purple-300/70', icon: Drama };
+
+export const getGenreStyle = (genre: string) => GENRE_STYLES[(genre || '').trim().toLowerCase()] ?? DEFAULT_GENRE_STYLE;
+
+export const GenreStatCard: React.FC<{
+  value: string;
+  label: string;
+  onClick?: () => void;
+}> = React.memo(function GenreStatCard({ value, label, onClick }) {
+  const style = getGenreStyle(value);
+  const Icon = style.icon;
+  return (
+    <motion.div
+      variants={itemVariants}
+      onClick={onClick}
+      title={value}
+      aria-label={`${label}: ${value}`}
+      className={`${style.bg} backdrop-blur-sm border ${style.border} rounded-2xl p-4 md:p-6 transition-all duration-200 shadow-lg h-full min-h-[120px] md:min-h-[140px] grid place-content-center text-center ${
+        onClick ? `cursor-pointer hover:scale-[1.04] ${style.hoverBg} active:scale-[0.97]` : `hover:scale-[1.02] ${style.hoverBg}`
+      }`}
+    >
+      <div className="flex flex-col items-center">
+        <Icon className={`w-9 h-9 md:w-12 md:h-12 ${style.text} mb-2`} strokeWidth={1.75} />
+        <div className="uppercase tracking-wider opacity-80 font-medium text-[11px] md:text-sm">
+          {label}
+        </div>
+      </div>
+    </motion.div>
   );
 });
 
