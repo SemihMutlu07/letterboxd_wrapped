@@ -22,10 +22,9 @@ CREATE INDEX IF NOT EXISTS idx_ops_runs_username  ON public.ops_runs (username);
 
 ALTER TABLE public.ops_runs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ops_runs_anon_all" ON public.ops_runs
-    FOR ALL TO anon
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "backend_ops_runs" ON public.ops_runs FOR ALL TO authenticated
+    USING ((auth.jwt() ->> 'email') = 'ops@movieswrapped.internal')
+    WITH CHECK ((auth.jwt() ->> 'email') = 'ops@movieswrapped.internal');
 
 
 -- ──────────────────────────────────────────────
@@ -45,10 +44,9 @@ CREATE INDEX IF NOT EXISTS idx_ops_watchlist_runs_usernames  ON public.ops_watch
 
 ALTER TABLE public.ops_watchlist_runs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ops_watchlist_runs_anon_all" ON public.ops_watchlist_runs
-    FOR ALL TO anon
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "backend_ops_watchlist_runs" ON public.ops_watchlist_runs FOR ALL TO authenticated
+    USING ((auth.jwt() ->> 'email') = 'ops@movieswrapped.internal')
+    WITH CHECK ((auth.jwt() ->> 'email') = 'ops@movieswrapped.internal');
 
 
 -- ──────────────────────────────────────────────
@@ -67,7 +65,6 @@ CREATE INDEX IF NOT EXISTS idx_ops_date_night_runs_usernames  ON public.ops_date
 
 ALTER TABLE public.ops_date_night_runs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ops_date_night_runs_anon_all" ON public.ops_date_night_runs
-    FOR ALL TO anon
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "backend_ops_date_night_runs" ON public.ops_date_night_runs FOR ALL TO authenticated
+    USING ((auth.jwt() ->> 'email') = 'ops@movieswrapped.internal')
+    WITH CHECK ((auth.jwt() ->> 'email') = 'ops@movieswrapped.internal');

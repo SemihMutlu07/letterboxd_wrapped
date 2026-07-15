@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, Coroutine
 
 import httpx
@@ -18,17 +19,36 @@ from app.config import settings
 logger = logging.getLogger("letterboxd_wrapped.supabase_ops")
 
 _background_tasks: set[asyncio.Task] = set()
+_access_token: str | None = None
+_access_token_expires_at = 0.0
+_auth_lock = asyncio.Lock()
 
 
-def _auth_headers() -> dict[str, str]:
+async def _auth_headers() -> dict[str, str]:
+    global _access_token, _access_token_expires_at
+    if not settings.supabase_enabled:
+        raise RuntimeError("Supabase ops credentials are not configured")
+    async with _auth_lock:
+        if not _access_token or time.monotonic() >= _access_token_expires_at:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{settings.supabase_url}/auth/v1/token",
+                    params={"grant_type": "password"},
+                    headers={"apikey": settings.supabase_anon_key},
+                    json={"email": settings.supabase_ops_email, "password": settings.supabase_ops_password},
+                )
+                response.raise_for_status()
+                payload = response.json()
+                _access_token = payload["access_token"]
+                _access_token_expires_at = time.monotonic() + max(30, int(payload.get("expires_in", 3600)) - 60)
     return {
         "apikey": settings.supabase_anon_key,
-        "Authorization": f"Bearer {settings.supabase_anon_key}",
+        "Authorization": f"Bearer {_access_token}",
     }
 
 
-def _client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(headers=_auth_headers(), timeout=5.0)
+async def _client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(headers=await _auth_headers(), timeout=5.0)
 
 
 def fire_and_forget(coro: Coroutine[Any, Any, Any]) -> None:
@@ -50,7 +70,7 @@ def fire_and_forget(coro: Coroutine[Any, Any, Any]) -> None:
 async def insert(table: str, row: dict[str, Any]) -> None:
     """Best-effort POST one row to `table`. No-op on any error."""
     try:
-        async with _client() as client:
+        async with await _client() as client:
             await client.post(
                 f"{settings.supabase_url}/rest/v1/{table}",
                 headers={"Prefer": "return=minimal"},
@@ -63,7 +83,7 @@ async def insert(table: str, row: dict[str, Any]) -> None:
 async def select(table: str, params: dict[str, str]) -> list[dict[str, Any]]:
     """Best-effort GET rows from `table`. Returns [] on any error."""
     try:
-        async with _client() as client:
+        async with await _client() as client:
             resp = await client.get(f"{settings.supabase_url}/rest/v1/{table}", params=params)
             resp.raise_for_status()
             return resp.json()
@@ -75,7 +95,7 @@ async def select(table: str, params: dict[str, str]) -> list[dict[str, Any]]:
 async def upsert(table: str, row: dict[str, Any], *, on_conflict: str) -> bool:
     """Best-effort UPSERT one row to `table`. Returns False on any error."""
     try:
-        async with _client() as client:
+        async with await _client() as client:
             resp = await client.post(
                 f"{settings.supabase_url}/rest/v1/{table}",
                 headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
@@ -87,3 +107,15 @@ async def upsert(table: str, row: dict[str, Any], *, on_conflict: str) -> bool:
     except Exception as exc:
         logger.warning("Failed to upsert row to %s: %s", table, exc)
         return False
+
+
+async def delete_before(table: str, cutoff_iso: str) -> None:
+    """Best-effort retention cleanup for backend-owned ops tables."""
+    try:
+        async with await _client() as client:
+            response = await client.delete(
+                f"{settings.supabase_url}/rest/v1/{table}", params={"created_at": f"lt.{cutoff_iso}"}
+            )
+            response.raise_for_status()
+    except Exception as exc:
+        logger.warning("Failed retention cleanup for %s: %s", table, exc)

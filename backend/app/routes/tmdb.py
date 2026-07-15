@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
 from app.services.tmdb_client import tmdb_get
+from app.security import enforce_rate_limit
 
 router = APIRouter()
 
@@ -11,6 +14,7 @@ router = APIRouter()
 @router.get("/api/tmdb/person/search")
 async def search_tmdb_person(request: Request, name: str, role: str | None = None):
     """Search TMDB for a person and return their profile image URL."""
+    enforce_rate_limit(request, "tmdb_search", limit=60, window=60)
     if not name:
         raise HTTPException(status_code=400, detail="Name parameter is required")
 
@@ -50,12 +54,13 @@ async def search_tmdb_person(request: Request, name: str, role: str | None = Non
         }
 
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"TMDB API error: {exc}") from exc
+        raise HTTPException(status_code=502, detail="TMDB lookup failed") from exc
 
 
 @router.get("/api/tmdb/movie/search")
 async def search_tmdb_movie(request: Request, title: str, year: int | None = None):
     """Search TMDB for a movie by title (and optional year) and return its poster image URL."""
+    enforce_rate_limit(request, "tmdb_search", limit=60, window=60)
     if not title:
         raise HTTPException(status_code=400, detail="Title parameter is required")
 
@@ -93,21 +98,31 @@ async def search_tmdb_movie(request: Request, title: str, year: int | None = Non
         }
 
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"TMDB API error: {exc}") from exc
+        raise HTTPException(status_code=502, detail="TMDB lookup failed") from exc
 
 
 @router.get("/tmdb-proxy/{path:path}")
 async def tmdb_proxy(path: str, request: Request):
     """Proxy TMDB images to avoid CORS issues."""
+    enforce_rate_limit(request, "tmdb_proxy", limit=120, window=60)
+    if not re.fullmatch(r"t/p/(?:w\d+|h\d+|original)/[A-Za-z0-9._-]+", path):
+        raise HTTPException(status_code=400, detail="Invalid TMDB image path")
     session = request.app.state.aiohttp_session
     try:
         async with session.get(f"https://image.tmdb.org/{path}") as resp:
             if resp.status != 200:
                 raise HTTPException(status_code=404, detail="Image not found")
+            if int(resp.headers.get("Content-Length", "0") or 0) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Image is too large")
             data = await resp.read()
+            if len(data) > 10 * 1024 * 1024:
+                raise HTTPException(status_code=413, detail="Image is too large")
+            media_type = resp.headers.get("Content-Type", "")
+            if not media_type.startswith("image/"):
+                raise HTTPException(status_code=502, detail="Upstream response was not an image")
             return Response(
                 content=data,
-                media_type=resp.headers.get("Content-Type", "image/jpeg"),
+                media_type=media_type,
                 headers={
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -119,7 +134,7 @@ async def tmdb_proxy(path: str, request: Request):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to proxy image: {exc}") from exc
+        raise HTTPException(status_code=502, detail="TMDB image proxy failed") from exc
 
 
 @router.options("/tmdb-proxy/{path:path}")

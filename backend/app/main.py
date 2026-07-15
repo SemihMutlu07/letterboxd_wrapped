@@ -23,6 +23,7 @@ from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist, worker
 from app import admin
 from app.services.worker_monitor import start_worker_monitor
+from app.services.run_log import cleanup_expired_runs
 
 logger = logging.getLogger("letterboxd_wrapped")
 logging.basicConfig(
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     if not settings.tmdb_api_key:
         raise RuntimeError("TMDB_API_KEY not found. Set it in .env or as an environment variable.")
 
+    await cleanup_expired_runs()
     app.state.aiohttp_session = aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit_per_host=20)
     )

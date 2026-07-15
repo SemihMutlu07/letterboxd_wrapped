@@ -340,7 +340,7 @@ async def test_supervisor_report_does_not_pollute_worker_heartbeat(client: Async
 @pytest.mark.asyncio
 async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
-    r = await client.get("/admin/dashboard?key=test-admin-secret-rotated")
+    r = await client.get("/admin/dashboard", headers=ADMIN_AUTH)
     assert r.status_code == 200
     html = r.text
     assert "Desktop Worker" in html
@@ -353,6 +353,19 @@ async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     assert "Supervisor Log Tail" in html
     assert "refreshAnalysisRuns" in html
     assert "/admin/api/runs" in html
+
+
+@pytest.mark.asyncio
+async def test_admin_login_uses_http_only_session_cookie(client: AsyncClient):
+    login = await client.post(
+        "/admin/session", data={"key": "test-admin-secret-rotated"}, follow_redirects=False
+    )
+    assert login.status_code == 303
+    cookie = login.headers["set-cookie"].lower()
+    assert "httponly" in cookie
+    assert "samesite=strict" in cookie
+    dashboard = await client.get("/admin/dashboard")
+    assert dashboard.status_code == 200
 
 
 # ---- claiming jobs -----------------------------------------------------------
@@ -410,7 +423,8 @@ async def test_worker_version_mismatch_blocks_claim(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_worker_completion_makes_progress_done(client: AsyncClient):
     await _beat(client)
-    task_id = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()["task_id"]
+    submitted = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()
+    task_id, poll_token = submitted["task_id"], submitted["poll_token"]
     await client.get("/api/worker/scrape/next", headers=AUTH)
 
     stats = {"total_films": 394, "scraped_username": "semihmutsuz"}
@@ -431,7 +445,7 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
     )
     assert done.status_code == 200
 
-    prog = await client.get(f"/api/progress/{task_id}")
+    prog = await client.get(f"/api/progress/{task_id}", headers={"X-Task-Token": poll_token})
     body = prog.json()
     assert body["status"] == "done"
     assert body["result"]["status"] == "success"
@@ -456,7 +470,8 @@ async def test_worker_completion_makes_progress_done(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     await _beat(client)
-    task_id = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()["task_id"]
+    submitted = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()
+    task_id, poll_token = submitted["task_id"], submitted["poll_token"]
     await client.get("/api/worker/scrape/next", headers=AUTH)
 
     fail = await client.post(
@@ -474,7 +489,7 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     )
     assert fail.status_code == 200
 
-    prog = await client.get(f"/api/progress/{task_id}")
+    prog = await client.get(f"/api/progress/{task_id}", headers={"X-Task-Token": poll_token})
     body = prog.json()
     assert body["status"] == "failed"
     assert body["error"] == "Letterboxd blocked the desktop worker."
@@ -490,7 +505,7 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     assert run["error_stage"] == "letterboxd_or_scrape"
     assert run["error_message"] == "Letterboxd blocked the desktop worker."
 
-    dashboard = await client.get("/admin/dashboard?key=test-admin-secret-rotated")
+    dashboard = await client.get("/admin/dashboard", headers=ADMIN_AUTH)
     assert dashboard.status_code == 200
     assert "letterboxd_or_scrape" in dashboard.text
 

@@ -73,10 +73,6 @@ def _persist_date_night_run(
                 "era_overlap": mutual_profile.get("era_overlap") if mutual_profile else None,
             },
             "recommendations": [r.get("title") for r in recommendations[:3]] if recommendations else [],
-            "device": {
-                "ip": request.client.host if request.client else None,
-                "user_agent": request.headers.get("user-agent"),
-            },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if settings.supabase_enabled:

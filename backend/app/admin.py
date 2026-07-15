@@ -1,12 +1,16 @@
 """
 Admin dashboard for MoviesWrapped.
 Reads from backend/runs/ + watchlist_runs/ + date_night_runs/ JSON logs.
-Auth: Authorization: Bearer <secret> header (primary), ?key= query param (GET nav fallback).
+Auth: signed HttpOnly session cookie for browsers; Bearer secret for automation.
 ADMIN_SECRET env var is mandatory — no hardcoded default.
 """
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
+import secrets
+import time
 import logging
 import os
 from datetime import datetime
@@ -14,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import supabase_ops, task_manager
@@ -88,15 +92,36 @@ def _require_admin(request: Request) -> None:
     # Primary: Authorization: Bearer <token>
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
-        if auth_header[7:] == secret:
+        if secrets.compare_digest(auth_header[7:], secret):
             return
-    # Fallback: ?key= query param (for GET navigation links)
-    if request.query_params.get("key") == secret:
+    if _valid_session(request.cookies.get("mw_admin_session", ""), secret):
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            origin = request.headers.get("origin", "")
+            expected = f"{request.url.scheme}://{request.url.netloc}"
+            if not origin or not secrets.compare_digest(origin, expected):
+                raise HTTPException(status_code=403, detail="Invalid request origin")
         return
     # Legacy: x-admin-key header
-    if request.headers.get("x-admin-key") == secret:
+    if secrets.compare_digest(request.headers.get("x-admin-key", ""), secret):
         return
     raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _session_value(secret: str) -> str:
+    expires = str(int(time.time()) + 8 * 60 * 60)
+    signature = hmac.new(secret.encode(), expires.encode(), hashlib.sha256).hexdigest()
+    return f"{expires}.{signature}"
+
+
+def _valid_session(value: str, secret: str) -> bool:
+    try:
+        expires, signature = value.split(".", 1)
+        if int(expires) < int(time.time()):
+            return False
+    except (ValueError, TypeError):
+        return False
+    expected = hmac.new(secret.encode(), expires.encode(), hashlib.sha256).hexdigest()
+    return secrets.compare_digest(signature, expected)
 
 
 def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
@@ -224,6 +249,17 @@ async def admin_login(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request": request})
 
 
+@router.post("/admin/session")
+async def admin_session(request: Request):
+    form = await request.form()
+    secret = _admin_secret()
+    if not secrets.compare_digest(str(form.get("key") or ""), secret):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    response = RedirectResponse("/admin/dashboard", status_code=303)
+    response.set_cookie("mw_admin_session", _session_value(secret), max_age=28800, httponly=True, secure=request.url.scheme == "https", samesite="strict", path="/admin")
+    return response
+
+
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
     _require_admin(request)
@@ -251,7 +287,7 @@ async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
             "worker_status": worker_status,
             "worker_enabled": settings.desktop_worker_enabled,
             "settings_store": dashboard_settings.settings_store_status(),
-            "key": request.query_params.get("key"),
+            "key": "",
         },
     )
 
@@ -271,7 +307,7 @@ async def admin_run_detail(request: Request, filename: str):
         data = json.loads(path.read_text())
     return templates.TemplateResponse(
         "admin_run.html",
-        {"request": request, "run": data, "filename": safe_name, "key": request.query_params.get("key")},
+        {"request": request, "run": data, "filename": safe_name, "key": ""},
     )
 
 

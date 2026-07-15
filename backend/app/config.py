@@ -20,11 +20,15 @@ class Settings(BaseSettings):
     # restarts (local runs/ is ephemeral there). Anon key only — never service_role.
     supabase_url: str = ""
     supabase_anon_key: str = ""
+    supabase_ops_email: str = ""
+    supabase_ops_password: str = ""
+    run_retention_days: int = 30
 
     # Desktop-worker mode: when worker_token is set, /api/scrape-profile queues
     # jobs for an outbound desktop worker instead of scraping inline. The worker
     # authenticates with this shared secret via the X-Worker-Token header.
     worker_token: str = ""
+    worker_token_previous: str = ""
     # A heartbeat older than this many seconds means the desktop worker is offline.
     worker_heartbeat_max_age_seconds: int = 60
     # Increment this when worker/backend control-plane payloads become
@@ -43,7 +47,12 @@ class Settings(BaseSettings):
 
     @property
     def supabase_enabled(self) -> bool:
-        return bool(self.supabase_url and self.supabase_anon_key)
+        return bool(
+            self.supabase_url
+            and self.supabase_anon_key
+            and self.supabase_ops_email
+            and self.supabase_ops_password
+        )
 
     @property
     def cors_origins(self) -> List[str]:

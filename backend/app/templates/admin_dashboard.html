@@ -279,7 +279,7 @@
               <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors{% if child %} hidden{% endif %}"{% if child %} data-group-child="{{ group_idx }}"{% endif %}>
                 <td class="px-4 py-2.5">
                   <div class="flex items-center gap-2">
-                    <a href="/admin/run/{{ run._filename }}?key={{ key }}" class="text-orange-400 hover:text-orange-300 font-medium">@{{ run.username or "anon" }}</a>
+                    <a href="/admin/run/{{ run._filename }}" class="text-orange-400 hover:text-orange-300 font-medium">@{{ run.username or "anon" }}</a>
                     {% if badge_count > 1 %}<button type="button" onclick="toggleRunGroup({{ group_idx }})" data-group-toggle="{{ group_idx }}" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-mono hover:bg-slate-600 cursor-pointer">×{{ badge_count }}</button>{% endif %}
                     {% if run.username %}
                     <a
@@ -403,7 +403,6 @@
       document.getElementById('tab-' + tab).classList.add('tab-active');
     }
 
-    const adminKey = {{ key|tojson }};
     const workerEnabled = {{ worker_enabled|tojson }};
 
     function shortTime(value) {
@@ -438,12 +437,11 @@
     }
 
     async function setWorkerDesiredState(desiredState) {
-      if (!adminKey) return;
       setWorkerControlBusy(true);
       try {
         const response = await fetch(`/admin/api/worker/control`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ desired_state: desiredState }),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -458,10 +456,9 @@
     }
 
     async function requestWorkerRestart() {
-      if (!adminKey) return;
       setWorkerControlBusy(true);
       try {
-        const response = await fetch(`/admin/api/worker/restart`, { method: 'POST', headers: { 'Authorization': `Bearer ${adminKey}` } });
+        const response = await fetch(`/admin/api/worker/restart`, { method: 'POST' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         setWorkerControlFeedback('Restart requested. The supervisor will relaunch the child on its next poll.', 'ok');
         await refreshWorkerStatus();
@@ -523,7 +520,7 @@
         <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors${isChild ? ' hidden' : ''}"${isChild ? ` data-group-child="${groupIdx}"` : ''}>
           <td class="px-4 py-2.5">
             <div class="flex items-center gap-2">
-              <a href="/admin/run/${filename}?key=${encodeURIComponent(adminKey || '')}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
+              <a href="/admin/run/${filename}" class="text-orange-400 hover:text-orange-300 font-medium">@${escapeHtml(run.username || 'anon')}</a>
               ${countBadge}
               ${letterboxdProfileLink(run.username)}
             </div>
@@ -608,9 +605,8 @@
     }
 
     async function refreshWorkerStatus() {
-      if (!adminKey) return;
       try {
-        const response = await fetch(`/admin/api/worker`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
+        const response = await fetch(`/admin/api/worker`);
         if (!response.ok) return;
         const body = await response.json();
         const status = body.status || {};
@@ -755,9 +751,8 @@
     // Single 15s poll refreshes all three tabs — /admin/api/runs already returns
     // analysis + watchlist + date_night payloads, so no extra fetch is needed.
     async function refreshAnalysisRuns() {
-      if (!adminKey) return;
       try {
-        const response = await fetch(`/admin/api/runs`, { headers: { 'Authorization': `Bearer ${adminKey}` } });
+        const response = await fetch(`/admin/api/runs`);
         if (!response.ok) return;
         const body = await response.json();
         renderAnalysisRuns(body.runs || [], body.run_groups || []);
@@ -775,9 +770,7 @@
     if (workerEnabled) {
       setInterval(refreshWorkerStatus, 15000);
     }
-    if (adminKey) {
-      setInterval(refreshAnalysisRuns, 15000);
-    }
+    setInterval(refreshAnalysisRuns, 15000);
   </script>
 </body>
 </html>

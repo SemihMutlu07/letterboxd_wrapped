@@ -9,6 +9,7 @@ in the `X-Worker-Token` header matching settings.worker_token.
 from __future__ import annotations
 
 import logging
+import secrets
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
@@ -26,7 +27,11 @@ router = APIRouter(prefix="/api/worker")
 
 def _require_worker_token(x_worker_token: str | None) -> None:
     """Reject the request unless a worker token is configured and matches."""
-    if not settings.worker_token or x_worker_token != settings.worker_token:
+    supplied = x_worker_token or ""
+    valid = bool(settings.worker_token) and secrets.compare_digest(supplied, settings.worker_token)
+    if settings.worker_token_previous:
+        valid = valid or secrets.compare_digest(supplied, settings.worker_token_previous)
+    if not valid:
         raise HTTPException(
             status_code=401,
             detail={"error_code": "unauthorized", "message": "Invalid or missing worker token."},

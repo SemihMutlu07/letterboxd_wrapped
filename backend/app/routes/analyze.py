@@ -7,6 +7,7 @@ import re
 import shutil
 import uuid
 import zipfile
+import secrets
 from pathlib import Path
 from typing import List, Optional
 
@@ -20,6 +21,7 @@ from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services import dashboard_settings
 from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
 from app.services.run_log import persist_run
+from app.security import client_key, enforce_rate_limit
 
 logger = logging.getLogger("letterboxd_wrapped.analyze")
 
@@ -29,6 +31,46 @@ _REQUIRED_FILES = [
     "diary.csv", "ratings.csv", "watched.csv", "reviews.csv",
     "watchlist.csv", "films.csv", "comments.csv", "profile.csv",
 ]
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_ARCHIVE_BYTES = 200 * 1024 * 1024
+MAX_ARCHIVE_ENTRIES = 30
+
+
+def _safe_extract_letterboxd_zip(upload, request_dir: Path) -> None:
+    with zipfile.ZipFile(upload, "r") as zf:
+        infos = zf.infolist()
+        if len(infos) > MAX_ARCHIVE_ENTRIES:
+            raise HTTPException(status_code=413, detail={"error_code": "too_many_files", "message": "Archive contains too many files."})
+        total = 0
+        seen: set[str] = set()
+        allowed = set(_REQUIRED_FILES)
+        for info in infos:
+            path = Path(info.filename)
+            name = path.name.lower()
+            if info.is_dir():
+                continue
+            mode = info.external_attr >> 16
+            if path.is_absolute() or ".." in path.parts or mode & 0o170000 == 0o120000 or info.flag_bits & 0x1:
+                raise HTTPException(status_code=400, detail={"error_code": "unsafe_archive", "message": "Archive contains an unsafe entry."})
+            if name not in allowed:
+                continue
+            if name in seen:
+                raise HTTPException(status_code=400, detail={"error_code": "unsafe_archive", "message": "Archive contains duplicate Letterboxd files."})
+            total += info.file_size
+            if info.file_size > MAX_UPLOAD_BYTES or total > MAX_ARCHIVE_BYTES:
+                raise HTTPException(status_code=413, detail={"error_code": "archive_too_large", "message": "Archive expands beyond the allowed size."})
+            seen.add(name)
+            written = 0
+            with zf.open(info) as source, (request_dir / name).open("wb") as destination:
+                while chunk := source.read(1024 * 1024):
+                    written += len(chunk)
+                    if written > MAX_UPLOAD_BYTES:
+                        raise HTTPException(status_code=413, detail={"error_code": "archive_too_large", "message": "Archive file is too large."})
+                    destination.write(chunk)
+
+
+def _queue_full() -> HTTPException:
+    return HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "The analysis queue is full. Please try again later."})
 
 
 def _find_csv_files(directory: Path) -> dict:
@@ -101,6 +143,7 @@ async def analyze_data(request: Request, files: List[UploadFile] = File(...)):
     Accept a Letterboxd export (ZIP or CSVs) and start analysis in the background.
     Returns 202 Accepted with a task_id for polling.
     """
+    enforce_rate_limit(request, "analyze", limit=3, window=600)
     if not files:
         raise HTTPException(status_code=400, detail={"error_code": "no_files", "message": "No files uploaded."})
 
@@ -113,12 +156,17 @@ async def analyze_data(request: Request, files: List[UploadFile] = File(...)):
 
     try:
         if len(files) == 1 and files[0].filename and files[0].filename.lower().endswith((".zip", ".utc")):
-            with zipfile.ZipFile(files[0].file, "r") as zf:
-                zf.extractall(request_dir)
+            _safe_extract_letterboxd_zip(files[0].file, request_dir)
         elif all(f.filename and f.filename.lower().endswith(".csv") for f in files):
             for uf in files:
                 safe_name = Path(uf.filename).name
-                (request_dir / safe_name).write_bytes(await uf.read())
+                written = 0
+                with (request_dir / safe_name).open("wb") as destination:
+                    while chunk := await uf.read(1024 * 1024):
+                        written += len(chunk)
+                        if written > MAX_UPLOAD_BYTES:
+                            raise HTTPException(status_code=413, detail={"error_code": "archive_too_large", "message": "Upload is too large."})
+                        destination.write(chunk)
         else:
             shutil.rmtree(request_dir, ignore_errors=True)
             raise HTTPException(
@@ -147,11 +195,16 @@ async def analyze_data(request: Request, files: List[UploadFile] = File(...)):
             if detected_username:
                 break
 
-    task_id = task_manager.create_task_state()
+    try:
+        task_id = task_manager.create_task_state(client_key(request))
+    except RuntimeError as exc:
+        shutil.rmtree(request_dir, ignore_errors=True)
+        raise _queue_full() from exc
     session = request.app.state.aiohttp_session
     asyncio.create_task(_run_analysis(task_id, session, csv_files, request_dir, detected_username))
 
-    return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending"})
+    task = task_manager.get_task_state(task_id)
+    return JSONResponse(status_code=202, content={"task_id": task_id, "poll_token": task.poll_token, "status": "pending"})
 
 
 @router.post("/api/scrape-profile")
@@ -164,6 +217,7 @@ async def scrape_profile(request: Request):
     returns 202 {task_id}; the frontend then polls /api/progress/{task_id}.
     Without a worker token it scrapes synchronously (local dev / fallback).
     """
+    enforce_rate_limit(request, "scrape_profile", limit=5, window=600)
     try:
         body = await request.json()
     except Exception:
@@ -221,9 +275,13 @@ async def scrape_profile(request: Request):
                     "message": "The desktop scraper is offline right now. Upload your Letterboxd export for a full Wrapped, or try again shortly.",
                 },
             )
-        task_id = task_manager.create_scrape_job(username)
+        try:
+            task_id = task_manager.create_scrape_job(username, owner_key=client_key(request))
+        except RuntimeError as exc:
+            raise _queue_full() from exc
         logger.info("Queued scrape job %s for @%s", task_id, username)
-        return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending"})
+        task = task_manager.get_task_state(task_id)
+        return JSONResponse(status_code=202, content={"task_id": task_id, "poll_token": task.poll_token, "status": "pending"})
 
     # Synchronous fallback: no desktop worker configured (local dev).
     try:
@@ -250,13 +308,13 @@ async def scrape_profile(request: Request):
             )
         raise HTTPException(
             status_code=404,
-            detail={"error_code": "user_not_found", "message": f"{exc}"},
+            detail={"error_code": "user_not_found", "message": "Letterboxd profile was not found or could not be read."},
         )
     except Exception as exc:
         logger.exception("Scraping failed for %s: %s", username, exc)
         raise HTTPException(
             status_code=502,
-            detail={"error_code": "scrape_failed", "message": f"Letterboxd returned an unexpected response for @{username}. (Debug: {type(exc).__name__}: {exc}) Try again later."},
+            detail={"error_code": "scrape_failed", "message": f"Letterboxd returned an unexpected response for @{username}. Try again later."},
         )
 
     persist_run(username, "scrape", stats, ok=True)
@@ -264,11 +322,15 @@ async def scrape_profile(request: Request):
 
 
 @router.get("/api/progress/{task_id}")
-async def get_task_progress(task_id: str):
+async def get_task_progress(task_id: str, request: Request):
     """Poll analysis progress and retrieve the final result when done."""
     task = task_manager.get_task_state(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found or expired")
+    enforce_rate_limit(request, "progress", limit=120, window=60)
+    supplied = request.headers.get("X-Task-Token", "")
+    if not supplied or not secrets.compare_digest(supplied, task.poll_token):
+        raise HTTPException(status_code=403, detail={"error_code": "invalid_task_token", "message": "Invalid task token."})
     return {
         "task_id": task.task_id,
         "status": task.status,
@@ -289,17 +351,3 @@ async def get_task_progress(task_id: str):
         "error_code": task.error_code,
         "trace_events": task.trace_events,
     }
-
-
-@router.get("/api/progress")
-async def get_progress_legacy():
-    """Legacy progress endpoint — returns the most recent active task state."""
-    running = sorted(
-        [t for t in task_manager._tasks.values() if t.status in ("pending", "running")],
-        key=lambda t: t.created_at,
-        reverse=True,
-    )
-    if running:
-        t = running[0]
-        return {"stage": t.stage, "message": t.message, "progress": t.progress, "total": t.total}
-    return {"stage": "idle", "message": "Ready to analyze", "progress": 0, "total": 0}

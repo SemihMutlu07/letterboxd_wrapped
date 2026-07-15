@@ -105,12 +105,9 @@ async def test_progress_unknown_task(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_progress_legacy(client: AsyncClient):
-    """GET /api/progress (legacy endpoint) should always return 200."""
+async def test_progress_legacy_removed(client: AsyncClient):
     r = await client.get("/api/progress")
-    assert r.status_code == 200
-    body = r.json()
-    assert "stage" in body
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -118,7 +115,7 @@ async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes
     """Submit a job, then poll its task_id — should reach a terminal state."""
     import asyncio
 
-    async def fake_run_analysis(task_id, session, csv_files, request_dir):
+    async def fake_run_analysis(task_id, session, csv_files, request_dir, username=None):
         from app import task_manager
 
         task_manager.set_task_done(task_id, {"status": "success", "stats": {"total_films": 1, "mock": True}})
@@ -131,14 +128,43 @@ async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes
         r = await client.post("/api/analyze", files=files)
         assert r.status_code == 202
         task_id = r.json()["task_id"]
+        poll_token = r.json()["poll_token"]
 
         # Give the background task a moment to run
         await asyncio.sleep(0.2)
 
-        poll = await client.get(f"/api/progress/{task_id}")
+        denied = await client.get(f"/api/progress/{task_id}")
+        assert denied.status_code == 403
+        poll = await client.get(f"/api/progress/{task_id}", headers={"X-Task-Token": poll_token})
         assert poll.status_code == 200
         body = poll.json()
         assert body["status"] in ("pending", "running", "done", "failed")
+
+
+@pytest.mark.asyncio
+async def test_rejects_zip_path_traversal(client: AsyncClient):
+    import io
+    import zipfile
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("../watched.csv", "Name,Year\nExample,2024\n")
+    response = await client.post(
+        "/api/analyze",
+        files={"files": ("export.zip", archive.getvalue(), "application/zip")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["error_code"] == "unsafe_archive"
+
+
+@pytest.mark.asyncio
+async def test_analyze_rate_limit_has_retry_after(client: AsyncClient):
+    for _ in range(3):
+        response = await client.post("/api/analyze", files={"files": ("bad.txt", b"bad", "text/plain")})
+        assert response.status_code == 400
+    limited = await client.post("/api/analyze", files={"files": ("bad.txt", b"bad", "text/plain")})
+    assert limited.status_code == 429
+    assert "Retry-After" in limited.headers
 
 
 # ---- parse-username ----------------------------------------------------------

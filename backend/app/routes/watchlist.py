@@ -115,10 +115,6 @@ def _persist_watchlist_run(
             "match_score": comparison.get("match_score") if comparison else None,
             "counts": comparison.get("counts") if comparison else None,
             "common_films": (comparison.get("common") or [])[:10] if comparison else [],
-            "device": {
-                "ip": request.client.host if request.client else None,
-                "user_agent": request.headers.get("user-agent"),
-            },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if settings.supabase_enabled:

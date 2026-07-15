@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import copy
+import asyncio
 import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -19,6 +20,23 @@ RUNS_DIR = Path("runs")
 # Bulky fields kept in the local file but stripped before mirroring to Supabase.
 # trace_events is lightweight (list of small dicts) and needed by the admin dashboard.
 _HEAVY_KEYS = ("stats",)
+
+
+async def cleanup_expired_runs() -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, settings.run_retention_days))
+    for directory in (RUNS_DIR, Path("watchlist_runs"), Path("date_night_runs")):
+        if directory.exists():
+            for path in directory.glob("*.json"):
+                try:
+                    if datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) < cutoff:
+                        path.unlink()
+                except OSError as exc:
+                    logger.warning("Failed retention cleanup for %s: %s", path, exc)
+    if settings.supabase_enabled:
+        cutoff_iso = cutoff.isoformat()
+        await asyncio.gather(*(supabase_ops.delete_before(table, cutoff_iso) for table in (
+            "ops_runs", "ops_watchlist_runs", "ops_date_night_runs", "ops_worker_events"
+        )))
 
 
 def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:

@@ -231,6 +231,7 @@ export type ScrapeProgress = {
 // Poll a task until it reaches a terminal state (done | failed).
 async function pollTask(
   taskId: string,
+  pollToken: string,
   opts: { intervalMs?: number; timeoutMs?: number; onProgress?: (p: ScrapeProgress) => void } = {},
 ): Promise<{ status: string; stats: LetterboxdStats }> {
   const intervalMs = opts.intervalMs ?? 2000;
@@ -240,7 +241,7 @@ async function pollTask(
   while (Date.now() < deadline) {
     const r = await fetch(`${API_BASE}/api/progress/${taskId}`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { 'Accept': 'application/json', 'X-Task-Token': pollToken },
     });
 
     if (!r.ok) {
@@ -287,7 +288,7 @@ export async function analyzeFiles(formData: FormData): Promise<{ status: string
 
     const data = await r.json();
     if (data && data.task_id) {
-      return await pollTask(data.task_id);
+      return await pollTask(data.task_id, data.poll_token);
     }
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Analysis failed');
@@ -357,7 +358,7 @@ export async function scrapeProfile(
 
     // Desktop-worker mode: the job was queued — poll until the worker finishes.
     if (data && data.task_id && !data.stats) {
-      return await pollTask(data.task_id, { onProgress });
+      return await pollTask(data.task_id, data.poll_token, { onProgress });
     }
 
     if (!data || data.status === 'error') {

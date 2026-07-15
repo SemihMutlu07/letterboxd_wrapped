@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import uuid
+import secrets
 
 
 @dataclass
@@ -37,6 +38,8 @@ class TaskState:
     job_type: str = ""  # watchlist_compare | date_night
     claimed: bool = False     # scrape/watchlist jobs: True once a worker has taken it
     trace_events: list[Dict[str, Any]] = field(default_factory=list)
+    poll_token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+    owner_key: Optional[str] = None
 
 
 _tasks: Dict[str, TaskState] = {}
@@ -61,20 +64,37 @@ _last_supervisor_status: Dict[str, Any] = {}
 _supervisor_log_tail: list[str] = []
 
 
-def create_task_state() -> str:
+MAX_TASKS = 25
+MAX_ACTIVE_PER_OWNER = 2
+
+
+def _ensure_queue_capacity(owner_key: Optional[str]) -> None:
+    active = [t for t in _tasks.values() if t.status in ("pending", "running")]
+    if len(active) >= MAX_TASKS or (owner_key and sum(t.owner_key == owner_key for t in active) >= MAX_ACTIVE_PER_OWNER):
+        raise RuntimeError("queue_full")
+
+
+def create_task_state(owner_key: Optional[str] = None) -> str:
+    _ensure_queue_capacity(owner_key)
     task_id = str(uuid.uuid4())
-    _tasks[task_id] = TaskState(task_id=task_id)
+    _tasks[task_id] = TaskState(task_id=task_id, owner_key=owner_key)
     return task_id
 
 
-def create_scrape_job(username: str, avatar_only: bool = False) -> str:
+def create_scrape_job(
+    username: str,
+    avatar_only: bool = False,
+    owner_key: Optional[str] = None,
+) -> str:
     """Queue a username scrape job for the desktop worker to claim."""
+    _ensure_queue_capacity(owner_key)
     task_id = str(uuid.uuid4())
     task = TaskState(
         task_id=task_id,
         kind="scrape",
         username=username,
         avatar_only=avatar_only,
+        owner_key=owner_key,
         stage="queued",
         message="Queued on desktop scraper",
     )
