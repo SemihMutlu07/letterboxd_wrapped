@@ -182,6 +182,97 @@ async def _beat(client: AsyncClient):
     assert r.status_code == 200
 
 
+async def _complete_raw_watchlist_request(client: AsyncClient, request_coro, raw: dict):
+    import asyncio
+
+    request_task = asyncio.create_task(request_coro)
+    for _ in range(20):
+        await asyncio.sleep(0)
+        queued = [task for task in task_manager._tasks.values() if task.kind == "watchlist"]
+        if queued:
+            break
+    assert len(queued) == 1
+    job = queued[0]
+    claim = await client.get("/api/worker/next", headers=AUTH)
+    assert claim.json()["job"]["task_id"] == job.task_id
+    complete = await client.post(
+        f"/api/worker/watchlist/{job.task_id}/complete", headers=AUTH, json=raw
+    )
+    assert complete.status_code == 200
+    return await request_task, job
+
+
+@pytest.mark.asyncio
+async def test_recommend_from_compare_consumes_raw_only_worker_result(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(watchlist, "enrich_films", AsyncMock(side_effect=lambda session, films, **kwargs: films))
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    raw = {
+        "first_watchlist": [{"title": "Film", "year": "2024", "slug": "/film/film/", "vote_average": 8}],
+        "second_watchlist": [{"title": "Film", "year": "2024", "slug": "/film/film/", "vote_average": 8}],
+    }
+    response, job = await _complete_raw_watchlist_request(
+        client,
+        client.post(
+            "/api/recommend-from-compare",
+            json={"usernames": ["one", "two"], "strategy": "highest_rated"},
+        ),
+        raw,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["recommendation"]["title"] == "Film"
+    assert job.options == {"raw_only": True}
+    assert job.owner_key == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+async def test_watchlist_enrich_consumes_raw_only_worker_result(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(
+        watchlist,
+        "enrich_films_concurrent",
+        AsyncMock(side_effect=lambda session, films, **kwargs: films),
+    )
+    raw = {
+        "first_watchlist": [{"title": "Film", "year": "2024", "slug": "/film/film/"}],
+        "second_watchlist": [{"title": "Film", "year": "2024", "slug": "/film/film/"}],
+    }
+    response, job = await _complete_raw_watchlist_request(
+        client,
+        client.post("/api/watchlist-enrich", json={"usernames": ["one", "two"]}),
+        raw,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["films"][0]["title"] == "Film"
+    assert job.options == {"raw_only": True}
+    assert job.owner_key == "127.0.0.1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path,payload", [
+    ("/api/recommend-from-compare", {"usernames": ["one", "two"]}),
+    ("/api/watchlist-enrich", {"usernames": ["one", "two"]}),
+])
+async def test_raw_watchlist_endpoints_map_queue_capacity_to_503(client: AsyncClient, monkeypatch, path, payload):
+    await _beat(client)
+    monkeypatch.setattr(
+        task_manager,
+        "create_watchlist_compare_job",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("queue_full")),
+    )
+    response = await client.post(path, json=payload)
+    assert response.status_code == 503
+    assert response.json()["detail"]["error_code"] == "queue_full"
+
+
 @pytest.mark.asyncio
 async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncClient, monkeypatch):
     from unittest.mock import AsyncMock
@@ -294,6 +385,63 @@ async def test_finalizer_does_not_overwrite_terminal_state_changed_during_await(
     assert task.status == "failed"
     assert task.error_code == "conflicting_terminal_state"
     assert task.error == "cancelled elsewhere"
+    task_manager._tasks.clear()
+
+
+@pytest.mark.asyncio
+async def test_date_night_no_recommendations_keeps_stable_classification(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import recommend
+
+    task_manager._tasks.clear()
+    task_id = task_manager.create_date_night_job(["one", "two"])
+    task = task_manager.get_task_state(task_id)
+    task.status = "running"
+    task.stage = "processing"
+    task.result = {}
+    monkeypatch.setattr(recommend, "_persist_date_night_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(watchlist_jobs, "enrich_films", AsyncMock(return_value=[]))
+    monkeypatch.setattr(watchlist_jobs, "build_mutual_profile", lambda *args: {"top_genres": [], "top_directors": [], "era_overlap": "modern"})
+    monkeypatch.setattr(watchlist_jobs, "discover_date_night_recommendations", AsyncMock(return_value=[]))
+
+    await watchlist_jobs.finalize_watchlist_job(task_id, object())
+
+    assert task.status == "failed"
+    assert task.error_code == "no_recommendations"
+    task_manager._tasks.clear()
+
+
+@pytest.mark.asyncio
+async def test_watchlist_finalization_timeout_is_bounded_and_classified(monkeypatch):
+    import asyncio
+    from app.services import watchlist_jobs
+    from app.routes import watchlist
+
+    task_manager._tasks.clear()
+    task_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task = task_manager.get_task_state(task_id)
+    task.status = "running"
+    task.stage = "processing"
+    task.result = {"first_watchlist": [], "second_watchlist": []}
+    cancelled = []
+
+    async def never_finishes(*args, **kwargs):
+        try:
+            await asyncio.sleep(60)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(watchlist_jobs, "WATCHLIST_ENRICH_TIMEOUT", 0.001)
+    monkeypatch.setattr(watchlist_jobs, "enrich_films_concurrent", never_finishes)
+
+    await watchlist_jobs.finalize_watchlist_job(task_id, object())
+
+    assert task.status == "failed"
+    assert task.error_code == "watchlist_enrichment_timeout"
+    assert len(cancelled) == 3
     task_manager._tasks.clear()
 
 

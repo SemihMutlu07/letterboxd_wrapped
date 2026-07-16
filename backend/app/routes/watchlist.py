@@ -234,7 +234,14 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_watchlist_compare_job([first, second])
+    try:
+        task_id = task_manager.create_watchlist_compare_job(
+            [first, second],
+            owner_key=_client_key(request),
+            options={"raw_only": True},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
     outcome, data = await _await_worker_job(task_id, 120)
 
     if outcome == "failed":
@@ -304,7 +311,14 @@ async def enrich_watchlist_films(request: Request, payload: WatchlistCompareRequ
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_watchlist_compare_job([first, second])
+    try:
+        task_id = task_manager.create_watchlist_compare_job(
+            [first, second],
+            owner_key=_client_key(request),
+            options={"raw_only": True},
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
     outcome, data = await _await_worker_job(task_id, 120)
 
     if outcome == "failed":

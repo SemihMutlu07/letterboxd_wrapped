@@ -602,8 +602,10 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
 
 # ponytail: a scrape running longer than this is treated as a dead worker and
 # re-queued; raise it if real scrapes ever legitimately exceed it.
-STALE_CLAIM_SECONDS = 900
-ACTIVE_JOB_TIMEOUT_SECONDS = 1800
+STALE_CLAIM_SECONDS = 300
+# Frontend polling stops at 10 minutes. Expire at 9 minutes and check every
+# 30 seconds so the browser receives a terminal response before its deadline.
+ACTIVE_JOB_TIMEOUT_SECONDS = 540
 
 
 def requeue_stale_claims(now: Optional[datetime] = None) -> int:
@@ -653,9 +655,9 @@ def fail_expired_worker_jobs(now: Optional[datetime] = None) -> int:
 
 
 async def cleanup_loop() -> None:
-    """Re-queue stale claims, then remove tasks older than 1 hour; every 5 minutes."""
+    """Re-queue/expire worker jobs, then remove terminal tasks after retention."""
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(30)
         now = datetime.now(timezone.utc)
         requeue_stale_claims(now)
         fail_expired_worker_jobs(now)
