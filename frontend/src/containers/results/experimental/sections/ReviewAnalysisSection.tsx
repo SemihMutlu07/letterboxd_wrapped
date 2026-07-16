@@ -74,9 +74,18 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   );
   const totalLikes = ra?.total_review_likes ?? null;
   const reviewsWithLikesData = ra?.reviews_with_likes_data ?? null;
-  const longestReview = ra?.longest_review ?? null;
-
   const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
+  const longestReview = useMemo(() => {
+    const longest = [...allReviews].sort((a, b) =>
+      (charLen(b) - charLen(a))
+      || (wordCountOf(b) - wordCountOf(a))
+      || (a.title ?? '').localeCompare(b.title ?? '')
+    )[0];
+    if (longest) {
+      return { title: longest.title, year: longest.year, length: charLen(longest) };
+    }
+    return ra?.longest_review ?? null;
+  }, [allReviews, ra?.longest_review]);
 
   // Most loyal fan: whoever liked the most of the user's distinct reviews.
   const mostLoyalFan = useMemo(() => {
@@ -110,9 +119,8 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         // Most liked, then longer review as the tie-break.
         return ((b.likes ?? 0) - (a.likes ?? 0)) || (charLen(b) - charLen(a));
       }
-      // Longest, by word count (matches the "N words" label on each card),
-      // char length as tie-break, then title for a stable order.
-      return (wordCountOf(b) - wordCountOf(a)) || (charLen(b) - charLen(a)) || (a.title ?? '').localeCompare(b.title ?? '');
+      // Canonical longest order: characters, then words, then title.
+      return (charLen(b) - charLen(a)) || (wordCountOf(b) - wordCountOf(a)) || (a.title ?? '').localeCompare(b.title ?? '');
     });
   }, [writtenReviews, reviewSort]);
   const filteredReviews = useMemo(() => {
@@ -132,7 +140,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
 
   return (
     <Section title="Your Reviews" subtitle={subtitleParts.join(' · ')}>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 items-start w-full">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 items-stretch w-full">
         <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
           <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{ra.reviews_with_text}</p>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">reviews written</p>
@@ -144,11 +152,11 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         </div>
 
         {totalLikes !== null && totalLikes > 0 && (
-          <div className="col-span-2 sm:col-span-1 bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+          <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
             <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{totalLikes}</p>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">likes on your reviews</p>
             {reviewsWithLikesData !== null && reviewsWithLikesData > 0 && (
-              <p className="mt-2 text-[10px] sm:text-[11px] text-slate-500 leading-snug">
+              <p className="mt-2 text-xs text-slate-400 leading-snug">
                 Sum across {reviewsWithLikesData} reviews
                 {' · '}
                 avg {(totalLikes / reviewsWithLikesData).toFixed(1)} per review.
@@ -159,10 +167,10 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         )}
 
         {longestReview && (
-          <div className="col-span-2 sm:col-span-1 bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+          <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
             <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{longestReview.length}</p>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">chars in your longest review</p>
-            <p className="mt-2 text-[11px] text-slate-500 truncate">
+            <p className="mt-2 text-xs text-slate-400 truncate">
               {longestReview.title}{longestReview.year ? ` (${longestReview.year})` : ''}
             </p>
           </div>
@@ -182,7 +190,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
               </span>
             </div>
             <div className="min-w-0">
-              <p className="text-[11px] sm:text-xs font-bold uppercase tracking-widest text-orange-300">
+              <p className="text-xs font-bold uppercase tracking-widest text-orange-300">
                 Your Most Loyal Fan
               </p>
               <p className="text-base sm:text-lg font-bold text-white truncate">
@@ -194,7 +202,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
             <p className="text-3xl sm:text-4xl font-black text-orange-300 tabular-nums leading-none">
               {mostLoyalFan.count}
             </p>
-            <p className="mt-1 text-[10px] sm:text-xs text-slate-400 whitespace-nowrap">
+            <p className="mt-1 text-xs text-slate-400 whitespace-nowrap">
               review{mostLoyalFan.count === 1 ? '' : 's'} liked
             </p>
           </div>
@@ -220,7 +228,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
                     } ${scaledWordSize(count, topWordsMax)}`}
                   >
                     <span>{word}</span>
-                    <span className="text-[10px] font-mono opacity-70">×{count}</span>
+                    <span className="text-xs font-mono opacity-70">×{count}</span>
                   </button>
                 );
               })}
@@ -248,7 +256,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
               ))}
             </ul>
             {filteredReviews.length > 6 && (
-              <p className="mt-2 text-[11px] text-slate-300">
+              <p className="mt-2 text-xs text-slate-300">
                 Showing 6 of {filteredReviews.length} reviews
               </p>
             )}
@@ -274,7 +282,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 transition-colors duration-150 ease-out hover:bg-slate-800/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400">
               <div className="flex items-baseline gap-3">
                 <p className="text-xs uppercase tracking-widest text-orange-300">Top 3 most-liked reviews</p>
-                <p className="text-[11px] text-slate-300">tap to expand</p>
+                <p className="text-xs text-slate-300">tap to expand</p>
               </div>
               <svg
                 aria-hidden="true"
@@ -344,17 +352,17 @@ export default function ReviewAnalysisSection({ stats }: Props) {
 
         {sortedReviews.length > 0 && (
           <div className="w-full rounded-xl bg-slate-800/35 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-widest text-orange-300">All written reviews</p>
-                <p className="mt-1 text-[11px] text-slate-300">
+                <p className="mt-1 text-xs text-slate-300">
                   Sort without extra scraping — likes come from the review listing page.
                   {hiddenLinkOnlyCount > 0
                     ? ` ${hiddenLinkOnlyCount} link-only review${hiddenLinkOnlyCount === 1 ? '' : 's'} hidden.`
                     : ''}
                 </p>
               </div>
-              <div className="flex rounded-full border border-slate-700/60 bg-slate-900/60 p-0.5">
+              <div className="grid w-full grid-cols-3 rounded-xl border border-slate-700/60 bg-slate-900/60 p-0.5 sm:flex sm:w-auto sm:rounded-full">
                 <ReviewSortButton
                   active={reviewSort === 'likes'}
                   onClick={() => { setReviewSort('likes'); setReviewPage(1); }}
@@ -453,13 +461,13 @@ function LikerRow({
   const [open, setOpen] = useState(false);
 
   if (likeCount <= 0) {
-    return <span className="text-[11px] text-slate-500">Not yet liked</span>;
+    return <span className="text-xs text-slate-500">Not yet liked</span>;
   }
 
   const list = likers ?? [];
   if (list.length === 0) {
     return (
-      <span className="text-[11px] text-slate-400">
+      <span className="text-xs text-slate-400">
         ♥ {likeCount}
         {complete === false ? ' · names unavailable' : ''}
       </span>
@@ -482,7 +490,7 @@ function LikerRow({
             <LikerAvatar key={l.username} liker={l} />
           ))}
         </span>
-        <span className="text-[11px] font-medium text-slate-400 transition-colors group-hover/likers:text-slate-200">
+        <span className="text-xs font-medium text-slate-400 transition-colors group-hover/likers:text-slate-200">
           {extra > 0 ? `+${extra} · ` : ''}Liked by {open ? '↑' : '↓'}
         </span>
       </button>
@@ -494,14 +502,14 @@ function LikerRow({
                 href={`https://letterboxd.com/${l.username}/`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-orange-300 hover:text-orange-200"
+                className="text-xs text-orange-300 hover:text-orange-200"
               >
                 {l.display_name || l.username}
               </a>
             </li>
           ))}
           {complete === false && (
-            <li className="text-[11px] text-slate-500">· some names unavailable</li>
+            <li className="text-xs text-slate-500">· some names unavailable</li>
           )}
         </ul>
       )}
@@ -529,7 +537,7 @@ function FilteredReviewCard({ review }: { review: ReviewItem }) {
       {isLong && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1.5 text-[11px] font-bold text-orange-300 hover:text-orange-200 transition-colors"
+          className="mt-1.5 text-xs font-bold text-orange-300 hover:text-orange-200 transition-colors"
         >
           {expanded ? 'Show less' : 'Read more'}
         </button>
@@ -551,7 +559,7 @@ function ReviewSortButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+      className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
         active
           ? 'bg-orange-400 text-slate-950'
           : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
@@ -594,7 +602,7 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
                 {wordLabel ? ` · ${wordLabel}` : ''}
               </p>
             </div>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
               likes > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-800 text-slate-400'
             }`}>
               {likes > 0 ? `♥ ${likes}` : 'Not yet liked'}
@@ -611,7 +619,7 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
                 e.stopPropagation();
                 setExpanded((v) => !v);
               }}
-              className="relative z-10 mt-2 text-[11px] font-bold text-orange-300 transition-colors hover:text-orange-200"
+              className="relative z-10 mt-2 text-xs font-bold text-orange-300 transition-colors hover:text-orange-200"
             >
               {expanded ? 'Show less' : 'Read more'}
             </button>

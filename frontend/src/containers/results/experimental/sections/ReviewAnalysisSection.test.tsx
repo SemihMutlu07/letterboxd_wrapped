@@ -94,4 +94,26 @@ describe('ReviewAnalysisSection', () => {
     await userEvent.click(screen.getByRole('button', { name: /Longest/i }));
     expect(screen.getAllByText(/Review text for film/).length).toBe(3);
   });
+
+  it('derives the longest review from review characters when backend summary disagrees', async () => {
+    const reviews = [
+      { title: 'Many Words', year: '2024', text: 'a b c d e f g', char_length: 13, word_count: 7, likes: 0, rating: 3 },
+      { title: 'Character Winner', year: '2023', text: 'abcdefghijklmnop', char_length: 16, word_count: 1, likes: 0, rating: 4 },
+    ];
+    renderSection({
+      review_analysis: {
+        total_reviews: 2, reviews_with_text: 2, review_rate: 1, total_words_written: 8,
+        avg_review_length_words: 4, unique_words_used: 8, vocab_richness: 1,
+        word_frequency: [], bigram_frequency: [], avg_length_by_rating: {}, language_mix: {},
+        longest_review: { title: 'Wrong Summary', year: '2000', length: 999 },
+        reviews,
+      },
+    }, [], reviews);
+
+    expect(screen.getByText('Character Winner (2023)')).toBeInTheDocument();
+    expect(screen.queryByText(/Wrong Summary/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Longest/i }));
+    const renderedReviews = screen.getAllByRole('listitem');
+    expect(renderedReviews[0]).toHaveTextContent('Character Winner');
+  });
 });

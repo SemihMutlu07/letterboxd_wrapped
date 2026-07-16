@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { POSTER_GAME_MOVIES, SUGGESTION_ONLY_TITLES, type PosterGameMovie } from '@/lib/posterGameData';
 import { isFuzzyMatch } from '@/lib/fuzzyMatch';
 import { usePixelatedImage } from '@/lib/usePixelatedImage';
@@ -69,6 +69,7 @@ export function PosterGuessGame({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [justScored, setJustScored] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { canvasRef, loaded, error } = usePixelatedImage(movie.poster_path, level, maxLevel, revealedAnswer);
   const hint = useMemo(
     () => buildHint(movie.title, wrongGuesses, maxLevel),
@@ -79,7 +80,22 @@ export function PosterGuessGame({
     setGuess('');
     setFeedback(null);
     setSuggestionsOpen(false);
+    requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }, [movie]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const keepInputVisible = () => {
+      if (document.activeElement === inputRef.current) {
+        if (typeof inputRef.current?.scrollIntoView === 'function') {
+          inputRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }
+    };
+    viewport.addEventListener('resize', keepInputVisible);
+    return () => viewport.removeEventListener('resize', keepInputVisible);
+  }, []);
 
   const suggestions = useMemo(() => {
     const query = guess.trim().toLowerCase();
@@ -109,6 +125,7 @@ export function PosterGuessGame({
       onWrongGuess();
       setGuess('');
       setSuggestionsOpen(false);
+      requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     }
   }
 
@@ -138,10 +155,10 @@ export function PosterGuessGame({
       const nextIndex = highlightedIndex > 0 ? highlightedIndex - 1 : suggestions.length - 1;
       setHighlightedIndex(nextIndex);
       setGuess(suggestions[nextIndex].title);
-    } else if (e.key === 'Tab') {
+    } else if (e.key === 'Escape') {
       e.preventDefault();
-      const nextIndex = highlightedIndex < suggestions.length - 1 ? highlightedIndex + 1 : 0;
-      setHighlightedIndex(nextIndex);
+      setSuggestionsOpen(false);
+      setHighlightedIndex(-1);
     }
   }
 
@@ -199,6 +216,7 @@ export function PosterGuessGame({
         <div className="relative">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <input
+              ref={inputRef}
               id="film-guess"
               type="text"
               value={guess}
@@ -206,12 +224,25 @@ export function PosterGuessGame({
                 setGuess(e.target.value);
                 setSuggestionsOpen(true);
               }}
-              onFocus={() => setSuggestionsOpen(true)}
+              onFocus={(event) => {
+                setSuggestionsOpen(true);
+                const input = event.currentTarget;
+                requestAnimationFrame(() => {
+                  if (typeof input.scrollIntoView === 'function') {
+                    input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                  }
+                });
+              }}
               onBlur={() => setTimeout(() => setSuggestionsOpen(false), 100)}
               onKeyDown={handleInputKeyDown}
               placeholder="What movie is this? (start typing for suggestions)"
               autoComplete="off"
-              className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-orange-400 focus:outline-none"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={suggestionsOpen && suggestions.length > 0}
+              aria-controls="film-guess-options"
+              aria-activedescendant={highlightedIndex >= 0 ? `film-guess-option-${highlightedIndex}` : undefined}
+              className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900/60 px-3 py-2 text-base text-slate-100 placeholder:text-slate-500 focus:border-orange-400 focus:outline-none"
             />
             <button
               type="submit"
@@ -222,9 +253,14 @@ export function PosterGuessGame({
           </form>
 
           {suggestionsOpen && suggestions.length > 0 && (
-            <ul className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-lg shadow-black/30">
+            <ul id="film-guess-options" role="listbox" className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-lg shadow-black/30">
               {suggestions.map((m, index) => (
-                <li key={m.title}>
+                <li
+                  id={`film-guess-option-${index}`}
+                  key={m.title}
+                  role="option"
+                  aria-selected={index === highlightedIndex}
+                >
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}

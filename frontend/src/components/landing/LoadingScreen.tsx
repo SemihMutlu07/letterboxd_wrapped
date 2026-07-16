@@ -107,7 +107,7 @@ export default function LoadingScreen({
     : `Elapsed ${formatElapsed(elapsed)}. Most exports finish in under a minute.`;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-4">
+    <div className="min-h-dvh overflow-y-auto bg-slate-900 text-white flex flex-col items-center justify-start px-4 py-5 sm:justify-center sm:py-8">
       {/* Keep the rotating prompt in one place, above the loading container. */}
       {isScrape && (
         <div className="mt-1 mb-4 max-w-xl text-center">
@@ -175,11 +175,18 @@ export default function LoadingScreen({
 
         {/* Progress + remaining time */}
         <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500">Typical</span>
-            <span className="text-slate-400">{formatElapsed(typical)}</span>
+          <div className="flex items-center justify-between text-sm font-medium">
+            <span className="text-slate-300">Typical</span>
+            <span className="text-slate-200">{formatElapsed(typical)}</span>
           </div>
-          <div className="h-2 rounded-full bg-slate-700/80 overflow-hidden">
+          <div
+            className="h-2 rounded-full bg-slate-700/80 overflow-hidden"
+            role="progressbar"
+            aria-label="Analysis progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+          >
             <div
               className="h-full bg-gradient-to-r from-orange-400 via-amber-300 to-orange-400 transition-all duration-1000"
               style={{ width: `${pct}%` }}

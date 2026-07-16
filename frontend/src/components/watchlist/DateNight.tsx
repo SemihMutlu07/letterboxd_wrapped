@@ -5,17 +5,27 @@ import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
-import { readWatchlistUsersFromLocation } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
 }
 
-export default function DateNight() {
+type Props = {
+  first?: string;
+  second?: string;
+  onFirstChange?: (value: string) => void;
+  onSecondChange?: (value: string) => void;
+};
+
+export default function DateNight({ first: controlledFirst, second: controlledSecond, onFirstChange, onSecondChange }: Props = {}) {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
-  const [first, setFirst] = useState(() => readWatchlistUsersFromLocation()[0]);
-  const [second, setSecond] = useState(() => readWatchlistUsersFromLocation()[1]);
+  const [localFirst, setLocalFirst] = useState('');
+  const [localSecond, setLocalSecond] = useState('');
+  const first = controlledFirst ?? localFirst;
+  const second = controlledSecond ?? localSecond;
+  const changeFirst = onFirstChange ?? setLocalFirst;
+  const changeSecond = onSecondChange ?? setLocalSecond;
   const [result, setResult] = useState<DateNightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +63,7 @@ export default function DateNight() {
           <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">First profile</span>
           <input
             value={first}
-            onChange={(event) => setFirst(event.target.value)}
+            onChange={(event) => changeFirst(event.target.value)}
             placeholder={placeholders[0]}
             aria-label="First Letterboxd username"
             className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
@@ -63,7 +73,7 @@ export default function DateNight() {
           <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Second profile</span>
           <input
             value={second}
-            onChange={(event) => setSecond(event.target.value)}
+            onChange={(event) => changeSecond(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') void handleSubmit();
             }}

@@ -281,20 +281,21 @@ function RecommendationStrip({ recommendation }: { recommendation: FilmRecommend
 
 /* ── Main exported component ───────────────────────────────────────────────── */
 
-export default function WatchlistCompare() {
+type Props = {
+  first?: string;
+  second?: string;
+  onFirstChange?: (value: string) => void;
+  onSecondChange?: (value: string) => void;
+};
+
+export default function WatchlistCompare({ first: controlledFirst, second: controlledSecond, onFirstChange, onSecondChange }: Props = {}) {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
-  const [first, setFirst] = useState(() => {
-    const [routeFirst] = readWatchlistUsersFromLocation();
-    if (routeFirst) return routeFirst;
-    if (typeof window === 'undefined') return '';
-    return sessionStorage.getItem('wc_first') || '';
-  });
-  const [second, setSecond] = useState(() => {
-    const [, routeSecond] = readWatchlistUsersFromLocation();
-    if (routeSecond) return routeSecond;
-    if (typeof window === 'undefined') return '';
-    return sessionStorage.getItem('wc_second') || '';
-  });
+  const [localFirst, setLocalFirst] = useState('');
+  const [localSecond, setLocalSecond] = useState('');
+  const first = controlledFirst ?? localFirst;
+  const second = controlledSecond ?? localSecond;
+  const changeFirst = onFirstChange ?? setLocalFirst;
+  const changeSecond = onSecondChange ?? setLocalSecond;
   const [strategy, setStrategy] = useState<RecommendationStrategy>('random');
   const [result, setResult] = useState<WatchlistCompareResult | null>(null);
   const [recommendation, setRecommendation] = useState<FilmRecommendation | null>(null);
@@ -306,6 +307,7 @@ export default function WatchlistCompare() {
   const [enrichedFilms, setEnrichedFilms] = useState<WatchlistFilm[] | null>(null);
   const [enriching, setEnriching] = useState(false);
   const autoComparedRef = useRef(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const validationMessage = useMemo(() => {
@@ -359,6 +361,16 @@ export default function WatchlistCompare() {
     void handleCompare();
   }, [handleCompare]);
 
+  useEffect(() => {
+    if (!result) return;
+    requestAnimationFrame(() => {
+      if (typeof resultRef.current?.scrollIntoView === 'function') {
+        resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      resultRef.current?.focus({ preventScroll: true });
+    });
+  }, [result]);
+
   const handleRecommend = async () => {
     if (!canSubmit) return;
     setRecommending(true);
@@ -400,7 +412,7 @@ export default function WatchlistCompare() {
             <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">First watchlist</span>
             <input
               value={first}
-              onChange={(event) => setFirst(event.target.value)}
+              onChange={(event) => changeFirst(event.target.value)}
               placeholder={placeholders[0]}
               className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-amber-400 focus:outline-none focus-visible:outline-none"
             />
@@ -409,7 +421,7 @@ export default function WatchlistCompare() {
             <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">Second watchlist</span>
             <input
               value={second}
-              onChange={(event) => setSecond(event.target.value)}
+              onChange={(event) => changeSecond(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void handleCompare();
               }}
@@ -452,7 +464,7 @@ export default function WatchlistCompare() {
       )}
 
       {result && (
-        <>
+        <div ref={resultRef} tabIndex={-1} aria-live="polite" aria-label="Watchlist comparison results" className="space-y-8 outline-none">
           {/* Match score header */}
           <section className="border border-amber-400/40 bg-[#0f0d0b] p-5 text-center">
             <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">Match score</p>
@@ -465,7 +477,7 @@ export default function WatchlistCompare() {
           </section>
 
           {/* Responsive summary cards */}
-          <section className="grid grid-cols-3 gap-2 sm:gap-3">
+          <section className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             <div className="border border-orange-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
               <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-orange-400 truncate">
                 Only @{result.users[0]}
@@ -488,43 +500,43 @@ export default function WatchlistCompare() {
 
           {/* Proportional bar */}
           <section className="border border-stone-800 bg-[#171411] p-5">
-            <div className="flex w-full gap-0.5">
+            <div className="flex w-full gap-0.5" aria-label="Watchlist share percentages">
               {counts && (
                 <>
-                  <div
-                    style={{ flex: counts.first_only || 1 }}
+                  {counts.first_only > 0 && <div
+                    style={{ width: formatPct(counts.first_only) }}
                     className="group relative h-12 bg-orange-500/80"
                     title={`Only @${result.users[0]}: ${counts.first_only} (${formatPct(counts.first_only)})`}
                   >
                     <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.first_only)}
                     </span>
-                  </div>
-                  <div
-                    style={{ flex: counts.common || 1 }}
+                  </div>}
+                  {counts.common > 0 && <div
+                    style={{ width: formatPct(counts.common) }}
                     className="group relative h-12 bg-amber-300"
                     title={`Both: ${counts.common} (${formatPct(counts.common)})`}
                   >
                     <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-stone-950 opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.common)}
                     </span>
-                  </div>
-                  <div
-                    style={{ flex: counts.second_only || 1 }}
+                  </div>}
+                  {counts.second_only > 0 && <div
+                    style={{ width: formatPct(counts.second_only) }}
                     className="group relative h-12 bg-emerald-500/80"
                     title={`Only @${result.users[1]}: ${counts.second_only} (${formatPct(counts.second_only)})`}
                   >
                     <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.second_only)}
                     </span>
-                  </div>
+                  </div>}
                 </>
               )}
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 font-mono text-[11px] uppercase tracking-[0.12em]">
-              <span className="text-orange-400/90 text-center">Only @{result.users[0]}: {counts?.first_only}</span>
-              <span className="text-amber-300 text-center">Both: {counts?.common}</span>
-              <span className="text-emerald-400/90 text-center">Only @{result.users[1]}: {counts?.second_only}</span>
+            <div className="mt-3 grid grid-cols-1 gap-2 font-mono text-xs uppercase tracking-[0.08em] sm:grid-cols-3 sm:tracking-[0.12em]">
+              <span className="text-orange-400/90 text-center">Only @{result.users[0]}: {counts?.first_only} · {formatPct(counts?.first_only ?? 0)}</span>
+              <span className="text-amber-300 text-center">Both: {counts?.common} · {formatPct(counts?.common ?? 0)}</span>
+              <span className="text-emerald-400/90 text-center">Only @{result.users[1]}: {counts?.second_only} · {formatPct(counts?.second_only ?? 0)}</span>
             </div>
           </section>
 
@@ -581,7 +593,7 @@ export default function WatchlistCompare() {
           )}
 
           {/* Individual watchlists — collapsed by default */}
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <WatchlistAccordion
               user={result.users[0]}
               count={result.counts.first_only}
@@ -633,7 +645,7 @@ export default function WatchlistCompare() {
           </section>
 
           {recommendation && <RecommendationStrip recommendation={recommendation} />}
-        </>
+        </div>
       )}
 
       {recommending && (

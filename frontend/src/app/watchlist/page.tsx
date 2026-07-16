@@ -1,9 +1,25 @@
+'use client';
+
 import Link from 'next/link';
+import { useState } from 'react';
 
 import DateNight from '@/components/watchlist/DateNight';
 import WatchlistCompare from '@/components/watchlist/WatchlistCompare';
+import { readWatchlistUsersFromLocation } from '@/lib/routes';
 
 export default function WatchlistPage() {
+  const [[first, second], setUsers] = useState<[string, string]>(() => {
+    const routed = readWatchlistUsersFromLocation();
+    if (routed[0] || routed[1] || typeof window === 'undefined') return routed;
+    return [sessionStorage.getItem('wc_first') || '', sessionStorage.getItem('wc_second') || ''];
+  });
+  const userProps = {
+    first,
+    second,
+    onFirstChange: (value: string) => setUsers((current) => [value, current[1]]),
+    onSecondChange: (value: string) => setUsers((current) => [current[0], value]),
+  };
+
   return (
     <main className="min-h-screen bg-[#0f0d0b] text-stone-100">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
@@ -18,8 +34,8 @@ export default function WatchlistPage() {
         </header>
 
         <div className="space-y-8">
-          <WatchlistCompare />
-          <DateNight />
+          <WatchlistCompare {...userProps} />
+          <DateNight {...userProps} />
         </div>
 
         <div className="mt-12 flex justify-center border-t border-stone-800 pt-8">
