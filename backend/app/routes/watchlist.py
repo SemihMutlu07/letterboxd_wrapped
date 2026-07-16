@@ -33,6 +33,7 @@ router = APIRouter()
 USERNAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
+RAW_HELPER_TIMEOUT_SECONDS = 120
 
 
 async def _await_worker_job(task_id: str, max_seconds: int) -> tuple[str, Any]:
@@ -51,6 +52,21 @@ async def _await_worker_job(task_id: str, max_seconds: int) -> tuple[str, Any]:
             return ("done", task.result or {})
         if task.status == "failed":
             return ("failed", task.error)
+    task = task_manager.get_task_state(task_id)
+    if (
+        task is not None
+        and task.options.get("raw_only")
+        and task.status in {"pending", "running"}
+    ):
+        task_manager.set_task_failed(
+            task_id,
+            "The desktop worker job timed out. Please try again.",
+            {
+                "error_type": "WorkerJobTimeout",
+                "error_stage": task.stage,
+                "error_code": "worker_timeout",
+            },
+        )
     return ("timeout", None)
 
 
@@ -242,7 +258,7 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
-    outcome, data = await _await_worker_job(task_id, 120)
+    outcome, data = await _await_worker_job(task_id, RAW_HELPER_TIMEOUT_SECONDS)
 
     if outcome == "failed":
         _persist_watchlist_run([first, second], None, request, ok=False, error_message=data)
@@ -319,7 +335,7 @@ async def enrich_watchlist_films(request: Request, payload: WatchlistCompareRequ
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
-    outcome, data = await _await_worker_job(task_id, 120)
+    outcome, data = await _await_worker_job(task_id, RAW_HELPER_TIMEOUT_SECONDS)
 
     if outcome == "failed":
         raise _worker_failure_exception(data)

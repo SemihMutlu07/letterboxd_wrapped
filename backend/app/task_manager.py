@@ -634,24 +634,28 @@ def requeue_stale_claims(now: Optional[datetime] = None) -> int:
     return count
 
 
+def fail_worker_job_if_expired(task: TaskState, now: Optional[datetime] = None) -> bool:
+    """Fail one active worker job once its public polling deadline passes."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=ACTIVE_JOB_TIMEOUT_SECONDS)
+    if not (
+        task.kind in {"scrape", "watchlist"}
+        and task.status in {"pending", "running"}
+        and task.created_at < cutoff
+    ):
+        return False
+    set_task_failed(
+        task.task_id,
+        "The desktop worker job timed out. Please try again.",
+        {"error_type": "WorkerJobTimeout", "error_stage": task.stage, "error_code": "worker_timeout"},
+    )
+    return True
+
+
 def fail_expired_worker_jobs(now: Optional[datetime] = None) -> int:
     """Fail worker jobs that never reach a terminal state after retries."""
     now = now or datetime.now(timezone.utc)
-    cutoff = now - timedelta(seconds=ACTIVE_JOB_TIMEOUT_SECONDS)
-    expired = [
-        task
-        for task in _tasks.values()
-        if task.kind in {"scrape", "watchlist"}
-        and task.status in {"pending", "running"}
-        and task.created_at < cutoff
-    ]
-    for task in expired:
-        set_task_failed(
-            task.task_id,
-            "The desktop worker job timed out. Please try again.",
-            {"error_type": "WorkerJobTimeout", "error_stage": task.stage, "error_code": "worker_timeout"},
-        )
-    return len(expired)
+    return sum(fail_worker_job_if_expired(task, now) for task in _tasks.values())
 
 
 async def cleanup_loop() -> None:

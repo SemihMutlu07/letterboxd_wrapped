@@ -331,6 +331,7 @@ async def get_task_progress(task_id: str, request: Request):
     supplied = request.headers.get("X-Task-Token", "")
     if not supplied or not secrets.compare_digest(supplied, task.poll_token):
         raise HTTPException(status_code=403, detail={"error_code": "invalid_task_token", "message": "Invalid task token."})
+    task_manager.fail_worker_job_if_expired(task)
     return {
         "task_id": task.task_id,
         "status": task.status,

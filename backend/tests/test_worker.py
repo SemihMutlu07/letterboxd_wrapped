@@ -274,6 +274,53 @@ async def test_raw_watchlist_endpoints_map_queue_capacity_to_503(client: AsyncCl
 
 
 @pytest.mark.asyncio
+async def test_raw_watchlist_timeout_releases_capacity_and_late_complete_is_duplicate(client: AsyncClient, monkeypatch):
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(watchlist, "RAW_HELPER_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(task_manager, "MAX_ACTIVE_PER_OWNER", 1)
+
+    response = await client.post(
+        "/api/watchlist-enrich", json={"usernames": ["one", "two"]}
+    )
+    assert response.status_code == 504
+    task = next(task for task in task_manager._tasks.values() if task.kind == "watchlist")
+    assert task.status == "failed"
+    assert task.error_code == "worker_timeout"
+
+    replacement_id = task_manager.create_watchlist_compare_job(
+        ["one", "three"], owner_key="127.0.0.1"
+    )
+    assert replacement_id
+    late = await client.post(
+        f"/api/worker/watchlist/{task.task_id}/complete",
+        headers=AUTH,
+        json={"first_watchlist": [], "second_watchlist": []},
+    )
+    assert late.json() == {"ok": True, "duplicate": True}
+    assert task.status == "failed" and task.error_code == "worker_timeout"
+
+
+@pytest.mark.asyncio
+async def test_progress_read_expires_aged_worker_task_before_cleanup(client: AsyncClient):
+    from datetime import datetime, timedelta, timezone
+
+    task_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task = task_manager.get_task_state(task_id)
+    task.created_at = datetime.now(timezone.utc) - timedelta(
+        seconds=task_manager.ACTIVE_JOB_TIMEOUT_SECONDS + 1
+    )
+
+    response = await client.get(
+        f"/api/progress/{task_id}", headers={"X-Task-Token": task.poll_token}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["error_code"] == "worker_timeout"
+
+
+@pytest.mark.asyncio
 async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncClient, monkeypatch):
     from unittest.mock import AsyncMock
     from app.services import watchlist_jobs
