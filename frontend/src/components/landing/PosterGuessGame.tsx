@@ -260,17 +260,13 @@ export function PosterGuessGame({
                   key={m.title}
                   role="option"
                   aria-selected={index === highlightedIndex}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleSuggestionClick(m.title)}
+                  className={`cursor-pointer px-3 py-2 text-left text-sm text-slate-100 hover:bg-orange-500/20 ${
+                    index === highlightedIndex ? 'bg-orange-500/20' : ''
+                  }`}
                 >
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleSuggestionClick(m.title)}
-                    className={`block w-full px-3 py-2 text-left text-sm text-slate-100 hover:bg-orange-500/20 ${
-                      index === highlightedIndex ? 'bg-orange-500/20' : ''
-                    }`}
-                  >
-                    {m.title}
-                  </button>
+                  {m.title}
                 </li>
               ))}
             </ul>

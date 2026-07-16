@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
@@ -30,8 +30,17 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [erroredPosters, setErroredPosters] = useState<Set<string>>(new Set());
+  const resultRef = useRef<HTMLDivElement>(null);
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && normalized[0] !== normalized[1];
+
+  useEffect(() => {
+    if (!result) return;
+    requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultRef.current?.focus({ preventScroll: true });
+    });
+  }, [result]);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -123,7 +132,14 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
       )}
 
       {result && (
-        <div className="space-y-5">
+        <div
+          ref={resultRef}
+          role="region"
+          aria-label="Date night results"
+          aria-live="polite"
+          tabIndex={-1}
+          className="space-y-5 outline-none"
+        >
           <div className="grid gap-3 md:grid-cols-3">
             <div className="border border-stone-800 bg-[#201b16] p-4">
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Genres</p>

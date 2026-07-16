@@ -94,7 +94,7 @@ describe('UploadZone', () => {
 // ---- WatchlistCompare --------------------------------------------------------
 
 import WatchlistCompare from '@/components/watchlist/WatchlistCompare';
-import { compareWatchlists, recommendFromCompare } from '@/lib/api';
+import { compareWatchlists, dateNight, recommendFromCompare } from '@/lib/api';
 
 describe('WatchlistCompare', () => {
   beforeEach(() => {
@@ -173,6 +173,29 @@ describe('WatchlistCompare', () => {
     await userEvent.click(screen.getByRole('button', { name: /pick one/i }));
     expect(await screen.findByText("Tonight's pick")).toBeInTheDocument();
     expect(screen.getAllByText('Aftersun').length).toBeGreaterThan(0);
+  });
+});
+
+// ---- DateNight --------------------------------------------------------------
+
+import DateNight from '@/components/watchlist/DateNight';
+
+describe('DateNight', () => {
+  it('announces, scrolls to, and focuses completed results', async () => {
+    vi.mocked(dateNight).mockResolvedValueOnce({
+      mutual_profile: { top_genres: ['Drama'], top_directors: ['Varda'], era_overlap: '1960s' },
+      recommendations: [],
+    });
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    render(<DateNight first="alice" second="bob" />);
+
+    await userEvent.click(screen.getByRole('button', { name: /find films/i }));
+
+    const results = await screen.findByRole('region', { name: /date night results/i });
+    await waitFor(() => expect(results).toHaveFocus());
+    expect(results).toHaveAttribute('aria-live', 'polite');
+    expect(scrollIntoView).toHaveBeenCalled();
   });
 });
 

@@ -33,6 +33,18 @@ describe('PosterGuessGame accessibility and focus', () => {
     expect(input).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('uses options without nested interactive controls and supports mouse selection', async () => {
+    const onCorrectGuess = vi.fn();
+    render(<PosterGuessGame {...props} onCorrectGuess={onCorrectGuess} />);
+    const input = screen.getByRole('combobox');
+    await userEvent.type(input, 'godfather');
+
+    const option = screen.getByRole('option', { name: 'The Godfather' });
+    expect(option.querySelector('button')).toBeNull();
+    await userEvent.click(option);
+    expect(onCorrectGuess).toHaveBeenCalledOnce();
+  });
+
   it('does not trap Tab and restores focus after a wrong guess', async () => {
     render(<PosterGuessGame {...props} />);
     const input = screen.getByRole('combobox');
