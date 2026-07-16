@@ -209,7 +209,7 @@ def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
         error_code = "analysis_failed" if exc.scraper_ok else "no_films"
     elif isinstance(exc, ValueError):
         error_stage = "letterboxd_or_scrape"
-        error_code = "scrape_failed"
+        error_code = getattr(exc, "error_code", "scrape_failed")
     else:
         error_stage = "pipeline_unexpected"
         error_code = "scrape_failed"
@@ -315,11 +315,13 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
     except Exception as exc:  # noqa: BLE001
         message = str(exc) if isinstance(exc, ValueError) else f"Scrape failed for {first}/{second}."
         logger.warning("Watchlist job %s failed: %s", task_id, exc)
-        await _post(session, cfg, f"/api/worker/watchlist/{task_id}/failed", {"message": message})
+        payload = {"message": message, "telemetry": _failure_telemetry(exc, 0.0)}
+        outbox_path = _write_outbox(task_id, "watchlist-failed", f"/api/worker/watchlist/{task_id}/failed", payload)
+        await _send_outbox_item(session, cfg, outbox_path)
         return
 
-    ok = await _post(session, cfg, f"/api/worker/watchlist/{task_id}/complete", payload)
-    if ok:
+    outbox_path = _write_outbox(task_id, "watchlist-complete", f"/api/worker/watchlist/{task_id}/complete", payload)
+    if await _send_outbox_item(session, cfg, outbox_path):
         logger.info("Watchlist job %s complete", task_id)
 
 
@@ -331,6 +333,14 @@ async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict
             return None
         if r.status != 200:
             logger.warning("Claim failed: HTTP %s", r.status)
+            return None
+        return (await r.json()).get("job")
+
+
+async def _claim_next_fair(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
+    async with session.get(f"{cfg.base_url}/api/worker/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
+        if r.status != 200:
+            logger.warning("Fair claim failed: HTTP %s", r.status)
             return None
         return (await r.json()).get("job")
 
@@ -481,31 +491,22 @@ async def run() -> None:
         try:
             while True:
                 try:
-                    job = await _claim_next(session, cfg)
+                    job = await _claim_next_fair(session, cfg)
                 except Exception as exc:  # noqa: BLE001 — keep polling through transient backend errors
                     logger.warning("Poll error: %s", exc)
                     job = None
 
                 if job is None:
-                    # Also check for watchlist/date-night jobs
-                    try:
-                        wl_job = await _claim_next_watchlist(session, cfg)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("Watchlist poll error: %s", exc)
-                        wl_job = None
-
-                    if wl_job is not None:
-                        await _flush_outbox(session, cfg)
-                        await _process_watchlist_job(session, cfg, wl_job)
-                        continue
-
                     await _flush_outbox(session, cfg)
                     await asyncio.sleep(POLL_INTERVAL)
                     continue
 
                 # Process one job at a time (V1 — no concurrency).
                 await _flush_outbox(session, cfg)
-                await _process_job(session, cfg, job)
+                if job.get("kind") == "watchlist":
+                    await _process_watchlist_job(session, cfg, job)
+                else:
+                    await _process_job(session, cfg, job)
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):

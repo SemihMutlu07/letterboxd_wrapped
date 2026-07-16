@@ -12,12 +12,14 @@ $SupervisorVersion = "2026-06-28"
 $SupervisorStartedAt = (Get-Date).ToUniversalTime().ToString("o")
 $SupervisorLog = Join-Path $BackendDir "worker-supervisor.log"
 $WorkerLog = Join-Path $BackendDir "worker.log"
+$WorkerErrorLog = Join-Path $BackendDir "worker-error.log"
 $LastSeenRestartToken = $null
 $DesiredState = "run"
 $LastControlError = $null
 $Child = $null
 $ChildStartedAt = $null
 $ChildExitCode = $null
+$PythonExe = Join-Path $BackendDir ".venv\Scripts\python.exe"
 
 function Write-SupervisorLog {
     param([string]$Message)
@@ -91,11 +93,16 @@ function Start-WorkerChild {
     if (Test-ChildRunning) {
         return
     }
-    Write-SupervisorLog "starting worker child"
+    if (-not (Test-Path $PythonExe)) {
+        throw "Worker interpreter not found at $PythonExe. Create backend/.venv before starting the supervisor."
+    }
+    Write-SupervisorLog ("starting worker child interpreter={0}" -f $PythonExe)
     $script:Child = Start-Process `
-        -FilePath "cmd.exe" `
-        -ArgumentList @("/c", "python -m app.worker.desktop_scrape_worker >> worker.log 2>&1") `
+        -FilePath $PythonExe `
+        -ArgumentList @("-m", "app.worker.desktop_scrape_worker") `
         -WorkingDirectory $BackendDir `
+        -RedirectStandardOutput $WorkerLog `
+        -RedirectStandardError $WorkerErrorLog `
         -PassThru `
         -WindowStyle Hidden
     $script:ChildStartedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -128,17 +135,25 @@ function Stop-WorkerChild {
 }
 
 function Update-RepoFastForward {
-    Write-SupervisorLog "running git pull --ff-only before restart"
+    Write-SupervisorLog "verifying desktop_server checkout before worker start"
     try {
-        $output = git -C $BackendDir pull --ff-only 2>&1
-        foreach ($line in $output) {
-            Write-SupervisorLog ("git: {0}" -f $line)
-        }
+        $RepoDir = Split-Path $BackendDir -Parent
+        $output = git -C $RepoDir fetch origin desktop_server 2>&1
+        foreach ($line in $output) { Write-SupervisorLog ("git: {0}" -f $line) }
+        if ($LASTEXITCODE -ne 0) { throw "git fetch failed with exit code $LASTEXITCODE" }
+
+        $output = git -C $RepoDir checkout desktop_server 2>&1
+        foreach ($line in $output) { Write-SupervisorLog ("git: {0}" -f $line) }
+        if ($LASTEXITCODE -ne 0) { throw "git checkout failed with exit code $LASTEXITCODE" }
+
+        $output = git -C $RepoDir pull --ff-only origin desktop_server 2>&1
+        foreach ($line in $output) { Write-SupervisorLog ("git: {0}" -f $line) }
         if ($LASTEXITCODE -ne 0) {
-            Write-SupervisorLog ("git pull exited with {0}; restarting with current checkout" -f $LASTEXITCODE)
+            throw "git pull --ff-only failed with exit code $LASTEXITCODE"
         }
     } catch {
         Write-SupervisorLog ("git pull failed: {0}" -f $_.Exception.Message)
+        throw
     }
 }
 
@@ -188,6 +203,11 @@ function Report-Supervisor {
 }
 
 Load-DotEnv
+Update-RepoFastForward
+$RepoDir = Split-Path $BackendDir -Parent
+$branch = git -C $RepoDir branch --show-current
+$sha = git -C $RepoDir rev-parse HEAD
+Write-SupervisorLog ("worker supervisor verified interpreter={0} branch={1} sha={2}" -f $PythonExe, $branch, $sha)
 Write-SupervisorLog "worker supervisor starting"
 
 while ($true) {

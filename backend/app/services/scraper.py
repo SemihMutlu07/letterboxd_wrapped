@@ -24,6 +24,14 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger("letterboxd_wrapped.scraper")
 
 
+class WatchlistScrapeError(ValueError):
+    """A classified Letterboxd watchlist failure safe to send to the backend."""
+
+    def __init__(self, message: str, error_code: str) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
 def _fetch(session: "cloudscraper.CloudScraper", url: str, timeout: int = 10):
     """Fetch a Letterboxd URL directly via the warmed cloudscraper session.
 
@@ -414,21 +422,50 @@ def _sync_scrape_watchlist(
         for page in range(1, max_pages + 1):
             url = f"{BASE_URL}/{username}/watchlist/page/{page}/"
             logger.debug("Watchlist page %d: GET %s", page, url)
-            r = _fetch(s, url, timeout=10)
+            try:
+                r = _fetch(s, url, timeout=10)
+            except Exception as exc:
+                raise WatchlistScrapeError(
+                    f"Letterboxd watchlist transport error: {type(exc).__name__}",
+                    "watchlist_transport_error",
+                ) from exc
 
             if r.status_code == 404:
                 logger.warning("Watchlist page %d: 404 for %s", page, username)
                 if page == 1:
-                    raise ValueError(f"User '{username}' not found")
+                    raise WatchlistScrapeError(f"User '{username}' not found", "user_not_found")
                 break
+            if r.status_code in {403, 429}:
+                raise WatchlistScrapeError(
+                    f"Letterboxd watchlist request failed with HTTP {r.status_code}",
+                    "watchlist_blocked",
+                )
             if r.status_code != 200:
                 logger.warning("Watchlist page %d: unexpected status %d for %s", page, r.status_code, username)
-                break
+                raise WatchlistScrapeError(
+                    f"Letterboxd watchlist request failed with HTTP {r.status_code}",
+                    "watchlist_upstream_error",
+                )
+
+            lowered = r.text.lower()
+            if "cloudflare" in lowered or "just a moment" in lowered:
+                raise WatchlistScrapeError(
+                    "Letterboxd is blocking watchlist requests with Cloudflare",
+                    "watchlist_blocked",
+                )
 
             soup = BeautifulSoup(r.text, "html.parser")
             films = _parse_grid_items(soup)
 
             if not films:
+                if page == 1:
+                    empty_evidence = "watchlist is empty" in lowered or "js-watchlist-content" in lowered
+                    expected_page = "watchlist" in lowered or "film-grid" in lowered or "griditem" in lowered
+                    if not empty_evidence and not expected_page:
+                        raise WatchlistScrapeError(
+                            "Malformed Letterboxd watchlist response: first page contained no films",
+                            "watchlist_malformed_response",
+                        )
                 break
 
             all_films.extend(films)

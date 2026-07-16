@@ -99,9 +99,34 @@ async def test_flush_outbox_deletes_acknowledged_item(tmp_path, monkeypatch):
     assert not outbox_path.exists()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [False, True])
+async def test_watchlist_postbacks_use_durable_outbox(tmp_path, monkeypatch, failure):
+    monkeypatch.setattr(worker, "OUTBOX_DIR", tmp_path / "outbox")
+    job = {"task_id": "wl-1", "job_type": "watchlist_compare", "usernames": ["one", "two"]}
+    effect = ValueError("blocked") if failure else [{"title": "Film"}]
+    with (
+        patch.object(worker, "scrape_watchlist", new=AsyncMock(side_effect=effect) if failure else AsyncMock(return_value=effect)),
+        patch.object(worker, "_post", new=AsyncMock(return_value=False)),
+    ):
+        await worker._process_watchlist_job(object(), _cfg(), job)
+    files = list((tmp_path / "outbox").glob("*.json"))
+    assert len(files) == 1
+    assert ("failed" if failure else "complete") in files[0].name
+
+
 def test_failure_message_mapping():
     assert "No public films" in worker._failure_message("u", ScrapeAnalysisEmpty("u", scraper_ok=False))
     assert "analysis came back empty" in worker._failure_message("u", ScrapeAnalysisEmpty("u", scraper_ok=True))
+
+
+def test_watchlist_failure_telemetry_preserves_classified_error_code():
+    from app.services.scraper import WatchlistScrapeError
+
+    telemetry = worker._failure_telemetry(
+        WatchlistScrapeError("blocked", "watchlist_blocked"), 1.0
+    )
+    assert telemetry["error_code"] == "watchlist_blocked"
     assert worker._failure_message("u", ValueError("Letterboxd is blocking requests")) == "Letterboxd is blocking requests"
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app import supabase_ops, task_manager
@@ -199,37 +200,12 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_watchlist_compare_job([first, second])
-    outcome, data = await _await_worker_job(task_id, 120)
-
-    if outcome == "failed":
-        _persist_watchlist_run([first, second], None, request, ok=False, error_message=data)
-        raise _worker_failure_exception(data)
-    if outcome == "timeout":
-        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_timeout")
-        raise HTTPException(
-            status_code=504,
-            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
-        )
-
-    comparison = compare_watchlist_sets(data.get("first_watchlist", []), data.get("second_watchlist", []))
-
-    # Enrich all buckets with TMDB metadata so the UI has real posters, genres,
-    # vote counts and popularity in list view as well as swipe view.
-    session = request.app.state.aiohttp_session
     try:
-        enriched_common, enriched_first, enriched_second = await asyncio.gather(
-            enrich_films_concurrent(session, comparison["common"], limit=50),
-            enrich_films_concurrent(session, comparison["first_only"], limit=50),
-            enrich_films_concurrent(session, comparison["second_only"], limit=50),
-        )
-        comparison["common"] = [public_film(f) for f in enriched_common]
-        comparison["first_only"] = [public_film(f) for f in enriched_first]
-        comparison["second_only"] = [public_film(f) for f in enriched_second]
-    except Exception:
-        logger.exception("Watchlist enrichment failed for %s/%s; returning raw scrape data", first, second)
-    _persist_watchlist_run([first, second], comparison, request, ok=True)
-    return {"status": "success", "users": [first, second], **comparison}
+        task_id = task_manager.create_watchlist_compare_job([first, second], owner_key=_client_key(request))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
+    task = task_manager.get_task_state(task_id)
+    return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending", "poll_token": task.poll_token})
 
 
 @router.post("/api/recommend-from-compare", response_model=RecommendFromCompareResponse)

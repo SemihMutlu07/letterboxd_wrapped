@@ -8,13 +8,14 @@ in the `X-Worker-Token` header matching settings.worker_token.
 """
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import secrets
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from app import task_manager
-from app.task_manager import claim_next_watchlist_job
 from app.config import backend_git_sha, settings
 from app.services import dashboard_settings
 from app.services.run_log import persist_run
@@ -334,11 +335,29 @@ async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)
                 "version": mismatch,
             },
         )
-    job = claim_next_watchlist_job()
+    job = task_manager.claim_next_watchlist_job()
     if job is None:
         return {"job": None}
     logger.info("Worker claimed watchlist job %s type=%s users=%s", job.task_id, job.job_type, job.usernames)
     return {"job": {"task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+
+
+@router.get("/next")
+async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
+    """Claim the oldest profile or watchlist job to prevent queue starvation."""
+    _require_worker_token(x_worker_token)
+    await dashboard_settings.load_worker_control_state()
+    if task_manager.is_worker_paused():
+        return {"job": None, "paused": True}
+    mismatch = _worker_version_mismatch()
+    if mismatch:
+        raise HTTPException(status_code=409, detail={"error_code": "worker_version_mismatch", "version": mismatch})
+    job = task_manager.claim_next_worker_job()
+    if job is None:
+        return {"job": None}
+    if job.kind == "watchlist":
+        return {"job": {"kind": "watchlist", "task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+    return {"job": {"kind": "scrape", "task_id": job.task_id, "username": job.username, "avatar_only": job.avatar_only}}
 
 
 @router.post("/watchlist/{task_id}/complete")
@@ -351,8 +370,15 @@ async def complete_watchlist(task_id: str, request: Request, x_worker_token: str
     task = task_manager.get_task_state(task_id)
     if task is None or task.kind != "watchlist":
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
-    task_manager.set_task_done(task_id, body)
-    logger.info("Worker completed watchlist job %s", task_id)
+    if task.status in {"done", "failed"} or task.stage == "processing":
+        return {"ok": True, "duplicate": True}
+    task.result = body
+    task.status = "running"
+    task.stage = "processing"
+    task.message = "Preparing recommendations"
+    from app.services.watchlist_jobs import finalize_watchlist_job
+    asyncio.create_task(finalize_watchlist_job(task_id, request.app.state.aiohttp_session))
+    logger.info("Worker stored raw watchlist job %s", task_id)
     return {"ok": True}
 
 
@@ -365,6 +391,8 @@ async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | N
     task = task_manager.get_task_state(task_id)
     if task is None or task.kind != "watchlist":
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
-    task_manager.set_task_failed(task_id, message)
+    if task.status in {"done", "failed"}:
+        return {"ok": True, "duplicate": True}
+    task_manager.set_task_failed(task_id, message, _request_telemetry(body))
     logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)
     return {"ok": True}

@@ -86,7 +86,7 @@ Backend side (`config.py`): `worker_heartbeat_max_age_seconds=60`,
 ## 5. Failure & offline behavior
 
 - **Worker offline at request time:** clean 503 + "upload your export" message; a failed run is logged. User is never left polling a job that can't run.
-- **Worker dies AFTER a job is queued/claimed:** ⚠️ the job sits `pending`/`running` forever; only the 1h `cleanup_loop` removes it, after which the user's poll 404s ("Task not found or expired") instead of a clean failure. **There is no job timeout, retry, or requeue.** (See gaps below.)
+- **Worker dies AFTER a job is queued/claimed:** the backend requeues stale profile, watchlist, and date-night claims after 15 minutes, then fails any job still active after 30 minutes so public polling reaches a clean terminal state. Completed/failed jobs remain available for one hour before cleanup.
 - **Orphan postback:** a complete/failed for a task the backend forgot (restart/cleanup) is still `persist_run`'d (`orphan:true`) for the dashboard, but the **public user never gets it** (their poll already 404'd).
 - **Pipeline errors** map to readable messages; a single failure never crashes the poll loop. Scrape is resilient: only if **both** diary and grid fail does it raise; reviews/overview are best-effort.
 

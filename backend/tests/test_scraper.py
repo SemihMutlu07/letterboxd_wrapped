@@ -135,6 +135,43 @@ def test_scrape_watchlist_parses_grid_items_and_closes_owned_session(monkeypatch
     ]
 
 
+@pytest.mark.parametrize("status", [403, 429])
+def test_scrape_watchlist_raises_for_block_status(monkeypatch, status):
+    session = WatchlistSession([FakeResponse(status, "blocked")])
+    monkeypatch.setattr(scraper, "_new_session", lambda: session)
+    monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+    with pytest.raises(scraper.WatchlistScrapeError, match=str(status)) as caught:
+        scraper._sync_scrape_watchlist("user", 1)
+    assert caught.value.error_code == "watchlist_blocked"
+
+
+def test_scrape_watchlist_rejects_cloudflare_and_malformed_empty(monkeypatch):
+    for html in ("<title>Just a moment...</title><div>Cloudflare</div>", "<html><main>unexpected</main></html>"):
+        session = WatchlistSession([FakeResponse(200, html)])
+        monkeypatch.setattr(scraper, "_new_session", lambda: session)
+        monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+        with pytest.raises(scraper.WatchlistScrapeError):
+            scraper._sync_scrape_watchlist("user", 1)
+
+
+def test_scrape_watchlist_accepts_evidenced_empty(monkeypatch):
+    html = '<html><body><div class="js-watchlist-content"><p>Your watchlist is empty</p></div></body></html>'
+    session = WatchlistSession([FakeResponse(200, html)])
+    monkeypatch.setattr(scraper, "_new_session", lambda: session)
+    monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+    assert scraper._sync_scrape_watchlist("user", 1) == []
+
+
+def test_scrape_watchlist_wraps_transport_failure(monkeypatch):
+    session = WatchlistSession([])
+    monkeypatch.setattr(scraper, "_new_session", lambda: session)
+    monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+    monkeypatch.setattr(scraper, "_fetch", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("offline")))
+    with pytest.raises(scraper.WatchlistScrapeError, match="transport error") as caught:
+        scraper._sync_scrape_watchlist("user", 1)
+    assert caught.value.error_code == "watchlist_transport_error"
+
+
 def test_parse_review_cards_extracts_fields_and_likes():
     html = """
     <article class="production-viewing">

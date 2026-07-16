@@ -221,12 +221,12 @@ def _reset_watchlist_rate_limiter():
 def _done_task(result: dict, kind: str = "watchlist"):
     """Minimal task stub that looks done to the poll loop."""
     from types import SimpleNamespace
-    return SimpleNamespace(status="done", result=result, error=None, kind=kind)
+    return SimpleNamespace(status="done", result=result, error=None, kind=kind, poll_token="poll-token")
 
 
 def _failed_task(message: str):
     from types import SimpleNamespace
-    return SimpleNamespace(status="failed", result=None, error=message, kind="watchlist")
+    return SimpleNamespace(status="failed", result=None, error=message, kind="watchlist", poll_token="poll-token")
 
 
 def _watchlist_patches(first_wl, second_wl):
@@ -275,31 +275,9 @@ async def test_watchlist_compare_success(client: AsyncClient):
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
 
-    assert r.status_code == 200
+    assert r.status_code == 202
     body = r.json()
-    assert body["status"] == "success"
-    assert body["users"] == ["alice", "bob"]
-    assert body["counts"] == {
-        "first_total": 2,
-        "second_total": 2,
-        "common": 1,
-        "first_only": 1,
-        "second_only": 1,
-    }
-    assert body["returned_counts"] == {"common": 1, "first_only": 1, "second_only": 1}
-    assert body["truncated"] == {"common": False, "first_only": False, "second_only": False}
-    assert body["match_score"] == 50.0
-    assert body["common"] == [{
-        "title": "Aftersun",
-        "year": "2022",
-        "slug": "/film/aftersun/",
-        "poster_url": "https://img/aftersun.jpg",
-        "poster_path": "/aftersun.jpg",
-        "popularity": 10.0,
-        "vote_average": 7.5,
-        "vote_count": 1000,
-        "genres": ["Drama"],
-    }]
+    assert body == {"task_id": "test-id", "status": "pending", "poll_token": "poll-token"}
 
 
 @pytest.mark.asyncio
@@ -333,8 +311,7 @@ async def test_watchlist_compare_worker_failure(client: AsyncClient):
         patch("app.routes.watchlist.asyncio.sleep"),
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
-    assert r.status_code == 503
-    assert r.json()["detail"]["error_code"] == "scraper_unavailable"
+    assert r.status_code == 202
 
 
 @pytest.mark.asyncio
@@ -348,8 +325,7 @@ async def test_watchlist_compare_worker_user_not_found(client: AsyncClient):
         patch("app.routes.watchlist.asyncio.sleep"),
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["ghost", "bob"]})
-    assert r.status_code == 404
-    assert r.json()["detail"]["error_code"] == "user_not_found"
+    assert r.status_code == 202
 
 
 @pytest.mark.asyncio
@@ -411,31 +387,13 @@ async def test_date_night_success(client: AsyncClient):
         "second_watchlist": [{"title": "Past Lives", "year": "2023", "slug": "/film/past-lives/"}],
     }
 
-    async def fake_enrich(session, films, limit=80):
-        return [
-            {**film, "genres": ["Romance", "Drama"], "directors": ["Richard Linklater"], "decade": "1990s"}
-            for film in films
-        ]
-
-    async def fake_discover(first_wl, second_wl, mutual_profile):
-        from app.models.recommend import FilmRecommendation
-        return [FilmRecommendation(title="Past Lives", year="2023", reason="Matched because you both lean toward Romance", poster_path="/past.jpg")]
-
-    async def fake_to_thread(func, *args, **kwargs):
-        return func(*args, **kwargs)
-
     with (
         patch("app.routes.recommend.task_manager.is_worker_online", return_value=True),
         patch("app.routes.recommend.task_manager.create_date_night_job", return_value="test-id"),
-        patch("app.routes.recommend._await_worker_job", return_value=("done", scraped_data)),
-        patch("app.routes.recommend.asyncio.to_thread", side_effect=fake_to_thread),
-        patch("app.routes.recommend.enrich_films", side_effect=fake_enrich),
-        patch("app.routes.recommend.discover_date_night_recommendations", side_effect=fake_discover),
+        patch("app.routes.recommend.task_manager.get_task_state", return_value=_done_task(scraped_data)),
     ):
         r = await client.post("/api/date-night", json={"usernames": ["alice", "bob"]})
 
-    assert r.status_code == 200
+    assert r.status_code == 202
     body = r.json()
-    assert body["mutual_profile"]["top_genres"] == ["Romance", "Drama"]
-    assert body["mutual_profile"]["era_overlap"] == "1990s"
-    assert body["recommendations"][0]["title"] == "Past Lives"
+    assert body == {"task_id": "test-id", "status": "pending", "poll_token": "poll-token"}

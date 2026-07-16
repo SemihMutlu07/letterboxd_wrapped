@@ -39,16 +39,84 @@ def test_requeue_stale_claims_recovers_dead_worker_jobs():
     tid = task_manager.create_scrape_job("ghost")
     job = task_manager.claim_next_scrape_job()
     assert job.task_id == tid and job.status == "running"
-
-    # Worker died mid-scrape: backdate the claim past the stale threshold.
     job.claimed_at = datetime.now(timezone.utc) - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 60)
     assert task_manager.requeue_stale_claims() == 1
     assert job.status == "pending" and job.claimed is False and job.claimed_at is None
-
-    # A freshly claimed job is NOT reaped.
     task_manager.claim_next_scrape_job()
     assert task_manager.requeue_stale_claims() == 0
     task_manager._tasks.clear()
+
+
+def test_watchlist_jobs_use_capacity_owner_and_stale_requeue(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    task_manager._tasks.clear()
+    monkeypatch.setattr(task_manager, "MAX_ACTIVE_PER_OWNER", 1)
+    tid = task_manager.create_watchlist_compare_job(["one", "two"], owner_key="owner")
+    with pytest.raises(RuntimeError, match="queue_full"):
+        task_manager.create_date_night_job(["one", "three"], owner_key="owner")
+    job = task_manager.claim_next_worker_job()
+    assert job.task_id == tid
+    job.claimed_at = datetime.now(timezone.utc) - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 1)
+    assert task_manager.requeue_stale_claims() == 1
+    assert job.status == "pending" and not job.claimed
+    task_manager._tasks.clear()
+
+
+def test_watchlist_processing_is_not_requeued_as_a_stale_worker_claim():
+    from datetime import datetime, timedelta, timezone
+
+    task_manager._tasks.clear()
+    tid = task_manager.create_watchlist_compare_job(["one", "two"])
+    job = task_manager.claim_next_worker_job()
+    assert job is not None
+    job.stage = "processing"
+    job.claimed_at = datetime.now(timezone.utc) - timedelta(
+        seconds=task_manager.STALE_CLAIM_SECONDS + 1
+    )
+
+    assert task_manager.requeue_stale_claims() == 0
+    assert task_manager.get_task_state(tid).stage == "processing"
+    task_manager._tasks.clear()
+
+
+def test_expired_watchlist_job_fails_instead_of_polling_forever():
+    from datetime import datetime, timedelta, timezone
+
+    task_manager._tasks.clear()
+    tid = task_manager.create_watchlist_compare_job(["one", "two"])
+    task = task_manager.get_task_state(tid)
+    task.created_at = datetime.now(timezone.utc) - timedelta(
+        seconds=task_manager.ACTIVE_JOB_TIMEOUT_SECONDS + 1
+    )
+
+    assert task_manager.fail_expired_worker_jobs() == 1
+    assert task.status == "failed"
+    assert task.error_code == "worker_timeout"
+    task_manager._tasks.clear()
+
+
+def test_worker_claim_is_oldest_across_scrape_and_watchlist():
+    from datetime import datetime, timedelta, timezone
+
+    task_manager._tasks.clear()
+    scrape_id = task_manager.create_scrape_job("profile")
+    watchlist_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task_manager._tasks[watchlist_id].created_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    assert task_manager.claim_next_worker_job().task_id == watchlist_id
+    assert task_manager.claim_next_worker_job().task_id == scrape_id
+    task_manager._tasks.clear()
+
+
+def test_supervisor_verifies_branch_and_venv_interpreter():
+    from pathlib import Path
+
+    script = (Path(__file__).parents[1] / "start-worker-supervisor.ps1").read_text(encoding="utf-8")
+    assert '.venv\\Scripts\\python.exe' in script
+    assert "fetch origin desktop_server" in script
+    assert "checkout desktop_server" in script
+    assert "pull --ff-only origin desktop_server" in script
+    assert "branch --show-current" in script and "rev-parse HEAD" in script
 
 
 @pytest.fixture
@@ -112,6 +180,55 @@ async def _beat(client: AsyncClient):
         json={"worker_protocol_version": settings.worker_protocol_version, "worker_git_sha": "test-worker"},
     )
     assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(watchlist_jobs, "enrich_films_concurrent", AsyncMock(side_effect=lambda session, films, **kw: films))
+    queued = await client.post("/api/watchlist-compare", json={"usernames": ["one", "two"]})
+    assert queued.status_code == 202
+    body = queued.json()
+    assert (await client.get(f"/api/progress/{body['task_id']}")).status_code == 403
+    claim = await client.get("/api/worker/next", headers=AUTH)
+    assert claim.json()["job"]["task_id"] == body["task_id"]
+    raw = {"first_watchlist": [{"title": "Film", "year": "2024", "slug": "film"}], "second_watchlist": [{"title": "Film", "year": "2024", "slug": "film"}]}
+    complete = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    assert complete.status_code == 200
+    await __import__("asyncio").sleep(0)
+    poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})
+    assert poll.status_code == 200 and poll.json()["status"] == "done"
+    assert poll.json()["result"]["counts"]["common"] == 1
+    duplicate = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    assert duplicate.status_code == 200 and duplicate.json()["duplicate"] is True
+
+
+@pytest.mark.asyncio
+async def test_date_night_enqueue_complete_and_final_poll(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import recommend
+
+    await _beat(client)
+    monkeypatch.setattr(recommend, "_persist_date_night_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(watchlist_jobs, "enrich_films", AsyncMock(side_effect=lambda session, films, **kw: films))
+    monkeypatch.setattr(watchlist_jobs, "build_mutual_profile", lambda a, b: {"top_genres": [], "top_directors": [], "era_overlap": "modern"})
+    monkeypatch.setattr(watchlist_jobs, "discover_date_night_recommendations", AsyncMock(return_value=[{"title": "Film", "year": "2024", "reason": "Shared", "poster_path": ""}]))
+    queued = await client.post("/api/date-night", json={"usernames": ["one", "two"]})
+    assert queued.status_code == 202
+    body = queued.json()
+    assert (await client.get("/api/worker/next", headers=AUTH)).json()["job"]["job_type"] == "date_night"
+    raw = {"first_diary": [], "first_grid": [], "second_diary": [], "second_grid": [], "first_watchlist": [], "second_watchlist": []}
+    assert (await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)).status_code == 200
+    await __import__("asyncio").sleep(0.01)
+    poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})
+    assert poll.json()["status"] == "done"
+    assert poll.json()["result"]["recommendations"][0]["title"] == "Film"
 
 
 # ---- /api/scrape-profile in desktop-worker mode ------------------------------

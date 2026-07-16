@@ -229,11 +229,11 @@ export type ScrapeProgress = {
 };
 
 // Poll a task until it reaches a terminal state (done | failed).
-async function pollTask(
+async function pollTask<T = { status: string; stats: LetterboxdStats }>(
   taskId: string,
   pollToken: string,
   opts: { intervalMs?: number; timeoutMs?: number; onProgress?: (p: ScrapeProgress) => void } = {},
-): Promise<{ status: string; stats: LetterboxdStats }> {
+): Promise<T> {
   const intervalMs = opts.intervalMs ?? 2000;
   const timeoutMs  = opts.timeoutMs  ?? 600_000; // 10 min max
   const deadline = Date.now() + timeoutMs;
@@ -255,7 +255,7 @@ async function pollTask(
       const result = task.result;
       if (!result) throw new Error('Analysis returned no result');
       if (result.status === 'error') throw new Error(result.detail || 'Analysis failed');
-      return result as { status: string; stats: LetterboxdStats };
+      return result as T;
     }
 
     if (task.status === 'failed') {
@@ -395,6 +395,10 @@ export async function compareWatchlists(
 
     const data = await r.json();
 
+    if (r.status === 202 && data?.task_id && data?.poll_token) {
+      return await pollTask<WatchlistCompareResult>(data.task_id, data.poll_token);
+    }
+
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Watchlist comparison failed');
     }
@@ -472,7 +476,11 @@ export async function dateNight(
       throw await parseApiFailure(r, 'date night recommendations', `date night ${r.status}`);
     }
 
-    return await r.json() as DateNightResult;
+    const data = await r.json();
+    if (r.status === 202 && data?.task_id && data?.poll_token) {
+      return await pollTask<DateNightResult>(data.task_id, data.poll_token);
+    }
+    return data as DateNightResult;
   } catch (error) {
     throw handleApiError(error, 'date night recommendations');
   }
