@@ -459,9 +459,17 @@ def _sync_scrape_watchlist(
 
             if not films:
                 if page == 1:
-                    empty_evidence = "watchlist is empty" in lowered or "js-watchlist-content" in lowered
-                    expected_page = "watchlist" in lowered or "film-grid" in lowered or "griditem" in lowered
-                    if not empty_evidence and not expected_page:
+                    page_text = " ".join(soup.stripped_strings).lower()
+                    empty_evidence = any(
+                        phrase in page_text
+                        for phrase in (
+                            "watchlist is empty",
+                            "this watchlist is empty",
+                            "no films in this watchlist",
+                            "there are no films in this watchlist",
+                        )
+                    )
+                    if not empty_evidence:
                         raise WatchlistScrapeError(
                             "Malformed Letterboxd watchlist response: first page contained no films",
                             "watchlist_malformed_response",

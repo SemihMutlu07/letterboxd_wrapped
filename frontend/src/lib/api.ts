@@ -259,7 +259,12 @@ async function pollTask<T = { status: string; stats: LetterboxdStats }>(
     }
 
     if (task.status === 'failed') {
-      throw new Error(task.error || 'Analysis failed on the server');
+      const error = new Error(task.error || 'Analysis failed on the server');
+      if (task.error_code) {
+        (error as Error & { code?: string; error_code?: string }).code = task.error_code;
+        (error as Error & { code?: string; error_code?: string }).error_code = task.error_code;
+      }
+      throw error;
     }
 
     // pending | running — surface live progress, then wait and retry

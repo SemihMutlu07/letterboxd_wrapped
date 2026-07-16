@@ -162,6 +162,17 @@ def test_scrape_watchlist_accepts_evidenced_empty(monkeypatch):
     assert scraper._sync_scrape_watchlist("user", 1) == []
 
 
+def test_scrape_watchlist_rejects_empty_container_without_explicit_empty_state(monkeypatch):
+    html = '<html><body><div class="js-watchlist-content"><ul class="film-grid"></ul></div></body></html>'
+    session = WatchlistSession([FakeResponse(200, html)])
+    monkeypatch.setattr(scraper, "_new_session", lambda: session)
+    monkeypatch.setattr(scraper, "_warm_session", lambda s: None)
+
+    with pytest.raises(scraper.WatchlistScrapeError) as caught:
+        scraper._sync_scrape_watchlist("user", 1)
+    assert caught.value.error_code == "watchlist_malformed_response"
+
+
 def test_scrape_watchlist_wraps_transport_failure(monkeypatch):
     session = WatchlistSession([])
     monkeypatch.setattr(scraper, "_new_session", lambda: session)

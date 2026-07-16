@@ -391,7 +391,7 @@ async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | N
     task = task_manager.get_task_state(task_id)
     if task is None or task.kind != "watchlist":
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
-    if task.status in {"done", "failed"}:
+    if task.status in {"done", "failed"} or task.stage == "processing":
         return {"ok": True, "duplicate": True}
     task_manager.set_task_failed(task_id, message, _request_telemetry(body))
     logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)

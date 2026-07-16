@@ -15,6 +15,14 @@ from app.services.recommender import (
 from app.services.scraper import merge_scraped_films
 
 
+def _is_current_processing_task(task_id: str, task) -> bool:
+    return (
+        task_manager.get_task_state(task_id) is task
+        and task.status == "running"
+        and task.stage == "processing"
+    )
+
+
 async def finalize_watchlist_job(task_id: str, session) -> None:
     """Turn a worker's raw scrape payload into the public API result."""
     task = task_manager.get_task_state(task_id)
@@ -36,6 +44,8 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
                 second_only=[public_film(f) for f in second_only],
             )
             final = {"status": "success", "users": task.usernames, **result}
+            if not _is_current_processing_task(task_id, task):
+                return
             from app.routes.watchlist import _persist_watchlist_run
 
             _persist_watchlist_run(task.usernames, result, None, ok=True)
@@ -55,11 +65,18 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
             final = DateNightResponse(
                 mutual_profile=MutualProfile(**profile), recommendations=recommendations
             ).model_dump()
+            if not _is_current_processing_task(task_id, task):
+                return
             from app.routes.recommend import _persist_date_night_run
 
             _persist_date_night_run(task.usernames, profile, final["recommendations"], None, ok=True)
+        if not _is_current_processing_task(task_id, task):
+            return
         task_manager.set_task_done(task_id, final)
     except Exception as exc:  # finalization failures must reach the poller
+        current = task_manager.get_task_state(task_id)
+        if current is not task or task.status in {"done", "failed"}:
+            return
         if task.job_type == "watchlist_compare":
             from app.routes.watchlist import _persist_watchlist_run
 
@@ -68,4 +85,17 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
             from app.routes.recommend import _persist_date_night_run
 
             _persist_date_night_run(task.usernames, None, [], None, ok=False, error_message=str(exc))
-        task_manager.set_task_failed(task_id, str(exc), {"error_type": type(exc).__name__, "error_stage": "processing"})
+        error_code = (
+            "watchlist_processing_failed"
+            if task.job_type == "watchlist_compare"
+            else "date_night_processing_failed"
+        )
+        task_manager.set_task_failed(
+            task_id,
+            str(exc),
+            {
+                "error_type": type(exc).__name__,
+                "error_stage": "processing",
+                "error_code": error_code,
+            },
+        )

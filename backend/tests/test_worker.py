@@ -209,6 +209,95 @@ async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncC
 
 
 @pytest.mark.asyncio
+async def test_watchlist_finalization_failure_surfaces_stable_poll_error_code(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        watchlist_jobs,
+        "enrich_films_concurrent",
+        AsyncMock(side_effect=RuntimeError("tmdb unavailable")),
+    )
+    queued = await client.post("/api/watchlist-compare", json={"usernames": ["one", "two"]})
+    body = queued.json()
+    await client.get("/api/worker/next", headers=AUTH)
+    raw = {"first_watchlist": [], "second_watchlist": []}
+    await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    await __import__("asyncio").sleep(0)
+
+    poll = await client.get(
+        f"/api/progress/{body['task_id']}",
+        headers={"X-Task-Token": body["poll_token"]},
+    )
+    assert poll.json()["status"] == "failed"
+    assert poll.json()["error_code"] == "watchlist_processing_failed"
+
+
+@pytest.mark.asyncio
+async def test_late_failed_watchlist_postback_does_not_override_processing_or_done(client: AsyncClient):
+    await _beat(client)
+    task_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task = task_manager.get_task_state(task_id)
+    task.status = "running"
+    task.stage = "processing"
+
+    late = await client.post(
+        f"/api/worker/watchlist/{task_id}/failed",
+        headers=AUTH,
+        json={"message": "late worker failure"},
+    )
+    assert late.json() == {"ok": True, "duplicate": True}
+    assert task.status == "running" and task.stage == "processing"
+
+    task_manager.set_task_done(task_id, {"status": "success"})
+    later = await client.post(
+        f"/api/worker/watchlist/{task_id}/failed",
+        headers=AUTH,
+        json={"message": "even later worker failure"},
+    )
+    assert later.json() == {"ok": True, "duplicate": True}
+    assert task.status == "done"
+
+
+@pytest.mark.asyncio
+async def test_finalizer_does_not_overwrite_terminal_state_changed_during_await(monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import watchlist
+
+    task_manager._tasks.clear()
+    task_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task = task_manager.get_task_state(task_id)
+    task.status = "running"
+    task.stage = "processing"
+    task.result = {"first_watchlist": [], "second_watchlist": []}
+
+    async def terminal_during_enrichment(session, films, **kwargs):
+        task_manager.set_task_failed(
+            task_id,
+            "cancelled elsewhere",
+            {"error_code": "conflicting_terminal_state"},
+        )
+        return films
+
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        watchlist_jobs,
+        "enrich_films_concurrent",
+        AsyncMock(side_effect=terminal_during_enrichment),
+    )
+    await watchlist_jobs.finalize_watchlist_job(task_id, object())
+
+    assert task.status == "failed"
+    assert task.error_code == "conflicting_terminal_state"
+    assert task.error == "cancelled elsewhere"
+    task_manager._tasks.clear()
+
+
+@pytest.mark.asyncio
 async def test_date_night_enqueue_complete_and_final_poll(client: AsyncClient, monkeypatch):
     from unittest.mock import AsyncMock
     from app.services import watchlist_jobs
