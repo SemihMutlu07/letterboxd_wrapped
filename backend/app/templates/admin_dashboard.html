@@ -36,6 +36,29 @@
   </header>
 
   <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <section class="bg-slate-900 border {% if incidents %}border-red-500/30{% else %}border-slate-800{% endif %} rounded-xl overflow-hidden" aria-labelledby="incidents-title">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 id="incidents-title" class="text-sm font-bold text-white">Operational Incidents</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Worker health, backend failures and frontend diagnostic reports</p>
+        </div>
+        <span class="text-xs {% if incidents %}text-red-300{% else %}text-emerald-400{% endif %}">{{ incidents|length }} active/recent</span>
+      </div>
+      {% if incidents %}
+      <div class="divide-y divide-slate-800/70 max-h-72 overflow-y-auto scrollbar">
+        {% for incident in incidents %}
+        <div class="px-4 py-3 grid gap-1 md:grid-cols-[8rem_1fr_12rem] md:items-center text-xs">
+          <span class="{% if incident.severity == 'info' %}text-emerald-400{% elif incident.severity == 'warning' %}text-amber-300{% else %}text-red-300{% endif %} font-semibold">{{ incident.source }}</span>
+          <div><span class="text-slate-200">{{ incident.message }}</span>{% if incident.detail %}<span class="text-slate-500"> · {{ incident.detail }}</span>{% endif %}</div>
+          <time class="text-slate-500 md:text-right">{{ incident.created_at or "Live status" }}</time>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="px-4 py-6 text-sm text-slate-500">No operational incidents recorded.</p>
+      {% endif %}
+    </section>
+
     <!-- Tabs -->
     <div class="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl w-fit">
       <button onclick="switchTab('analysis')" id="tab-analysis" class="tab-active px-4 py-2 rounded-lg text-xs font-semibold transition-all border">Analysis Runs</button>

@@ -10,6 +10,8 @@ from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
+from app.services.worker_monitor import log_worker_event
+
 router = APIRouter()
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
@@ -158,5 +160,12 @@ async def submit_report(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     (reports_dir / f"report-{issue_id}.bin").write_bytes(data)
+
+    await log_worker_event("frontend_report", {
+        "source": "frontend",
+        "severity": "warning",
+        "message": "Frontend diagnostic report received",
+        "issue_id": issue_id,
+    })
 
     return {"ok": True, "issue_id": issue_id}

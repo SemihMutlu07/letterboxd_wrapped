@@ -372,6 +372,10 @@ async def complete_watchlist(task_id: str, request: Request, x_worker_token: str
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
     if task.status in {"done", "failed"} or task.stage == "processing":
         return {"ok": True, "duplicate": True}
+    if task.options.get("raw_only"):
+        task_manager.set_task_done(task_id, body)
+        logger.info("Worker completed raw watchlist job %s", task_id)
+        return {"ok": True}
     task.result = body
     task.status = "running"
     task.stage = "processing"
@@ -395,4 +399,14 @@ async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | N
         return {"ok": True, "duplicate": True}
     task_manager.set_task_failed(task_id, message, _request_telemetry(body))
     logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)
+    await log_worker_event("watchlist_job_failed", {
+        "source": "desktop_worker",
+        "severity": "error",
+        "task_id": task_id,
+        "job_type": task.job_type,
+        "message": message,
+        "error_type": _request_telemetry(body).get("error_type"),
+        "error_stage": _request_telemetry(body).get("error_stage"),
+        "error_code": _request_telemetry(body).get("error_code"),
+    })
     return {"ok": True}

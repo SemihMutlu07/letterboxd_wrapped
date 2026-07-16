@@ -13,6 +13,7 @@ from app.services.recommender import (
     public_film,
 )
 from app.services.scraper import merge_scraped_films
+from app.services.worker_monitor import log_worker_event
 
 
 def _is_current_processing_task(task_id: str, task) -> bool:
@@ -99,3 +100,13 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
                 "error_code": error_code,
             },
         )
+        await log_worker_event("watchlist_finalization_failed", {
+            "source": "backend",
+            "severity": "error",
+            "task_id": task_id,
+            "job_type": task.job_type,
+            "message": str(exc),
+            "error_type": type(exc).__name__,
+            "error_stage": "processing",
+            "error_code": error_code,
+        })

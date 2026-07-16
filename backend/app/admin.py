@@ -32,10 +32,16 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 def _admin_secret() -> str:
-    """Lazy-load ADMIN_SECRET from env var. Raises if unset — no hardcoded fallback."""
+    """Lazy-load ADMIN_SECRET from env var with a safe setup failure."""
     secret = os.environ.get("ADMIN_SECRET")
     if not secret:
-        raise RuntimeError("ADMIN_SECRET environment variable is required and must not be empty")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error_code": "admin_not_configured",
+                "message": "Admin dashboard is not configured on this server.",
+            },
+        )
     return secret
 
 
@@ -201,6 +207,93 @@ async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]
     return _payload_rows(await supabase_ops.select("ops_date_night_runs", _list_params(limit)))
 
 
+def _incident(
+    incident_type: str,
+    message: str,
+    *,
+    created_at: Any = None,
+    source: str = "backend",
+    severity: str = "error",
+    detail: Any = None,
+) -> dict[str, Any]:
+    return {
+        "type": incident_type,
+        "message": message,
+        "created_at": created_at,
+        "source": source,
+        "severity": severity,
+        "detail": detail,
+    }
+
+
+async def _load_operational_incidents(worker_status: dict[str, Any], limit: int = 50) -> list[dict[str, Any]]:
+    """Build a safe incident feed from live state, durable events and reports."""
+    incidents: list[dict[str, Any]] = []
+    if settings.desktop_worker_enabled and not worker_status.get("online"):
+        incidents.append(_incident("worker_offline", "Worker is offline", source="desktop_worker"))
+    version = worker_status.get("version") or {}
+    if version.get("mismatch"):
+        incidents.append(
+            _incident(
+                "worker_protocol_mismatch",
+                "Worker protocol mismatch",
+                source="desktop_worker",
+                detail=f"expected {version.get('expected_protocol_version', '—')}, worker {version.get('worker_protocol_version', '—')}",
+            )
+        )
+    for failure in worker_status.get("recent_failures") or []:
+        incidents.append(
+            _incident(
+                "worker_job_failed",
+                str(failure.get("message") or "Worker job failed"),
+                created_at=failure.get("completed_at") or failure.get("updated_at"),
+                source="desktop_worker",
+                detail=failure.get("error_stage") or failure.get("error_type"),
+            )
+        )
+
+    if settings.supabase_enabled:
+        rows = await supabase_ops.select(
+            "ops_worker_events",
+            {"select": "created_at,event_type,meta", "order": "created_at.desc", "limit": str(limit)},
+        )
+        for row in rows:
+            meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            event_type = str(row.get("event_type") or "operational_event")
+            message = str(meta.get("message") or event_type.replace("_", " ").capitalize())
+            detail = meta.get("path") or meta.get("reason") or meta.get("error_type")
+            incidents.append(
+                _incident(
+                    event_type,
+                    message,
+                    created_at=row.get("created_at"),
+                    source=str(meta.get("source") or "backend"),
+                    severity=str(meta.get("severity") or ("info" if event_type == "online" else "error")),
+                    detail=detail,
+                )
+            )
+
+    reports_dir = Path("uploads") / "reports"
+    if reports_dir.exists():
+        for path in sorted(reports_dir.glob("*.meta.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]:
+            try:
+                meta = json.loads(path.read_text(encoding="utf-8"))
+                incidents.append(
+                    _incident(
+                        "frontend_report",
+                        "Frontend diagnostic report received",
+                        created_at=meta.get("received_at"),
+                        source="frontend",
+                        severity="warning",
+                        detail=meta.get("issue_id"),
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Failed to parse report metadata %s: %s", path.name, exc)
+
+    return incidents[:limit]
+
+
 def _group_runs_by_username(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Group runs by case-insensitive username across the whole list.
 
@@ -262,6 +355,22 @@ async def admin_session(request: Request):
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
+    secret = _admin_secret()
+    query_key = request.query_params.get("key")
+    if query_key is not None:
+        if not secrets.compare_digest(query_key, secret):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        response = RedirectResponse("/admin/dashboard", status_code=303)
+        response.set_cookie(
+            "mw_admin_session",
+            _session_value(secret),
+            max_age=28800,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="strict",
+            path="/admin",
+        )
+        return response
     _require_admin(request)
     await dashboard_settings.load_worker_control_state()
     runs = await _load_analysis_runs(limit=limit)
@@ -276,6 +385,7 @@ async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
         expected_protocol_version=settings.worker_protocol_version,
         backend_git_sha=backend_git_sha(),
     )
+    incidents = await _load_operational_incidents(worker_status)
     return templates.TemplateResponse(
         "admin_dashboard.html",
         {
@@ -287,6 +397,7 @@ async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
             "worker_status": worker_status,
             "worker_enabled": settings.desktop_worker_enabled,
             "settings_store": dashboard_settings.settings_store_status(),
+            "incidents": incidents,
             "key": "",
         },
     )
