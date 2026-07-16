@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import RatingDeviation from './RatingDeviation';
 import type { StatsData } from '../types';
 
@@ -88,5 +88,27 @@ describe('RatingDeviation outliers', () => {
     render(<RatingDeviation stats={statsWith(films, [{ title: 'Pick', poster_path: '/pick.jpg' }])} />);
 
     expect(screen.getByAltText('Pick')).toHaveAttribute('src', '/pick.jpg');
+  });
+
+  it('matches poster and metadata by title and year when remakes share a title', () => {
+    const rated = [
+      { ...higherFilm('Suspiria', 5, 3.0), year: 2018 },
+      higherFilm('A', 4.5, 4.0),
+      higherFilm('B', 4, 3.6),
+      higherFilm('C', 5, 4.2),
+      higherFilm('D', 4, 3.8),
+    ];
+    render(<RatingDeviation stats={statsWith(rated, [
+      { title: 'Suspiria', year: 2018, poster_path: '/remake.jpg', director: 'Luca Guadagnino' },
+      { title: 'Suspiria', year: 1977, poster_path: '/original.jpg', director: 'Dario Argento' },
+    ])} />);
+
+    const poster = screen.getByAltText('Suspiria');
+    expect(poster).toHaveAttribute('src', '/remake.jpg');
+    const card = poster.closest('.group')!;
+    fireEvent.click(card);
+    fireEvent.click(card.querySelector('button')!);
+    expect(screen.getByText(/2018 · Luca Guadagnino/)).toBeInTheDocument();
+    expect(screen.queryByText(/Dario Argento/)).toBeNull();
   });
 });

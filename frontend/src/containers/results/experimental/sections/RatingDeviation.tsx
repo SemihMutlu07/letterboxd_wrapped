@@ -51,6 +51,15 @@ function hasAverageRating(stats: StatsData): stats is StatsWithAverageRating {
   return typeof stats.average_rating === 'number' && Number.isFinite(stats.average_rating);
 }
 
+function normalizedTitle(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+function normalizedYear(value: unknown): string | null {
+  const year = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(year) && year > 0 ? String(year) : null;
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EnrichedFilm {
@@ -92,14 +101,22 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
   }, []);
 
   const { higher, lower } = useMemo<{ higher: EnrichedFilm[]; lower: EnrichedFilm[] }>(() => {
-    // Build lookup of all_films by title for enrichment
-    const allFilmsLookup = new Map<string, NonNullable<typeof stats.all_films>[0]>();
+    type AllFilm = NonNullable<typeof stats.all_films>[0];
+    const filmsByTitleYear = new Map<string, AllFilm>();
+    const filmsByUniqueTitle = new Map<string, AllFilm | null>();
     (stats.all_films ?? []).forEach((f) => {
-      allFilmsLookup.set(f.title, f);
+      const title = normalizedTitle(f.title);
+      const year = normalizedYear(f.year);
+      if (year) filmsByTitleYear.set(`${title}\u0000${year}`, f);
+      filmsByUniqueTitle.set(title, filmsByUniqueTitle.has(title) ? null : f);
     });
 
     const films: EnrichedFilm[] = (stats.rated_films ?? []).flatMap((f) => {
-      const enrichedData = allFilmsLookup.get(f.title);
+      const title = normalizedTitle(f.title);
+      const year = normalizedYear(f.year);
+      const enrichedData = year
+        ? filmsByTitleYear.get(`${title}\u0000${year}`)
+        : filmsByUniqueTitle.get(title) ?? undefined;
       const communityRating = f.community_rating ?? f.average_rating;
       const yourRating = f.your_rating ?? f.rating;
       if (communityRating == null || communityRating <= 0 || yourRating == null) return [];
