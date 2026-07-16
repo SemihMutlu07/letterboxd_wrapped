@@ -16,6 +16,7 @@ import {
 import { readWatchlistUsersFromLocation, watchlistPath } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
+import { getPosterUrl } from '@/lib/analytics';
 import SwipeDeck from './SwipeDeck';
 
 const COLLAPSED_FILM_LIMIT = 10;
@@ -90,7 +91,7 @@ function FilmRows({ films }: { films: WatchlistFilm[] }) {
       {films.map((film) => {
         const slug = film.slug?.replace(/^\/film\/|\/$/g, '');
         const href = slug ? `https://letterboxd.com/film/${slug}/` : null;
-        const posterUrl = film.poster_path || film.poster_url || null;
+        const posterUrl = getPosterUrl(film.poster_path) || getPosterUrl(film.poster_url);
         const content = (
           <div className="flex items-center gap-3 py-2">
             <div className="relative h-[60px] w-10 shrink-0 overflow-hidden bg-stone-900">

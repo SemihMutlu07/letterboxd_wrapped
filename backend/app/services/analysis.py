@@ -620,7 +620,7 @@ async def process_comprehensive_letterboxd_data(
 
     # Backfill profile_paths for rated directors
     await resolve_profile_paths(
-        session, stats["directors_with_ratings"][:4], "director",
+        session, stats["directors_with_ratings"][:5], "director",
         director_films_map, director_profile_map, logger,
     )
 
@@ -631,7 +631,7 @@ async def process_comprehensive_letterboxd_data(
 
     # Backfill profile_paths for rated actors
     await resolve_profile_paths(
-        session, stats["actors_with_ratings"][:4], "actor",
+        session, stats["actors_with_ratings"][:5], "actor",
         actor_films_map, actor_profile_map, logger,
     )
 

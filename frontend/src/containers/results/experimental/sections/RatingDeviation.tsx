@@ -106,7 +106,7 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
       return [{
         title: f.title,
         year: f.year,
-        poster_path: f.poster_path,
+        poster_path: f.poster_path || enrichedData?.poster_path,
         rating: yourRating,
         communityRating,
         popularity: f.popularity ?? enrichedData?.popularity ?? 0,

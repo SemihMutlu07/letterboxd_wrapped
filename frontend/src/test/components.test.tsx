@@ -9,7 +9,8 @@ vi.mock('@/lib/api', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({
-  getPosterUrl: (path: string) => path,
+  getPosterUrl: (path?: string | null) => path ? `https://image.tmdb.org/t/p/w780/${path.replace(/^\/+/, '')}` : null,
+  getProfileUrl: (path?: string | null) => path ? `https://image.tmdb.org/t/p/w342/${path.replace(/^\/+/, '')}` : null,
   getTmdbImageUrl: (path: string) => path,
   trackEvent: vi.fn(),
   trackConsentedEvent: vi.fn(),
@@ -114,7 +115,7 @@ describe('WatchlistCompare', () => {
         second_only: 1,
       },
       match_score: 50,
-      common: [{ title: 'Aftersun', year: '2022', slug: '/film/aftersun/' }],
+      common: [{ title: 'Aftersun', year: '2022', slug: '/film/aftersun/', poster_path: '/aftersun.jpg' }],
       first_only: [{ title: 'Heat', year: '1995', slug: '/film/heat-1995/' }],
       second_only: [{ title: 'Past Lives', year: '2023', slug: '/film/past-lives/' }],
     });
@@ -126,6 +127,10 @@ describe('WatchlistCompare', () => {
 
     expect(await screen.findByText('50%')).toBeInTheDocument();
     expect(screen.getByText('Aftersun')).toBeInTheDocument();
+    expect(screen.getByAltText('Aftersun poster')).toHaveAttribute(
+      'src',
+      'https://image.tmdb.org/t/p/w780/aftersun.jpg',
+    );
     await userEvent.click(screen.getByRole('button', { name: /only @alice/i }));
     await userEvent.click(screen.getByRole('button', { name: /only @bob/i }));
     expect(screen.getByText('Heat')).toBeInTheDocument();

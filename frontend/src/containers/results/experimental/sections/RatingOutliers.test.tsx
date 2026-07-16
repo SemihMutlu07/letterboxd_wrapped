@@ -5,7 +5,7 @@ import RatingDeviation from './RatingDeviation';
 import type { StatsData } from '../types';
 
 vi.mock('@/lib/analytics', () => ({
-  getPosterUrl: () => null,
+  getPosterUrl: (path: string | null | undefined) => path ?? null,
   getTmdbImageUrl: () => null,
   trackEvent: vi.fn(),
   trackConsentedEvent: vi.fn(),
@@ -27,10 +27,10 @@ Object.defineProperty(window, 'matchMedia', {
 
 type RatedFilm = NonNullable<StatsData['rated_films']>[number];
 
-function statsWith(ratedFilms: RatedFilm[]): StatsData {
+function statsWith(ratedFilms: RatedFilm[], allFilms?: StatsData['all_films']): StatsData {
   // average_rating (global) is intentionally far from every film's community
   // rating so a test can prove the delta uses per-film community, not the avg.
-  return { average_rating: 3.5, rated_films: ratedFilms } as StatsData;
+  return { average_rating: 3.5, rated_films: ratedFilms, all_films: allFilms } as StatsData;
 }
 
 function higherFilm(title: string, yourRating: number, community: number): RatedFilm {
@@ -75,5 +75,18 @@ describe('RatingDeviation outliers', () => {
     render(<RatingDeviation stats={statsWith(films)} />);
     expect(screen.getAllByText(/vs community/).length).toBe(6);
     expect(screen.queryByRole('button', { name: /more/i })).toBeNull();
+  });
+
+  it('falls back to the matching all_films poster', () => {
+    const films = [
+      higherFilm('Pick', 5, 3.0),
+      higherFilm('A', 4.5, 4.0),
+      higherFilm('B', 4, 3.6),
+      higherFilm('C', 5, 4.2),
+      higherFilm('D', 4, 3.8),
+    ];
+    render(<RatingDeviation stats={statsWith(films, [{ title: 'Pick', poster_path: '/pick.jpg' }])} />);
+
+    expect(screen.getByAltText('Pick')).toHaveAttribute('src', '/pick.jpg');
   });
 });

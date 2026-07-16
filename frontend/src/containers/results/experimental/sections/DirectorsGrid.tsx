@@ -226,7 +226,7 @@ export function PersonCard({
   /** When provided, renders a "+" button that opens this person's films modal. */
   onShowFilms?: () => void;
 }) {
-  const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
+  const imageUrl = profilePath ? getProfileUrl(profilePath, 'grid') : null;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [retried, setRetried] = useState(false);
@@ -234,6 +234,12 @@ export function PersonCard({
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
   const [, setClicked] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+    setImageLoaded(false);
+    setRetried(false);
+  }, [imageUrl]);
 
   useEffect(() => {
     if (!profilePath) {
@@ -326,14 +332,14 @@ export function PersonCard({
         )}
         {showFallback && <PersonAvatarPlaceholder />}
       </motion.div>
-      {/* Name + stat — count reveals on hover instead of sitting there statically */}
+      {/* Name + stats remain visible on touch devices and without hover. */}
       <div className="space-y-0.5 w-full text-center">
         <p className="text-sm md:text-base font-semibold text-white leading-tight line-clamp-2 text-center">{name}</p>
-        <p className="text-sm md:text-base text-slate-200 text-center opacity-0 -translate-y-1 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-y-0">
+        <p className="text-sm md:text-base text-slate-200 text-center">
           {primaryStat}
         </p>
         {secondaryStat && (
-          <p className="text-xs md:text-sm text-slate-300 text-center opacity-0 -translate-y-1 transition-all duration-300 delay-75 ease-out group-hover:opacity-100 group-hover:translate-y-0">
+          <p className="text-xs md:text-sm text-slate-300 text-center">
             {secondaryStat}
           </p>
         )}

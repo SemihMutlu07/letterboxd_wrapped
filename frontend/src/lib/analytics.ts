@@ -24,7 +24,8 @@ function warnIfMissingApiBase(): void {
  * Generate TMDB image URL with proxy to avoid CORS issues
  */
 export function getTmdbImageUrl(path: string | null | undefined, size: string = 'w300'): string | null {
-  if (!path) return null;
+  const value = path?.trim();
+  if (!value) return null;
 
   const proxiedPath = (cleanPath: string) => {
     const base = typeof window !== 'undefined' ? (API_BASE || '') : '';
@@ -34,28 +35,53 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
   };
 
   // If already a full URL and it's TMDB CDN, convert to proxy
-  if (path.startsWith('http') && path.includes('://image.tmdb.org')) {
-    const url = new URL(path);
+  if (/^https?:\/\//i.test(value) && value.includes('://image.tmdb.org')) {
+    const url = new URL(value);
     const cleanPath = url.pathname.replace(/^\/+/, '');
     return proxiedPath(cleanPath);
   }
 
   // If already a full URL (non-TMDB), return as-is
-  if (path.startsWith('http')) return path;
+  if (/^https?:\/\//i.test(value) && !value.includes('/tmdb-proxy/')) return value;
 
   // Clean the path: remove leading slashes and duplicate t/p/<size>/ parts
-  let cleanPath = path.replace(/^\/+/, ''); // Remove leading slashes
+  let cleanPath = value.replace(/^https?:\/\/[^/]+/i, '').replace(/^\/+/, '');
+  cleanPath = cleanPath.replace(/^tmdb-proxy\//, '');
   cleanPath = cleanPath.replace(/^t\/p\/[^\/]+\//, ''); // Remove t/p/<size>/ prefix if exists
 
   return proxiedPath(`t/p/${size}/${cleanPath}`);
 }
 
 export function getPosterUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
-  return getTmdbImageUrl(path, quality === 'share' ? 'original' : 'w780');
+  return quality === 'share'
+    ? getTmdbImageUrl(path, 'original')
+    : getDirectTmdbImageUrl(path, 'w780');
 }
 
 export function getProfileUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
-  return getTmdbImageUrl(path, quality === 'share' ? 'w500' : 'w342');
+  return quality === 'share'
+    ? getTmdbImageUrl(path, 'w500')
+    : getDirectTmdbImageUrl(path, 'w342');
+}
+
+/** Normalize any supported TMDB path/URL to the public CDN for normal display. */
+export function getDirectTmdbImageUrl(path: string | null | undefined, size: string = 'w342'): string | null {
+  const value = path?.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value) && !value.includes('image.tmdb.org') && !value.includes('/tmdb-proxy/')) {
+    return value;
+  }
+  let pathname = value;
+  try {
+    pathname = new URL(value, 'https://local.invalid').pathname;
+  } catch {
+    // Normalize the raw value below.
+  }
+  const cleanPath = pathname
+    .replace(/^\/+/, '')
+    .replace(/^tmdb-proxy\//, '')
+    .replace(/^t\/p\/[^/]+\//, '');
+  return cleanPath ? `https://image.tmdb.org/t/p/${size}/${cleanPath}` : null;
 }
 
 /**
@@ -94,5 +120,4 @@ export function trackFilmStats(stats: unknown): void {
     // Silent failure
   }
 }
-
 

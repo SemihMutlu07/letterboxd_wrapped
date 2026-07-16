@@ -7,7 +7,7 @@
  * (w-full/h-full), so drop it into any sized/aspect-ratio container.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Film, UserRound } from 'lucide-react';
 
 /** Icon fill for a missing film poster. */
@@ -48,6 +48,7 @@ export function PosterImage({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
   if (!src || failed) return <PosterPlaceholder />;
   return (
     // eslint-disable-next-line @next/next/no-img-element

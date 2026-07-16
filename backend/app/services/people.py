@@ -437,14 +437,17 @@ async def resolve_profile_paths(
     films_map: Dict[str, List[Dict[str, Any]]],
     cache: Dict[str, Optional[str]],
     logger: Any,
-    limit: int = 4,
+    limit: int = 5,
 ) -> None:
     """Backfill profile_path for the first N entities using TMDB search + film credit fallback.
     Mutates entities in-place.
     """
     for row in entities[:limit]:
         name = row.get("name")
-        if not name or name in cache:
+        if not name:
+            continue
+        if name in cache:
+            row["profile_path"] = cache[name]
             continue
         pp: Optional[str] = None
         try:

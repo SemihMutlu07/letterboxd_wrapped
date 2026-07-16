@@ -192,6 +192,29 @@ class TestResolveProfilePaths:
         assert cache["Nolan"] == "/nolan.jpg"
         assert cache["Fincher"] == "/fincher.jpg"
 
+    @patch("app.services.people.search_person_with_fallback")
+    async def test_cache_hit_is_copied_to_entity(self, mock_search, mock_session, logger):
+        entities = [{"name": "Nolan", "count": 5}]
+
+        await resolve_profile_paths(
+            mock_session, entities, "director", {}, {"Nolan": "/cached.jpg"}, logger
+        )
+
+        assert entities[0]["profile_path"] == "/cached.jpg"
+        mock_search.assert_not_awaited()
+
+    @patch("app.services.people.search_person_with_fallback")
+    async def test_default_limit_enriches_fifth_person(self, mock_search, mock_session, logger):
+        mock_search.side_effect = lambda _session, name, role="director": {
+            "results": [{"profile_path": f"/{name}.jpg"}]
+        }
+        entities = [{"name": f"Person-{index}"} for index in range(1, 7)]
+
+        await resolve_profile_paths(mock_session, entities, "director", {}, {}, logger)
+
+        assert entities[4]["profile_path"] == "/Person-5.jpg"
+        assert "profile_path" not in entities[5]
+
 
 # Helper to compute director_counts without importing compute_director_counts
 def compute_director_counts_wrapper(films_enriched):
