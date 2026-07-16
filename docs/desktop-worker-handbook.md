@@ -1,8 +1,8 @@
 # Desktop Scrape Worker — Handbook
 
 > Durable reference so we **never re-derive** how the desktop server works.
-> Branch of record: `feat/desktop-direct-scrape`. Paths relative to repo root.
-> Last verified: 2026-06-26.
+> Branch of record: `desktop_server`. Paths relative to repo root.
+> Last verified: 2026-07-16.
 
 ## 1. Mental model (read this first)
 
@@ -74,7 +74,15 @@ Backend side (`config.py`): `worker_heartbeat_max_age_seconds=60`,
 
 ## 4. Operating it (the practical bit)
 
-- **Start:** from `backend/`, `python -m app.worker.desktop_scrape_worker` (reads `backend/.env`). On Windows use `backend/start-worker.bat` (drop a shortcut into `shell:startup` for auto-boot at login).
+- **Start on Windows (recommended):** from the repository root run
+  `powershell -ExecutionPolicy Bypass -File .\backend\start-worker-supervisor.ps1`.
+  The supervisor requires `backend\.venv\Scripts\python.exe`, fast-forwards the
+  checkout to `origin/desktop_server`, and records the branch, SHA, interpreter,
+  restarts, and failures in `backend\worker-supervisor.log`.
+- **Start directly (diagnostics only):** from `backend/`, run
+  `.\.venv\Scripts\python.exe -m app.worker.desktop_scrape_worker` (reads
+  `backend/.env`). If this works while the supervisor does not, inspect
+  `backend\worker-supervisor.log` first.
 - **Stop:** Ctrl-C / close. Backend notices via heartbeat age within ~60s; new public requests then get a clean 503 telling users to upload their export.
 - **After a code/env change:** the worker must be **restarted** — it does not hot-reload.
 - **Invariants / do-nots:**
@@ -92,7 +100,10 @@ Backend side (`config.py`): `worker_heartbeat_max_age_seconds=60`,
 
 ## 6. Observability
 
-- **Dashboard:** `GET /admin/dashboard?key=...` (auth `?key`/`x-admin-key` == `ADMIN_SECRET`). Shows runs + worker status + queue counts.
+- **Dashboard:** open `GET /admin/dashboard` and submit `ADMIN_SECRET` through
+  the login form. Secrets in query strings are deliberately rejected because
+  proxies and access logs record URLs. The dashboard shows runs, worker status,
+  queue counts, and operational incidents.
 - **Worker status** (`task_manager.get_worker_status`, also `GET /admin/api/worker`): `online`, `heartbeat_age_seconds`, version match, last self-test, queue counts, `current_jobs[:10]` with per-stage timings, `recent_failures[:10]`.
 - **Run history:** every complete/failed calls `persist_run` → local `runs/*.json` **and** best-effort mirror to Supabase `ops_runs` (heavy `stats` stripped, `trace_events` kept). On Render (ephemeral FS) the dashboard reads from Supabase so history survives restarts; per-run detail `/admin/run/{id}` reads Supabase by UUID.
 - **Measure timings** (no code needed):
