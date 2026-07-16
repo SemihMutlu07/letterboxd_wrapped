@@ -18,9 +18,45 @@ async def client(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dashboard_query_key_is_exchanged_for_cookie_and_scrubbed(client):
+async def test_dashboard_query_key_never_authenticates_or_sets_cookie(client):
     response = await client.get(
         "/admin/dashboard?key=test-admin-secret",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/dashboard"
+    assert "set-cookie" not in response.headers
+    assert "test-admin-secret" not in response.text
+    assert "test-admin-secret" not in response.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_ignores_invalid_query_key_without_echoing_it(client):
+    response = await client.get("/admin/dashboard?key=wrong", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/dashboard"
+    assert "set-cookie" not in response.headers
+    assert "wrong" not in response.text
+    assert "wrong" not in response.headers["location"]
+
+
+@pytest.mark.asyncio
+async def test_dashboard_without_session_renders_post_login_form(client):
+    response = await client.get("/admin/dashboard")
+
+    assert response.status_code == 200
+    assert 'method="post"' in response.text
+    assert 'action="/admin/session"' in response.text
+    assert "set-cookie" not in response.headers
+
+
+@pytest.mark.asyncio
+async def test_admin_post_session_sets_cookie_and_redirects_without_secret(client):
+    response = await client.post(
+        "/admin/session",
+        data={"key": "test-admin-secret"},
         follow_redirects=False,
     )
 
@@ -32,15 +68,7 @@ async def test_dashboard_query_key_is_exchanged_for_cookie_and_scrubbed(client):
     assert "Secure" in cookie
     assert "SameSite=strict" in cookie
     assert "test-admin-secret" not in cookie
-
-
-@pytest.mark.asyncio
-async def test_dashboard_rejects_invalid_query_key_without_setting_cookie(client):
-    response = await client.get("/admin/dashboard?key=wrong", follow_redirects=False)
-
-    assert response.status_code == 403
-    assert "set-cookie" not in response.headers
-    assert "wrong" not in response.text
+    assert "test-admin-secret" not in response.headers["location"]
 
 
 @pytest.mark.asyncio

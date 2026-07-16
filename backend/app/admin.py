@@ -355,23 +355,19 @@ async def admin_session(request: Request):
 
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
-    secret = _admin_secret()
-    query_key = request.query_params.get("key")
-    if query_key is not None:
-        if not secrets.compare_digest(query_key, secret):
-            raise HTTPException(status_code=403, detail="Forbidden")
-        response = RedirectResponse("/admin/dashboard", status_code=303)
-        response.set_cookie(
-            "mw_admin_session",
-            _session_value(secret),
-            max_age=28800,
-            httponly=True,
-            secure=request.url.scheme == "https",
-            samesite="strict",
-            path="/admin",
-        )
-        return response
-    _require_admin(request)
+    _admin_secret()  # Keep a missing secret as an explicit setup error.
+    if "key" in request.query_params:
+        # Scrub a legacy query-key URL from the browser without authenticating
+        # it. The clean dashboard request will render the POST-only login form.
+        return RedirectResponse("/admin/dashboard", status_code=303)
+    try:
+        _require_admin(request)
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+        # Never authenticate from a query parameter: upstream access logs see
+        # the original URL before this application can redirect or scrub it.
+        return templates.TemplateResponse("admin_login.html", {"request": request})
     await dashboard_settings.load_worker_control_state()
     runs = await _load_analysis_runs(limit=limit)
     if settings.supabase_enabled:
