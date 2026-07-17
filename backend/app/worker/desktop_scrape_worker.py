@@ -363,7 +363,15 @@ async def _send_outbox_item(session: aiohttp.ClientSession, cfg: WorkerConfig, o
         path = item["path"]
         payload = item["payload"]
     except Exception as exc:
-        logger.error("Outbox item %s is unreadable: %s", outbox_path, exc)
+        # Quarantine instead of leaving in place: _flush_outbox retries every
+        # *.json forever, so a corrupt/0-byte file would re-log this each cycle.
+        quarantine_path = outbox_path.parent / "quarantine" / outbox_path.name
+        try:
+            quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+            outbox_path.replace(quarantine_path)
+            logger.error("Outbox item %s is unreadable (%s); moved to %s for inspection", outbox_path, exc, quarantine_path)
+        except OSError as move_exc:
+            logger.error("Outbox item %s is unreadable (%s) and could not be quarantined: %s", outbox_path, exc, move_exc)
         return False
     ok = await _post(session, cfg, path, payload)
     if ok:

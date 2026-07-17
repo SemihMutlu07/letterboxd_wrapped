@@ -10,7 +10,7 @@ Run from backend/ directory:
 """
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app import task_manager
 from app.config import settings
@@ -817,6 +817,57 @@ async def test_worker_version_mismatch_blocks_claim(client: AsyncClient):
     r = await client.get("/api/worker/scrape/next", headers=AUTH)
     assert r.status_code == 409
     assert r.json()["detail"]["error_code"] == "worker_version_mismatch"
+
+
+# ---- worker outbox -------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_corrupt_outbox_item_is_quarantined_not_retried(tmp_path, monkeypatch):
+    """A corrupt/0-byte outbox file (2026-07-02 incident) must be moved to
+    quarantine on the first flush — not left in place to re-log the same
+    'unreadable' error on every retry cycle forever."""
+    from app.worker import desktop_scrape_worker as worker
+
+    monkeypatch.setattr(worker, "OUTBOX_DIR", tmp_path)
+    corrupt = tmp_path / "task1-failed.json"
+    corrupt.write_bytes(b"")
+
+    post = AsyncMock()
+    monkeypatch.setattr(worker, "_post", post)
+
+    await worker._flush_outbox(None, None)
+
+    # Preserved for inspection under quarantine/, gone from the outbox itself.
+    quarantined = tmp_path / "quarantine" / "task1-failed.json"
+    assert not corrupt.exists()
+    assert quarantined.exists()
+    assert quarantined.read_bytes() == b""
+
+    # A second flush no longer sees it: nothing is read or posted.
+    await worker._flush_outbox(None, None)
+    post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_valid_outbox_item_still_sent_and_removed(tmp_path, monkeypatch):
+    """Quarantine must not touch the happy path: a readable item is posted
+    and deleted, never quarantined."""
+    import json
+
+    from app.worker import desktop_scrape_worker as worker
+
+    monkeypatch.setattr(worker, "OUTBOX_DIR", tmp_path)
+    item = tmp_path / "task2-complete.json"
+    item.write_text(json.dumps({"path": "/api/worker/scrape/task2/complete", "payload": {"stats": {}}}), encoding="utf-8")
+
+    post = AsyncMock(return_value=True)
+    monkeypatch.setattr(worker, "_post", post)
+
+    await worker._flush_outbox(None, None)
+
+    post.assert_awaited_once()
+    assert not item.exists()
+    assert not (tmp_path / "quarantine").exists()
 
 
 # ---- completion / failure ----------------------------------------------------
