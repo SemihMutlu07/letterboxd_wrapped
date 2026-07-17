@@ -176,6 +176,10 @@ class WatchlistCompareRequest(BaseModel):
     usernames: list[str] = Field(..., min_length=2, max_length=2)
 
 
+class FindFilmRequest(BaseModel):
+    usernames: list[str] = Field(..., min_length=2, max_length=6)
+
+
 def _normalize_username(username: str) -> str:
     return username.strip().removeprefix("@").lower()
 
@@ -218,6 +222,44 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
 
     try:
         task_id = task_manager.create_watchlist_compare_job([first, second], owner_key=_client_key(request))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
+    task = task_manager.get_task_state(task_id)
+    return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending", "poll_token": task.poll_token})
+
+
+@router.post("/api/find-film")
+async def find_film(request: Request, payload: FindFilmRequest):
+    """Queue a group watchlist-intersection job: films on everyone's watchlist
+    that nobody has watched, popularity-sorted. Result via /api/progress polling."""
+    if not _check_rate_limit(_client_key(request)):
+        raise _rate_limit_exception()
+
+    users: list[str] = []
+    for name in payload.usernames:
+        normalized = _validate_username(name)
+        if normalized not in users:
+            users.append(normalized)
+    if len(users) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "duplicate_username", "message": "Enter at least two different Letterboxd usernames."},
+        )
+
+    await dashboard_settings.load_worker_control_state()
+    if task_manager.is_worker_paused():
+        _persist_watchlist_run(users, None, request, ok=False, error_message="worker_paused")
+        raise _worker_paused_exception()
+
+    if not task_manager.is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        _persist_watchlist_run(users, None, request, ok=False, error_message="worker_offline")
+        raise HTTPException(
+            status_code=503,
+            detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
+        )
+
+    try:
+        task_id = task_manager.create_find_film_job(users, owner_key=_client_key(request))
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
     task = task_manager.get_task_state(task_id)

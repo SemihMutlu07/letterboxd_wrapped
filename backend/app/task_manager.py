@@ -142,6 +142,25 @@ def create_date_night_job(usernames: list, owner_key: Optional[str] = None, opti
     return task_id
 
 
+def create_find_film_job(usernames: list, owner_key: Optional[str] = None, options: Optional[Dict[str, Any]] = None) -> str:
+    """Queue a group find-film scrape job for the desktop worker to claim."""
+    _ensure_queue_capacity(owner_key)
+    task_id = str(uuid.uuid4())
+    task = TaskState(
+        task_id=task_id,
+        kind="watchlist",
+        job_type="find_film",
+        usernames=list(usernames),
+        owner_key=owner_key,
+        options=dict(options or {}),
+        stage="queued",
+        message="Queued on desktop scraper",
+    )
+    _tasks[task_id] = task
+    append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
+    return task_id
+
+
 def claim_next_watchlist_job() -> Optional[TaskState]:
     """Atomically claim the oldest unclaimed watchlist/date-night job."""
     if is_worker_paused():

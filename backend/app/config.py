@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Increment this when worker/backend control-plane payloads become
     # incompatible. Older desktop workers will keep heartbeating but will not
     # receive new jobs until updated.
-    worker_protocol_version: int = 1
+    worker_protocol_version: int = 2
     # Optional startup smoke test for the desktop worker. Keep opt-in because it
     # performs a real Letterboxd scrape and should not run on every restart by
     # accident.

@@ -397,3 +397,52 @@ async def test_date_night_success(client: AsyncClient):
     assert r.status_code == 202
     body = r.json()
     assert body == {"task_id": "test-id", "status": "pending", "poll_token": "poll-token"}
+
+
+# ---- find film -----------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_find_film_rejects_too_few_and_too_many_usernames(client: AsyncClient):
+    r = await client.post("/api/find-film", json={"usernames": ["alice"]})
+    assert r.status_code == 422
+    r = await client.post("/api/find-film", json={"usernames": [f"user{i}" for i in range(7)]})
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_find_film_rejects_invalid_username(client: AsyncClient):
+    r = await client.post("/api/find-film", json={"usernames": ["alice", "bad name"]})
+    assert r.status_code == 400
+    assert r.json()["detail"]["error_code"] == "invalid_username"
+
+
+@pytest.mark.asyncio
+async def test_find_film_rejects_duplicates_that_leave_one_user(client: AsyncClient):
+    r = await client.post("/api/find-film", json={"usernames": ["alice", "@Alice "]})
+    assert r.status_code == 400
+    assert r.json()["detail"]["error_code"] == "duplicate_username"
+
+
+@pytest.mark.asyncio
+async def test_find_film_worker_offline(client: AsyncClient):
+    with patch("app.routes.watchlist.task_manager.is_worker_online", return_value=False):
+        r = await client.post("/api/find-film", json={"usernames": ["alice", "bob", "carol"]})
+    assert r.status_code == 503
+    assert r.json()["detail"]["error_code"] == "worker_offline"
+
+
+@pytest.mark.asyncio
+async def test_find_film_queues_job_and_returns_poll_token(client: AsyncClient):
+    from app import task_manager
+
+    with patch("app.routes.watchlist.task_manager.is_worker_online", return_value=True):
+        r = await client.post("/api/find-film", json={"usernames": ["alice", "@Bob", "carol", "alice"]})
+
+    assert r.status_code == 202
+    body = r.json()
+    assert body["status"] == "pending"
+    task = task_manager.get_task_state(body["task_id"])
+    assert task.job_type == "find_film"
+    assert task.usernames == ["alice", "bob", "carol"]  # normalized, deduped, order kept
+    assert body["poll_token"] == task.poll_token
+    task_manager._tasks.pop(body["task_id"], None)  # don't leak into other tests

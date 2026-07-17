@@ -138,3 +138,49 @@ def test_failure_telemetry_mapping():
         "error_stage": "analysis_empty",
         "error_code": "analysis_failed",
     }
+
+
+@pytest.mark.asyncio
+async def test_find_film_job_posts_watchlists_and_watched_payload(tmp_path, monkeypatch):
+    monkeypatch.setattr(worker, "OUTBOX_DIR", tmp_path / "outbox")
+    job = {"task_id": "ff-1", "job_type": "find_film", "usernames": ["alice", "bob", "carol"]}
+    shelf = [{"title": "Dune", "year": "2021", "slug": "dune"}]
+    watched = [{"title": "Heat", "year": "1995", "slug": "heat"}]
+
+    with (
+        patch.object(worker, "scrape_watchlist", new=AsyncMock(return_value=list(shelf))) as mock_wl,
+        patch.object(worker, "scrape_films_grid", new=AsyncMock(return_value=list(watched))) as mock_grid,
+        patch.object(worker, "_post", new=AsyncMock(return_value=True)) as mock_post,
+    ):
+        await worker._process_watchlist_job(object(), _cfg(), job)
+
+    assert mock_wl.await_count == 3
+    assert mock_grid.await_count == 3
+    args = mock_post.await_args_list[-1].args
+    assert args[2] == "/api/worker/watchlist/ff-1/complete"
+    payload = args[3]
+    assert set(payload) == {"watchlists", "watched"}
+    assert set(payload["watchlists"]) == {"alice", "bob", "carol"}
+    assert payload["watchlists"]["alice"] == shelf
+    assert payload["watched"]["bob"] == watched
+
+
+@pytest.mark.asyncio
+async def test_find_film_job_skips_watched_scrape_when_intersection_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(worker, "OUTBOX_DIR", tmp_path / "outbox")
+    job = {"task_id": "ff-2", "job_type": "find_film", "usernames": ["alice", "bob"]}
+    shelves = [
+        [{"title": "Dune", "year": "2021", "slug": "dune"}],
+        [{"title": "Heat", "year": "1995", "slug": "heat"}],
+    ]
+
+    with (
+        patch.object(worker, "scrape_watchlist", new=AsyncMock(side_effect=shelves)),
+        patch.object(worker, "scrape_films_grid", new=AsyncMock()) as mock_grid,
+        patch.object(worker, "_post", new=AsyncMock(return_value=True)) as mock_post,
+    ):
+        await worker._process_watchlist_job(object(), _cfg(), job)
+
+    mock_grid.assert_not_awaited()
+    payload = mock_post.await_args_list[-1].args[3]
+    assert payload["watched"] == {"alice": [], "bob": []}

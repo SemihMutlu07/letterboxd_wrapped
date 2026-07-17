@@ -24,6 +24,26 @@ export function watchlistPath(first: string, second: string): string {
   return `/watchlist?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
 }
 
+export function findFilmPath(users: string[]): string {
+  const clean = [] as string[];
+  for (const user of users.map(cleanRouteUsername)) {
+    if (isValidRouteUsername(user) && !clean.includes(user)) clean.push(user);
+  }
+  if (clean.length < 2) return '/findfilm';
+  return `/findfilm?users=${encodeURIComponent(clean.slice(0, 6).join(','))}`;
+}
+
+export function readFindFilmUsersFromLocation(): string[] {
+  if (typeof window === 'undefined') return [];
+  const params = new URLSearchParams(window.location.search);
+  const raw = (params.get('users') || '').split(',');
+  const users: string[] = [];
+  for (const value of raw.map(cleanRouteUsername)) {
+    if (isValidRouteUsername(value) && !users.includes(value)) users.push(value);
+  }
+  return users.length >= 2 ? users.slice(0, 6) : [];
+}
+
 export function readResultUsernameFromLocation(): string {
   if (typeof window === 'undefined') return '';
   const match = window.location.pathname.match(/^\/results\/([^/?#]+)/);

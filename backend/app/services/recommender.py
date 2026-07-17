@@ -84,6 +84,33 @@ def compare_watchlist_sets(first_watchlist: list[dict], second_watchlist: list[d
     }
 
 
+def intersect_watchlists_minus_watched(
+    watchlists: list[list[dict]],
+    watched_lists: list[list[dict]],
+) -> dict[str, Any]:
+    """Films on EVERY watchlist that NOBODY has watched.
+
+    Films come from the first user's watchlist map (same convention as
+    compare_watchlist_sets), keyed/deduped by film_key, key-sorted for
+    determinism. No cap here — the enrich step limits downstream.
+    """
+    maps = [{film_key(film): film for film in wl if film.get("title")} for wl in watchlists]
+    common: set[tuple[str, str]] = set(maps[0]) if maps else set()
+    for by_key in maps[1:]:
+        common &= set(by_key)
+    watched_keys = {film_key(film) for wl in watched_lists for film in wl if film.get("title")}
+    keep = sorted(common - watched_keys)
+    return {
+        "films": [maps[0][key] for key in keep],
+        "counts": {
+            "per_user": [len(by_key) for by_key in maps],
+            "intersection": len(common),
+            "watched_removed": len(common & watched_keys),
+            "candidates": len(keep),
+        },
+    }
+
+
 def _year_from_film(film: dict[str, Any]) -> Optional[int]:
     try:
         year = str(film.get("year", "") or film.get("release_date", "")[:4])

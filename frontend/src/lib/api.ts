@@ -50,6 +50,22 @@ export interface WatchlistCompareResult {
   second_only: WatchlistFilm[];
 }
 
+export interface FindFilmCounts {
+  per_user: Record<string, number>;
+  intersection: number;
+  watched_removed: number;
+  candidates: number;
+  returned: number;
+  truncated: boolean;
+}
+
+export interface FindFilmResult {
+  status: 'success';
+  users: string[];
+  counts: FindFilmCounts;
+  films: WatchlistFilm[];
+}
+
 export type RecommendationStrategy = 'random' | 'highest_rated' | 'newest';
 
 export interface FilmRecommendation {
@@ -141,6 +157,14 @@ const ERROR_CODE_HINTS: Record<string, string> = {
     'The submitted username contains invalid characters. The UI should prevent this; report if it did not.',
   no_common_watchlist:
     'The two watchlists have zero films in common. This is a real result, not an error.',
+  duplicate_username:
+    'After normalization fewer than two distinct usernames remained. The UI should prevent this; report if it did not.',
+  queue_full:
+    'The desktop worker job queue is at capacity. Wait a minute and try again.',
+  find_film_processing_failed:
+    'The group watchlist result could not be assembled after the scrape finished. Usually transient — try again.',
+  find_film_enrichment_timeout:
+    'TMDB metadata lookup for the group watchlist took too long. Usually transient — try again.',
 };
 
 export { ERROR_CODE_HINTS };
@@ -411,6 +435,41 @@ export async function compareWatchlists(
     return data as WatchlistCompareResult;
   } catch (error) {
     throw handleApiError(error, 'watchlist comparison');
+  }
+}
+
+// Group find-film: films on everyone's watchlist that nobody has watched,
+// popularity-sorted by the backend. Always async via the desktop worker.
+export async function findFilm(
+  usernames: string[],
+  onProgress?: (p: ScrapeProgress) => void,
+): Promise<FindFilmResult> {
+  const url = `${API_BASE}/api/find-film`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usernames }),
+    });
+
+    if (!r.ok) {
+      throw await parseApiFailure(r, 'find film', `find film ${r.status}`);
+    }
+
+    const data = await r.json();
+
+    if (r.status === 202 && data?.task_id && data?.poll_token) {
+      return await pollTask<FindFilmResult>(data.task_id, data.poll_token, { onProgress });
+    }
+
+    if (!data || data.status === 'error') {
+      throw new Error(data?.detail || 'Find film failed');
+    }
+
+    return data as FindFilmResult;
+  } catch (error) {
+    throw handleApiError(error, 'find film');
   }
 }
 

@@ -994,3 +994,87 @@ async def test_worker_fail_unknown_task_persists_orphan_run(client: AsyncClient)
     assert run["ok"] is False
     assert run["username"] == "semihmutsuz"
     assert run["error_stage"] == "postback"
+
+
+# ---- find film job -------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_find_film_enqueue_complete_and_secure_poll(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(watchlist_jobs, "_persist_watchlist_run", lambda *args, **kwargs: None, raising=False)
+
+    popularity = {"dune": 5.0, "oppenheimer": 50.0, "barbie": 99.0}
+
+    async def fake_enrich(session, films, **kwargs):
+        return [{**film, "popularity": popularity[film["slug"]], "poster_path": f"/{film['slug']}.jpg"} for film in films]
+
+    monkeypatch.setattr(watchlist_jobs, "enrich_films_concurrent", AsyncMock(side_effect=fake_enrich))
+
+    queued = await client.post("/api/find-film", json={"usernames": ["alice", "bob", "carol"]})
+    assert queued.status_code == 202
+    body = queued.json()
+    assert (await client.get(f"/api/progress/{body['task_id']}")).status_code == 403
+
+    claim = await client.get("/api/worker/next", headers=AUTH)
+    job = claim.json()["job"]
+    assert job["task_id"] == body["task_id"]
+    assert job["job_type"] == "find_film"
+    assert job["usernames"] == ["alice", "bob", "carol"]
+
+    shelf = [
+        {"title": "Dune", "year": "2021", "slug": "dune"},
+        {"title": "Oppenheimer", "year": "2023", "slug": "oppenheimer"},
+        {"title": "Barbie", "year": "2023", "slug": "barbie"},
+    ]
+    raw = {
+        "watchlists": {"alice": shelf, "bob": shelf, "carol": shelf},
+        # Barbie was watched by exactly one user — it must disappear.
+        "watched": {"alice": [], "bob": [{"title": "Barbie", "year": "2023", "slug": "barbie"}], "carol": []},
+    }
+    complete = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    assert complete.status_code == 200
+    await __import__("asyncio").sleep(0)
+
+    poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})
+    assert poll.status_code == 200 and poll.json()["status"] == "done"
+    result = poll.json()["result"]
+    assert result["status"] == "success"
+    assert result["users"] == ["alice", "bob", "carol"]
+    # popularity-desc, watched film removed
+    assert [film["title"] for film in result["films"]] == ["Oppenheimer", "Dune"]
+    assert result["counts"]["per_user"] == {"alice": 3, "bob": 3, "carol": 3}
+    assert result["counts"]["intersection"] == 3
+    assert result["counts"]["watched_removed"] == 1
+    assert result["counts"]["returned"] == 2
+    assert result["counts"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_find_film_finalization_failure_surfaces_stable_error_code(client: AsyncClient, monkeypatch):
+    from unittest.mock import AsyncMock
+    from app.services import watchlist_jobs
+    from app.routes import watchlist
+
+    await _beat(client)
+    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        watchlist_jobs,
+        "enrich_films_concurrent",
+        AsyncMock(side_effect=RuntimeError("tmdb unavailable")),
+    )
+    queued = await client.post("/api/find-film", json={"usernames": ["alice", "bob"]})
+    body = queued.json()
+    await client.get("/api/worker/next", headers=AUTH)
+    shelf = [{"title": "Dune", "year": "2021", "slug": "dune"}]
+    raw = {"watchlists": {"alice": shelf, "bob": shelf}, "watched": {"alice": [], "bob": []}}
+    await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    await __import__("asyncio").sleep(0)
+
+    poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})
+    assert poll.json()["status"] == "failed"
+    assert poll.json()["error_code"] == "find_film_processing_failed"

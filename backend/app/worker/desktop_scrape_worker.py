@@ -41,7 +41,8 @@ from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     scrape_and_analyze,
 )
-from app.services.scraper import scrape_watchlist, scrape_profile_sources, scrape_avatar_only
+from app.services.recommender import film_key
+from app.services.scraper import scrape_films_grid, scrape_watchlist, scrape_profile_sources, scrape_avatar_only
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -54,7 +55,7 @@ HEARTBEAT_INTERVAL = float(os.getenv("WORKER_HEARTBEAT_INTERVAL", "20"))
 # Short timeout for the small control-plane calls; the scrape itself is unbounded.
 CONTROL_TIMEOUT = aiohttp.ClientTimeout(total=15)
 TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
-WORKER_PROTOCOL_VERSION = 1
+WORKER_PROTOCOL_VERSION = 2
 OUTBOX_DIR = Path(os.getenv("WORKER_OUTBOX_DIR", ".worker_outbox"))
 PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
@@ -287,17 +288,36 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
     task_id = job["task_id"]
     job_type = job["job_type"]
     usernames = job["usernames"]
-    first, second = usernames[0], usernames[1]
-    logger.info("Processing watchlist job %s type=%s users=%s/%s", task_id, job_type, first, second)
+    logger.info("Processing watchlist job %s type=%s users=%s", task_id, job_type, "/".join(usernames))
 
     try:
         if job_type == "watchlist_compare":
+            first, second = usernames[0], usernames[1]
             first_wl, second_wl = await asyncio.gather(
                 scrape_watchlist(first, max_pages=40),
                 scrape_watchlist(second, max_pages=40),
             )
             payload = {"first_watchlist": first_wl, "second_watchlist": second_wl}
+        elif job_type == "find_film":
+            wl_lists = await asyncio.gather(*(scrape_watchlist(u, max_pages=20) for u in usernames))
+            watchlists = dict(zip(usernames, wl_lists))
+            # Watched films only FILTER the watchlist intersection — if that
+            # intersection is already empty, skip the expensive watched scrape.
+            common = set.intersection(
+                *({film_key(f) for f in wl if f.get("title")} for wl in wl_lists)
+            )
+            if common:
+                # Grid is a superset of the diary and membership is all the
+                # filter needs, so a single grid scrape per user is enough.
+                # If a heavy user's grid is truncated at 25 pages, the worst
+                # outcome is one long-ago watched film slipping through.
+                grids = await asyncio.gather(*(scrape_films_grid(u, max_pages=25) for u in usernames))
+                watched = dict(zip(usernames, grids))
+            else:
+                watched = {u: [] for u in usernames}
+            payload = {"watchlists": watchlists, "watched": watched}
         else:  # date_night
+            first, second = usernames[0], usernames[1]
             first_src, second_src, first_wl, second_wl = await asyncio.gather(
                 scrape_profile_sources(first, max_pages=25),
                 scrape_profile_sources(second, max_pages=25),
@@ -313,7 +333,7 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
                 "second_watchlist": second_wl,
             }
     except Exception as exc:  # noqa: BLE001
-        message = str(exc) if isinstance(exc, ValueError) else f"Scrape failed for {first}/{second}."
+        message = str(exc) if isinstance(exc, ValueError) else f"Scrape failed for {'/'.join(usernames)}."
         logger.warning("Watchlist job %s failed: %s", task_id, exc)
         payload = {"message": message, "telemetry": _failure_telemetry(exc, 0.0)}
         outbox_path = _write_outbox(task_id, "watchlist-failed", f"/api/worker/watchlist/{task_id}/failed", payload)

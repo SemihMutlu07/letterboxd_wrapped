@@ -2,7 +2,12 @@
 
 import pytest
 
-from app.services.recommender import compare_watchlist_sets, public_film, recommendation_from_film
+from app.services.recommender import (
+    compare_watchlist_sets,
+    intersect_watchlists_minus_watched,
+    public_film,
+    recommendation_from_film,
+)
 
 
 @pytest.fixture
@@ -71,3 +76,64 @@ def test_recommendation_from_film_handles_missing_director():
     rec = recommendation_from_film(film, "Random pick.")
     assert rec.director is None
     assert rec.overview is None
+
+
+# ---- find film: intersect_watchlists_minus_watched ----------------------------
+
+def _film(title, year="2020"):
+    return {"title": title, "year": year, "slug": title.lower().replace(" ", "-")}
+
+
+def test_intersect_three_users_keeps_only_films_on_every_watchlist():
+    result = intersect_watchlists_minus_watched(
+        [
+            [_film("Heat"), _film("Aftersun"), _film("Inception")],
+            [_film("Heat"), _film("Aftersun")],
+            [_film("Heat"), _film("Inception")],
+        ],
+        [[], [], []],
+    )
+    assert [f["title"] for f in result["films"]] == ["Heat"]
+    assert result["counts"] == {
+        "per_user": [3, 2, 2],
+        "intersection": 1,
+        "watched_removed": 0,
+        "candidates": 1,
+    }
+
+
+def test_intersect_removes_film_watched_by_only_one_user():
+    result = intersect_watchlists_minus_watched(
+        [
+            [_film("Heat"), _film("Aftersun")],
+            [_film("Heat"), _film("Aftersun")],
+        ],
+        [[], [_film("Heat")]],
+    )
+    assert [f["title"] for f in result["films"]] == ["Aftersun"]
+    assert result["counts"]["intersection"] == 2
+    assert result["counts"]["watched_removed"] == 1
+    assert result["counts"]["candidates"] == 1
+
+
+def test_intersect_keys_are_case_and_whitespace_insensitive():
+    result = intersect_watchlists_minus_watched(
+        [
+            [{"title": "Heat ", "year": "1995", "slug": "heat"}],
+            [{"title": "heat", "year": " 1995", "slug": "heat"}],
+        ],
+        [[{"title": "HEAT", "year": "1995 ", "slug": "heat"}]],
+    )
+    assert result["films"] == []
+    assert result["counts"]["intersection"] == 1
+    assert result["counts"]["watched_removed"] == 1
+
+
+def test_intersect_empty_watchlist_yields_no_films_but_counts():
+    result = intersect_watchlists_minus_watched(
+        [[_film("Heat")], [], [_film("Heat")]],
+        [[], [], []],
+    )
+    assert result["films"] == []
+    assert result["counts"]["per_user"] == [1, 0, 1]
+    assert result["counts"]["intersection"] == 0

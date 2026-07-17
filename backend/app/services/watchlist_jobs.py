@@ -10,12 +10,14 @@ from app.services.recommender import (
     discover_date_night_recommendations,
     enrich_films,
     enrich_films_concurrent,
+    intersect_watchlists_minus_watched,
     public_film,
 )
 from app.services.scraper import merge_scraped_films
 from app.services.worker_monitor import log_worker_event
 
 WATCHLIST_ENRICH_TIMEOUT = 120
+FIND_FILM_ENRICH_TIMEOUT = 120
 DATE_NIGHT_ENRICH_TIMEOUT = 180
 DATE_NIGHT_PROFILE_TIMEOUT = 60
 DATE_NIGHT_RECOMMEND_TIMEOUT = 120
@@ -72,6 +74,34 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
             from app.routes.watchlist import _persist_watchlist_run
 
             _persist_watchlist_run(task.usernames, result, None, ok=True)
+        elif task.job_type == "find_film":
+            watchlists = raw.get("watchlists") or {}
+            watched = raw.get("watched") or {}
+            picked = intersect_watchlists_minus_watched(
+                [watchlists.get(user) or [] for user in task.usernames],
+                [watched.get(user) or [] for user in task.usernames],
+            )
+            enriched = await _bounded(
+                enrich_films_concurrent(session, picked["films"], limit=50),
+                FIND_FILM_ENRICH_TIMEOUT,
+                "find_film_enrichment_timeout",
+            )
+            films = [public_film(f) for f in enriched]
+            films.sort(key=lambda f: f.get("popularity") or 0, reverse=True)
+            counts = {
+                **picked["counts"],
+                "per_user": dict(zip(task.usernames, picked["counts"]["per_user"])),
+                "returned": len(films),
+                "truncated": picked["counts"]["candidates"] > len(films),
+            }
+            # Empty intersection is a success (films: []) — per_user counts let
+            # the UI point at an empty/private watchlist.
+            final = {"status": "success", "users": task.usernames, "counts": counts, "films": films}
+            if not _is_current_processing_task(task_id, task):
+                return
+            from app.routes.watchlist import _persist_watchlist_run
+
+            _persist_watchlist_run(task.usernames, {"counts": counts}, None, ok=True)
         else:
             first = merge_scraped_films(raw.get("first_diary", []), raw.get("first_grid", []))
             second = merge_scraped_films(raw.get("second_diary", []), raw.get("second_grid", []))
@@ -115,7 +145,7 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
         current = task_manager.get_task_state(task_id)
         if current is not task or task.status in {"done", "failed"}:
             return
-        if task.job_type == "watchlist_compare":
+        if task.job_type in {"watchlist_compare", "find_film"}:
             from app.routes.watchlist import _persist_watchlist_run
 
             _persist_watchlist_run(task.usernames, None, None, ok=False, error_message=str(exc))
@@ -123,8 +153,12 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
             from app.routes.recommend import _persist_date_night_run
 
             _persist_date_night_run(task.usernames, None, [], None, ok=False, error_message=str(exc))
-        error_code = getattr(exc, "error_code", None) or (
-            "watchlist_processing_failed" if task.job_type == "watchlist_compare" else "date_night_processing_failed"
+        fallback_codes = {
+            "watchlist_compare": "watchlist_processing_failed",
+            "find_film": "find_film_processing_failed",
+        }
+        error_code = getattr(exc, "error_code", None) or fallback_codes.get(
+            task.job_type, "date_night_processing_failed"
         )
         task_manager.set_task_failed(
             task_id,
