@@ -1,9 +1,11 @@
 """Targeted tests for the additive review-likes path and watchlist 50-cap."""
 
 import pandas as pd
+from bs4 import BeautifulSoup
 
 from app.services.recommender import compare_watchlist_sets, public_film, BUCKET_CAP
 from app.services.review_analysis import compute_review_metrics
+from app.services.scraper import _parse_review_likers
 
 
 def test_compute_review_metrics_emits_top_liked_when_likes_column_present():
@@ -185,3 +187,65 @@ def test_public_film_carries_tmdb_poster_path():
     result = public_film(enriched)
 
     assert result["poster_path"] == "/1p5aI299YBnqrEEfBpimMWzmVQZ.jpg"
+
+
+def test_parse_review_likers_extracts_public_identities():
+    soup = BeautifulSoup(
+        """
+        <ul class="avatars">
+          <li class="person-summary">
+            <a href="/cinefriend/"><img src="//a.ltrbxd.com/avatar.jpg" /></a>
+            <a class="name" href="/cinefriend/">Cine Friend</a>
+          </li>
+          <li class="person-summary">
+            <a href="/repeat/"><img src="/avatar2.jpg" /></a>
+            <span class="displayname">Repeat Viewer</span>
+          </li>
+        </ul>
+        """,
+        "html.parser",
+    )
+
+    likers = _parse_review_likers(soup)
+
+    assert likers[0]["username"] == "cinefriend"
+    assert likers[0]["display_name"] == "Cine Friend"
+    assert likers[0]["profile_url"] == "https://letterboxd.com/cinefriend/"
+    assert likers[0]["avatar_url"] == "https://a.ltrbxd.com/avatar.jpg"
+    assert likers[1]["username"] == "repeat"
+
+
+def test_compute_review_metrics_aggregates_review_likers():
+    df = pd.DataFrame([
+        {
+            "Date": "2024-01-01",
+            "Name": "Aftersun",
+            "Year": "2022",
+            "Rating": 4.0,
+            "Review": "Quiet, devastating.",
+            "Likes": 2,
+            "LikedBy": [
+                {"username": "cinefriend", "display_name": "Cine Friend", "profile_url": "https://letterboxd.com/cinefriend/"},
+                {"username": "repeat", "display_name": "Repeat Viewer", "profile_url": "https://letterboxd.com/repeat/"},
+            ],
+        },
+        {
+            "Date": "2024-02-01",
+            "Name": "Heat",
+            "Year": "1995",
+            "Rating": 4.5,
+            "Review": "Coffee shop cinema.",
+            "Likes": 1,
+            "LikedBy": [
+                {"username": "cinefriend", "display_name": "Cine Friend", "profile_url": "https://letterboxd.com/cinefriend/"},
+            ],
+        },
+    ])
+
+    metrics = compute_review_metrics(df)
+
+    assert metrics["total_unique_likers"] == 2
+    assert metrics["top_recurring_likers"][0]["username"] == "cinefriend"
+    assert metrics["top_recurring_likers"][0]["count"] == 2
+    assert metrics["socially_active_reviews"][0]["title"] == "Aftersun"
+    assert metrics["reviews"][0]["liked_by"][0]["username"] == "cinefriend"

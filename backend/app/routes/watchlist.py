@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app import supabase_ops, task_manager
@@ -32,6 +33,7 @@ router = APIRouter()
 USERNAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 WATCHLIST_RUNS_DIR = Path("watchlist_runs")
+RAW_HELPER_TIMEOUT_SECONDS = 120
 
 
 async def _await_worker_job(task_id: str, max_seconds: int) -> tuple[str, Any]:
@@ -50,6 +52,11 @@ async def _await_worker_job(task_id: str, max_seconds: int) -> tuple[str, Any]:
             return ("done", task.result or {})
         if task.status == "failed":
             return ("failed", task.error)
+    task = task_manager.get_task_state(task_id)
+    if task is not None and task.options.get("raw_only") and task.status in {"pending", "running"}:
+        task_manager.set_task_failed(task_id, "The desktop worker job timed out. Please try again.", {
+            "error_type": "WorkerJobTimeout", "error_stage": task.stage, "error_code": "worker_timeout",
+        })
     return ("timeout", None)
 
 
@@ -97,7 +104,7 @@ async def _mirror_watchlist_to_supabase(payload: dict[str, Any]) -> None:
 def _persist_watchlist_run(
     usernames: list[str],
     comparison: dict,
-    request: Request,
+    request: Request | None,
     ok: bool = True,
     error_message: str | None = None,
 ) -> None:
@@ -115,10 +122,6 @@ def _persist_watchlist_run(
             "match_score": comparison.get("match_score") if comparison else None,
             "counts": comparison.get("counts") if comparison else None,
             "common_films": (comparison.get("common") or [])[:10] if comparison else [],
-            "device": {
-                "ip": request.client.host if request.client else None,
-                "user_agent": request.headers.get("user-agent"),
-            },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if settings.supabase_enabled:
@@ -203,22 +206,12 @@ async def compare_watchlists(request: Request, payload: WatchlistCompareRequest)
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_watchlist_compare_job([first, second])
-    outcome, data = await _await_worker_job(task_id, 120)
-
-    if outcome == "failed":
-        _persist_watchlist_run([first, second], None, request, ok=False, error_message=data)
-        raise _worker_failure_exception(data)
-    if outcome == "timeout":
-        _persist_watchlist_run([first, second], None, request, ok=False, error_message="worker_timeout")
-        raise HTTPException(
-            status_code=504,
-            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
-        )
-
-    comparison = compare_watchlist_sets(data.get("first_watchlist", []), data.get("second_watchlist", []))
-    _persist_watchlist_run([first, second], comparison, request, ok=True)
-    return {"status": "success", "users": [first, second], **comparison}
+    try:
+        task_id = task_manager.create_watchlist_compare_job([first, second], owner_key=_client_key(request))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
+    task = task_manager.get_task_state(task_id)
+    return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending", "poll_token": task.poll_token})
 
 
 @router.post("/api/recommend-from-compare", response_model=RecommendFromCompareResponse)
@@ -247,8 +240,11 @@ async def recommend_from_compare(request: Request, payload: RecommendFromCompare
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_watchlist_compare_job([first, second])
-    outcome, data = await _await_worker_job(task_id, 120)
+    try:
+        task_id = task_manager.create_watchlist_compare_job([first, second], owner_key=_client_key(request), options={"raw_only": True})
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
+    outcome, data = await _await_worker_job(task_id, RAW_HELPER_TIMEOUT_SECONDS)
 
     if outcome == "failed":
         _persist_watchlist_run([first, second], None, request, ok=False, error_message=data)
@@ -317,8 +313,11 @@ async def enrich_watchlist_films(request: Request, payload: WatchlistCompareRequ
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_watchlist_compare_job([first, second])
-    outcome, data = await _await_worker_job(task_id, 120)
+    try:
+        task_id = task_manager.create_watchlist_compare_job([first, second], owner_key=_client_key(request), options={"raw_only": True})
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
+    outcome, data = await _await_worker_job(task_id, RAW_HELPER_TIMEOUT_SECONDS)
 
     if outcome == "failed":
         raise _worker_failure_exception(data)

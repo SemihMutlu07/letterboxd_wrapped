@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Film, X } from 'lucide-react';
+import { PosterGuessGame, type PosterGameProps } from '@/components/landing/PosterGuessGame';
 
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -24,6 +25,10 @@ type Props = {
   onGuess?: (n: number) => void;
   guess?: number | null;
   reveal?: { guess: number; actual: number } | null;
+  /** Optional poster game shown alongside the existing film-count guess. */
+  posterGame?: PosterGameProps | null;
+  /** Completed analyses wait for an explicit transition while the last answer is visible. */
+  resultReady?: string | null;
 };
 
 const FUN_MESSAGES = [
@@ -66,6 +71,8 @@ export default function LoadingScreen({
   onGuess,
   guess,
   reveal,
+  posterGame,
+  resultReady,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [funMessageIndex, setFunMessageIndex] = useState(0);
@@ -201,6 +208,22 @@ export default function LoadingScreen({
           <p className="mb-5 text-sm text-orange-300/90">
             Tahminin: <span className="font-bold tabular-nums">{guess.toLocaleString()}</span> — birazdan görürüz.
           </p>
+        )}
+
+        {isScrape && posterGame && (
+          <div className="mb-5 text-left">
+            <PosterGuessGame {...posterGame} />
+          </div>
+        )}
+
+        {resultReady && (
+          <button
+            type="button"
+            onClick={() => { window.location.href = resultReady; }}
+            className="mb-5 w-full rounded-xl bg-orange-500 px-6 py-3 text-base font-bold text-white shadow-lg shadow-orange-500/25 transition hover:bg-orange-400 active:scale-[0.98]"
+          >
+            See Wrapped
+          </button>
         )}
 
         {isScrape && !reveal && (

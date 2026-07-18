@@ -7,7 +7,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 
 interface Film {
@@ -74,7 +74,7 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-            className="relative w-full max-w-4xl max-h-[84vh] flex flex-col bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+            className="relative flex max-h-[84vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#111113] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -89,7 +89,7 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="w-8 h-8 grid place-items-center rounded-full text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors flex-shrink-0"
+                className="grid h-11 w-11 flex-shrink-0 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
               >
                 ✕
               </button>
@@ -99,13 +99,13 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
             <div className="overflow-y-auto flex-1 p-5">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {visibleFilms.map((f, idx) => {
-                const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w154') : null;
+                const poster = f.poster_path ? getDirectTmdbImageUrl(f.poster_path, 'w342') : null;
                 return (
                   <div
                     key={`${f.title}-${idx}`}
                     className="group min-w-0"
                   >
-                    <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-zinc-800 ring-1 ring-white/10 transition-all duration-150 group-hover:scale-[1.02] group-hover:ring-orange-400/30">
+                    <div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-[#1c1c1e] ring-1 ring-white/10 transition-colors group-hover:ring-white/25">
                       <PosterImage src={poster} alt={`${f.title} poster`} />
                       {f.your_rating != null && (
                         <span className="absolute bottom-2 right-2 rounded-full bg-black/75 px-2 py-0.5 text-xs font-bold text-orange-300">
@@ -139,7 +139,7 @@ export default function LangModal({ open, onClose, language, languageLabel, coun
             <div className="border-t border-white/[0.06] px-5 py-3">
               <button
                 onClick={onClose}
-                className="w-full px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-colors"
+                className="min-h-11 w-full rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
               >
                 Close
               </button>

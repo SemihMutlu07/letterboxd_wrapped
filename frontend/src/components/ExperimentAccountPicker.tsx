@@ -142,23 +142,23 @@ export default function ExperimentAccountPicker() {
         <div className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(245,215,168,.09)_1px,transparent_1px),linear-gradient(90deg,rgba(245,215,168,.08)_1px,transparent_1px)] [background-size:46px_46px]" />
       </div>
 
-      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 md:px-8 md:py-8">
-        <header className="grid gap-5 border-b border-[#f5d7a8]/[0.1] pb-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+      <section className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 md:px-8 md:py-8">
+        <header className="grid gap-4 border-b border-[#f5d7a8]/[0.1] pb-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
           <div>
             <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#f5d7a8]/[0.14] bg-black/20 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.22em] text-[#d8b56d]">
               <Clapperboard className="h-3.5 w-3.5" />
               Experiment branch
             </p>
-            <h1 className="max-w-4xl text-[clamp(48px,10vw,132px)] font-black leading-[0.82] tracking-normal">
+            <h1 className="max-w-4xl text-[clamp(42px,15vw,132px)] font-black leading-[0.86] tracking-normal">
               Pick the
               <span className="block text-[#ff7a1a]">dossier.</span>
             </h1>
-            <p className="mt-5 max-w-2xl text-sm leading-6 text-[#b6a99a] md:text-base">
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-[#b6a99a] md:mt-5 md:text-base">
               Cached Supabase runs are bundled as local fixtures for this branch. Choose one account and open the redesigned results instantly.
             </p>
           </div>
 
-          <div className="rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/80 p-5 shadow-2xl shadow-black/25">
+          <div className="sticky top-3 z-20 rounded-[20px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/90 p-4 shadow-2xl shadow-black/25 backdrop-blur md:static md:rounded-[24px] md:p-5">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-[#d8b56d]">Cached + Live Scrape Lab</p>
             <p className="mt-2 text-sm leading-6 text-[#d6c6b4]">
               Choose a bundled profile for instant fixtures, or type any public username to use the backend/desktop-worker scrape flow.
@@ -244,14 +244,14 @@ export default function ExperimentAccountPicker() {
           </motion.div>
         )}
 
-        <section className="grid flex-1 gap-4 py-6 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid flex-1 gap-4 py-5 md:grid-cols-2 md:py-6 xl:grid-cols-5">
           {filteredAccounts.map((account, index) => (
             <motion.div
               key={account.username}
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05, duration: 0.32 }}
-              className="group relative min-h-[360px] overflow-hidden rounded-[26px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 p-5 text-left shadow-2xl shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-[#f5d7a8]/[0.24]"
+              className="group relative min-h-[300px] overflow-hidden rounded-[22px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 p-4 text-left shadow-2xl shadow-black/20 transition-all duration-200 hover:-translate-y-1 hover:border-[#f5d7a8]/[0.24] md:min-h-[360px] md:rounded-[26px] md:p-5"
             >
               <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100" style={{ background: `radial-gradient(circle at 30% 15%, ${account.accent}33, transparent 40%)` }} />
               <div className="absolute inset-y-0 left-0 w-9 border-r border-[#f5d7a8]/[0.08] bg-black/20">

@@ -51,11 +51,24 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
 }
 
 export function getPosterUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
-  return getTmdbImageUrl(path, quality === 'share' ? 'original' : 'w780');
+  return getDirectTmdbImageUrl(path, quality === 'share' ? 'original' : 'w780');
 }
 
 export function getProfileUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
-  return getTmdbImageUrl(path, quality === 'share' ? 'w500' : 'w342');
+  return getDirectTmdbImageUrl(path, quality === 'share' ? 'w500' : 'w342');
+}
+
+export function getDirectTmdbImageUrl(path: string | null | undefined, size: string = 'w342'): string | null {
+  const value = path?.trim();
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value) && !value.includes('image.tmdb.org') && !value.includes('/tmdb-proxy/')) return value;
+  let pathname = value;
+  try { pathname = new URL(value, 'https://local.invalid').pathname; } catch { /* normalize below */ }
+  const cleanPath = pathname
+    .replace(/^\/+/, '')
+    .replace(/^tmdb-proxy\//, '')
+    .replace(/^t\/p\/[^/]+\//, '');
+  return cleanPath ? `https://image.tmdb.org/t/p/${size}/${cleanPath}` : null;
 }
 
 /**
@@ -94,5 +107,3 @@ export function trackFilmStats(stats: unknown): void {
     // Silent failure
   }
 }
-
-

@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
 import { Clock, Gauge, Globe, Languages, CalendarRange } from 'lucide-react';
 import Section from '@/components/results/Section';
+import ScrollPanel from '@/components/results/ScrollPanel';
 
 interface QuickFactsProps {
   avgMinutes: number;
@@ -86,105 +86,63 @@ export default function QuickFacts({
   })();
 
   return (
-    <Section title="Quick Facts" subtitle="Your viewing at a glance">
-      <div className="grid gap-3">
-        {/* Top row — stack vertically on phones, side-by-side from sm: up */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <motion.div
-            className="flex items-center justify-between gap-2 bg-slate-800/40 border border-slate-700/40 rounded-xl px-3 py-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0, duration: 0.3 }}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Clock className="w-5 h-5 text-slate-400 shrink-0" />
-              <div className="flex flex-col min-w-0">
-                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">avg runtime</span>
-                <span className="text-xl font-black text-white leading-tight">
-                  {Math.round(avgMinutes)}
-                  <span className="text-xs font-medium text-slate-400 ml-1">min</span>
-                </span>
+    <Section title="Quick Facts" subtitle="Your viewing, annotated">
+      <ScrollPanel className="grid gap-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.35fr)_minmax(220px,0.65fr)]">
+          <div className="results-stat flex min-w-0 flex-col justify-between gap-5 rounded-2xl sm:min-h-44">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Gauge className="h-5 w-5 shrink-0 text-[var(--results-accent)]" />
+                <span className="text-xs font-semibold text-[var(--results-text)]">Your viewing pace</span>
               </div>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--results-muted)]">Primary signal</span>
             </div>
-            <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 font-medium">
-              {runtimeLabel}
-            </span>
-          </motion.div>
-
-          <motion.div
-            className="flex flex-col gap-1 bg-slate-800/40 border border-slate-700/40 rounded-xl px-3 py-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05, duration: 0.3 }}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-3 min-w-0">
-                <Gauge className="w-5 h-5 text-slate-400 shrink-0" />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">pace</span>
-                  <span className="text-xl font-black text-white leading-tight">
-                    {filmsPerWeek.toFixed(1)}
-                    <span className="text-xs font-medium text-slate-400 ml-1">/week</span>
-                  </span>
-                </div>
-              </div>
-              <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 font-medium">
-                {pace}
+            <div>
+              <span className="text-5xl font-semibold leading-none tracking-[-0.04em] text-[var(--results-text)]">
+                {filmsPerWeek.toFixed(1)}
               </span>
+              <span className="ml-2 text-sm font-medium text-[var(--results-muted)]">films / week</span>
+              <p className="mt-2 text-sm font-semibold text-[var(--results-text)]">{pace}</p>
             </div>
             {paceExplainer && (
-              <p className="text-[10px] text-slate-500 leading-snug">{paceExplainer}</p>
+              <p className="border-t border-[var(--results-border)] pt-3 text-xs leading-relaxed text-[var(--results-muted)]">{paceExplainer}</p>
             )}
-          </motion.div>
+          </div>
+
+          <div className="results-stat flex min-w-0 flex-col justify-between gap-5 rounded-2xl sm:min-h-44">
+            <div className="flex items-center justify-between gap-3">
+              <Clock className="h-5 w-5 shrink-0 text-slate-400" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--results-muted)]">Typical feature</span>
+            </div>
+            <div>
+              <span className="text-4xl font-semibold leading-none tracking-[-0.03em] text-[var(--results-text)]">{Math.round(avgMinutes)}</span>
+              <span className="ml-1 text-sm font-medium text-[var(--results-muted)]">minutes</span>
+              <p className="mt-2 text-xs text-[var(--results-muted)]">{runtimeLabel}</p>
+            </div>
+          </div>
         </div>
 
-        {/* Bottom row — compact stat chips */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <motion.div
-            className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/15 rounded-lg px-3 py-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.3 }}
-          >
-            <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-emerald-400 text-xl font-black leading-none shrink-0">{totalCountries}</span>
-            <div className="flex flex-col min-w-0 leading-tight">
-              <span className="text-[11px] uppercase tracking-wider text-emerald-300/80 font-medium">
-                countries explored
-              </span>
+          <div className="results-stat flex min-w-0 flex-col justify-between gap-5 rounded-2xl">
+            <div className="flex items-center justify-between"><Globe className="h-5 w-5 text-[var(--results-accent)]" /><span className="text-[10px] uppercase tracking-[0.16em] text-[var(--results-muted)]">Range</span></div>
+            <div><span className="text-3xl font-semibold leading-none text-[var(--results-text)]">{totalCountries}</span><span className="ml-2 text-xs text-[var(--results-muted)]">countries explored</span>
               {topCountry && (
-                <span className="text-[10px] text-emerald-400/70 truncate">mostly {topCountry}</span>
+                <p className="mt-2 truncate text-xs text-[var(--results-muted)]">Most often: {topCountry}</p>
               )}
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            className="flex items-center gap-3 bg-orange-500/10 border border-orange-500/15 rounded-lg px-3 py-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.3 }}
-          >
-            <Languages className="w-4 h-4 text-orange-400 shrink-0" />
-            <span className="text-orange-400 text-xl font-black leading-none shrink-0">{languageCount}</span>
-            <span className="text-[11px] uppercase tracking-wider text-orange-300/80 font-medium leading-tight">
-              {languageCount === 1 ? 'language' : 'different languages'}
-            </span>
-          </motion.div>
+          <div className="results-stat flex min-w-0 flex-col justify-between gap-5 rounded-2xl">
+            <div className="flex items-center justify-between"><Languages className="h-5 w-5 text-orange-400" /><span className="text-[10px] uppercase tracking-[0.16em] text-[var(--results-muted)]">Voices</span></div>
+            <div><span className="text-3xl font-semibold leading-none text-[var(--results-text)]">{languageCount}</span><span className="ml-2 text-xs text-[var(--results-muted)]">{languageCount === 1 ? 'language heard' : 'languages heard'}</span></div>
+          </div>
 
-          <motion.div
-            className="flex items-center gap-3 bg-fuchsia-500/10 border border-fuchsia-500/15 rounded-lg px-3 py-2"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.3 }}
-          >
-            <CalendarRange className="w-4 h-4 text-fuchsia-400 shrink-0" />
-            <span className="text-fuchsia-400 text-xl font-black leading-none shrink-0">{decadeSpan}</span>
-            <span className="text-[11px] uppercase tracking-wider text-fuchsia-300/80 font-medium leading-tight">
-              decades on screen
-            </span>
-          </motion.div>
+          <div className="results-stat flex min-w-0 flex-col justify-between gap-5 rounded-2xl">
+            <div className="flex items-center justify-between"><CalendarRange className="h-5 w-5 text-[var(--results-accent)]" /><span className="text-[10px] uppercase tracking-[0.16em] text-[var(--results-muted)]">Time span</span></div>
+            <div><span className="text-3xl font-semibold leading-none text-[var(--results-text)]">{decadeSpan}</span><span className="ml-2 text-xs text-[var(--results-muted)]">decades on screen</span></div>
+          </div>
         </div>
-      </div>
+      </ScrollPanel>
     </Section>
   );
 }

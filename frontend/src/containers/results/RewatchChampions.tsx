@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { Repeat } from 'lucide-react';
 import Section from '@/components/results/Section';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import ScrollPanel from '@/components/results/ScrollPanel';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 
 interface ChampionFilm {
   title: string;
@@ -31,12 +32,13 @@ export default function RewatchChampions({ films }: RewatchChampionsProps) {
   return (
     <Section title="Rewatch Champions" subtitle="Films you couldn't watch just once">
       <div className="grid gap-3">
-        {shown.map((f) => {
-          const posterUrl = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
+        {shown.map((f, i) => {
+          const posterUrl = f.poster_path ? getDirectTmdbImageUrl(f.poster_path, 'w500') : null;
           return (
-            <div
+            <ScrollPanel
               key={`${f.title}-${f.year ?? ''}`}
-              className="flex items-center gap-4 rounded-xl border border-slate-700/40 bg-slate-800/40 p-3"
+              delayMs={i * 80}
+              className="results-row flex items-center gap-4 py-4"
             >
               <div className="relative h-[96px] w-[64px] shrink-0 overflow-hidden rounded-lg bg-slate-900/60">
                 {posterUrl ? (
@@ -54,16 +56,16 @@ export default function RewatchChampions({ films }: RewatchChampionsProps) {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-bold text-white truncate">
+                <p className="truncate text-base font-semibold text-[var(--results-text)]">
                   {f.title}
                   {f.year ? <span className="ml-1.5 text-sm font-medium text-slate-400">{f.year}</span> : null}
                 </p>
-                <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--results-accent)]">
                   <Repeat className="size-3.5" />
                   Watched {f.watch_count}× times
                 </p>
               </div>
-            </div>
+            </ScrollPanel>
           );
         })}
       </div>
@@ -73,7 +75,7 @@ export default function RewatchChampions({ films }: RewatchChampionsProps) {
           <button
             type="button"
             onClick={() => setExpanded(true)}
-            className="rounded-full border border-slate-700/50 px-4 py-2 text-xs font-semibold text-slate-400 transition-colors hover:border-slate-500 hover:text-white"
+            className="results-secondary-action px-4 py-2 text-xs font-semibold transition-colors"
           >
             Show {Math.min(films.length, EXPANDED_MAX) - COLLAPSED} more
           </button>

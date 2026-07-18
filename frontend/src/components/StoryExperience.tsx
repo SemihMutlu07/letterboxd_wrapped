@@ -29,7 +29,7 @@ type Slide = {
   body: ReactNode;
   media?: StoryMedia[];
   accent?: string;
-  visual?: 'mosaic' | 'hero' | 'portrait' | 'strip' | 'cascade';
+  visual?: 'mosaic' | 'hero' | 'portrait' | 'strip' | 'cascade' | 'director' | 'poster-wall';
 };
 
 function tmdbCdn(path: string | null | undefined, size = 'w780'): string | null {
@@ -105,6 +105,26 @@ function personFilmPosters(stats: StatsData, name?: string, role: 'director' | '
   );
 }
 
+function storySeason(value: string | { season?: string; percentage?: number; story?: string } | undefined): string | null {
+  if (typeof value === 'string') return value;
+  return value?.season ?? null;
+}
+
+function activeDayCopy(value: string | { date?: string; films?: number; story?: string } | undefined): string | null {
+  if (typeof value === 'string') return value;
+  if (!value) return null;
+  if (value.story) return value.story;
+  if (value.date && value.films) return `${value.date}, when you watched ${value.films} films`;
+  return value.date ?? null;
+}
+
+function generousCriticPosters(stats: StatsData): StoryMedia[] {
+  const films = (stats.all_films ?? []).filter((film) => film.poster_path);
+  const fiveStar = films.filter((film) => film.rating === 5);
+  const featured = fiveStar.length > 0 ? fiveStar : films.filter((film) => film.rating === 4.5);
+  return compactMedia(featured.map((film) => posterMedia(film, 'w500')), Number.POSITIVE_INFINITY);
+}
+
 function Label({ children }: { children: ReactNode }) {
   return <p className="font-mono text-xs uppercase tracking-[0.22em] text-amber-300">{children}</p>;
 }
@@ -123,6 +143,8 @@ function buildSlides(stats: StatsData): Slide[] {
   const broadPosters = topRatedPosters(stats, 10);
   const directorName = stats.most_watched_director?.name ?? stats.top_directors?.[0]?.name;
   const topActor = stats.top_actors?.[0];
+  const viewingSeason = storySeason(stats.story_analytics?.viewing_season);
+  const mostActiveDay = activeDayCopy(stats.story_analytics?.most_active_day);
 
   slides.push({
     key: 'intro',
@@ -176,7 +198,7 @@ function buildSlides(stats: StatsData): Slide[] {
     (best, m) => (!best || m.count > best.count ? m : best),
     null,
   );
-  if (peakMonth || stats.story_analytics?.viewing_season) {
+  if (peakMonth || viewingSeason) {
     slides.push({
       key: 'rhythm',
       media: broadPosters.slice(1, 9),
@@ -185,13 +207,13 @@ function buildSlides(stats: StatsData): Slide[] {
       body: (
         <>
           <Label>Your rhythm</Label>
-          <Big>{peakMonth ? peakMonth.month : stats.story_analytics?.viewing_season}</Big>
+          <Big>{peakMonth ? peakMonth.month : viewingSeason}</Big>
           <Sub>
             {peakMonth
               ? `${peakMonth.count} films that month — you weren't watching, you were processing something.`
               : null}
-            {stats.story_analytics?.most_active_day
-              ? ` Your comfort zone had subtitles and you pressed play most on ${stats.story_analytics.most_active_day}s.`
+            {mostActiveDay
+              ? ` ${mostActiveDay}`
               : ''}
           </Sub>
         </>
@@ -221,20 +243,16 @@ function buildSlides(stats: StatsData): Slide[] {
       key: 'director',
       media: compactMedia([
         profileMedia(directorProfile),
-        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 5),
-        profileMedia(topActor),
-      ], 7),
+        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', Number.POSITIVE_INFINITY),
+      ], Number.POSITIVE_INFINITY),
       accent: '#ef4444',
-      visual: 'portrait',
+      visual: 'director',
       body: (
         <>
           <Label>Your comfort zone had subtitles</Label>
           <Big>{stats.most_watched_director.name}</Big>
           <Sub>
-            {stats.most_watched_director.count} films together.
-            {topActor
-              ? ` And you kept showing up for ${topActor.name} — ${topActor.count} times, like a familiar face in the crowd.`
-              : ''}
+            {stats.most_watched_director.count} films together — an auteur you kept returning to.
           </Sub>
         </>
       ),
@@ -263,14 +281,16 @@ function buildSlides(stats: StatsData): Slide[] {
   }
 
   if (stats.rating_personality || stats.most_common_rating != null) {
+    const generousPosters = stats.rating_personality === 'The Generous Critic'
+      ? generousCriticPosters(stats)
+      : [];
     slides.push({
       key: 'rating-personality',
-      media: compactMedia([
-        posterMedia(stats.rating_outlier_film),
-        ...topRatedPosters(stats, 8),
-      ], 7),
+      media: generousPosters.length > 0
+        ? generousPosters
+        : compactMedia([posterMedia(stats.rating_outlier_film), ...topRatedPosters(stats, 8)], 9),
       accent: '#a3e635',
-      visual: 'strip',
+      visual: generousPosters.length > 0 ? 'poster-wall' : 'strip',
       body: (
         <>
           <Label>How you judge</Label>
@@ -339,20 +359,25 @@ function buildSlides(stats: StatsData): Slide[] {
   }
 
   if (stats.cinematic_persona?.persona) {
+    const basis = stats.cinematic_persona_basis;
     slides.push({
       key: 'persona',
-      media: compactMedia([
-        profileMedia(topActor),
-        profileMedia(stats.top_directors?.[0]),
-        ...broadPosters,
-      ], 8),
+      media: genrePosters(stats, basis?.genre ?? stats.favorite_genre?.name, 12),
       accent: '#c084fc',
-      visual: 'portrait',
+      visual: 'poster-wall',
       body: (
         <>
           <Label>Which makes you</Label>
           <Big>{stats.cinematic_persona.persona}</Big>
           {stats.cinematic_persona.description && <Sub>{stats.cinematic_persona.description}</Sub>}
+          {basis?.genre && (
+            <Sub className="text-stone-300">
+              {basis.genre} was your most-watched genre
+              {basis.match_type === 'genre_decade_country'
+                ? `, shaped by your ${basis.decade} and ${basis.country} streak.`
+                : ' — the strongest signal behind this persona.'}
+            </Sub>
+          )}
         </>
       ),
     });
@@ -414,7 +439,11 @@ function StoryVisual({ slide }: { slide: Slide }) {
           transition={{ duration: 0.65, ease: 'easeOut' }}
           className="absolute inset-y-[9vh] right-[-8vw] hidden w-[58vw] max-w-[760px] md:block"
         >
-          {slide.visual === 'portrait' ? (
+          {slide.visual === 'director' ? (
+            <DirectorVisual media={media} accent={accent} />
+          ) : slide.visual === 'poster-wall' ? (
+            <PosterWall media={media} accent={accent} />
+          ) : slide.visual === 'portrait' ? (
             <PortraitStack media={media} accent={accent} />
           ) : slide.visual === 'cascade' ? (
             <PosterCascade media={media} accent={accent} />
@@ -471,19 +500,61 @@ function StoryImage({ item, className = '', priority = false }: { item: StoryMed
 
 function PosterMosaic({ media, accent }: { media: StoryMedia[]; accent: string }) {
   return (
-    <div className="grid h-full rotate-[-4deg] grid-cols-3 gap-3">
+    <div className="grid h-full rotate-[-4deg] auto-rows-max grid-cols-3 content-center gap-3">
       {media.slice(0, 9).map((item, index) => (
         <motion.div
           key={`${item.url}-${index}`}
           initial={{ y: index % 2 ? 40 : -30 }}
           animate={{ y: index % 2 ? -18 : 18 }}
           transition={{ duration: 7 + index, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-          className="relative overflow-hidden rounded-[18px] border border-white/10 bg-stone-950 shadow-2xl"
+          className="relative aspect-[2/3] overflow-hidden rounded-[18px] border border-white/10 bg-stone-950 shadow-2xl"
           style={{ boxShadow: index === 4 ? `0 0 70px ${accent}55` : undefined }}
         >
           <StoryImage item={item} priority={index < 3} />
         </motion.div>
       ))}
+    </div>
+  );
+}
+
+function PosterWall({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  return (
+    <div className="grid h-full rotate-[2deg] grid-cols-[repeat(auto-fit,minmax(86px,1fr))] content-center gap-3">
+      {media.map((item, index) => (
+        <motion.div
+          key={`${item.url}-${index}`}
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: index % 2 ? 12 : -8 }}
+          transition={{ delay: Math.min(index * 0.035, 0.5), duration: 0.55 }}
+          className="aspect-[2/3] min-h-0 overflow-hidden rounded-[16px] border border-white/10 bg-black shadow-2xl"
+          style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
+        >
+          <StoryImage item={item} priority={index < 6} />
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function DirectorVisual({ media, accent }: { media: StoryMedia[]; accent: string }) {
+  const profile = media.find((item) => item.type === 'profile');
+  const films = media.filter((item) => item.type === 'poster');
+  if (!profile) return <PosterWall media={films} accent={accent} />;
+  return (
+    <div className="grid h-full grid-cols-[minmax(220px,1.2fr)_minmax(180px,0.8fr)] items-center gap-4 pr-[7vw]">
+      <div
+        className="aspect-[2/3] max-h-[76vh] overflow-hidden rounded-[30px] border border-white/15 bg-black shadow-2xl"
+        style={{ boxShadow: `0 0 90px ${accent}55` }}
+      >
+        <StoryImage item={profile} priority />
+      </div>
+      <div className="grid max-h-[76vh] grid-cols-2 gap-3 overflow-hidden">
+        {films.map((item, index) => (
+          <div key={`${item.url}-${index}`} className="aspect-[2/3] overflow-hidden rounded-xl border border-white/10 bg-black shadow-xl">
+            <StoryImage item={item} priority={index < 4} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

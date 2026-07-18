@@ -12,7 +12,7 @@ const Pie = dynamic(() => import('recharts').then(m => m.Pie), { ssr: false });
 const Cell = dynamic(() => import('recharts').then(m => m.Cell), { ssr: false });
 const Tooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false });
 
-const COLORS = ['#f97316', '#a855f7', '#3b82f6', '#10b981', '#eab308', '#059669', '#ec4899'];
+const COLORS = ['#ff7a1a', '#ff9852', '#ffb47d', '#d88958', '#b86f45', '#92593b', '#704632'];
 
 const LANGUAGE_LABEL: Record<string, string> = {
   en: 'English', fr: 'French', ja: 'Japanese', es: 'Spanish', ko: 'Korean',
@@ -65,9 +65,10 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
     <Section title="Languages" subtitle="Your cinematic linguistic profile">
       <div className="grid w-full gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)] lg:items-center">
         <motion.div
-          className="relative h-[260px] overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-950/40"
+          className="results-surface relative h-[260px] overflow-hidden"
           initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
           transition={{ duration: 0.35 }}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -130,9 +131,10 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
               <motion.button
                 key={d.language}
                 type="button"
-                className="group flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-slate-800/40 px-4 py-3 text-left transition-all duration-150 hover:border-white/15 hover:bg-slate-800/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+                className="results-row group flex min-h-14 items-center justify-between gap-4 px-2 py-3 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--results-text)_4%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--results-accent)]"
                 initial={{ opacity: 0, x: 12 }}
-                animate={{ opacity: 1, x: 0 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
                 transition={{ delay: i * 0.04, duration: 0.25 }}
                 onClick={() => handleLanguageClick(d.language)}
                 onMouseEnter={() => setHoveredLanguage(d.language)}
@@ -141,11 +143,11 @@ export default function LanguagesLeaderboard({ data, allFilms }: { data: Row[]; 
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">{name}</span>
-                    <span className="block text-[11px] text-slate-500">{pct}% of tracked language data</span>
+                    <span className="block truncate text-sm font-semibold text-[var(--results-text)]">{name}</span>
+                    <span className="block text-xs text-[var(--results-muted)]">{pct}% of tracked language data</span>
                   </span>
                 </span>
-                <span className="font-mono text-sm font-semibold text-slate-200">{d.count.toLocaleString()}</span>
+                <span className="text-sm font-semibold tabular-nums text-[var(--results-text)]">{d.count.toLocaleString()}</span>
               </motion.button>
             );
           })}

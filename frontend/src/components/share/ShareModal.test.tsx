@@ -18,6 +18,7 @@ vi.mock('html-to-image', () => ({
 
 vi.mock('@/lib/analytics', () => ({
   getTmdbImageUrl: (path: string | null | undefined) => (path ? `http://localhost:8000${path}` : null),
+  getDirectTmdbImageUrl: (path: string | null | undefined) => (path ? `https://image.tmdb.org/t/p/w500${path}` : null),
   trackEvent: vi.fn(),
 }));
 

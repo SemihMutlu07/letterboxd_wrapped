@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import math
+import unicodedata
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -157,6 +158,89 @@ def _guess_language(text: str) -> str:
     return "en"
 
 
+def _title_key(title: Any) -> str:
+    return unicodedata.normalize("NFC", str(title or "")).strip().casefold()
+
+
+def _year_key(year: Any) -> Optional[str]:
+    try:
+        return str(int(float(year)))
+    except (TypeError, ValueError):
+        return None
+
+
+def enrich_scraped_reviews(
+    review_analysis: Dict[str, Any], scraped_reviews: list[dict], all_films: list[dict]
+) -> Dict[str, Any]:
+    """Restore rich scrape-only fields after the reviews.csv analysis round-trip."""
+    scraped_by_ty: dict = {}
+    scraped_by_t: dict = {}
+    for review in scraped_reviews:
+        key = _title_key(review.get("title"))
+        scraped_by_ty.setdefault((key, _year_key(review.get("year"))), review)
+        scraped_by_t.setdefault(key, review)
+
+    poster_by_ty: dict = {}
+    poster_by_t: dict = {}
+    for film in all_films:
+        path = film.get("poster_path")
+        if not isinstance(path, str) or not path:
+            continue
+        key = _title_key(film.get("title"))
+        poster_by_ty.setdefault((key, _year_key(film.get("year"))), path)
+        poster_by_t.setdefault(key, path)
+
+    def enrich(review: dict) -> None:
+        key = _title_key(review.get("title"))
+        year = _year_key(review.get("year"))
+        scraped = scraped_by_ty.get((key, year)) or scraped_by_t.get(key)
+        text = ((scraped or {}).get("review_text") or review.get("text") or review.get("text_preview") or "")
+        likers = (scraped or {}).get("likers", [])
+        if not isinstance(likers, list):
+            likers = []
+        review["char_length"] = len(text)
+        review["word_count"] = len(text.split())
+        review["poster_path"] = poster_by_ty.get((key, year)) or poster_by_t.get(key) or ""
+        review["review_path"] = (scraped or {}).get("review_path", "")
+        review["review_url"] = f"https://letterboxd.com{review['review_path']}" if review["review_path"] else review.get("review_url")
+        review["likers"] = likers
+        review["liked_by"] = likers  # experiment compatibility alias
+        review["likers_complete"] = (scraped or {}).get("likers_complete", True)
+
+    for review in review_analysis.get("reviews", []) or []:
+        if isinstance(review, dict):
+            enrich(review)
+    for review in review_analysis.get("top_liked_reviews", []) or []:
+        if isinstance(review, dict):
+            enrich(review)
+
+    # Preserve experiment's richer aggregate contract from the canonical crawl.
+    liker_counter: Counter[str] = Counter()
+    profiles: dict[str, dict] = {}
+    social: list[dict] = []
+    for review in review_analysis.get("reviews", []) or []:
+        liked_by = review.get("liked_by", [])
+        if liked_by:
+            social.append({
+                "title": review.get("title"), "year": review.get("year"),
+                "review_url": review.get("review_url"), "like_count": review.get("likes", 0),
+                "liked_by": liked_by[:8], "likers_complete": review.get("likers_complete", True),
+            })
+        for liker in liked_by:
+            username = str(liker.get("username") or "") if isinstance(liker, dict) else ""
+            if username:
+                liker_counter[username] += 1
+                profiles.setdefault(username, liker)
+    review_analysis["total_unique_likers"] = len(liker_counter)
+    review_analysis["top_recurring_likers"] = [
+        {**profiles[name], "count": count} for name, count in liker_counter.most_common(10)
+    ]
+    review_analysis["socially_active_reviews"] = sorted(
+        social, key=lambda item: (len(item["liked_by"]), item["like_count"]), reverse=True
+    )[:6]
+    return review_analysis
+
+
 def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     """
     Compute text analysis metrics from a Letterboxd reviews.csv DataFrame.
@@ -203,6 +287,8 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         rename_map["TextLength"] = "scraped_text_length"
     if "HasLikesPage" in df.columns:
         rename_map["HasLikesPage"] = "has_likes_page"
+    if "LikedBy" in df.columns:
+        rename_map["LikedBy"] = "liked_by"
 
     df = df.rename(columns=rename_map)
 
@@ -223,6 +309,9 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     reviews_list = []
     for _, row in with_text.iterrows():
         text = str(row.get("review") or "")
+        liked_by = row.get("liked_by", [])
+        if not isinstance(liked_by, list):
+            liked_by = []
         reviews_list.append({
             "title": str(row.get("title") or ""),
             "year": str(row.get("year") or ""),
@@ -242,6 +331,7 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
                 else len(text)
             ),
             "has_likes_page": bool(row.get("has_likes_page")) if pd.notna(row.get("has_likes_page")) else False,
+            "liked_by": liked_by,
         })
 
     if reviews_with_text == 0:
@@ -413,7 +503,35 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
                         else str(row.get("date", ""))
                     ),
                     "text_preview": preview,
+                    "liked_by": row.get("liked_by") if isinstance(row.get("liked_by"), list) else [],
                 })
+
+    liker_counter: Counter[str] = Counter()
+    liker_profiles: dict[str, dict] = {}
+    socially_active_reviews: list[dict] = []
+    for review in reviews_list:
+        liked_by = review.get("liked_by") if isinstance(review.get("liked_by"), list) else []
+        if liked_by:
+            socially_active_reviews.append({
+                "title": review.get("title"),
+                "year": review.get("year"),
+                "review_url": review.get("review_url"),
+                "like_count": review.get("likes", 0),
+                "liked_by": liked_by[:8],
+            })
+        for liker in liked_by:
+            if not isinstance(liker, dict):
+                continue
+            username = str(liker.get("username") or "")
+            if not username:
+                continue
+            liker_counter[username] += 1
+            liker_profiles.setdefault(username, liker)
+
+    top_recurring_likers = [
+        {**liker_profiles[username], "count": count}
+        for username, count in liker_counter.most_common(10)
+    ]
 
     return {
         "total_reviews": total_reviews,
@@ -437,5 +555,12 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         "top_liked_reviews": top_liked_reviews,
         "total_review_likes": total_review_likes,
         "reviews_with_likes_data": reviews_with_likes_data,
+        "total_unique_likers": len(liker_counter),
+        "top_recurring_likers": top_recurring_likers,
+        "socially_active_reviews": sorted(
+            socially_active_reviews,
+            key=lambda review: (len(review.get("liked_by", [])), review.get("like_count", 0)),
+            reverse=True,
+        )[:6],
         "reviews": reviews_list,
     }

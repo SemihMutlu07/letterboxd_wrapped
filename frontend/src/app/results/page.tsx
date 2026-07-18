@@ -488,18 +488,26 @@ export default function ResultsPage() {
     }
   }, [stats, cineScore]);
 
-  if (loading) return <div className="min-h-screen bg-slate-900" />;
+  if (loading) return (
+    <main className="results-experience min-h-screen px-4 py-12" aria-busy="true" aria-label="Loading your results">
+      <div className="mx-auto max-w-6xl space-y-12">
+        <div className="h-[56vh] min-h-[420px] animate-pulse rounded-[32px] bg-[var(--results-surface)]" />
+        <div className="grid gap-6 md:grid-cols-2"><div className="h-64 animate-pulse rounded-3xl bg-[var(--results-surface)]" /><div className="h-64 animate-pulse rounded-3xl bg-[var(--results-surface)]" /></div>
+      </div>
+    </main>
+  );
   if (!stats || (typeof stats === 'object' && Object.keys(stats).length === 0)) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">No data found</h2>
-          <p className="text-gray-400">
+      <main className="results-experience flex min-h-screen items-center justify-center px-6 text-[var(--results-text)]">
+        <div className="max-w-md text-center">
+          <p className="mb-3 text-sm font-semibold text-[var(--results-accent)]">Your year in film</p>
+          <h1 className="mb-4 text-4xl font-semibold tracking-[-0.03em]">No result data yet</h1>
+          <p className="text-[var(--results-muted)]">
             {username ? `No local result data found for @${username}.` : 'Please upload your Letterboxd data first.'}
           </p>
-          <Link href="/" className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors">Go Back</Link>
+          <Link href="/" className="mt-8 inline-flex min-h-11 items-center rounded-full bg-[var(--results-accent)] px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--results-accent)]">Return home</Link>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -675,7 +683,7 @@ function ResultsContent({
 
   return (
     <>
-      <main className="relative z-10 mx-auto max-w-7xl space-y-4 px-3 py-3 text-[#fff7ed] md:space-y-6 md:px-8 md:py-6">
+      <main className={`results-experience ${theme === 'apple' ? 'results-light' : ''} relative z-10 mx-auto max-w-[1200px] space-y-8 px-4 pb-28 pt-4 text-[var(--results-text)] md:space-y-12 md:px-8 md:pb-32 md:pt-8`}>
         <DossierHero
           theme={theme}
           accent={config.cssVars['--theme-accent']}
@@ -701,7 +709,7 @@ function ResultsContent({
           }}
         />
 
-        <div className="flex justify-center rounded-full border border-[#f5d7a8]/[0.08] bg-black/20 px-3 py-2 backdrop-blur-sm">
+        <div className="flex justify-center py-2">
           <ThemeSwitcher />
         </div>
 
@@ -712,24 +720,23 @@ function ResultsContent({
         </div>
 
         {/* Share teaser — visible after directors/cast while users are engaged */}
-        <div className="relative overflow-hidden rounded-[22px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 px-5 py-4 shadow-2xl shadow-black/20">
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-10 border-r border-[#f5d7a8]/[0.08] bg-black/20">
+        <div className="results-scene flex flex-col justify-between gap-6 border-y py-8 sm:flex-row sm:items-center">
+          <div className="hidden">
             <div className="grid h-full grid-rows-5 gap-2 px-2 py-3">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="rounded-[2px] border border-[#f5d7a8]/[0.12] bg-[#f5d7a8]/[0.06]" />
               ))}
             </div>
           </div>
-          <div className="relative z-10 ml-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="contents">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#d8b56d]">Export the dossier</p>
-            <p className="mt-1 text-sm text-[#b6a99a]">Turn your stats into a shareable card, then keep exploring with a friend.</p>
+            <p className="text-xl font-semibold tracking-[-0.02em]">Share your year in film</p>
+            <p className="mt-1 text-sm text-[var(--results-muted)]">Choose a card, preview it, and save it in one step.</p>
           </div>
           <div className="flex flex-wrap gap-2">
           <button
             onClick={() => { setShowShareModal(true); trackEvent('share_export_started'); }}
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-extrabold uppercase tracking-[0.12em] transition-all hover:scale-[1.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
-            style={{ background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`, color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614' }}
+            className="results-primary-action inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--results-accent)]"
           >
             <Share2 className="h-4 w-4" />
             Share
@@ -758,7 +765,7 @@ function ResultsContent({
         )}
 
         {/* Film History */}
-        <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} />
+        <LazyFilmHistory data={decadeData} max={decadeMax} isMobile={isMobile} allFilms={stats.all_films ?? []} userAvg={stats.average_rating} />
 
         {/* Ratings Bar */}
         <LazyRatingsBar
@@ -805,17 +812,13 @@ function ResultsContent({
         </SectionContainer>
 
         {/* Share button */}
-        <div className="my-8 flex flex-col items-center gap-3 rounded-[24px] border border-[#f5d7a8]/[0.1] bg-[#120f0d]/75 px-5 py-6 text-center">
+        <div className="my-12 flex flex-col items-center gap-4 border-y border-[var(--results-border)] px-5 py-12 text-center">
           <button
             onClick={() => {
               setShowShareModal(true);
               trackEvent('share_export_started');
             }}
-            className="flex items-center gap-2 rounded-full px-8 py-4 text-base font-extrabold uppercase tracking-[0.14em] shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-xl"
-            style={{
-              background: `linear-gradient(135deg, ${config.cssVars['--theme-accent']}, ${config.cssVars['--theme-accent-2']})`,
-              color: theme === 'current' || theme === 'vhs' ? '#fff' : '#181614',
-            }}
+            className="results-primary-action flex min-h-12 items-center gap-2 rounded-full px-8 py-4 text-base font-semibold transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--results-accent)]"
           >
             <Share2 className="h-5 w-5" />
             Share Your Wrapped
@@ -863,6 +866,14 @@ function ResultsContent({
           </p>
         </div>
       </main>
+
+      <button
+        type="button"
+        onClick={() => { setShowShareModal(true); trackEvent('share_export_started'); }}
+        className="results-primary-action fixed bottom-5 right-5 z-40 inline-flex min-h-12 items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold shadow-lg transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--results-accent)] motion-reduce:transform-none md:bottom-8 md:right-8"
+      >
+        <Share2 className="h-4 w-4" /> Share result
+      </button>
 
       <ShareModal
         open={showShareModal}
@@ -934,10 +945,10 @@ function DossierHero({
 }) {
   const heroAccent = theme === 'current' ? '#ff7a1a' : accent;
   const heroAccent2 = theme === 'current' ? '#64b4bf' : accent2;
-  const textColor = theme === 'apple' ? '#1D1D1F' : '#fff7ed';
-  const mutedColor = theme === 'apple' ? '#5f5f66' : '#b6a99a';
-  const panelBg = theme === 'apple' ? 'rgba(255,255,255,0.86)' : 'rgba(28,23,19,0.76)';
-  const borderColor = theme === 'apple' ? 'rgba(38,38,38,0.12)' : 'rgba(255,247,237,0.12)';
+  const textColor = 'var(--results-text)';
+  const mutedColor = 'var(--results-muted)';
+  const panelBg = 'transparent';
+  const borderColor = 'var(--results-border)';
   const hoursLabel = `${Math.round(Math.max(0, runtimeHours)).toLocaleString()}h`;
   const avgRatingLabel = typeof avgRating === 'number' && Number.isFinite(avgRating)
     ? `${avgRating.toFixed(1)}★`
@@ -974,18 +985,16 @@ function DossierHero({
   ];
 
   return (
-    <section className="relative isolate overflow-hidden rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f] px-3 py-3 shadow-2xl shadow-black/30 md:rounded-[34px] md:px-6 md:py-6">
+    <section className="relative isolate overflow-hidden border-b border-[var(--results-border)] px-0 py-12 md:py-16">
       <div
         className="absolute inset-0 -z-20"
         style={{
           background:
-            theme === 'apple'
-              ? 'linear-gradient(135deg, #f6f1e8 0%, #faf8f2 46%, #e8edf0 100%)'
-              : 'radial-gradient(circle at 18% 12%, rgba(218, 79, 43, 0.28), transparent 30%), radial-gradient(circle at 82% 22%, rgba(62, 147, 166, 0.18), transparent 28%), linear-gradient(135deg, #18110e 0%, #241712 48%, #0c0c0b 100%)',
+            'transparent',
         }}
       />
-      <div className="absolute inset-0 -z-10 opacity-[0.18] [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:42px_42px]" />
-      <div className="absolute inset-y-0 left-0 hidden w-12 border-r border-white/[0.08] bg-black/20 md:block">
+      <div className="hidden" />
+      <div className="hidden">
         <div className="grid h-full grid-rows-12 gap-3 px-3 py-4">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="rounded-[2px] border border-orange-100/15 bg-orange-50/10" />
@@ -993,8 +1002,8 @@ function DossierHero({
         </div>
       </div>
 
-      <div className="grid gap-4 md:ml-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:gap-6">
-        <div className="rounded-[20px] border p-4 md:rounded-[22px] md:p-7" style={{ background: panelBg, borderColor }}>
+      <div className="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:items-end lg:gap-16">
+        <div className="px-0 py-4" style={{ background: panelBg, borderColor }}>
           <div className="mb-6 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] md:text-xs md:tracking-[0.22em]" style={{ color: mutedColor }}>
             <span className="inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor }}>
               <CalendarDays className="h-3.5 w-3.5" />
@@ -1012,7 +1021,7 @@ function DossierHero({
             <p className="mb-3 text-xs font-black uppercase tracking-[0.28em] md:tracking-[0.34em]" style={{ color: heroAccent }}>
               Personal cinema dossier
             </p>
-            <h1 className="text-[clamp(42px,8vw,104px)] font-black leading-[0.86] tracking-normal" style={{ fontFamily: 'var(--theme-font-display)', color: textColor }}>
+            <h1 className="text-[clamp(48px,8vw,104px)] font-semibold leading-[0.88] tracking-[-0.055em]" style={{ color: textColor }}>
               Letterboxd
               <span className="block" style={{ color: heroAccent }}>
                 Wrapped
@@ -1062,8 +1071,8 @@ function DossierHero({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[20px] border p-4 sm:col-span-2 md:rounded-[22px] md:p-5" style={{ background: panelBg, borderColor }}>
+        <div className="grid gap-px overflow-hidden rounded-3xl border sm:grid-cols-2" style={{ borderColor, background: borderColor }}>
+          <div className="bg-[var(--results-surface)] p-5 sm:col-span-2 md:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.28em]" style={{ color: mutedColor }}>Cinema scale</p>
@@ -1085,8 +1094,8 @@ function DossierHero({
           </div>
 
           {heroStats.map(({ label, value, detail, icon: Icon, onClick }) => {
-            const className = "group min-h-[148px] rounded-[20px] border p-4 text-left transition-transform hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400";
-            const style = { background: panelBg, borderColor, color: textColor };
+            const className = "group min-h-[148px] bg-[var(--results-surface)] p-5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--results-surface)_92%,var(--results-text))] focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--results-accent)]";
+            const style = { color: textColor };
             const content = (
               <>
                 <div className="flex items-center justify-between gap-3">
@@ -1149,13 +1158,13 @@ function LazyLanguages({
 }
 
 // Lazy wrapper for Film History
-function LazyFilmHistory({ data, max, isMobile }: { data: any[]; max: number; isMobile: boolean }) {
+function LazyFilmHistory({ data, max, isMobile, allFilms, userAvg }: { data: any[]; max: number; isMobile: boolean; allFilms: any[]; userAvg?: number | null }) {
   const { ref, shouldMount } = useLazyMount(150);
 
   return (
     <div ref={ref}>
       {shouldMount ? (
-        <FilmHistory data={data} max={max} isMobile={isMobile} />
+        <FilmHistory data={data} max={max} isMobile={isMobile} allFilms={allFilms} userAvg={userAvg} />
       ) : (
         <div className="h-48 bg-slate-800/30 rounded-2xl animate-pulse" />
       )}

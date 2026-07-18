@@ -11,6 +11,14 @@ export interface PersonFilm {
   user_rating?: number | null;
 }
 
+export interface ReviewLiker {
+  username: string;
+  display_name: string;
+  profile_url: string;
+  avatar_url?: string | null;
+  count?: number;
+}
+
 export interface StatsData {
   total_films: number;
   average_rating: number | null;
@@ -31,8 +39,8 @@ export interface StatsData {
   day_of_week_pattern?: { weekday: number; weekend: number };
   monthly_viewing_habits?: { month: string; count: number }[];
   story_analytics?: {
-    viewing_season?: string;
-    most_active_day?: string;
+    viewing_season?: string | { season?: string; percentage?: number; story?: string };
+    most_active_day?: string | { date?: string; films?: number; story?: string };
   };
   favorite_decade?: { name: string; count: number };
   sinefil_meter?: {
@@ -59,6 +67,12 @@ export interface StatsData {
   cinematic_persona?: {
     persona: string;
     description: string;
+  };
+  cinematic_persona_basis?: {
+    genre: string;
+    decade: string;
+    country: string;
+    match_type: 'genre_decade_country' | 'genre';
   };
   favorite_genre?: {
     name: string;
@@ -199,6 +213,10 @@ export interface StatsData {
       rating?: number | null;
       review_date?: string;
       text_preview?: string;
+      poster_path?: string;
+      liked_by?: ReviewLiker[];
+      likers?: ReviewLiker[];
+      likers_complete?: boolean;
     }[];
     /** Sum of like_count across all reviews with HTML like data. */
     total_review_likes?: number | null;
@@ -218,6 +236,20 @@ export interface StatsData {
       word_count?: number;
       text_length?: number;
       has_likes_page?: boolean;
+      poster_path?: string;
+      liked_by?: ReviewLiker[];
+      likers?: ReviewLiker[];
+      likers_complete?: boolean;
+    }[];
+    total_unique_likers?: number;
+    top_recurring_likers?: (ReviewLiker & { count: number })[];
+    socially_active_reviews?: {
+      title?: string;
+      year?: string;
+      review_url?: string | null;
+      like_count?: number;
+      liked_by?: ReviewLiker[];
+      likers_complete?: boolean;
     }[];
   };
 }

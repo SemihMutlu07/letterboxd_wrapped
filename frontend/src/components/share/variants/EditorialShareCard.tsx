@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Heart, User, Star } from 'lucide-react';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 import type { ShareCardData, ShareOrientation } from '../types';
 
 type EditorialShareCardProps = {
@@ -15,7 +15,7 @@ const cx = (...classes: (string | false | null | undefined)[]) => classes.filter
 const normalizeTmdb = (url?: string | null): string | undefined => {
   if (!url) return undefined;
   if (url.startsWith('http')) return url;
-  if (url.startsWith('/')) return getTmdbImageUrl(url) ?? undefined;
+  if (url.startsWith('/') || url.includes('image.tmdb.org') || url.includes('/tmdb-proxy/')) return getDirectTmdbImageUrl(url, 'h632') ?? undefined;
   return url;
 };
 

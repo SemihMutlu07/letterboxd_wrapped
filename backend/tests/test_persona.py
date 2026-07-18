@@ -21,6 +21,12 @@ class TestComputeCinematicPersona:
         result = compute_cinematic_persona("Action", "2020s", "USA")
         assert result["persona"] == "Blockbuster Addict"
         assert "explosions" in result["description"]
+        assert result["basis"] == {
+            "genre": "Action",
+            "decade": "2020s",
+            "country": "USA",
+            "match_type": "genre_decade_country",
+        }
 
     def test_known_persona_japan(self):
         result = compute_cinematic_persona("Animation", "2000s", "Japan")
@@ -29,6 +35,7 @@ class TestComputeCinematicPersona:
     def test_fallback_by_genre(self):
         result = compute_cinematic_persona("Horror", "1990s", "France")
         assert result["persona"] == "Horror Devotee"
+        assert result["basis"]["match_type"] == "genre"
 
     def test_generic_fallback(self):
         result = compute_cinematic_persona("Musical", "2020s", "India")

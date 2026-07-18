@@ -11,6 +11,7 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/analytics', () => ({
   getPosterUrl: (path: string) => path,
   getTmdbImageUrl: (path: string) => path,
+  getDirectTmdbImageUrl: (path: string) => path,
   trackEvent: vi.fn(),
   trackConsentedEvent: vi.fn(),
 }));
@@ -40,16 +41,16 @@ describe('OrientationToggle', () => {
     expect(onChange).toHaveBeenCalledWith('horizontal');
   });
 
-  it('applies active style to the selected orientation', () => {
+  it('exposes the selected orientation to assistive technology', () => {
     const { rerender } = render(
       <OrientationToggle orientation="horizontal" onChange={() => {}} />,
     );
     const horizontalBtn = screen.getByText('Horizontal').closest('button')!;
-    expect(horizontalBtn.className).toMatch(/bg-gradient-to-r/);
+    expect(horizontalBtn).toHaveAttribute('aria-pressed', 'true');
 
     rerender(<OrientationToggle orientation="vertical" onChange={() => {}} />);
     const verticalBtn = screen.getByText('Vertical').closest('button')!;
-    expect(verticalBtn.className).toMatch(/bg-gradient-to-r/);
+    expect(verticalBtn).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -201,16 +202,17 @@ const ratingDeviationStats: StatsData = {
 };
 
 describe('RatingDeviation', () => {
-  it('uses a two-column grid and clipped captions for mobile outlier cards', () => {
-    const { container } = render(<RatingDeviation stats={ratingDeviationStats} />);
+  it('uses a two-column grid and keeps comparison details actionable on mobile', () => {
+    render(<RatingDeviation stats={ratingDeviationStats} />);
 
-    const grid = container.querySelector('.grid');
+    const firstCard = screen.getByText('A Very Long Film Title That Should Not Break The Mobile Card').closest('article');
+    const grid = firstCard?.parentElement;
     expect(grid?.className).toContain('grid-cols-2');
     expect(grid?.className).not.toContain('grid-cols-1');
 
-    const caption = screen.getByText(/5\.0 vs avg 3\.2/i);
-    expect(caption.className).toContain('whitespace-nowrap');
-    expect(caption.className).toContain('text-ellipsis');
+    const caption = screen.getByText('5.0★');
+    expect(caption).toBeVisible();
+    expect(screen.getAllByRole('button', { name: /view comparison/i }).length).toBeGreaterThan(0);
   });
 });
 

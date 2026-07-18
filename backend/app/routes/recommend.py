@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app import supabase_ops, task_manager
 from app.config import settings
@@ -52,7 +53,7 @@ def _persist_date_night_run(
     usernames: list[str],
     mutual_profile: dict | None,
     recommendations: list,
-    request: Request,
+    request: Request | None,
     ok: bool = True,
     error_message: str | None = None,
 ) -> None:
@@ -73,10 +74,6 @@ def _persist_date_night_run(
                 "era_overlap": mutual_profile.get("era_overlap") if mutual_profile else None,
             },
             "recommendations": [r.get("title") for r in recommendations[:3]] if recommendations else [],
-            "device": {
-                "ip": request.client.host if request.client else None,
-                "user_agent": request.headers.get("user-agent"),
-            },
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         if settings.supabase_enabled:
@@ -85,7 +82,7 @@ def _persist_date_night_run(
         logger.warning("Failed to persist date night run: %s", exc)
 
 
-@router.post("/api/date-night", response_model=DateNightResponse)
+@router.post("/api/date-night", response_model=None)
 async def date_night(request: Request, payload: UserPairRequest):
     if not _check_rate_limit(_client_key(request)):
         raise _rate_limit_exception()
@@ -111,90 +108,9 @@ async def date_night(request: Request, payload: UserPairRequest):
             detail={"error_code": "worker_offline", "message": "The desktop scraper is currently offline. Please try again later."},
         )
 
-    task_id = task_manager.create_date_night_job([first, second])
-    # date-night scrapes 4 sources — allow more time than watchlist compare
-    outcome, scraped = await _await_worker_job(task_id, 180)
-
-    if outcome == "failed":
-        _persist_date_night_run([first, second], None, [], request, ok=False, error_message=scraped)
-        raise _worker_failure_exception(scraped)
-    if outcome == "timeout":
-        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="worker_timeout")
-        raise HTTPException(
-            status_code=504,
-            detail={"error_code": "scrape_timeout", "message": "Desktop worker took too long. Try again later."},
-        )
-
-    first_films = merge_scraped_films(scraped.get("first_diary", []), scraped.get("first_grid", []))
-    second_films = merge_scraped_films(scraped.get("second_diary", []), scraped.get("second_grid", []))
-    first_watchlist = scraped.get("first_watchlist", [])
-    second_watchlist = scraped.get("second_watchlist", [])
-
-    session = request.app.state.aiohttp_session
-
     try:
-        first_enriched, second_enriched, first_wl_enriched, second_wl_enriched = await asyncio.gather(
-            asyncio.wait_for(enrich_films(session, first_films, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
-            asyncio.wait_for(enrich_films(session, second_films, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
-            asyncio.wait_for(enrich_films(session, first_watchlist, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
-            asyncio.wait_for(enrich_films(session, second_watchlist, limit=MAX_ENRICHED_FILMS), timeout=ENRICH_TIMEOUT),
-        )
-    except asyncio.TimeoutError:
-        logger.exception("Date night TMDB enrich timed out for %s/%s", first, second)
-        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="enrich_timeout")
-        raise HTTPException(
-            status_code=504,
-            detail={"error_code": "enrich_timeout", "message": "Film enrichment took too long. Try again later."},
-        )
-    except Exception:
-        logger.exception("Date night TMDB enrich failed for %s/%s", first, second)
-        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="enrichment_failed")
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "enrichment_failed", "message": "Could not look up film details. Try again later."},
-        )
-
-    try:
-        mutual_profile = await asyncio.wait_for(
-            asyncio.to_thread(build_mutual_profile, first_enriched, second_enriched),
-            timeout=60,
-        )
-    except asyncio.TimeoutError:
-        logger.exception("Date night mutual profile timed out for %s/%s", first, second)
-        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="profile_timeout")
-        raise HTTPException(
-            status_code=504,
-            detail={"error_code": "profile_timeout", "message": "Building taste profile took too long. Try again later."},
-        )
-    except Exception:
-        logger.exception("Date night mutual profile failed for %s/%s", first, second)
-        _persist_date_night_run([first, second], None, [], request, ok=False, error_message="profile_failed")
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "profile_failed", "message": "Could not build taste profile. Try again later."},
-        )
-
-    try:
-        recommendations = await discover_date_night_recommendations(
-            first_wl_enriched, second_wl_enriched, mutual_profile
-        )
-    except Exception:
-        logger.exception("Date night recommendation discovery failed for %s/%s", first, second)
-        _persist_date_night_run([first, second], mutual_profile, [], request, ok=False, error_message="recommendation_failed")
-        raise HTTPException(
-            status_code=502,
-            detail={"error_code": "recommendation_failed", "message": "Could not find recommendations. Try again later."},
-        )
-
-    if not recommendations:
-        _persist_date_night_run([first, second], mutual_profile, [], request, ok=False, error_message="no_recommendations")
-        raise HTTPException(
-            status_code=404,
-            detail={"error_code": "no_recommendations", "message": "No strong mutual recommendation was found yet."},
-        )
-
-    _persist_date_night_run([first, second], mutual_profile, recommendations, request, ok=True)
-    return DateNightResponse(
-        mutual_profile=MutualProfile(**mutual_profile),
-        recommendations=recommendations,
-    )
+        task_id = task_manager.create_date_night_job([first, second], owner_key=_client_key(request))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail={"error_code": "queue_full", "message": "Worker queue is full."}) from exc
+    task = task_manager.get_task_state(task_id)
+    return JSONResponse(status_code=202, content={"task_id": task_id, "status": "pending", "poll_token": task.poll_token})

@@ -1,0 +1,104 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun run test
+      - run: bun run build
+        env:
+          NEXT_PUBLIC_API_BASE: https://wrapped-backend.onrender.com
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+        working-directory: frontend
+      - run: bun audit --production
+        working-directory: frontend
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pip-audit
+      - run: >-
+          pip-audit -r backend/requirements.txt
+          --ignore-vuln PYSEC-2026-161
+          --ignore-vuln PYSEC-2026-249
+          --ignore-vuln PYSEC-2026-248
+          --ignore-vuln PYSEC-2026-2281
+          --ignore-vuln PYSEC-2026-2280
+
+  dead-code-guard:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for known-dead patterns
+        run: |
+          set -e
+          PATTERNS=("rss_feed" "sentry_sdk" "TestLab" "test-lab")
+          FOUND=0
+          for p in "${PATTERNS[@]}"; do
+            if grep -RIl --exclude-dir=node_modules --exclude-dir=.git -- "$p" . ; then
+              echo "::error::Found resurrected dead-code pattern: $p"
+              FOUND=1
+            fi
+          done
+          if [ "$FOUND" -eq 1 ]; then
+            echo "One or more known-dead patterns reappeared. See CONTRIBUTING.md 'What went wrong before'."
+            exit 1
+          fi
+
+  merge-conflict-guard:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Attempt clean merge into base branch
+        run: |
+          git config user.email "ci@example.com"
+          git config user.name "CI Merge Guard"
+          git fetch origin ${{ github.base_ref }}
+          git checkout -B __merge_check origin/${{ github.base_ref }}
+          if ! git merge --no-commit --no-ff "origin/${{ github.head_ref }}"; then
+            echo "::error::This branch does not merge cleanly into ${{ github.base_ref }}. Rebase and resolve conflicts locally before opening/updating the PR."
+            git merge --abort || true
+            exit 1
+          fi
+          git merge --abort || true

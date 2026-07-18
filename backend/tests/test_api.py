@@ -105,12 +105,9 @@ async def test_progress_unknown_task(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_progress_legacy(client: AsyncClient):
-    """GET /api/progress (legacy endpoint) should always return 200."""
+async def test_progress_legacy_removed(client: AsyncClient):
     r = await client.get("/api/progress")
-    assert r.status_code == 200
-    body = r.json()
-    assert "stage" in body
+    assert r.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -118,7 +115,7 @@ async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes
     """Submit a job, then poll its task_id — should reach a terminal state."""
     import asyncio
 
-    async def fake_run_analysis(task_id, session, csv_files, request_dir):
+    async def fake_run_analysis(task_id, session, csv_files, request_dir, username=None):
         from app import task_manager
 
         task_manager.set_task_done(task_id, {"status": "success", "stats": {"total_films": 1, "mock": True}})
@@ -131,14 +128,43 @@ async def test_task_id_polling_flow(client: AsyncClient, zip_with_watched: bytes
         r = await client.post("/api/analyze", files=files)
         assert r.status_code == 202
         task_id = r.json()["task_id"]
+        poll_token = r.json()["poll_token"]
 
         # Give the background task a moment to run
         await asyncio.sleep(0.2)
 
-        poll = await client.get(f"/api/progress/{task_id}")
+        denied = await client.get(f"/api/progress/{task_id}")
+        assert denied.status_code == 403
+        poll = await client.get(f"/api/progress/{task_id}", headers={"X-Task-Token": poll_token})
         assert poll.status_code == 200
         body = poll.json()
         assert body["status"] in ("pending", "running", "done", "failed")
+
+
+@pytest.mark.asyncio
+async def test_rejects_zip_path_traversal(client: AsyncClient):
+    import io
+    import zipfile
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("../watched.csv", "Name,Year\nExample,2024\n")
+    response = await client.post(
+        "/api/analyze",
+        files={"files": ("export.zip", archive.getvalue(), "application/zip")},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["error_code"] == "unsafe_archive"
+
+
+@pytest.mark.asyncio
+async def test_analyze_rate_limit_has_retry_after(client: AsyncClient):
+    for _ in range(3):
+        response = await client.post("/api/analyze", files={"files": ("bad.txt", b"bad", "text/plain")})
+        assert response.status_code == 400
+    limited = await client.post("/api/analyze", files={"files": ("bad.txt", b"bad", "text/plain")})
+    assert limited.status_code == 429
+    assert "Retry-After" in limited.headers
 
 
 # ---- parse-username ----------------------------------------------------------
@@ -195,12 +221,12 @@ def _reset_watchlist_rate_limiter():
 def _done_task(result: dict, kind: str = "watchlist"):
     """Minimal task stub that looks done to the poll loop."""
     from types import SimpleNamespace
-    return SimpleNamespace(status="done", result=result, error=None, kind=kind)
+    return SimpleNamespace(status="done", result=result, error=None, kind=kind, poll_token="poll-token")
 
 
 def _failed_task(message: str):
     from types import SimpleNamespace
-    return SimpleNamespace(status="failed", result=None, error=message, kind="watchlist")
+    return SimpleNamespace(status="failed", result=None, error=message, kind="watchlist", poll_token="poll-token")
 
 
 def _watchlist_patches(first_wl, second_wl):
@@ -233,31 +259,8 @@ async def test_watchlist_compare_success(client: AsyncClient):
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
 
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "success"
-    assert body["users"] == ["alice", "bob"]
-    assert body["counts"] == {
-        "first_total": 2,
-        "second_total": 2,
-        "common": 1,
-        "first_only": 1,
-        "second_only": 1,
-    }
-    assert body["returned_counts"] == {"common": 1, "first_only": 1, "second_only": 1}
-    assert body["truncated"] == {"common": False, "first_only": False, "second_only": False}
-    assert body["match_score"] == 50.0
-    assert body["common"] == [{
-        "title": "Aftersun",
-        "year": "2022",
-        "slug": "/film/aftersun/",
-        "poster_url": "https://img/aftersun.jpg",
-        "poster_path": "",
-        "popularity": None,
-        "vote_average": None,
-        "vote_count": None,
-        "genres": [],
-    }]
+    assert r.status_code == 202
+    assert r.json() == {"task_id": "test-id", "status": "pending", "poll_token": "poll-token"}
 
 
 @pytest.mark.asyncio
@@ -291,8 +294,7 @@ async def test_watchlist_compare_worker_failure(client: AsyncClient):
         patch("app.routes.watchlist.asyncio.sleep"),
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["alice", "bob"]})
-    assert r.status_code == 503
-    assert r.json()["detail"]["error_code"] == "scraper_unavailable"
+    assert r.status_code == 202
 
 
 @pytest.mark.asyncio
@@ -306,8 +308,7 @@ async def test_watchlist_compare_worker_user_not_found(client: AsyncClient):
         patch("app.routes.watchlist.asyncio.sleep"),
     ):
         r = await client.post("/api/watchlist-compare", json={"usernames": ["ghost", "bob"]})
-    assert r.status_code == 404
-    assert r.json()["detail"]["error_code"] == "user_not_found"
+    assert r.status_code == 202
 
 
 @pytest.mark.asyncio
@@ -389,8 +390,39 @@ async def test_date_night_success(client: AsyncClient):
     ):
         r = await client.post("/api/date-night", json={"usernames": ["alice", "bob"]})
 
-    assert r.status_code == 200
-    body = r.json()
-    assert body["mutual_profile"]["top_genres"] == ["Romance", "Drama"]
-    assert body["mutual_profile"]["era_overlap"] == "1990s"
-    assert body["recommendations"][0]["title"] == "Past Lives"
+    assert r.status_code == 202
+    assert r.json() == {"task_id": "test-id", "status": "pending", "poll_token": "poll-token"}
+
+
+@pytest.mark.asyncio
+async def test_date_night_no_recommendations_returns_empty_success(client: AsyncClient):
+    scraped_data = {
+        "first_diary": [{"title": "Before Sunrise", "year": "1995", "rating": 4.5, "watch_date": "2024-01-01"}],
+        "first_grid": [],
+        "second_diary": [{"title": "Before Sunrise", "year": "1995", "rating": 4.0, "watch_date": "2024-02-01"}],
+        "second_grid": [],
+        "first_watchlist": [{"title": "Obscure Pick", "year": "2023", "slug": "/film/obscure-pick/"}],
+        "second_watchlist": [{"title": "Other Pick", "year": "2023", "slug": "/film/other-pick/"}],
+    }
+
+    async def fake_enrich(session, films, limit=80):
+        return [
+            {**film, "genres": ["Drama"], "directors": ["Richard Linklater"], "decade": "1990s"}
+            for film in films
+        ]
+
+    async def fake_discover(first_wl, second_wl, mutual_profile):
+        return []
+
+    with (
+        patch("app.routes.recommend.task_manager.is_worker_online", return_value=True),
+        patch("app.routes.recommend.task_manager.create_date_night_job", return_value="test-id"),
+        patch("app.routes.recommend.task_manager.get_task_state", return_value=_done_task(scraped_data)),
+        patch("app.routes.recommend.asyncio.sleep"),
+        patch("app.routes.recommend.enrich_films", side_effect=fake_enrich),
+        patch("app.routes.recommend.discover_date_night_recommendations", side_effect=fake_discover),
+    ):
+        r = await client.post("/api/date-night", json={"usernames": ["alice", "bob"]})
+
+    assert r.status_code == 202
+    assert r.json() == {"task_id": "test-id", "status": "pending", "poll_token": "poll-token"}

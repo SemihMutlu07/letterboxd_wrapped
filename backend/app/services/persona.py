@@ -34,7 +34,7 @@ def compute_cinematic_persona(
     top_genre: str,
     favorite_decade: str,
     top_country: str,
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """Map top genre/decade/country to a cinematic persona label and description.
 
     All three arguments should be human-readable names (or fallbacks like
@@ -47,7 +47,9 @@ def compute_cinematic_persona(
     persona_key = (genre, decade, country)
     if persona_key in _PERSONA_MAP:
         persona, description = _PERSONA_MAP[persona_key]
+        match_type = "genre_decade_country"
     else:
+        match_type = "genre"
         # Fallback by genre
         if "Horror" in genre:
             persona, description = "Horror Devotee", "You watch scary movies like other people watch comfort food shows."
@@ -63,7 +65,16 @@ def compute_cinematic_persona(
             persona = f"{genre} Enthusiast"
             description = f"You've made {genre} your personality, and honestly? Respect."
 
-    return {"persona": persona, "description": description}
+    return {
+        "persona": persona,
+        "description": description,
+        "basis": {
+            "genre": genre,
+            "decade": decade,
+            "country": country,
+            "match_type": match_type,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------

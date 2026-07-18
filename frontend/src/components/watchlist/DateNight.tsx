@@ -1,27 +1,46 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
 
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
-import { readWatchlistUsersFromLocation } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
 }
 
-export default function DateNight() {
+type Props = {
+  first?: string;
+  second?: string;
+  onFirstChange?: (value: string) => void;
+  onSecondChange?: (value: string) => void;
+};
+
+export default function DateNight({ first: controlledFirst, second: controlledSecond, onFirstChange, onSecondChange }: Props = {}) {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
-  const [first, setFirst] = useState(() => readWatchlistUsersFromLocation()[0]);
-  const [second, setSecond] = useState(() => readWatchlistUsersFromLocation()[1]);
+  const [localFirst, setLocalFirst] = useState('');
+  const [localSecond, setLocalSecond] = useState('');
+  const first = controlledFirst ?? localFirst;
+  const second = controlledSecond ?? localSecond;
+  const changeFirst = onFirstChange ?? setLocalFirst;
+  const changeSecond = onSecondChange ?? setLocalSecond;
   const [result, setResult] = useState<DateNightResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [erroredPosters, setErroredPosters] = useState<Set<string>>(new Set());
+  const resultRef = useRef<HTMLDivElement>(null);
   const normalized = useMemo(() => [cleanUsername(first), cleanUsername(second)] as const, [first, second]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && normalized[0] !== normalized[1];
+
+  useEffect(() => {
+    if (!result) return;
+    requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      resultRef.current?.focus({ preventScroll: true });
+    });
+  }, [result]);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -53,7 +72,7 @@ export default function DateNight() {
           <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">First profile</span>
           <input
             value={first}
-            onChange={(event) => setFirst(event.target.value)}
+            onChange={(event) => changeFirst(event.target.value)}
             placeholder={placeholders[0]}
             aria-label="First Letterboxd username"
             className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
@@ -63,7 +82,7 @@ export default function DateNight() {
           <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Second profile</span>
           <input
             value={second}
-            onChange={(event) => setSecond(event.target.value)}
+            onChange={(event) => changeSecond(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') void handleSubmit();
             }}
@@ -113,7 +132,14 @@ export default function DateNight() {
       )}
 
       {result && (
-        <div className="space-y-5">
+        <div
+          ref={resultRef}
+          role="region"
+          aria-label="Date night results"
+          aria-live="polite"
+          tabIndex={-1}
+          className="space-y-5 outline-none"
+        >
           <div className="grid gap-3 md:grid-cols-3">
             <div className="border border-stone-800 bg-[#201b16] p-4">
               <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Genres</p>
@@ -140,9 +166,9 @@ export default function DateNight() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {result.recommendations.map((film, index) => {
                 const posterUrl = film.poster_path ? getPosterUrl(film.poster_path) : null;
+                const director = film.director;
+                const overview = film.overview;
                 const extra = film as unknown as Record<string, unknown>;
-                const director = extra.director as string | undefined;
-                const overview = extra.overview as string | undefined;
                 const watchlistAddedAt = extra.watchlist_added_at as string | undefined;
                 const slug = (extra.letterboxd_slug as string) || film.slug;
                 const letterboxdUrl = slug
@@ -164,6 +190,7 @@ export default function DateNight() {
                           width={80}
                           height={120}
                           loading="lazy"
+                          referrerPolicy="no-referrer"
                           className="h-full w-full object-cover"
                           onError={() => setErroredPosters(prev => new Set(prev).add(posterKey))}
                         />

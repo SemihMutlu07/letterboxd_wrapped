@@ -75,9 +75,78 @@ describe('StoryPage', () => {
     await userEvent.click(screen.getByLabelText('Resume story'));
     expect(screen.getByLabelText('Pause story')).toBeInTheDocument();
   });
+
+  it('renders story media in the mobile slide flow', async () => {
+    sessionStorage.setItem('letterboxdStats', JSON.stringify({
+      ...STATS,
+      all_films: [
+        { title: 'Aftersun', rating: 5, poster_path: '/aftersun.jpg' },
+        { title: 'Heat', rating: 4.5, poster_path: '/heat.jpg' },
+      ],
+    }));
+    render(<StoryPage />);
+
+    expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
+    expect(screen.getAllByAltText('Aftersun poster').length).toBeGreaterThan(0);
+  });
 });
 
 describe('buildSlides', () => {
+  it('normalizes object story analytics without rendering object placeholders', () => {
+    const slides = buildSlides({
+      ...STATS,
+      story_analytics: {
+        viewing_season: { season: 'Summer', percentage: 42, story: 'Summer story' },
+        most_active_day: { date: 'August 12', films: 4, story: 'August 12 was a four-film marathon.' },
+      },
+    } as unknown as StatsData);
+    const rhythm = slides.find((slide) => slide.key === 'rhythm');
+    render(<>{rhythm!.body}</>);
+    expect(screen.getByText('Summer')).toBeInTheDocument();
+    expect(screen.getByText(/August 12 was a four-film marathon/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument();
+  });
+
+  it('uses only the selected director profile and films in the director visual', () => {
+    const slides = buildSlides({
+      ...STATS,
+      top_directors: [{ name: 'Denis Villeneuve', count: 2, profile_path: '/denis.jpg' }],
+      top_actors: [{ name: 'Jake Gyllenhaal', count: 18, profile_path: '/jake.jpg' }],
+      all_films: [
+        { title: 'Arrival', director: 'Denis Villeneuve', poster_path: '/arrival.jpg' },
+        { title: 'Heat', director: 'Michael Mann', poster_path: '/heat.jpg' },
+      ],
+    } as unknown as StatsData);
+    const director = slides.find((slide) => slide.key === 'director')!;
+    expect(director.visual).toBe('director');
+    expect(director.media?.map((item) => item.alt)).toEqual([
+      'Denis Villeneuve portrait',
+      'Arrival poster',
+    ]);
+  });
+
+  it('shows every five-star film for the generous critic', () => {
+    const allFilms = Array.from({ length: 11 }, (_, index) => ({
+      title: `Five ${index}`,
+      rating: 5,
+      poster_path: `/five-${index}.jpg`,
+    }));
+    const slides = buildSlides({ ...STATS, rating_personality: 'The Generous Critic', all_films: allFilms } as unknown as StatsData);
+    const rating = slides.find((slide) => slide.key === 'rating-personality')!;
+    expect(rating.visual).toBe('poster-wall');
+    expect(rating.media).toHaveLength(11);
+  });
+
+  it('explains the signal behind the cinematic persona', () => {
+    const slides = buildSlides({
+      ...STATS,
+      cinematic_persona_basis: { genre: 'Drama', decade: '2010s', country: 'France', match_type: 'genre' },
+    } as unknown as StatsData);
+    const persona = slides.find((slide) => slide.key === 'persona')!;
+    render(<>{persona.body}</>);
+    expect(screen.getByText(/Drama was your most-watched genre/i)).toBeInTheDocument();
+  });
+
   it('omits the review-personality slide when review_analysis has no reviews', () => {
     const slides = buildSlides(STATS as unknown as StatsData);
     expect(slides.some((s) => s.key === 'review-personality')).toBe(false);

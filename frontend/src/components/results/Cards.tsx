@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { motion, Variants } from 'framer-motion';
 import { Heart, User } from 'lucide-react';
 import { searchPerson } from '@/lib/api';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 
 export const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
@@ -116,7 +116,7 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
       }
 
       const cacheKey = `director-${director.name}`;
-      const profileUrl = getTmdbImageUrl(director.profile_path);
+      const profileUrl = getDirectTmdbImageUrl(director.profile_path, 'h632');
       if (profileUrl) {
         imgCache.set(cacheKey, profileUrl);
         setImageError(false);
@@ -147,7 +147,7 @@ export const DirectorCard: React.FC<{ director: CountItem; rank: number }> = Rea
         releaseFn = await acquire();
         const data = await searchPerson(director.name, 'director');
         if (data.found && data.url) {
-          const proxyUrl = getTmdbImageUrl(data.url);
+          const proxyUrl = getDirectTmdbImageUrl(data.url, 'h632');
           imgCache.set(cacheKey, proxyUrl);
           setImageError(false);
           setImageUrl(proxyUrl);
@@ -270,7 +270,7 @@ export const ActorCard: React.FC<{
       }
 
       const cacheKey = `actor-${actor.name}`;
-      const profileUrl = getTmdbImageUrl(actor.profile_path);
+      const profileUrl = getDirectTmdbImageUrl(actor.profile_path, 'h632');
       if (profileUrl) {
         imgCache.set(cacheKey, profileUrl);
         setImageError(false);
@@ -302,7 +302,7 @@ export const ActorCard: React.FC<{
 
         const data = await searchPerson(actor.name, 'actor');
         if (data.found && data.url) {
-          const proxyUrl = getTmdbImageUrl(data.url);
+          const proxyUrl = getDirectTmdbImageUrl(data.url, 'h632');
           imgCache.set(cacheKey, proxyUrl);
           setImageError(false);
           setImageUrl(proxyUrl);

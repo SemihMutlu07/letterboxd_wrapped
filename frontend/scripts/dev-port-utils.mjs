@@ -16,6 +16,20 @@ export function parsePort(value, fallback = DEFAULT_BACKEND_PORT) {
   return port;
 }
 
+export async function findFreePort(start, label = 'port') {
+  for (let offset = 0; offset < 20; offset++) {
+    const candidate = start + offset;
+    const open = await isPortListeningWithSs(candidate)
+      || await isPortListeningInProc(candidate)
+      || await isPortOpen(candidate);
+    if (!open) return candidate;
+    if (offset === 0) {
+      console.log(`[dev] ${label} ${candidate} is in use, scanning forward...`);
+    }
+  }
+  throw new Error(`No free port found starting from ${start} (scanned +20).`);
+}
+
 export function isPortOpen(port) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host: '127.0.0.1', port });

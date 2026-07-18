@@ -3,12 +3,14 @@ import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parsePort, probeBackendPort } from './dev-port-utils.mjs';
+import { parsePort, probeBackendPort, findFreePort } from './dev-port-utils.mjs';
 
 const frontendDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const backendPort = parsePort(process.env.BACKEND_PORT);
 const apiBase = `http://localhost:${backendPort}`;
-const frontendPort = parsePort(process.env.PORT, 3000);
+const desiredFrontendPort = parsePort(process.env.PORT, 3000);
+const frontendPort = await findFreePort(desiredFrontendPort, 'frontend');
+const actualFrontendPort = frontendPort !== desiredFrontendPort ? frontendPort : null;
 const frontendUrl = `http://localhost:${frontendPort}/experiment`;
 const startBackend = process.env.START_BACKEND === '1';
 const probe = startBackend ? await probeBackendPort(backendPort) : { state: 'skipped' };
@@ -105,6 +107,10 @@ run('frontend', 'bun', ['run', 'dev:frontend'], {
   ...sharedEnv,
   PORT: String(frontendPort),
 });
+
+if (actualFrontendPort) {
+  console.log(`[dev] Frontend on port ${actualFrontendPort} (${desiredFrontendPort} was occupied).`);
+}
 
 setTimeout(() => {
   console.log(`[dev] Opening ${frontendUrl}`);

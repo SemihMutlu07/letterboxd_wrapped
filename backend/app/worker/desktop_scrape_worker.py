@@ -41,7 +41,7 @@ from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     scrape_and_analyze,
 )
-from app.services.scraper import scrape_watchlist, scrape_profile_sources
+from app.services.scraper import scrape_watchlist, scrape_profile_sources, scrape_avatar_only
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
@@ -209,7 +209,7 @@ def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
         error_code = "analysis_failed" if exc.scraper_ok else "no_films"
     elif isinstance(exc, ValueError):
         error_stage = "letterboxd_or_scrape"
-        error_code = "scrape_failed"
+        error_code = getattr(exc, "error_code", "scrape_failed")
     else:
         error_stage = "pipeline_unexpected"
         error_code = "scrape_failed"
@@ -315,11 +315,13 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
     except Exception as exc:  # noqa: BLE001
         message = str(exc) if isinstance(exc, ValueError) else f"Scrape failed for {first}/{second}."
         logger.warning("Watchlist job %s failed: %s", task_id, exc)
-        await _post(session, cfg, f"/api/worker/watchlist/{task_id}/failed", {"message": message})
+        payload = {"message": message, "telemetry": _failure_telemetry(exc, 0.0)}
+        outbox_path = _write_outbox(task_id, "watchlist-failed", f"/api/worker/watchlist/{task_id}/failed", payload)
+        await _send_outbox_item(session, cfg, outbox_path)
         return
 
-    ok = await _post(session, cfg, f"/api/worker/watchlist/{task_id}/complete", payload)
-    if ok:
+    outbox_path = _write_outbox(task_id, "watchlist-complete", f"/api/worker/watchlist/{task_id}/complete", payload)
+    if await _send_outbox_item(session, cfg, outbox_path):
         logger.info("Watchlist job %s complete", task_id)
 
 
@@ -331,6 +333,14 @@ async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict
             return None
         if r.status != 200:
             logger.warning("Claim failed: HTTP %s", r.status)
+            return None
+        return (await r.json()).get("job")
+
+
+async def _claim_next_fair(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
+    async with session.get(f"{cfg.base_url}/api/worker/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
+        if r.status != 200:
+            logger.warning("Fair claim failed: HTTP %s", r.status)
             return None
         return (await r.json()).get("job")
 
@@ -384,17 +394,21 @@ async def _trace_flush_loop(session: aiohttp.ClientSession, cfg: WorkerConfig, t
 async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
     task_id = job["task_id"]
     username = job["username"]
+    avatar_only = bool(job.get("avatar_only"))
     started = monotonic()
     trace = TraceBuffer()
     trace.add(
         "worker_received",
         "Worker received scrape job",
-        {"username": username, "scrape_transport": "direct_cloudscraper"},
+        {"username": username, "scrape_transport": "direct_cloudscraper", "avatar_only": avatar_only},
     )
     trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace))
-    logger.info("Processing scrape job %s for @%s", task_id, username)
+    logger.info("Processing %s job %s for @%s", "avatar" if avatar_only else "scrape", task_id, username)
     try:
-        stats = await scrape_and_analyze(session, username, trace_callback=trace.add)
+        if avatar_only:
+            stats = {"profile_avatar_url": await scrape_avatar_only(username)}
+        else:
+            stats = await scrape_and_analyze(session, username, trace_callback=trace.add)
     except Exception as exc:  # noqa: BLE001 — any failure must report back, not crash the loop
         message = _failure_message(username, exc)
         duration_seconds = round(monotonic() - started, 1)
@@ -477,31 +491,22 @@ async def run() -> None:
         try:
             while True:
                 try:
-                    job = await _claim_next(session, cfg)
+                    job = await _claim_next_fair(session, cfg)
                 except Exception as exc:  # noqa: BLE001 — keep polling through transient backend errors
                     logger.warning("Poll error: %s", exc)
                     job = None
 
                 if job is None:
-                    # Also check for watchlist/date-night jobs
-                    try:
-                        wl_job = await _claim_next_watchlist(session, cfg)
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning("Watchlist poll error: %s", exc)
-                        wl_job = None
-
-                    if wl_job is not None:
-                        await _flush_outbox(session, cfg)
-                        await _process_watchlist_job(session, cfg, wl_job)
-                        continue
-
                     await _flush_outbox(session, cfg)
                     await asyncio.sleep(POLL_INTERVAL)
                     continue
 
                 # Process one job at a time (V1 — no concurrency).
                 await _flush_outbox(session, cfg)
-                await _process_job(session, cfg, job)
+                if job.get("kind") == "watchlist":
+                    await _process_watchlist_job(session, cfg, job)
+                else:
+                    await _process_job(session, cfg, job)
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):

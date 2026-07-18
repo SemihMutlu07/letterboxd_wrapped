@@ -7,14 +7,14 @@
  * (w-full/h-full), so drop it into any sized/aspect-ratio container.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Film, UserRound } from 'lucide-react';
 
 /** Icon fill for a missing film poster. */
 export function PosterPlaceholder({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`w-full h-full grid place-items-center bg-gradient-to-br from-zinc-800 to-zinc-900 ${className}`}
+      className={`grid h-full w-full place-items-center bg-[var(--results-surface)] ${className}`}
       aria-hidden
     >
       <Film className="w-1/3 aspect-square text-white/20" strokeWidth={1.5} />
@@ -26,7 +26,7 @@ export function PosterPlaceholder({ className = '' }: { className?: string }) {
 export function PersonAvatarPlaceholder({ className = '' }: { className?: string }) {
   return (
     <div
-      className={`w-full h-full grid place-items-center bg-gradient-to-br from-slate-700 to-slate-900 ${className}`}
+      className={`grid h-full w-full place-items-center bg-[var(--results-surface)] ${className}`}
       aria-hidden
     >
       <UserRound className="w-1/2 aspect-square text-white/25" strokeWidth={1.5} />
@@ -48,6 +48,7 @@ export function PosterImage({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
   if (!src || failed) return <PosterPlaceholder />;
   return (
     // eslint-disable-next-line @next/next/no-img-element

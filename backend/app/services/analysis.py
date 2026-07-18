@@ -395,7 +395,9 @@ async def process_comprehensive_letterboxd_data(
     top_decade = stats.get("favorite_decade", {}).get("name", "2020s") if stats.get("favorite_decade") else "2020s"
     top_country = stats.get("top_countries", [{}])[0].get("name", "USA") if stats.get("top_countries") else "USA"
 
-    stats["cinematic_persona"] = compute_cinematic_persona(top_genre, top_decade, top_country)
+    persona_result = compute_cinematic_persona(top_genre, top_decade, top_country)
+    stats["cinematic_persona_basis"] = persona_result.pop("basis")
+    stats["cinematic_persona"] = persona_result
 
     # -----------------------------------------------------------------------
     # 11. DIRECTOR + ACTOR PROFILES (async)

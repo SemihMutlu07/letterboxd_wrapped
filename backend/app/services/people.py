@@ -444,7 +444,10 @@ async def resolve_profile_paths(
     """
     for row in entities[:limit]:
         name = row.get("name")
-        if not name or name in cache:
+        if not name:
+            continue
+        if name in cache:
+            row["profile_path"] = cache[name]
             continue
         pp: Optional[str] = None
         try:

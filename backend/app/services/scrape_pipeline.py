@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from app.services.analysis import process_comprehensive_letterboxd_data
+from app.services.review_analysis import enrich_scraped_reviews
 from app.services.scraper import (
     diary_to_csv_dicts,
     merge_scraped_films,
@@ -162,6 +163,12 @@ async def scrape_and_analyze(
         stats["scraped_review_count"] = sources.review_count
         stats["scraped_film_count_estimated"] = sources.film_count
         stats["scraped_reviews_with_text"] = sum(1 for r in sources.reviews if r.get("review_text"))
+        stats["profile_avatar_url"] = sources.profile_avatar_url
+
+        if sources.reviews and isinstance(stats.get("review_analysis"), dict):
+            enrich_scraped_reviews(
+                stats["review_analysis"], sources.reviews, stats.get("all_films", [])
+            )
 
         # Enrich profile favorite films with poster_path via title match against enriched data
         if sources.favorite_films:

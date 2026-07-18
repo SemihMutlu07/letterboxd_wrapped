@@ -196,6 +196,23 @@ export async function searchPerson(name: string, role: 'director' | 'actor' = 'd
   }
 }
 
+// Search for a movie through the backend so the TMDB key never reaches the browser.
+export async function searchMovie(title: string, year?: number) {
+  const params = new URLSearchParams({ title });
+  if (year) params.set('year', String(year));
+  const url = `${API_BASE}/api/tmdb/movie/search?${params.toString()}`;
+  try {
+    const r = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error(`TMDB movie search ${r.status}`);
+    const data = await r.json();
+    if (!data || typeof data !== 'object') throw new Error('Invalid response from TMDB movie search');
+    return data;
+  } catch (error) {
+    const enhancedError = handleApiError(error, 'TMDB movie search');
+    return { found: false, message: enhancedError.message, title, url: null, error: enhancedError.message };
+  }
+}
+
 export type ScrapeTraceEvent = {
   stage?: string;
   message?: string;
@@ -210,10 +227,11 @@ export type ScrapeProgress = {
 };
 
 // Poll a task until it reaches a terminal state (done | failed).
-async function pollTask(
+async function pollTask<T = { status: string; stats: LetterboxdStats }>(
   taskId: string,
+  pollToken: string,
   opts: { intervalMs?: number; timeoutMs?: number; onProgress?: (p: ScrapeProgress) => void } = {},
-): Promise<{ status: string; stats: LetterboxdStats }> {
+): Promise<T> {
   const intervalMs = opts.intervalMs ?? 2000;
   const timeoutMs  = opts.timeoutMs  ?? 600_000; // 10 min max
   const deadline = Date.now() + timeoutMs;
@@ -221,7 +239,7 @@ async function pollTask(
   while (Date.now() < deadline) {
     const r = await fetch(`${API_BASE}/api/progress/${taskId}`, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: { 'Accept': 'application/json', 'X-Task-Token': pollToken },
     });
 
     if (!r.ok) {
@@ -235,11 +253,16 @@ async function pollTask(
       const result = task.result;
       if (!result) throw new Error('Analysis returned no result');
       if (result.status === 'error') throw new Error(result.detail || 'Analysis failed');
-      return result as { status: string; stats: LetterboxdStats };
+      return result as T;
     }
 
     if (task.status === 'failed') {
-      throw new Error(task.error || 'Analysis failed on the server');
+      const error = new Error(task.error || 'Analysis failed on the server');
+      if (task.error_code) {
+        (error as Error & { code?: string; error_code?: string }).code = task.error_code;
+        (error as Error & { code?: string; error_code?: string }).error_code = task.error_code;
+      }
+      throw error;
     }
 
     // pending | running — surface live progress, then wait and retry
@@ -268,7 +291,7 @@ export async function analyzeFiles(formData: FormData): Promise<{ status: string
 
     const data = await r.json();
     if (data && data.task_id) {
-      return await pollTask(data.task_id);
+      return await pollTask(data.task_id, data.poll_token);
     }
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Analysis failed');
@@ -338,7 +361,7 @@ export async function scrapeProfile(
 
     // Desktop-worker mode: the job was queued — poll until the worker finishes.
     if (data && data.task_id && !data.stats) {
-      return await pollTask(data.task_id, { onProgress });
+      return await pollTask(data.task_id, data.poll_token, { onProgress });
     }
 
     if (!data || data.status === 'error') {
@@ -374,6 +397,10 @@ export async function compareWatchlists(
     }
 
     const data = await r.json();
+
+    if (r.status === 202 && data?.task_id && data?.poll_token) {
+      return await pollTask<WatchlistCompareResult>(data.task_id, data.poll_token);
+    }
 
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Watchlist comparison failed');
@@ -452,7 +479,11 @@ export async function dateNight(
       throw await parseApiFailure(r, 'date night recommendations', `date night ${r.status}`);
     }
 
-    return await r.json() as DateNightResult;
+    const data = await r.json();
+    if (r.status === 202 && data?.task_id && data?.poll_token) {
+      return await pollTask<DateNightResult>(data.task_id, data.poll_token);
+    }
+    return data as DateNightResult;
   } catch (error) {
     throw handleApiError(error, 'date night recommendations');
   }

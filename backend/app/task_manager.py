@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 import uuid
+import secrets
 
 
 @dataclass
@@ -32,10 +33,14 @@ class TaskState:
     error_code: Optional[str] = None
     kind: str = "analyze"     # analyze | scrape | watchlist
     username: Optional[str] = None
+    avatar_only: bool = False
     usernames: list = field(default_factory=list)  # watchlist jobs
     job_type: str = ""  # watchlist_compare | date_night
+    options: Dict[str, Any] = field(default_factory=dict)
     claimed: bool = False     # scrape/watchlist jobs: True once a worker has taken it
     trace_events: list[Dict[str, Any]] = field(default_factory=list)
+    poll_token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+    owner_key: Optional[str] = None
 
 
 _tasks: Dict[str, TaskState] = {}
@@ -60,19 +65,35 @@ _last_supervisor_status: Dict[str, Any] = {}
 _supervisor_log_tail: list[str] = []
 
 
-def create_task_state() -> str:
+MAX_TASKS = 25
+MAX_ACTIVE_PER_OWNER = 2
+
+
+def _ensure_queue_capacity(owner_key: Optional[str]) -> None:
+    active = [task for task in _tasks.values() if task.status in ("pending", "running")]
+    if len(active) >= MAX_TASKS or (
+        owner_key and sum(task.owner_key == owner_key for task in active) >= MAX_ACTIVE_PER_OWNER
+    ):
+        raise RuntimeError("queue_full")
+
+
+def create_task_state(owner_key: Optional[str] = None) -> str:
+    _ensure_queue_capacity(owner_key)
     task_id = str(uuid.uuid4())
-    _tasks[task_id] = TaskState(task_id=task_id)
+    _tasks[task_id] = TaskState(task_id=task_id, owner_key=owner_key)
     return task_id
 
 
-def create_scrape_job(username: str) -> str:
+def create_scrape_job(username: str, avatar_only: bool = False, owner_key: Optional[str] = None) -> str:
     """Queue a username scrape job for the desktop worker to claim."""
+    _ensure_queue_capacity(owner_key)
     task_id = str(uuid.uuid4())
     task = TaskState(
         task_id=task_id,
         kind="scrape",
         username=username,
+        avatar_only=avatar_only,
+        owner_key=owner_key,
         stage="queued",
         message="Queued on desktop scraper",
     )
@@ -81,33 +102,41 @@ def create_scrape_job(username: str) -> str:
     return task_id
 
 
-def create_watchlist_compare_job(usernames: list) -> str:
+def create_watchlist_compare_job(usernames: list, owner_key: Optional[str] = None, options: Optional[Dict[str, Any]] = None) -> str:
     """Queue a watchlist comparison job for the desktop worker to claim."""
+    _ensure_queue_capacity(owner_key)
     task_id = str(uuid.uuid4())
     task = TaskState(
         task_id=task_id,
         kind="watchlist",
         job_type="watchlist_compare",
         usernames=list(usernames),
+        owner_key=owner_key,
+        options=dict(options or {}),
         stage="queued",
         message="Queued on desktop scraper",
     )
     _tasks[task_id] = task
+    append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
     return task_id
 
 
-def create_date_night_job(usernames: list) -> str:
+def create_date_night_job(usernames: list, owner_key: Optional[str] = None, options: Optional[Dict[str, Any]] = None) -> str:
     """Queue a date-night scrape job for the desktop worker to claim."""
+    _ensure_queue_capacity(owner_key)
     task_id = str(uuid.uuid4())
     task = TaskState(
         task_id=task_id,
         kind="watchlist",
         job_type="date_night",
         usernames=list(usernames),
+        owner_key=owner_key,
+        options=dict(options or {}),
         stage="queued",
         message="Queued on desktop scraper",
     )
     _tasks[task_id] = task
+    append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
     return task_id
 
 
@@ -127,6 +156,26 @@ def claim_next_watchlist_job() -> Optional[TaskState]:
     job.stage = "scraping"
     job.message = "Desktop worker is reading Letterboxd"
     job.claimed_at = datetime.now(timezone.utc)
+    return job
+
+
+def claim_next_worker_job() -> Optional[TaskState]:
+    """Claim the oldest pending outbound-worker job, regardless of job kind."""
+    if is_worker_paused():
+        return None
+    queued = sorted(
+        [t for t in _tasks.values() if t.kind in {"scrape", "watchlist"} and t.status == "pending" and not t.claimed],
+        key=lambda t: t.created_at,
+    )
+    if not queued:
+        return None
+    job = queued[0]
+    job.claimed = True
+    job.status = "running"
+    job.stage = "scraping"
+    job.message = "Desktop worker is reading Letterboxd"
+    job.claimed_at = datetime.now(timezone.utc)
+    append_task_event(job.task_id, "claimed", "Desktop worker claimed the job", level="info")
     return job
 
 
@@ -159,6 +208,15 @@ def _seconds_between(start: Optional[datetime], end: Optional[datetime]) -> Opti
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value is not None else None
+
+
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> None:
@@ -279,6 +337,22 @@ def request_worker_restart() -> Dict[str, Any]:
     return get_worker_control_state()
 
 
+def apply_worker_control_state(control: Dict[str, Any]) -> Dict[str, Any]:
+    """Replace in-memory worker controls with a validated persisted snapshot."""
+    global _worker_desired_state, _worker_restart_token, _worker_restart_requested_at
+    desired_state = str(control.get("desired_state") or "run").strip().lower()
+    if desired_state not in WORKER_DESIRED_STATES:
+        desired_state = "run"
+    try:
+        restart_token = max(0, int(control.get("restart_token")))
+    except (TypeError, ValueError):
+        restart_token = 0
+    _worker_desired_state = desired_state
+    _worker_restart_token = restart_token
+    _worker_restart_requested_at = _parse_iso_datetime(control.get("restart_requested_at"))
+    return get_worker_control_state()
+
+
 def get_worker_control_state() -> Dict[str, Any]:
     return {
         "desired_state": _worker_desired_state,
@@ -391,7 +465,7 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
         if _last_worker_heartbeat is not None
         else None
     )
-    scrape_tasks = [t for t in _tasks.values() if t.kind == "scrape"]
+    scrape_tasks = [t for t in _tasks.values() if t.kind in {"scrape", "watchlist"}]
     queued = [t for t in scrape_tasks if t.status == "pending" and not t.claimed]
     running = [t for t in scrape_tasks if t.status == "running"]
     completed = [t for t in scrape_tasks if t.status == "done"]
@@ -418,11 +492,15 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
             "running": len(running),
             "completed": len(completed),
             "failed": len(failed),
+            "watchlist_queued": sum(t.kind == "watchlist" for t in queued),
+            "watchlist_running": sum(t.kind == "watchlist" for t in running),
         },
         "current_jobs": [
             {
                 "task_id": t.task_id,
                 "username": t.username,
+                "usernames": t.usernames,
+                "job_type": t.job_type,
                 "status": t.status,
                 "stage": t.stage,
                 "message": t.message,
@@ -478,7 +556,7 @@ def update_task_progress(
         task.progress = progress
         task.total = total
         append_task_event(task_id, stage, message, metrics={"progress": progress, "total": total})
-    print(f"📊 [{task_id[:8]}] {stage}: {message} ({progress}/{total})")
+    print(f"[{task_id[:8]}] {stage}: {message} ({progress}/{total})")
 
 
 def set_task_running(task_id: str) -> None:
@@ -519,7 +597,8 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
 
 # ponytail: a scrape running longer than this is treated as a dead worker and
 # re-queued; raise it if real scrapes ever legitimately exceed it.
-STALE_CLAIM_SECONDS = 900
+STALE_CLAIM_SECONDS = 300
+ACTIVE_JOB_TIMEOUT_SECONDS = 540
 
 
 def requeue_stale_claims(now: Optional[datetime] = None) -> int:
@@ -531,7 +610,13 @@ def requeue_stale_claims(now: Optional[datetime] = None) -> int:
     cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
     count = 0
     for t in _tasks.values():
-        if t.kind == "scrape" and t.status == "running" and t.claimed_at and t.claimed_at < cutoff:
+        if (
+            t.kind in {"scrape", "watchlist"}
+            and t.status == "running"
+            and t.stage == "scraping"
+            and t.claimed_at
+            and t.claimed_at < cutoff
+        ):
             t.claimed = False
             t.status = "pending"
             t.stage = "queued"
@@ -542,13 +627,34 @@ def requeue_stale_claims(now: Optional[datetime] = None) -> int:
     return count
 
 
+def fail_worker_job_if_expired(task: TaskState, now: Optional[datetime] = None) -> bool:
+    """Fail one active worker job once its public polling deadline passes."""
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=ACTIVE_JOB_TIMEOUT_SECONDS)
+    if not (task.kind in {"scrape", "watchlist"} and task.status in {"pending", "running"} and task.created_at < cutoff):
+        return False
+    set_task_failed(task.task_id, "The desktop worker job timed out. Please try again.", {
+        "error_type": "WorkerJobTimeout", "error_stage": task.stage, "error_code": "worker_timeout",
+    })
+    return True
+
+
+def fail_expired_worker_jobs(now: Optional[datetime] = None) -> int:
+    now = now or datetime.now(timezone.utc)
+    return sum(fail_worker_job_if_expired(task, now) for task in _tasks.values())
+
+
 async def cleanup_loop() -> None:
-    """Re-queue stale claims, then remove tasks older than 1 hour; every 5 minutes."""
+    """Re-queue/expire worker jobs, then remove terminal tasks after retention."""
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(30)
         now = datetime.now(timezone.utc)
         requeue_stale_claims(now)
+        fail_expired_worker_jobs(now)
         cutoff = now - timedelta(hours=1)
-        stale = [tid for tid, t in list(_tasks.items()) if t.created_at < cutoff]
+        stale = [
+            tid for tid, t in list(_tasks.items())
+            if t.status in {"done", "failed"} and (t.completed_at or t.failed_at or t.created_at) < cutoff
+        ]
         for tid in stale:
             _tasks.pop(tid, None)

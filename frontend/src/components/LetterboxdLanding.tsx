@@ -15,6 +15,23 @@ import ErrorBanner from '@/components/ErrorBanner';
 import LoadingScreen from '@/components/landing/LoadingScreen';
 import UploadZone from '@/components/landing/UploadZone';
 import ExportInstructions from '@/components/landing/ExportInstructions';
+import { POSTER_GAME_MOVIES, type PosterGameMovie } from '@/lib/posterGameData';
+
+const POSTER_GAME_MAX_LEVEL = 5;
+const POSTER_ROUND_POINTS = [100, 80, 60, 40, 20];
+
+function drawShuffledMovie(deckRef: React.MutableRefObject<PosterGameMovie[]>, indexRef: React.MutableRefObject<number>): PosterGameMovie {
+  if (indexRef.current >= deckRef.current.length) {
+    const shuffled = [...POSTER_GAME_MOVIES];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    deckRef.current = shuffled;
+    indexRef.current = 0;
+  }
+  return deckRef.current[indexRef.current++];
+}
 
 export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
@@ -26,6 +43,14 @@ export default function LetterboxdLanding() {
   const [reveal, setReveal] = useState<{ guess: number; actual: number } | null>(null);
   const guessRef = useRef<number | null>(null);
   const setGuess = useCallback((n: number) => { guessRef.current = n; setGuessState(n); }, []);
+  const [posterRound, setPosterRound] = useState<PosterGameMovie | null>(null);
+  const [posterLevel, setPosterLevel] = useState(0);
+  const [posterScore, setPosterScore] = useState(0);
+  const [posterWrongGuesses, setPosterWrongGuesses] = useState(0);
+  const [posterRevealed, setPosterRevealed] = useState(false);
+  const shuffledDeckRef = useRef<PosterGameMovie[]>([]);
+  const deckIndexRef = useRef(0);
+  const [resultReady, setResultReady] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [error, setError] = useState<NormalizedError | null>(null);
@@ -80,6 +105,36 @@ export default function LetterboxdLanding() {
       document.body.style.overflow = prevOverflow;
     };
   }, [showUploadModal]);
+
+  const drawNextPosterRound = useCallback(() => {
+    setPosterLevel(0);
+    setPosterWrongGuesses(0);
+    setPosterRevealed(false);
+    setPosterRound(drawShuffledMovie(shuffledDeckRef, deckIndexRef));
+  }, []);
+
+  useEffect(() => {
+    if (isScraping && !posterRound) drawNextPosterRound();
+  }, [drawNextPosterRound, isScraping, posterRound]);
+
+  const handlePosterWrongGuess = useCallback(() => {
+    setPosterWrongGuesses((value) => value + 1);
+    setPosterLevel((value) => {
+      const next = Math.min(value + 1, POSTER_GAME_MAX_LEVEL);
+      if (next >= POSTER_GAME_MAX_LEVEL) {
+        setPosterRevealed(true);
+        setTimeout(drawNextPosterRound, 2000);
+      }
+      return next;
+    });
+  }, [drawNextPosterRound]);
+
+  const handlePosterCorrectGuess = useCallback(() => {
+    const points = POSTER_ROUND_POINTS[Math.min(posterWrongGuesses, POSTER_ROUND_POINTS.length - 1)];
+    setPosterScore((value) => value + points);
+    setPosterRevealed(true);
+    setTimeout(drawNextPosterRound, 1200);
+  }, [drawNextPosterRound, posterWrongGuesses]);
 
   const zipFiles = useCallback(async (files: FileList | File[]): Promise<File> => {
     const zip = new JSZip();
@@ -273,6 +328,11 @@ export default function LetterboxdLanding() {
     setGuessState(null);
     setReveal(null);
     guessRef.current = null;
+    setPosterRound(null);
+    setPosterScore(0);
+    shuffledDeckRef.current = [];
+    deckIndexRef.current = 0;
+    setResultReady(null);
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape' });
 
@@ -318,7 +378,7 @@ export default function LetterboxdLanding() {
         setReveal({ guess: playedGuess, actual: actualFilms });
         setTimeout(() => { window.location.href = resultPath(username); }, 3500);
       } else {
-        setTimeout(() => { window.location.href = resultPath(username); }, 100);
+        setResultReady(resultPath(username));
       }
     } catch (err) {
       console.error('[scrape] analysis failed:', err);
@@ -366,6 +426,11 @@ export default function LetterboxdLanding() {
     setGuessState(null);
     setReveal(null);
     guessRef.current = null;
+    setPosterRound(null);
+    setPosterScore(0);
+    shuffledDeckRef.current = [];
+    deckIndexRef.current = 0;
+    setResultReady(null);
     setError(null);
   }, []);
 
@@ -380,6 +445,18 @@ export default function LetterboxdLanding() {
         onGuess={setGuess}
         guess={guess}
         reveal={reveal}
+        posterGame={posterRound ? {
+          movie: posterRound,
+          level: posterLevel,
+          maxLevel: POSTER_GAME_MAX_LEVEL,
+          wrongGuesses: posterWrongGuesses,
+          score: posterScore,
+          nextPoints: POSTER_ROUND_POINTS[Math.min(posterWrongGuesses, POSTER_ROUND_POINTS.length - 1)],
+          onWrongGuess: handlePosterWrongGuess,
+          onCorrectGuess: handlePosterCorrectGuess,
+          revealedAnswer: posterRevealed,
+        } : null}
+        resultReady={resultReady}
       />
     );
   }

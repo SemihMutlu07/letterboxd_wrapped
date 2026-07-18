@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { Heart, User, Clock, Star, Calendar, Film } from 'lucide-react';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 import type { ShareCardData, ShareOrientation } from '../types';
 
 /**
@@ -26,7 +26,7 @@ type Props = {
 const BG = '#000000';
 const SURFACE = '#1C1C1E';
 const BORDER = '#38383A';
-const ACCENT = '#0A84FF';
+const ACCENT = '#FF7A1A';
 const TEXT_PRIMARY = '#FFFFFF';
 const TEXT_SECONDARY = '#8E8E93';
 
@@ -61,7 +61,7 @@ const PosterStrip: React.FC<{
   return (
     <div className="flex gap-2 justify-center">
       {shown.map((f) => {
-        const url = f.posterPath ? getTmdbImageUrl(f.posterPath, 'w342') : null;
+        const url = f.posterPath ? getDirectTmdbImageUrl(f.posterPath, 'w500') : null;
         return (
           <div
             key={`${f.title}-${f.year}`}
@@ -97,7 +97,7 @@ const formatReviewWords = (words?: ShareCardData['topReviewWords']) =>
 
 const OutlierFilmCard: React.FC<{ film?: ShareCardData['ratingOutlierFilm'] }> = ({ film }) => {
   if (!film) return null;
-  const posterUrl = film.posterPath ? getTmdbImageUrl(film.posterPath, 'w342') : null;
+  const posterUrl = film.posterPath ? getDirectTmdbImageUrl(film.posterPath, 'w500') : null;
   const sign = film.delta > 0 ? '+' : '';
   const deltaColor = film.delta > 0 ? '#34C759' : '#FF453A';
   return (
@@ -362,13 +362,13 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
 
     const crushUrl = useMemo(() => {
       if (!data.onScreenCrush.headshotUrl) return undefined;
-      const url = getTmdbImageUrl(data.onScreenCrush.headshotUrl);
+      const url = getDirectTmdbImageUrl(data.onScreenCrush.headshotUrl, 'h632');
       return url === null ? undefined : url;
     }, [data.onScreenCrush.headshotUrl]);
 
     const directorUrl = useMemo(() => {
       if (!data.favoriteDirector.headshotUrl) return undefined;
-      const url = getTmdbImageUrl(data.favoriteDirector.headshotUrl);
+      const url = getDirectTmdbImageUrl(data.favoriteDirector.headshotUrl, 'h632');
       return url === null ? undefined : url;
     }, [data.favoriteDirector.headshotUrl]);
     const reviewWordsText = formatReviewWords(data.topReviewWords);
@@ -394,7 +394,7 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
               className="text-[14px] font-semibold uppercase tracking-[0.16em]"
               style={{ color: TEXT_SECONDARY }}
             >
-              Year In Film
+              {data.username ? `@${data.username}` : 'Your year in film'}
             </p>
 
             {/* Title */}
@@ -402,7 +402,7 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
               className="font-bold leading-none -mt-2"
               style={{ fontSize: 44, color: TEXT_PRIMARY, letterSpacing: '-0.02em' }}
             >
-              Letterboxd Wrapped
+              {data.personaLabel || 'A year shaped by cinema'}
             </h1>
 
             {/* Hero count — big, left-aligned */}
@@ -423,7 +423,7 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
                 className="mt-1 text-[15px] font-semibold"
                 style={{ color: TEXT_SECONDARY }}
               >
-                films this year
+                films shaped your year
               </p>
             </div>
 
@@ -500,7 +500,7 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
                 className="text-[11px] font-semibold uppercase tracking-[0.12em]"
                 style={{ color: '#636366' }}
               >
-                movieswrapped.com
+                What did your year look like? · movieswrapped.com
               </p>
             </div>
           </div>
@@ -529,13 +529,13 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
                 className="text-[16px] font-semibold uppercase tracking-[0.14em]"
                 style={{ color: TEXT_SECONDARY }}
               >
-                Year In Film
+                {data.username ? `@${data.username}` : 'Your year in film'}
               </p>
               <h1
                 className="mt-2 font-bold leading-none"
                 style={{ fontSize: 44, color: TEXT_PRIMARY, letterSpacing: '-0.02em' }}
               >
-                Your Letterboxd Wrapped
+                {data.personaLabel || 'A year shaped by cinema'}
               </h1>
             </div>
 
@@ -551,7 +551,7 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
                 className="mt-1 text-[18px] font-semibold"
                 style={{ color: TEXT_SECONDARY }}
               >
-                films this year
+                films shaped your year
               </p>
             </div>
 
@@ -596,7 +596,7 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
               className="text-[12px] font-semibold uppercase tracking-[0.14em]"
               style={{ color: '#636366' }}
             >
-              movieswrapped.com
+              What did your year look like? · movieswrapped.com
             </p>
           </div>
 

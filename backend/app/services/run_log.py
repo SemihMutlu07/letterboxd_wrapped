@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
+import asyncio
 import json
 import logging
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -18,6 +20,23 @@ RUNS_DIR = Path("runs")
 # Bulky fields kept in the local file but stripped before mirroring to Supabase.
 # trace_events is lightweight (list of small dicts) and needed by the admin dashboard.
 _HEAVY_KEYS = ("stats",)
+
+
+async def cleanup_expired_runs() -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, settings.run_retention_days))
+    for directory in (RUNS_DIR, Path("watchlist_runs"), Path("date_night_runs")):
+        if directory.exists():
+            for path in directory.glob("*.json"):
+                try:
+                    if datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) < cutoff:
+                        path.unlink()
+                except OSError as exc:
+                    logger.warning("Failed retention cleanup for %s: %s", path, exc)
+    if settings.supabase_enabled:
+        cutoff_iso = cutoff.isoformat()
+        await asyncio.gather(*(supabase_ops.delete_before(table, cutoff_iso) for table in (
+            "ops_runs", "ops_watchlist_runs", "ops_date_night_runs", "ops_worker_events"
+        )))
 
 
 def _remote_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -49,6 +68,21 @@ def _safe_username(username: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9_-]", "_", (username or "anon").lower()) or "anon"
 
 
+def _redact_third_party_likers(stats: dict[str, Any]) -> dict[str, Any]:
+    """Remove third-party identities from durable logs, retaining aggregates."""
+    redacted = copy.deepcopy(stats)
+    analysis = redacted.get("review_analysis")
+    if not isinstance(analysis, dict):
+        return redacted
+    for key in ("reviews", "top_liked_reviews", "socially_active_reviews"):
+        for review in analysis.get(key, []) or []:
+            if isinstance(review, dict):
+                review.pop("likers", None)
+                review.pop("liked_by", None)
+    analysis.pop("top_recurring_likers", None)
+    return redacted
+
+
 def persist_run(
     username: Optional[str],
     source: str,
@@ -70,7 +104,7 @@ def persist_run(
 ) -> Optional[Path]:
     """Best-effort run log under runs/{username}-{iso-ts}-{task}.json."""
     try:
-        stats = stats or {}
+        stats = _redact_third_party_likers(stats or {})
         telemetry = telemetry or {}
         RUNS_DIR.mkdir(parents=True, exist_ok=True)
 

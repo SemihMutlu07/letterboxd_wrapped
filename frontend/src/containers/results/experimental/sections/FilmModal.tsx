@@ -54,7 +54,7 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-[#1a1a1a] border border-white/8 rounded-2xl p-6 max-w-md w-full space-y-4"
+            className="w-full max-w-md space-y-6 rounded-[28px] border border-white/10 bg-[#111113] p-6 shadow-2xl"
           >
             {/* Header */}
             <div className="space-y-2">
@@ -66,22 +66,22 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
 
             {/* Details grid */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-slate-800/40 rounded-lg p-3">
+              <div className="rounded-2xl bg-[#1c1c1e] p-3">
                 <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Runtime</p>
                 <p className="text-sm font-semibold text-white">{film.runtime ? `${film.runtime} min` : '—'}</p>
               </div>
-              <div className="bg-slate-800/40 rounded-lg p-3">
+              <div className="rounded-2xl bg-[#1c1c1e] p-3">
                 <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Language</p>
                 <p className="text-sm font-semibold text-white">{film.language || '—'}</p>
               </div>
-              <div className="bg-slate-800/40 rounded-lg p-3">
+              <div className="rounded-2xl bg-[#1c1c1e] p-3">
                 <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Your rating</p>
                 <p className="text-sm font-semibold text-orange-400">★ {(film.rating ?? 0).toFixed(1)}</p>
               </div>
             </div>
 
             {/* Rating comparison */}
-            <div className="bg-slate-800/40 rounded-lg p-4 border border-white/4">
+            <div className="rounded-2xl border border-white/10 bg-[#1c1c1e] p-4">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1">
                   <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Community avg</p>
@@ -112,7 +112,7 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
             {/* Close button */}
             <button
               onClick={onClose}
-              className="w-full mt-4 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold transition-colors"
+              className="mt-4 min-h-11 w-full rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
             >
               Close
             </button>

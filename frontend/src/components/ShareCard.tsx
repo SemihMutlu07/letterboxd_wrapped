@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import { Heart, User, Clock, Star, Calendar, Film } from "lucide-react";
-import { getTmdbImageUrl } from "@/lib/analytics";
+import { getDirectTmdbImageUrl } from "@/lib/analytics";
 import type { ShareFilmStat, ShareReviewWordStat } from "@/components/share/types";
 
 // ==================== Types ====================
@@ -60,7 +60,7 @@ const PosterStrip: React.FC<{ films?: ShareFilmStat[]; size: "xl" | "lg" | "sm" 
   return (
     <div className="flex gap-2 justify-center">
       {shown.map((f) => {
-        const url = f.posterPath ? getTmdbImageUrl(f.posterPath, "w342") : null;
+        const url = f.posterPath ? getDirectTmdbImageUrl(f.posterPath, "w500") : null;
         return (
           <div
             key={`${f.title}-${f.year}`}
@@ -201,7 +201,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
   const crushUrl = useMemo(
     () => {
       if (!onScreenCrush.headshotUrl) return undefined;
-      const url = getTmdbImageUrl(onScreenCrush.headshotUrl);
+      const url = getDirectTmdbImageUrl(onScreenCrush.headshotUrl, 'h632');
       return url === null ? undefined : url;
     },
     [onScreenCrush.headshotUrl]
@@ -211,7 +211,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
   const directorUrl = useMemo(
     () => {
       if (!favoriteDirector.headshotUrl) return undefined;
-      const url = getTmdbImageUrl(favoriteDirector.headshotUrl);
+      const url = getDirectTmdbImageUrl(favoriteDirector.headshotUrl, 'h632');
       return url === null ? undefined : url;
     },
     [favoriteDirector.headshotUrl]

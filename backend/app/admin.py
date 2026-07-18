@@ -1,12 +1,16 @@
 """
 Admin dashboard for MoviesWrapped.
 Reads from backend/runs/ + watchlist_runs/ + date_night_runs/ JSON logs.
-Auth: Authorization: Bearer <secret> header (primary), ?key= query param (GET nav fallback).
+Auth: signed HttpOnly session cookie for browsers; Bearer secret for automation.
 ADMIN_SECRET env var is mandatory — no hardcoded default.
 """
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
+import secrets
+import time
 import logging
 import os
 from datetime import datetime
@@ -14,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import supabase_ops, task_manager
@@ -27,10 +31,10 @@ router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
 def _admin_secret() -> str:
-    """Lazy-load ADMIN_SECRET from env var. Raises if unset — no hardcoded fallback."""
+    """Lazy-load ADMIN_SECRET from env var with a safe setup failure."""
     secret = os.environ.get("ADMIN_SECRET")
     if not secret:
-        raise RuntimeError("ADMIN_SECRET environment variable is required and must not be empty")
+        raise HTTPException(status_code=503, detail={"error_code": "admin_not_configured", "message": "Admin dashboard is not configured on this server."})
     return secret
 
 
@@ -80,15 +84,36 @@ def _require_admin(request: Request) -> None:
     # Primary: Authorization: Bearer <token>
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
-        if auth_header[7:] == secret:
+        if secrets.compare_digest(auth_header[7:], secret):
             return
-    # Fallback: ?key= query param (for GET navigation links)
-    if request.query_params.get("key") == secret:
+    if _valid_session(request.cookies.get("mw_admin_session", ""), secret):
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            origin = request.headers.get("origin", "")
+            expected = f"{request.url.scheme}://{request.url.netloc}"
+            if not origin or not secrets.compare_digest(origin, expected):
+                raise HTTPException(status_code=403, detail="Invalid request origin")
         return
     # Legacy: x-admin-key header
-    if request.headers.get("x-admin-key") == secret:
+    if secrets.compare_digest(request.headers.get("x-admin-key", ""), secret):
         return
     raise HTTPException(status_code=403, detail="Forbidden")
+
+
+def _session_value(secret: str) -> str:
+    expires = str(int(time.time()) + 8 * 60 * 60)
+    signature = hmac.new(secret.encode(), expires.encode(), hashlib.sha256).hexdigest()
+    return f"{expires}.{signature}"
+
+
+def _valid_session(value: str, secret: str) -> bool:
+    try:
+        expires, signature = value.split(".", 1)
+        if int(expires) < int(time.time()):
+            return False
+    except (ValueError, TypeError):
+        return False
+    expected = hmac.new(secret.encode(), expires.encode(), hashlib.sha256).hexdigest()
+    return secrets.compare_digest(signature, expected)
 
 
 def _load_json_dir(directory: Path, limit: int = 100) -> list[dict[str, Any]]:
@@ -168,6 +193,101 @@ async def _load_date_night_runs_supabase(limit: int = 50) -> list[dict[str, Any]
     return _payload_rows(await supabase_ops.select("ops_date_night_runs", _list_params(limit)))
 
 
+def _incident(
+    incident_type: str,
+    message: str,
+    *,
+    created_at: Any = None,
+    source: str = "backend",
+    severity: str = "error",
+    detail: Any = None,
+) -> dict[str, Any]:
+    return {
+        "type": incident_type,
+        "message": message,
+        "created_at": created_at,
+        "source": source,
+        "severity": severity,
+        "detail": detail,
+    }
+
+
+async def _load_operational_incidents(
+    worker_status: dict[str, Any], limit: int = 50
+) -> list[dict[str, Any]]:
+    """Build a safe incident feed from live state, durable events and reports."""
+    incidents: list[dict[str, Any]] = []
+    if settings.desktop_worker_enabled and not worker_status.get("online"):
+        incidents.append(_incident("worker_offline", "Worker is offline", source="desktop_worker"))
+
+    version = worker_status.get("version") or {}
+    if version.get("mismatch"):
+        incidents.append(
+            _incident(
+                "worker_protocol_mismatch",
+                "Worker protocol mismatch",
+                source="desktop_worker",
+                detail=(
+                    f"expected {version.get('expected_protocol_version', '—')}, "
+                    f"worker {version.get('worker_protocol_version', '—')}"
+                ),
+            )
+        )
+
+    for failure in worker_status.get("recent_failures") or []:
+        incidents.append(
+            _incident(
+                "worker_job_failed",
+                str(failure.get("message") or "Worker job failed"),
+                created_at=failure.get("completed_at") or failure.get("updated_at"),
+                source="desktop_worker",
+                detail=failure.get("error_stage") or failure.get("error_type"),
+            )
+        )
+
+    if settings.supabase_enabled:
+        rows = await supabase_ops.select(
+            "ops_worker_events",
+            {"select": "created_at,event_type,meta", "order": "created_at.desc", "limit": str(limit)},
+        )
+        for row in rows:
+            meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            event_type = str(row.get("event_type") or "operational_event")
+            incidents.append(
+                _incident(
+                    event_type,
+                    str(meta.get("message") or event_type.replace("_", " ").capitalize()),
+                    created_at=row.get("created_at"),
+                    source=str(meta.get("source") or "backend"),
+                    severity=str(meta.get("severity") or ("info" if event_type == "online" else "error")),
+                    detail=meta.get("path") or meta.get("reason") or meta.get("error_type"),
+                )
+            )
+
+    reports_dir = Path("uploads") / "reports"
+    if reports_dir.exists():
+        report_paths = sorted(
+            reports_dir.glob("*.meta.json"), key=lambda item: item.stat().st_mtime, reverse=True
+        )[:limit]
+        for path in report_paths:
+            try:
+                meta = json.loads(path.read_text(encoding="utf-8"))
+                incidents.append(
+                    _incident(
+                        "frontend_report",
+                        "Frontend diagnostic report received",
+                        created_at=meta.get("received_at"),
+                        source="frontend",
+                        severity="warning",
+                        detail=meta.get("issue_id"),
+                    )
+                )
+            except Exception as exc:
+                logger.warning("Failed to parse report metadata %s: %s", path.name, exc)
+
+    return incidents[:limit]
+
+
 def _mark_consecutive_dupes(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     i = 0
     while i < len(runs):
@@ -193,9 +313,36 @@ async def admin_login(request: Request):
     return templates.TemplateResponse("admin_login.html", {"request": request})
 
 
+@router.post("/admin/session")
+async def admin_session(request: Request):
+    form = await request.form()
+    secret = _admin_secret()
+    if not secrets.compare_digest(str(form.get("key") or ""), secret):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    response = RedirectResponse("/admin/dashboard", status_code=303)
+    response.set_cookie(
+        "mw_admin_session",
+        _session_value(secret),
+        max_age=28800,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="strict",
+        path="/admin",
+    )
+    return response
+
+
 @router.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
-    _require_admin(request)
+    _admin_secret()
+    if "key" in request.query_params:
+        return RedirectResponse("/admin/dashboard", status_code=303)
+    try:
+        _require_admin(request)
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+        return templates.TemplateResponse("admin_login.html", {"request": request})
     runs = await _load_analysis_runs(limit=limit)
     if settings.supabase_enabled:
         watchlist_runs = await _load_watchlist_runs_supabase(limit=limit)
@@ -208,6 +355,7 @@ async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
         expected_protocol_version=settings.worker_protocol_version,
         backend_git_sha=backend_git_sha(),
     )
+    incidents = await _load_operational_incidents(worker_status)
     return templates.TemplateResponse(
         "admin_dashboard.html",
         {
@@ -217,7 +365,8 @@ async def admin_dashboard(request: Request, limit: int = DASHBOARD_RUNS_LIMIT):
             "date_night_runs": date_night_runs,
             "worker_status": worker_status,
             "worker_enabled": settings.desktop_worker_enabled,
-            "key": request.query_params.get("key"),
+            "incidents": incidents,
+            "key": "",
         },
     )
 
@@ -237,7 +386,7 @@ async def admin_run_detail(request: Request, filename: str):
         data = json.loads(path.read_text())
     return templates.TemplateResponse(
         "admin_run.html",
-        {"request": request, "run": data, "filename": safe_name, "key": request.query_params.get("key")},
+        {"request": request, "run": data, "filename": safe_name, "key": ""},
     )
 
 

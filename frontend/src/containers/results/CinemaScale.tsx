@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Section from '@/components/results/Section';
+import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 
 interface Breakdown {
   geography: number;
@@ -34,6 +35,9 @@ export default function CinemaScale({
     return "Blockbuster focused";
   };
 
+  const { ref: scoreRef, isVisible: scoreVisible } = useIntersectionObserver({ rootMargin: '-10% 0px', threshold: 0.3, triggerOnce: true });
+  const scoreChars = String(score).split('');
+
   const axes: { key: keyof Breakdown; label: string; max: number; color: string }[] = [
     { key: 'geography',  label: 'Geographic',  max: 25, color: 'bg-[#7bbf86]' },
     { key: 'temporal',   label: 'Historical',   max: 20, color: 'bg-[#d8b56d]' },
@@ -45,20 +49,31 @@ export default function CinemaScale({
 
   return (
     <Section title="Your Cinema Scale" subtitle="How adventurous is your film taste?">
-      <div className="rounded-[22px] border border-[#f5d7a8]/[0.12] bg-black/20 p-5 md:p-7 space-y-6">
+      <div className="results-surface space-y-8 p-6 md:p-8">
         {/* Main Score Display */}
         <div className="text-center mb-6">
-          <div className="text-5xl md:text-7xl font-black tabular-nums text-[#fff7ed]">
-            {score}<span className="text-2xl text-[#b6a99a]">/100</span>
+          <div className="text-6xl font-semibold tabular-nums text-[var(--results-text)] md:text-7xl">
+            <span ref={scoreRef} className={`t-digit-group ${scoreVisible ? 'is-animating' : ''}`}>
+              {scoreChars.map((ch, i) => (
+                <span
+                  key={i}
+                  className="t-digit"
+                  data-stagger={i === scoreChars.length - 2 ? '1' : i === scoreChars.length - 1 ? '2' : undefined}
+                >
+                  {ch}
+                </span>
+              ))}
+            </span>
+            <span className="text-2xl text-[var(--results-muted)]">/100</span>
           </div>
-          <div className="text-[#d8b56d] mt-2 font-bold uppercase tracking-[0.12em] text-xs md:text-sm">{getScoreMessage(score)}</div>
+          <div className="mt-2 text-sm font-semibold text-[var(--results-accent)]">{getScoreMessage(score)}</div>
         </div>
 
         {/* Progress Bar */}
         <div className="relative">
-          <div className="w-full h-4 bg-black/35 rounded-full overflow-hidden border border-[#f5d7a8]/[0.08]">
+          <div className="h-3 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--results-text)_10%,transparent)]">
             <div
-              className="h-full bg-[linear-gradient(90deg,#ff8a3d,#d8b56d,#64b4bf)] transition-all duration-1000 ease-out"
+              className="h-full bg-[var(--results-accent)] transition-[width] duration-300 ease-out"
               style={{ width: `${score}%` }}
             />
           </div>
@@ -86,10 +101,10 @@ export default function CinemaScale({
               const val = breakdown[key] ?? 0;
               const pct = max > 0 ? Math.round((val / max) * 100) : 0;
               return (
-                <div key={key} className="rounded-xl border border-[#f5d7a8]/[0.08] bg-[#211711]/60 p-3 space-y-1.5">
+                <div key={key} className="space-y-2 border-t border-[var(--results-border)] py-4">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-[#b6a99a]">{label}</span>
-                    <span className="font-semibold tabular-nums text-[#fff7ed]">{val}/{max}</span>
+                    <span className="text-[var(--results-muted)]">{label}</span>
+                    <span className="font-semibold tabular-nums text-[var(--results-text)]">{val}/{max}</span>
                   </div>
                   <div className="w-full h-1.5 bg-black/35 rounded-full overflow-hidden">
                     <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />

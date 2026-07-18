@@ -14,7 +14,7 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { getProfileUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 import type { StatsData, PersonFilm } from '../types';
 import type { GateResult, SectionToggle } from './section-utils';
 import PersonFilmsModal from './PersonFilmsModal';
@@ -195,15 +195,14 @@ export function SectionShell({
     ? ratedTabTooltip
     : ratedTabHint;
   return (
-    <div className="relative overflow-hidden rounded-[24px] border border-[#f5d7a8]/[0.12] bg-[#17120f]/85 p-5 shadow-2xl shadow-black/20 md:p-6">
-      <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:linear-gradient(90deg,rgba(245,215,168,.05)_1px,transparent_1px)] [background-size:34px_34px]" />
-      <div className="relative z-10 space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f5d7a8]/[0.08] pb-4">
+    <section className="border-b border-[var(--results-border)] py-8 md:py-12">
+      <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="mb-1 text-[10px] font-black uppercase tracking-[0.28em] text-[#d8b56d]">Credits index</p>
-          <h3 className="text-xl font-black tracking-normal text-[#fff7ed]">{title}</h3>
+          <p className="results-kicker mb-1">Credits</p>
+          <h3 className="text-2xl font-semibold tracking-[-0.02em] text-[var(--results-text)]">{title}</h3>
         </div>
-        <div className="flex items-center gap-1 rounded-full border border-[#f5d7a8]/[0.12] bg-black/25 p-0.5">
+        <div className="results-segmented">
           <button
             className={toggleClass(mode === 'most_watched')}
             onClick={() => onToggle('most_watched')}
@@ -223,7 +222,7 @@ export function SectionShell({
       </div>
       {children}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -242,13 +241,19 @@ export function PersonCard({
   /** When provided, renders a "+" button that opens this person's films modal. */
   onShowFilms?: () => void;
 }) {
-  const imageUrl = profilePath ? getProfileUrl(profilePath, 'share') : null;
+  const imageUrl = profilePath ? getDirectTmdbImageUrl(profilePath, 'w500') : null;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [retried, setRetried] = useState(false);
 
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
+
+  useEffect(() => {
+    setImageError(false);
+    setImageLoaded(false);
+    setRetried(false);
+  }, [name, profilePath]);
 
   useEffect(() => {
     if (!profilePath) {
@@ -262,7 +267,7 @@ export function PersonCard({
 
   return (
     <div
-      className={`group relative flex min-h-[204px] flex-col items-center gap-2 rounded-2xl border border-[#f5d7a8]/[0.08] bg-black/15 p-3 text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-[#f5d7a8]/[0.2] hover:bg-[#241712]/60 ${interactive ? 'cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400' : ''}`}
+      className={`group relative flex min-h-[220px] flex-col items-start gap-3 border-t border-[var(--results-border)] py-4 text-left transition-colors ${interactive ? 'cursor-pointer hover:bg-[color-mix(in_srgb,var(--results-text)_4%,transparent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--results-accent)]' : ''}`}
       {...(interactive
         ? {
             role: 'button',
@@ -280,7 +285,7 @@ export function PersonCard({
     >
       {/* Avatar */}
       <div
-        className="relative h-28 w-28 overflow-hidden rounded-xl ring-2 ring-[#f5d7a8]/10 transition-all duration-200 group-hover:ring-[#ff8a3d]/40 md:h-32 md:w-32"
+        className="relative aspect-square w-full overflow-hidden rounded-2xl bg-[var(--results-surface)]"
       >
         {showImage && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -312,10 +317,10 @@ export function PersonCard({
       </div>
       {/* Name + stat */}
       <div className="space-y-0.5">
-        <p className="line-clamp-2 text-sm font-bold leading-tight text-[#fff7ed] md:text-base">{name}</p>
-        <p className="text-sm text-[#d8b56d] md:text-base">{primaryStat}</p>
+        <p className="line-clamp-2 text-base font-semibold leading-tight text-[var(--results-text)]">{name}</p>
+        <p className="text-sm text-[var(--results-accent)]">{primaryStat}</p>
         {secondaryStat && (
-          <p className="text-xs text-[#b6a99a] md:text-sm">{secondaryStat}</p>
+          <p className="text-xs text-[var(--results-muted)] md:text-sm">{secondaryStat}</p>
         )}
       </div>
     </div>
@@ -334,7 +339,7 @@ export function ShowMoreButton({
     <div className="flex justify-center pt-2">
       <button
         onClick={onClick}
-        className="text-xs font-semibold px-4 py-2 rounded-full border border-slate-700/50 text-slate-400 hover:text-white hover:border-slate-500 transition-colors"
+        className="results-secondary-action px-4 py-2 text-xs font-semibold transition-colors"
       >
         Show {Math.min(remaining, PAGE_SIZE)} more
       </button>

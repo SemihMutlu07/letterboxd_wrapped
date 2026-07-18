@@ -4,7 +4,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { X } from 'lucide-react';
 import Section from '@/components/results/Section';
+import ScrollPanel from '@/components/results/ScrollPanel';
 import { getPosterUrl } from '@/lib/analytics';
+
+const bigReveal: React.CSSProperties = { ['--panel-translate-y' as string]: '48px', ['--panel-blur' as string]: '4px' };
 import { PosterImage } from '@/components/results/Placeholders';
 import FilmModal from '@/containers/results/experimental/sections/FilmModal';
 
@@ -21,15 +24,55 @@ export function FilmHistory({
   data,
   max,
   isMobile,
+  allFilms = [],
+  userAvg,
 }: {
   data: { decade: string; count: number }[];
   max: number;
   isMobile: boolean;
+  allFilms?: RatingSourceFilm[];
+  userAvg?: number | null;
 }) {
   const primary = '#f97316';
+  const [selectedDecade, setSelectedDecade] = useState<DecadeBucket | null>(null);
+  const [selectedFilm, setSelectedFilm] = useState<RatingBucketFilm | null>(null);
+  const filmsByDecade = useMemo(() => {
+    const buckets = new Map<string, RatingBucketFilm[]>();
+    allFilms.forEach((film) => {
+      if (!film.decade) return;
+      const films = buckets.get(film.decade) ?? [];
+      films.push(toModalFilm(film));
+      buckets.set(film.decade, films);
+    });
+    buckets.forEach((films) => films.sort((a, b) => (a.year ?? 0) - (b.year ?? 0) || a.title.localeCompare(b.title)));
+    return buckets;
+  }, [allFilms]);
+
+  const openDecade = (entry?: { decade?: string }) => {
+    const decade = entry?.decade;
+    const films = decade ? filmsByDecade.get(decade) : undefined;
+    if (decade && films?.length) setSelectedDecade({ decade, films });
+  };
+
+  const renderDot = ({ cx, cy, payload, key }: { cx?: number; cy?: number; payload?: { decade?: string }; key?: React.Key | null }) => (
+    <circle
+      key={key}
+      cx={cx}
+      cy={cy}
+      r={isMobile ? 6 : 7}
+      fill={primary}
+      stroke="var(--results-bg)"
+      strokeWidth={3}
+      className={payload?.decade && filmsByDecade.has(payload.decade) ? 'cursor-pointer transition-[r] hover:[r:9px]' : undefined}
+      onClick={() => openDecade(payload)}
+      role={payload?.decade && filmsByDecade.has(payload.decade) ? 'button' : undefined}
+      aria-label={payload?.decade ? `View films from the ${payload.decade}` : undefined}
+    />
+  );
   return (
-    <Section title="Film History" subtitle="Your journey through cinema decades">
-      <div className="w-full h-56 md:h-72 lg:h-80 px-2 md:px-0">
+    <>
+    <Section title="Film History" subtitle="Your journey through cinema decades · select a point to see the films">
+      <ScrollPanel style={bigReveal} className="w-full h-56 md:h-72 lg:h-80 px-2 md:px-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart 
             data={data} 
@@ -80,13 +123,24 @@ export function FilmHistory({
               dataKey="count"
               stroke={primary}
               strokeWidth={isMobile ? 2.5 : 3}
-              dot={{ fill: primary, strokeWidth: 2, stroke: '#0f172a', r: isMobile ? 3 : 4 }}
-              activeDot={{ r: isMobile ? 6 : 8, stroke: primary, strokeWidth: 2, fill: '#0f172a' }}
+              dot={renderDot}
+              activeDot={renderDot}
             />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </ScrollPanel>
     </Section>
+    <FilmCollectionModal
+      eyebrow="Decade"
+      title={selectedDecade?.decade ?? ''}
+      films={selectedDecade?.films ?? []}
+      open={selectedDecade !== null}
+      onClose={() => setSelectedDecade(null)}
+      onSelectFilm={setSelectedFilm}
+      badge={(film) => String(film.year ?? '—')}
+    />
+    <FilmModal open={selectedFilm !== null} onClose={() => setSelectedFilm(null)} film={selectedFilm || { title: '', rating: 0, communityRating: 0 }} userAvg={userAvg ?? 0} />
+    </>
   );
 }
 
@@ -159,7 +213,7 @@ export function RatingsBar({
             <span className="text-sm font-black text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1">{mostCommonRating}★</span>
           </div>
         )}
-        <div className="w-full h-44 md:h-56 lg:h-64 px-2 md:px-0">
+        <ScrollPanel style={bigReveal} className="w-full h-44 md:h-56 lg:h-64 px-2 md:px-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart 
               data={data} 
@@ -212,7 +266,7 @@ export function RatingsBar({
               />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </ScrollPanel>
       </Section>
 
       <RatingBucketModal
@@ -239,6 +293,7 @@ type RatingSourceFilm = {
   director?: string;
   runtime?: number;
   language?: string;
+  decade?: string;
 };
 
 type RatingBucketFilm = {
@@ -257,6 +312,21 @@ type RatingBucket = {
   label: string;
   films: RatingBucketFilm[];
 };
+
+type DecadeBucket = { decade: string; films: RatingBucketFilm[] };
+
+function toModalFilm(film: RatingSourceFilm): RatingBucketFilm {
+  return {
+    title: film.title,
+    year: film.year,
+    rating: film.rating ?? 0,
+    communityRating: film.average_rating ?? 0,
+    poster_path: film.poster_path,
+    director: film.director,
+    runtime: film.runtime,
+    language: film.language,
+  };
+}
 
 const INITIAL_POSTER_PAGE = 12;
 
@@ -348,6 +418,50 @@ export function RatingBucketModal({
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function FilmCollectionModal({
+  eyebrow,
+  title,
+  films,
+  open,
+  onClose,
+  onSelectFilm,
+  badge,
+}: {
+  eyebrow: string;
+  title: string;
+  films: RatingBucketFilm[];
+  open: boolean;
+  onClose: () => void;
+  onSelectFilm: (film: RatingBucketFilm) => void;
+  badge: (film: RatingBucketFilm) => string;
+}) {
+  const [posterPage, setPosterPage] = useState(1);
+  useEffect(() => {
+    if (!open) return;
+    setPosterPage(1);
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+  if (!open) return null;
+  const visibleFilms = films.slice(0, posterPage * INITIAL_POSTER_PAGE);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-4">
+      <button className="absolute inset-0 bg-black/70" aria-label={`Close ${title} films`} onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-label={`${title} films`} className="results-experience relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[28px] border border-[var(--results-border)] bg-[var(--results-bg)] shadow-2xl sm:max-h-[86vh] sm:rounded-[28px]">
+        <header className="flex items-start justify-between gap-4 border-b border-[var(--results-border)] px-6 py-5">
+          <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--results-accent)]">{eyebrow}</p><h3 className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-[var(--results-text)]">{title}</h3><p className="mt-1 text-sm text-[var(--results-muted)]">{films.length} film{films.length === 1 ? '' : 's'} · select one for details</p></div>
+          <button type="button" onClick={onClose} aria-label="Close film collection" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[var(--results-muted)] transition-colors hover:bg-[var(--results-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--results-accent)]"><X className="h-5 w-5" /></button>
+        </header>
+        <div className="grid flex-1 grid-cols-2 gap-4 overflow-y-auto p-4 sm:grid-cols-3 sm:p-6 md:grid-cols-4 lg:grid-cols-5">
+          {visibleFilms.map((film) => <button key={`${film.title}-${film.year ?? ''}`} type="button" onClick={() => onSelectFilm(film)} className="group min-w-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--results-accent)]"><div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-[var(--results-surface)] ring-1 ring-[var(--results-border)] transition-transform group-hover:-translate-y-1 motion-reduce:transform-none"><PosterImage src={getPosterUrl(film.poster_path, 'grid')} alt={`${film.title} poster`} /><span className="absolute bottom-2 right-2 rounded-full bg-black/80 px-2 py-1 text-xs font-semibold text-white">{badge(film)}</span></div><p className="mt-2 line-clamp-2 text-sm font-semibold leading-tight text-[var(--results-text)]">{film.title}</p><p className="mt-1 text-xs text-[var(--results-muted)]">{film.rating ? `★ ${film.rating.toFixed(1)}` : 'Unrated'}</p></button>)}
+        </div>
+        {visibleFilms.length < films.length && <div className="border-t border-[var(--results-border)] p-4"><button type="button" onClick={() => setPosterPage((page) => page + 1)} className="min-h-11 w-full rounded-full bg-[var(--results-surface)] px-5 py-3 text-sm font-semibold text-[var(--results-text)] transition-colors hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--results-accent)]">Show more films</button></div>}
       </div>
     </div>
   );

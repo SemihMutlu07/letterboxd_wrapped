@@ -236,6 +236,7 @@ def test_sync_scrape_reviews_walks_pages_and_stops_on_empty(monkeypatch):
     assert session.urls == [
         "https://letterboxd.com/semihmutsuz/reviews/films/page/1/",
         "https://letterboxd.com/semihmutsuz/reviews/films/page/2/",
+        "https://letterboxd.com/semihmutsuz/film/x/likes/",
     ]
     assert len(reviews) == 1
     assert reviews[0]["title"] == "X"

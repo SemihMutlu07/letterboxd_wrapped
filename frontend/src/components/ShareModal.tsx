@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Sliders } from 'lucide-react';
+import { X, Download, Sliders, CheckCircle2, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
@@ -141,11 +141,16 @@ export default function ShareModal({
   cardProps,
   onDownloadSuccess,
 }: Props) {
+  const onCloseRef = useRef(onClose);
   const railRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [pageW, setPageW] = useState(0);
   const [pageH, setPageH] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [actorIdx, setActorIdx] = useState(0);
   const [directorIdx, setDirectorIdx] = useState(0);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -154,12 +159,15 @@ export default function ShareModal({
 
   const variantKey = VARIANTS[Math.max(0, Math.min(VARIANTS.length - 1, activeIdx))].key;
 
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
     setActorIdx(0);
     setDirectorIdx(0);
     setActiveIdx(0);
     setSwapOpen(false);
+    setSaveStatus('idle');
   }, [open]);
 
   useEffect(() => {
@@ -214,9 +222,26 @@ export default function ShareModal({
   // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
+    restoreFocusRef.current = document.activeElement as HTMLElement | null;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); onCloseRef.current(); return; }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener('keydown', onKeyDown);
+      restoreFocusRef.current?.focus();
+    };
   }, [open]);
 
   // Measure rail viewport so ScaledCard can fit each page
@@ -262,6 +287,7 @@ export default function ShareModal({
   const handleSavePNG = async () => {
     if (isSaving) return;
     setIsSaving(true);
+    setSaveStatus('idle');
     const originalSrcs: string[] = [];
     try {
       const exportRoot = findExportRoot();
@@ -284,9 +310,11 @@ export default function ShareModal({
       if (shared) { method = 'system_share'; }
       else { const saved = await saveWithFilePicker(blob); if (saved) method = 'file_picker'; else downloadFallback(blob); }
       trackEvent('share_export_succeeded', { variant: variantKey, orientation, method });
+      setSaveStatus('success');
       onDownloadSuccess?.();
     } catch (err) {
       console.error('Export failed:', err);
+      setSaveStatus('error');
     } finally {
       const exportRoot = findExportRoot();
       if (exportRoot) {
@@ -304,19 +332,21 @@ export default function ShareModal({
   const showSwapTrigger = hasActors || hasDirectors;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="share-dialog fixed inset-0 z-50" role="presentation">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} aria-hidden="true" />
 
       {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className="relative h-full md:h-[88vh] md:max-h-[920px] md:max-w-[600px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="share-dialog-title" className="relative flex h-full flex-col overflow-hidden bg-[#111113] text-white md:mx-auto md:mt-8 md:h-[88vh] md:max-h-[880px] md:max-w-[680px] md:rounded-[28px] md:border md:border-white/10 md:shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <span className="text-sm font-semibold text-white/90">Share</span>
+          <div><h2 id="share-dialog-title" className="text-lg font-semibold tracking-[-0.02em]">Share your year</h2><p className="text-xs text-[#a1a1a6]">Preview your card, then save it.</p></div>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
-            className="grid place-items-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
-            aria-label="Close"
+            className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            aria-label="Close share dialog"
           >
             <X size={18} strokeWidth={2.5} />
           </button>
@@ -364,10 +394,10 @@ export default function ShareModal({
               key={v.key}
               onClick={() => jumpTo(i)}
               aria-label={`Go to ${v.label}`}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
+              className={`min-h-11 min-w-11 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
+                i === activeIdx ? 'text-white' : 'text-white/35 hover:text-white/70'
               }`}
-            />
+            ><span className={`mx-auto block h-1.5 rounded-full ${i === activeIdx ? 'w-5 bg-current' : 'w-1.5 bg-current'}`} /></button>
           ))}
         </div>
 
@@ -421,10 +451,11 @@ export default function ShareModal({
 
           {/* Orientation + swap trigger */}
           <div className="flex items-center justify-between relative">
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+            <div className="flex items-center gap-1 rounded-xl bg-white/5 p-1" role="group" aria-label="Card orientation">
               <button
                 onClick={() => setOrientation('vertical')}
-                className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                aria-pressed={orientation === 'vertical'}
+                className={`min-h-11 rounded-lg px-4 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
                   orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -432,7 +463,8 @@ export default function ShareModal({
               </button>
               <button
                 onClick={() => setOrientation('horizontal')}
-                className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                aria-pressed={orientation === 'horizontal'}
+                className={`min-h-11 rounded-lg px-4 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
                   orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -467,7 +499,7 @@ export default function ShareModal({
                 <button
                   onClick={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
                   aria-label="Tune actor and director"
-                  className={`relative grid place-items-center w-9 h-9 rounded-full transition ${
+                  className={`relative grid h-11 w-11 place-items-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
                     swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
                 >
@@ -483,6 +515,7 @@ export default function ShareModal({
 
           {/* Single dominant CTA */}
           <button
+            type="button"
             onClick={handleSavePNG}
             disabled={isSaving}
             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-bold text-sm transition active:scale-[0.98] ${
@@ -493,6 +526,10 @@ export default function ShareModal({
             <Download size={18} />
             {isSaving ? 'Download starting...' : 'Download PNG'}
           </button>
+          <div className="min-h-5 text-center text-xs" role="status" aria-live="polite">
+            {saveStatus === 'success' && <span className="inline-flex items-center gap-1.5 text-[#30d158]"><CheckCircle2 size={14} /> Card saved successfully.</span>}
+            {saveStatus === 'error' && <span className="inline-flex items-center gap-1.5 text-[#ff6961]"><AlertCircle size={14} /> Couldn&apos;t save the card. Please try again.</span>}
+          </div>
         </div>
       </div>
     </div>

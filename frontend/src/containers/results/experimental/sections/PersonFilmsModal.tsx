@@ -8,7 +8,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getTmdbImageUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl } from '@/lib/analytics';
 import { PersonAvatarPlaceholder, PosterImage } from '@/components/results/Placeholders';
 import type { PersonFilm } from '../types';
 
@@ -23,7 +23,7 @@ interface PersonFilmsModalProps {
 const INITIAL_POSTER_PAGE = 12;
 
 export default function PersonFilmsModal({ open, onClose, name, films, profilePath }: PersonFilmsModalProps) {
-  const profileUrl = profilePath ? getTmdbImageUrl(profilePath, 'h632') : null;
+  const profileUrl = profilePath ? getDirectTmdbImageUrl(profilePath, 'h632') : null;
   const [profileFailed, setProfileFailed] = useState(false);
   const [posterPage, setPosterPage] = useState(1);
 
@@ -32,7 +32,7 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
       setProfileFailed(false);
       setPosterPage(1);
     }
-  }, [open, profileUrl]);
+  }, [open, name, profileUrl]);
 
   // Close on Escape
   useEffect(() => {
@@ -76,18 +76,18 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-            className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[26px] border border-[#f5d7a8]/[0.14] bg-[#17120f] shadow-2xl"
+            className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#111113] shadow-2xl"
           >
             {/* Header */}
-            <div className="relative min-h-[168px] overflow-hidden border-b border-[#f5d7a8]/[0.1]">
+            <div className="relative min-h-[144px] overflow-hidden border-b border-white/10">
               {profileUrl && !profileFailed && (
                 <div
                   className="absolute inset-0 scale-110 bg-cover bg-center opacity-25 blur-md"
                   style={{ backgroundImage: `url(${profileUrl})` }}
                 />
               )}
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(100,180,191,0.18),transparent_35%),linear-gradient(90deg,#17120f_0%,rgba(23,18,15,0.94)_52%,rgba(23,18,15,0.68)_100%)]" />
-              <div className="absolute inset-y-0 left-0 w-9 border-r border-[#f5d7a8]/[0.09] bg-black/25">
+              <div className="absolute inset-0 bg-[#111113]/90" />
+              <div className="hidden">
                 <div className="grid h-full grid-rows-4 gap-2 px-2 py-4">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="rounded-[2px] border border-[#f5d7a8]/[0.14] bg-[#f5d7a8]/[0.06]" />
@@ -95,7 +95,7 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                 </div>
               </div>
               <div className="relative z-10 flex h-full items-end justify-between gap-4 px-5 py-5">
-                <div className="ml-8 flex min-w-0 flex-1 items-end gap-4">
+                <div className="flex min-w-0 flex-1 items-end gap-4">
                   <div className="h-28 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-[#241712] ring-1 ring-[#f5d7a8]/15 shadow-2xl">
                     {profileUrl && !profileFailed ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -111,10 +111,10 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
                     )}
                   </div>
                   <div className="min-w-0 pb-1">
-                    <p className="text-xs font-black uppercase tracking-[0.22em] text-[#d8b56d]">
+                    <p className="text-xs font-semibold text-[#ff7a1a]">
                       Film shelf
                     </p>
-                    <p className="mt-1 text-2xl font-black leading-tight text-[#fff7ed] md:text-3xl">{name}</p>
+                    <p className="mt-1 text-2xl font-semibold leading-tight text-white md:text-3xl">{name}</p>
                     <p className="mt-1 text-sm text-[#b6a99a]">
                       {films.length} film{films.length !== 1 ? 's' : ''} you watched
                     </p>
@@ -123,7 +123,7 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="mb-auto grid h-8 w-8 flex-shrink-0 place-items-center rounded-full text-[#b6a99a] transition-colors hover:bg-white/[0.08] hover:text-[#fff7ed] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400"
+                className="mb-auto grid h-11 w-11 flex-shrink-0 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
               >
                 ✕
               </button>
@@ -131,12 +131,12 @@ export default function PersonFilmsModal({ open, onClose, name, films, profilePa
             </div>
 
             {/* Film grid */}
-            <div className="grid grid-cols-2 gap-4 overflow-y-auto bg-[linear-gradient(90deg,rgba(245,215,168,0.035)_1px,transparent_1px)] bg-[size:42px_42px] p-5 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-4 overflow-y-auto bg-[#111113] p-5 sm:grid-cols-3">
               {visibleFilms.map((f) => {
-                const poster = f.poster_path ? getTmdbImageUrl(f.poster_path, 'w342') : null;
+                const poster = f.poster_path ? getDirectTmdbImageUrl(f.poster_path, 'w500') : null;
                 return (
                   <div key={`${f.title}-${f.year}`} className="space-y-1.5">
-                    <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-[#241712] ring-1 ring-[#f5d7a8]/10 transition-all duration-150 hover:scale-[1.02] hover:ring-[#ff8a3d]/40 hover:shadow-2xl hover:shadow-black/40">
+                    <div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-[#1c1c1e] ring-1 ring-white/10 transition-colors hover:ring-white/25">
                       <PosterImage src={poster} alt={`${f.title} poster`} />
                       {f.user_rating != null && (
                         <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-[10px] font-bold text-[#f4cf75]">

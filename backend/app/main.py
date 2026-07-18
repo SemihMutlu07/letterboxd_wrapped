@@ -22,7 +22,8 @@ from app.config import settings
 from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist, worker
 from app import admin
-from app.services.worker_monitor import start_worker_monitor
+from app.services.worker_monitor import log_worker_event, start_worker_monitor
+from app.services.run_log import cleanup_expired_runs
 
 logger = logging.getLogger("letterboxd_wrapped")
 logging.basicConfig(
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     if not settings.tmdb_api_key:
         raise RuntimeError("TMDB_API_KEY not found. Set it in .env or as an environment variable.")
 
+    await cleanup_expired_runs()
     app.state.aiohttp_session = aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit_per_host=20)
     )
@@ -94,8 +96,19 @@ def create_app() -> FastAPI:
         # and would strip the Access-Control-Allow-Origin header.
         try:
             return await call_next(request)
-        except Exception:
+        except Exception as exc:
             logger.error("Unhandled exception on %s %s\n%s", request.method, request.url.path, traceback.format_exc())
+            await log_worker_event(
+                "backend_error",
+                {
+                    "source": "backend",
+                    "severity": "error",
+                    "path": request.url.path,
+                    "method": request.method,
+                    "error_type": type(exc).__name__,
+                    "message": "Unhandled backend exception",
+                },
+            )
             return JSONResponse(
                 status_code=500,
                 content={"error_code": "internal_error", "message": "Something went wrong on the server."},
