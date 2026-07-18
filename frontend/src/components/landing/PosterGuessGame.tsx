@@ -237,6 +237,10 @@ export function PosterGuessGame({
               onKeyDown={handleInputKeyDown}
               placeholder="What movie is this? (start typing for suggestions)"
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="go"
               role="combobox"
               aria-autocomplete="list"
               aria-expanded={suggestionsOpen && suggestions.length > 0}
@@ -252,8 +256,9 @@ export function PosterGuessGame({
             </button>
           </form>
 
+          {/* Opens above the input on phones so the on-screen keyboard can't cover it. */}
           {suggestionsOpen && suggestions.length > 0 && (
-            <ul id="film-guess-options" role="listbox" className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-lg shadow-black/30">
+            <ul id="film-guess-options" role="listbox" className="absolute left-0 right-0 bottom-full mb-1 sm:bottom-auto sm:mb-0 sm:top-full sm:mt-1 z-10 max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-lg shadow-black/30">
               {suggestions.map((m, index) => (
                 <li
                   id={`film-guess-option-${index}`}
@@ -262,13 +267,16 @@ export function PosterGuessGame({
                   aria-selected={index === highlightedIndex}
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleSuggestionClick(m.title)}
-                  className={`cursor-pointer px-3 py-2 text-left text-sm text-slate-100 hover:bg-orange-500/20 ${
+                  className={`cursor-pointer px-3 py-2.5 sm:py-2 text-left text-sm text-slate-100 hover:bg-orange-500/20 ${
                     index === highlightedIndex ? 'bg-orange-500/20' : ''
                   }`}
                 >
                   {m.title}
                 </li>
               ))}
+              <li aria-hidden="true" className="hidden select-none border-t border-slate-700 px-3 py-1.5 text-[11px] text-slate-500 sm:block">
+                ↑↓ browse · Enter guess · Esc close
+              </li>
             </ul>
           )}
         </div>
