@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Manrope, Syne } from 'next/font/google';
 import './globals.css';
 import PageViewTracker from '@/components/PageViewTracker';
@@ -20,6 +20,13 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: 'Movies Wrapped - Your Year in Film',
   description: 'Discover your personal film statistics and insights from your Letterboxd data.',
+};
+
+// Colors the mobile browser chrome (address bar / status bar) to match the page
+// background and lets content extend into notch safe areas.
+export const viewport: Viewport = {
+  themeColor: '#1e252d',
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({

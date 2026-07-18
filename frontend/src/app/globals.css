@@ -21,9 +21,24 @@
   }
 }
 
+/* App-feel layer: dark overscroll/rubber-band area, no accidental
+   pull-to-refresh, no gray tap flash on touch devices. */
+html {
+  background: #1e252d;
+}
+
 body {
   color: var(--foreground);
   font-family: var(--font-body);
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Full-height sections track the *dynamic* viewport so nothing jumps when
+   the mobile URL bar collapses. Overrides Tailwind's 100vh (fallback kept). */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 h1, h2, h3 {
