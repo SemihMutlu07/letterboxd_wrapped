@@ -51,11 +51,11 @@ export function getTmdbImageUrl(path: string | null | undefined, size: string = 
 }
 
 export function getPosterUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
-  return getDirectTmdbImageUrl(path, quality === 'share' ? 'original' : 'w780');
+  return getTmdbImageUrl(path, quality === 'share' ? 'original' : 'w780');
 }
 
 export function getProfileUrl(path: string | null | undefined, quality: 'grid' | 'share' = 'grid'): string | null {
-  return getDirectTmdbImageUrl(path, quality === 'share' ? 'w500' : 'w342');
+  return getTmdbImageUrl(path, quality === 'share' ? 'w500' : 'w342');
 }
 
 export function getDirectTmdbImageUrl(path: string | null | undefined, size: string = 'w342'): string | null {

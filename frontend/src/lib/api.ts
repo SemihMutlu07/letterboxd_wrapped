@@ -150,6 +150,7 @@ async function parseApiFailure(r: Response, context: string, fallbackMessage: st
   let detail = '';
   let code: string | undefined;
   let fullBody: unknown;
+  const clone = typeof r.clone === 'function' ? r.clone() : null;
   try {
     fullBody = await r.json();
     if (typeof fullBody === 'object' && fullBody !== null) {
@@ -163,7 +164,14 @@ async function parseApiFailure(r: Response, context: string, fallbackMessage: st
       }
     }
   } catch {
-    // body wasn't JSON
+    if (clone) {
+      try {
+        const text = await clone.text();
+        detail = text.trim();
+      } catch {
+        // ignore
+      }
+    }
   }
   const err = new Error(detail || fallbackMessage) as Error & { code?: string };
   if (code) err.code = code;
