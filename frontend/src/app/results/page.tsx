@@ -874,15 +874,19 @@ export function ResultsContent({
           </div>
 
           <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
-            <p className="text-xs text-slate-600">
+            <p className="text-sm text-slate-300">
+              Built by Semih Mutlu with Berdan Mengünoğlu — many features here were
+              his ideas, and his code.
+            </p>
+            <p className="text-xs text-slate-400">
               Thanks to our beta testers — Mete, Mehlika Ceylin Aydoğan, Salih Emre Padır,
               Mert Efe Şentürk, Deniz and Ayberk — for the invaluable feedback.
             </p>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-400">
               Questions or feedback?{' '}
               <a
                 href="mailto:semihmutlu220@gmail.com"
-                className="underline underline-offset-2 hover:text-slate-400 transition-colors"
+                className="underline underline-offset-2 hover:text-slate-200 transition-colors"
               >
                 Get in touch
               </a>
