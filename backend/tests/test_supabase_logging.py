@@ -171,6 +171,28 @@ async def test_load_date_night_runs_supabase():
 
 
 @pytest.mark.asyncio
+async def test_check_expected_schema_warns_on_missing_table(caplog):
+    mock_client = _mock_async_client({"definitions": {"ops_runs": {}, "ops_worker_events": {}}})
+    with patch("httpx.AsyncClient", return_value=mock_client), \
+         patch.object(settings, "supabase_url", "https://mock.supabase.co"), \
+         patch.object(settings, "supabase_anon_key", "mock_key"), \
+         patch.object(settings, "supabase_ops_email", "ops@movieswrapped.internal"), \
+         patch.object(settings, "supabase_ops_password", "test-password"), \
+         caplog.at_level("WARNING", logger="letterboxd_wrapped.supabase_ops"):
+        await supabase_ops.check_expected_schema()
+
+    assert "ops_watchlist_runs" in caplog.text
+    assert "ops_date_night_runs" in caplog.text
+    assert "ops_dashboard_settings" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_check_expected_schema_silent_when_disabled():
+    with patch.object(settings, "supabase_url", ""):
+        await supabase_ops.check_expected_schema()  # must not raise or hit the network
+
+
+@pytest.mark.asyncio
 async def test_upsert_dashboard_setting_uses_on_conflict():
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()

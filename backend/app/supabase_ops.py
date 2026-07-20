@@ -109,6 +109,44 @@ async def upsert(table: str, row: dict[str, Any], *, on_conflict: str) -> bool:
         return False
 
 
+# Tables the backend actually writes to via insert/upsert/select above.
+# Migrations (backend/migrations/*.sql) are applied by hand in the Supabase
+# dashboard, so nothing guarantees a given environment has all of them —
+# this is a best-effort tripwire, not a migration runner.
+EXPECTED_OPS_TABLES = (
+    "ops_runs",
+    "ops_watchlist_runs",
+    "ops_date_night_runs",
+    "ops_worker_events",
+    "ops_dashboard_settings",
+)
+
+
+async def check_expected_schema() -> None:
+    """Log a warning at startup if an expected ops table is missing from the
+    Supabase schema. Best-effort only: never raises, so a Supabase outage or
+    auth failure here must not block backend startup."""
+    if not settings.supabase_enabled:
+        return
+    try:
+        async with await _client() as client:
+            resp = await client.get(f"{settings.supabase_url}/rest/v1/")
+            resp.raise_for_status()
+            known_tables = set(resp.json().get("definitions", {}).keys())
+    except Exception as exc:
+        logger.warning("Could not verify Supabase schema at startup: %s", exc)
+        return
+    missing = [t for t in EXPECTED_OPS_TABLES if t not in known_tables]
+    if missing:
+        logger.warning(
+            "Supabase schema is missing expected ops table(s) %s — check that "
+            "all backend/migrations/*.sql have been run against this project.",
+            missing,
+        )
+    else:
+        logger.info("Supabase ops schema check passed (%d tables present).", len(EXPECTED_OPS_TABLES))
+
+
 async def delete_before(table: str, cutoff_iso: str) -> None:
     """Best-effort retention cleanup for backend-owned ops tables."""
     try:

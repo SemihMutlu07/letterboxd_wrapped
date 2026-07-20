@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist, worker
-from app import admin
+from app import admin, supabase_ops
 from app.services.worker_monitor import log_worker_event, start_worker_monitor
 from app.services.run_log import cleanup_expired_runs
 
@@ -52,6 +52,7 @@ async def lifespan(app: FastAPI):
     app.state.aiohttp_session = aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(limit_per_host=20)
     )
+    asyncio.create_task(supabase_ops.check_expected_schema())
     _cleanup = asyncio.create_task(cleanup_loop())
     _monitor = await start_worker_monitor()
     logger.info("🚀 FastAPI app startup: aiohttp session created.")
