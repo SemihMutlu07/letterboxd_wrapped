@@ -45,6 +45,14 @@ class TaskState:
 
 _tasks: Dict[str, TaskState] = {}
 
+# Task state is process-local and does not survive a backend restart (Render
+# redeploy, crash, etc.) — a restart silently wipes every queued/running task.
+# We can't recover the wiped task, but we can tell a genuinely-unknown/expired
+# task_id apart from "this 404 is probably because the server just restarted"
+# by comparing against how long this process has been up.
+_SERVER_STARTED_AT: datetime = datetime.now(timezone.utc)
+RECENT_RESTART_WINDOW_SECONDS = 900  # frontend polling gives up after 10 min; add buffer
+
 # Last time the desktop scrape worker checked in. None until the first heartbeat.
 _last_worker_heartbeat: Optional[datetime] = None
 _last_worker_started_at: Optional[datetime] = None
@@ -564,6 +572,17 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
 
 def get_task_state(task_id: str) -> Optional[TaskState]:
     return _tasks.get(task_id)
+
+
+def get_task_not_found_context() -> Dict[str, Any]:
+    """Extra context for a 404 on task lookup, so callers can distinguish a
+    genuinely invalid/expired task_id from the in-memory queue having been
+    wiped by a backend restart."""
+    boot_age_seconds = round((datetime.now(timezone.utc) - _SERVER_STARTED_AT).total_seconds(), 1)
+    return {
+        "boot_age_seconds": boot_age_seconds,
+        "likely_server_restart": boot_age_seconds < RECENT_RESTART_WINDOW_SECONDS,
+    }
 
 
 def update_task_progress(

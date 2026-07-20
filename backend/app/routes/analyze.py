@@ -326,7 +326,14 @@ async def get_task_progress(task_id: str, request: Request):
     """Poll analysis progress and retrieve the final result when done."""
     task = task_manager.get_task_state(task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found or expired")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error_code": "task_not_found",
+                "message": "Task not found or expired.",
+                **task_manager.get_task_not_found_context(),
+            },
+        )
     enforce_rate_limit(request, "progress", limit=120, window=60)
     supplied = request.headers.get("X-Task-Token", "")
     if not supplied or not secrets.compare_digest(supplied, task.poll_token):

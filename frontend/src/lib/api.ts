@@ -269,7 +269,20 @@ async function pollTask<T = { status: string; stats: LetterboxdStats }>(
     });
 
     if (!r.ok) {
-      if (r.status === 404) throw new Error('Task not found or expired');
+      if (r.status === 404) {
+        let likelyServerRestart = false;
+        try {
+          const body = await r.json();
+          likelyServerRestart = Boolean(body?.detail?.likely_server_restart);
+        } catch {
+          // ignore — fall through to the generic message
+        }
+        throw new Error(
+          likelyServerRestart
+            ? 'The server restarted while your analysis was running. Please try again.'
+            : 'Task not found or expired.',
+        );
+      }
       throw new Error(`Progress poll failed: ${r.status}`);
     }
 

@@ -99,9 +99,16 @@ async def test_analyze_corrupt_zip(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_progress_unknown_task(client: AsyncClient):
-    """GET /api/progress/{task_id} for a non-existent task returns 404."""
+    """GET /api/progress/{task_id} for a non-existent task returns 404 with
+    enough context (boot_age_seconds/likely_server_restart) for the frontend
+    to distinguish a genuinely invalid task_id from an in-memory task queue
+    wiped by a backend restart."""
     r = await client.get("/api/progress/nonexistent-task-id")
     assert r.status_code == 404
+    detail = r.json()["detail"]
+    assert detail["error_code"] == "task_not_found"
+    assert isinstance(detail["boot_age_seconds"], (int, float))
+    assert detail["likely_server_restart"] is True  # test process just booted
 
 
 @pytest.mark.asyncio
