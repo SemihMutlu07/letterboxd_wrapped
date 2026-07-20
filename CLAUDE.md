@@ -11,7 +11,7 @@ Frontend is a static Next.js export; backend is FastAPI that processes uploads/s
 - Scraper: BeautifulSoup4 + lxml + requests (used by `app/services/scraper.py`)
 - Database: Supabase (client-side insert/upsert for `user_sessions`, `feedback`, `analysis_runs`)
 - Analytics: PostHog (consent-gated), in-app helper modules
-- Deployment: Frontend on Netlify static export (`output: 'export'`); backend has `backend/Dockerfile` for Render but is **not yet deployed** — currently local-only
+- Deployment: Frontend on Netlify static export (`output: 'export'`); backend is **live on Render** at `https://wrapped-backend.onrender.com` (built from `backend/Dockerfile`; `netlify.toml` sets it as the production `NEXT_PUBLIC_API_BASE`)
 
 ## Repo structure
 - `frontend/src/app`: Next.js pages + route handlers (`page.tsx`, `results/page.tsx`, `api/*/route.ts`)
@@ -130,57 +130,16 @@ Before opening a PR, verify:
 ## Known issues (triage order)
 1) `frontend/src/app/api/upload/route.ts` returns 501
    - This is intentional for the static export build. Backend API should be used for all processing.
-2) **WrappedBrutal orphan gap**: `FeedbackFab`, `ShareModal`, and `PageViewTracker` (PostHog) exist in the codebase but are NOT imported by `WrappedBrutal.jsx`. They must be re-integrated into the neo-brutalist shell.
-3) **desktop_server branch out of sync**: Local `desktop_server` branch has no upstream and is behind `origin/desktop_server`, which is itself 3 commits behind `main`. Needs reset + sync before next Windows worker deploy.
+2) **Task state does not survive backend restarts**: `task_manager.py` keeps all task/job state in a process-local dict. A Render redeploy or crash silently drops queued and in-flight jobs (including desktop-worker scrape/watchlist jobs), and pollers get a 404 indistinguishable from "expired". Persistence or graceful degradation is deliberately deferred — do not "fix" this in passing without a decision on the approach.
 
-## WIP: Feature Extraction from WrappedBrutal.jsx (berdan branch)
-**Objective:** Extract functional features from neo-brutal design (`WrappedBrutal.jsx`) and integrate them into the modern results page (`results/page.tsx` + sub-components).
+Resolved (kept for history, do not re-triage):
+- ~~WrappedBrutal orphan gap~~ — the `/brutal` route and `WrappedBrutal.jsx` were deleted 2026-07-20 after all 5 features were ported to `results/page.tsx`. (Note: the old claim that `PageViewTracker` was missing was wrong — it is mounted globally in `layout.tsx`.)
+- ~~desktop_server branch out of sync~~ — resolved via PR #24; `origin/desktop_server` and `origin/main` are identical.
 
-**Design baseline:** Modern Letterboxd-dark theme (dark bg, white text hierarchy, subtle white borders, rounded corners, orange/slate accents) — NO neo-brutal styling.
-
-**Features to extract & integrate:**
-1. **FilmModal** (lines 527–560 in WrappedBrutal.jsx)
-   - [x] Extract as standalone component `FilmModal.tsx`
-   - [x] Shows: title, release_year, director, runtime, language, your_rating, average_rating, community rating comparison
-   - [x] Wire into RatingDeviation.tsx: clicking a FilmPosterCard opens modal
-   - Status: ✓ Done
-   - Details: Created FilmModal.tsx with modern dark theme (bg-[#1a1a1a], border-white/8, rounded-2xl). Enhanced EnrichedFilm interface with director, runtime, language fields. RatingDeviation enriches films with all_films data. FilmPosterCard "View Details" button opens modal with film info and rating comparison.
-
-2. **Director portrait in PersonFilmsModal** (lines 216–294 in WrappedBrutal.jsx)
-   - [x] Add `profilePath?: string` prop to PersonFilmsModal.tsx
-   - [x] Show TMDB portrait image (h632 size) alongside film grid when available
-   - Status: ✓ Done
-   - Details: Added profilePath prop to PersonFilmsModalProps interface. Compute profileUrl at component level using getTmdbImageUrl(profilePath, 'h632'). Display portrait (w-16 h-24 rounded-lg) to the left of director name in header. Updated DirectorsGrid and CastGrid to pass selected?.profile_path to PersonFilmsModal. Portrait displays gracefully when available.
-
-3. **Language → film list modal** (lines 721–750 in WrappedBrutal.jsx)
-   - [x] Extract LangModal pattern
-   - [x] Integrate into LanguagesLeaderboard.tsx: clicking a language row opens modal
-   - Status: ✓ Done
-   - Details: Created LangModal.tsx component matching modern dark theme. Updated LanguagesLeaderboard to track selected language and filter all_films by language field. Added click handler to language rows with hover state. Modal displays films (up to 20) with title, year, and rating. Integrated allFilms data flow from results/page.tsx through LazyLanguages wrapper.
-
-4. **Reviews word filter + reveal toggle** (lines 785–841 in WrappedBrutal.jsx)
-   - [x] ReviewAnalysisSection already has word filter (✓ done)
-   - [x] Add blur reveal toggle (filter: blur(4px) when revealed=false)
-   - Status: ✓ Done
-   - Details: Added `revealed` state to ReviewAnalysisSection. When a word is selected and reviews are filtered, a REVEAL/HIDE toggle button appears in the filter header. Review text displays with `filter: blur(4px)` when hidden, revealing on toggle with 200ms transition. Shows hint text "Review text hidden · hit REVEAL to show it" when blurred. Button styling matches modern theme (slate-700 with slate-200 text).
-
-5. **RatingDeviation → use FilmPosterCard data for modal** (HIGH PRIORITY)
-   - [x] Expand EnrichedFilm interface to carry: director, runtime, language, review_text, your_rating, average_rating
-   - [x] Create and wire FilmModal component
-   - Status: ✓ Done (implemented as Feature 1)
-   - Details: FilmModal.tsx displays film title, year, director, runtime, language, your rating, and community rating with delta comparison. EnrichedFilm interface extended with director/runtime/language fields. RatingDeviation enriches rated_films from all_films data. FilmPosterCard "View Details" button opens modal with full film info. Works with both "Rated Higher" and "Rated Lower" tabs.
-
-**Design constraints:**
-- Do NOT modify landing page or Watchlist pages
-- Do NOT modify neo-brutal route (`WrappedBrutal.jsx`)
-- Do NOT add neo-brutal styling anywhere in modern theme
-- Modern theme: dark bg (#1a1a1a), white text, border-white/8, rounded-2xl, orange-400 accents
-
-**Verification checklist:**
-- [x] `cd frontend && npx tsc --noEmit` passes with 0 errors (verified: 0 errors)
-- [x] Visual check: components match dark theme (all 5 features use #1a1a1a, border-white/8, rounded-2xl, orange-400 accents)
-- [x] Data flow: clicking opens modals with correct details (FilmModal, LangModal, PersonFilmsModal all wired correctly)
-- [ ] `git rebase origin/main` before PR (pending)
+## Results page design tokens
+The results screen uses the modern Letterboxd-dark theme — keep new results components consistent:
+- Dark bg `#1a1a1a`, white text hierarchy, `border-white/8`, `rounded-2xl`, orange-400 accents (slate for secondary actions).
+- Do NOT reintroduce neo-brutal styling. The old neo-brutal shell (`WrappedBrutal.jsx`, `/brutal` route) was deleted 2026-07-20 after its 5 features (FilmModal, director portraits in PersonFilmsModal, LangModal, review blur/reveal toggle, enriched FilmPosterCard modal) were ported into `results/page.tsx` and its sub-components.
 
 ## AI workflow (how to work in this repo)
 When asked to implement a change:
