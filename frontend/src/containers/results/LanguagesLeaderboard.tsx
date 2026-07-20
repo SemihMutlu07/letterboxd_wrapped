@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import Section from '@/components/results/Section';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
-import LangModal from '@/containers/results/experimental/sections/LangModal';
+import LangModal from '@/containers/results/sections/LangModal';
 
 const LanguagesPieChart = dynamic(() => import('@/containers/results/LanguagesPieChart'), { ssr: false });
 

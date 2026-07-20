@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import Section from '@/components/results/Section';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
-import type { StatsData, ReviewLiker } from '../types';
+import type { StatsData, ReviewLiker } from './types';
 
 /** char length; used as a "Longest" tie-break, falls back to raw text length. */
 function charLen(r: { char_length?: number; text?: string }): number {

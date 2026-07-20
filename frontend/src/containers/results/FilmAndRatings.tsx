@@ -7,7 +7,7 @@ import { X } from 'lucide-react';
 import Section from '@/components/results/Section';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
-import FilmModal from '@/containers/results/experimental/sections/FilmModal';
+import FilmModal from '@/containers/results/sections/FilmModal';
 
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
 const LineChart = dynamic(() => import('recharts').then(m => m.LineChart), { ssr: false });

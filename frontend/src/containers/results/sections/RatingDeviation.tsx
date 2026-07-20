@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 import FilmModal from './FilmModal';
-import type { StatsData } from '../types';
+import type { StatsData } from './types';
 import type { GateResult } from './section-utils';
 import {
   gateOk,

@@ -12,7 +12,7 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import type { StatsData, PersonFilm } from '../types';
+import type { StatsData, PersonFilm } from './types';
 import type { GateResult, SectionToggle } from './section-utils';
 import PersonFilmsModal from './PersonFilmsModal';
 import {

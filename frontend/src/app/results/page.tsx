@@ -8,12 +8,12 @@ import LanguagesLeaderboard from '@/containers/results/LanguagesLeaderboard';
 
 const ShareModal = dynamic(() => import('@/components/ShareModal'), { ssr: false, loading: () => null });
 
-import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
-import ReviewAnalysisSection from '@/containers/results/experimental/sections/ReviewAnalysisSection';
-import CastGrid from '@/containers/results/experimental/sections/CastGrid';
-import DirectorsGrid from '@/containers/results/experimental/sections/DirectorsGrid';
-import type { StatsData, PersonFilm } from '@/containers/results/experimental/types';
-import PersonFilmsModal from '@/containers/results/experimental/sections/PersonFilmsModal';
+import RatingDeviation from '@/containers/results/sections/RatingDeviation';
+import ReviewAnalysisSection from '@/containers/results/sections/ReviewAnalysisSection';
+import CastGrid from '@/containers/results/sections/CastGrid';
+import DirectorsGrid from '@/containers/results/sections/DirectorsGrid';
+import type { StatsData, PersonFilm } from '@/containers/results/sections/types';
+import PersonFilmsModal from '@/containers/results/sections/PersonFilmsModal';
 
 import { ThemeProvider, useTheme } from '@/lib/theme';
 import ThemeWrapper from '@/components/ThemeWrapper';
@@ -33,7 +33,7 @@ import { FilmHistory, RatingsBar } from '@/containers/results/FilmAndRatings';
 import RewatchChampions from '@/containers/results/RewatchChampions';
 import CinemaScale from '@/containers/results/CinemaScale';
 
-// Note: StatsData is imported from @/containers/results/experimental/types
+// Note: StatsData is imported from @/containers/results/sections/types
 
 /**
  * Client-side fallback when backend sinefil_meter is missing.

@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ResultsContent } from '../../../../app/results/page';
+import { ResultsContent } from '../../../app/results/page';
 import { ThemeProvider } from '@/lib/theme';
 
 vi.mock('next/link', () => ({

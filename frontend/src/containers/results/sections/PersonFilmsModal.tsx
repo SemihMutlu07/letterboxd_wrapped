@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import { PersonAvatarPlaceholder, PosterImage } from '@/components/results/Placeholders';
 import { getGenreStyle } from '@/components/results/Cards';
-import type { PersonFilm } from '../types';
+import type { PersonFilm } from './types';
 
 const INITIAL_POSTER_PAGE = 9;
 

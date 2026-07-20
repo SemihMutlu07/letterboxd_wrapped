@@ -16,7 +16,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { getProfileUrl } from '@/lib/analytics';
-import type { StatsData, PersonFilm } from '../types';
+import type { StatsData, PersonFilm } from './types';
 import type { GateResult, SectionToggle } from './section-utils';
 import PersonFilmsModal from './PersonFilmsModal';
 import { PersonAvatarPlaceholder } from '@/components/results/Placeholders';

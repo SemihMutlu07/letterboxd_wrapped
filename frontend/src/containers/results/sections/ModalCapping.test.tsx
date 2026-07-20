@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PersonFilmsModal from './PersonFilmsModal';
 import LangModal from './LangModal';
-import type { PersonFilm } from '../types';
+import type { PersonFilm } from './types';
 
 vi.mock('@/lib/analytics', () => ({
   getTmdbImageUrl: (path: string | null | undefined, size?: string) =>

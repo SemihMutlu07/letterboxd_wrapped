@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import RatingDeviation from './RatingDeviation';
-import type { StatsData } from '../types';
+import type { StatsData } from './types';
 
 vi.mock('@/lib/analytics', () => ({
   getPosterUrl: (path: string | null | undefined) => path ?? null,

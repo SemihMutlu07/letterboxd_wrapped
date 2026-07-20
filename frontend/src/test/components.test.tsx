@@ -201,8 +201,8 @@ describe('DateNight', () => {
 
 // ---- RatingDeviation ---------------------------------------------------------
 
-import RatingDeviation from '@/containers/results/experimental/sections/RatingDeviation';
-import type { StatsData } from '@/containers/results/experimental/types';
+import RatingDeviation from '@/containers/results/sections/RatingDeviation';
+import type { StatsData } from '@/containers/results/sections/types';
 import HeroStats from '@/containers/results/HeroStats';
 
 const ratingDeviationStats: StatsData = {
