@@ -8,7 +8,10 @@ export type ShareVariant =
   | 'apple-hig'
   | 'narrative'
   | 'visual-first'
-  | 'dense-data';
+  | 'dense-data'
+  | 'wrapped-hero'
+  | 'dossier'
+  | 'minimal-outlier';
 
 export type SharePersonStat = {
   name: string;

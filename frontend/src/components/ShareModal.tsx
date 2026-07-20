@@ -7,6 +7,9 @@ import ShareCard from './ShareCard';
 import EditorialShareCard from '@/components/share/variants/EditorialShareCard';
 import Variant3ShareCard from '@/components/share/variants/Variant3ShareCard';
 import AppleHIGShareCard from '@/components/share/variants/AppleHIGShareCard';
+import WrappedHeroShareCard from '@/components/share/variants/WrappedHeroShareCard';
+import DossierShareCard from '@/components/share/variants/DossierShareCard';
+import MinimalOutlierShareCard from '@/components/share/variants/MinimalOutlierShareCard';
 import type { ShareCardData, ShareVariant } from '@/components/share/types';
 import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
 import { API_BASE } from '@/lib/api';
@@ -117,6 +120,9 @@ const VARIANTS: { key: ShareVariant; label: string }[] = [
   { key: 'default', label: 'Wrapped' },
   { key: 'editorial', label: 'Editorial' },
   { key: 'variant-3', label: 'Clean' },
+  { key: 'wrapped-hero', label: 'Hero' },
+  { key: 'dossier', label: 'Dossier' },
+  { key: 'minimal-outlier', label: 'Minimal' },
 ];
 
 function lastName(name: string): string {
@@ -558,6 +564,9 @@ const VariantPage = React.memo(function VariantPage({
       {variantKey === 'default' && <ShareCard {...data} orientation={orientation} />}
       {variantKey === 'editorial' && <EditorialShareCard data={data} orientation={orientation} />}
       {variantKey === 'variant-3' && <Variant3ShareCard data={data} orientation={orientation} />}
+      {variantKey === 'wrapped-hero' && <WrappedHeroShareCard data={data} orientation={orientation} />}
+      {variantKey === 'dossier' && <DossierShareCard data={data} orientation={orientation} />}
+      {variantKey === 'minimal-outlier' && <MinimalOutlierShareCard data={data} orientation={orientation} />}
     </ScaledCard>
   );
 });
