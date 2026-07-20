@@ -119,6 +119,7 @@ EXPECTED_OPS_TABLES = (
     "ops_date_night_runs",
     "ops_worker_events",
     "ops_dashboard_settings",
+    "ops_tasks",
 )
 
 

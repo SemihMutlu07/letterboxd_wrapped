@@ -130,7 +130,7 @@ Before opening a PR, verify:
 ## Known issues (triage order)
 1) `frontend/src/app/api/upload/route.ts` returns 501
    - This is intentional for the static export build. Backend API should be used for all processing.
-2) **Task state still does not survive backend restarts (persistence deliberately deferred)**: `task_manager.py` keeps all task/job state in a process-local dict. A Render redeploy or crash silently drops queued and in-flight jobs (including desktop-worker scrape/watchlist jobs). What *was* fixed (2026-07-20): the 404 on `GET /api/progress/{task_id}` now returns `boot_age_seconds`/`likely_server_restart` context (`task_manager.get_task_not_found_context()`), and the frontend poller (`pollTask` in `lib/api.ts`) surfaces a clear "server restarted, please try again" message instead of a generic "not found or expired". Actually persisting/recovering the queue itself is still not done — do not assume redeploys are safe for in-flight jobs.
+2) **CSV-upload ("analyze") task state still does not survive backend restarts, by design**: `task_manager.py` keeps all task/job state in a process-local dict. `kind="analyze"` tasks (CSV/ZIP upload analysis) read local disk files a restart also wipes, so they're intentionally excluded from persistence — a restart still drops them, and `GET /api/progress/{task_id}` returns `boot_age_seconds`/`likely_server_restart` context so the frontend can show a clear "server restarted, please try again" message. **Desktop-worker jobs (scrape/watchlist/date-night/find-film) now survive a restart** (fixed 2026-07-20): `task_manager.py` write-through-persists them to the `ops_tasks` table (migration `006_ops_tasks.sql`) at every create/claim/terminal/requeue transition (not every progress tick), and `load_pending_tasks()` reloads non-terminal rows back into memory at backend startup, before the app starts serving traffic. `poll_token` round-trips exactly so an already-open browser tab's poll loop keeps working transparently across the restart.
 
 Resolved (kept for history, do not re-triage):
 - ~~WrappedBrutal orphan gap~~ — the `/brutal` route and `WrappedBrutal.jsx` were deleted 2026-07-20 after all 5 features were ported to `results/page.tsx`. (Note: the old claim that `PageViewTracker` was missing was wrong — it is mounted globally in `layout.tsx`.)
@@ -183,7 +183,7 @@ will otherwise raise during render and surface as a CORS-shaped 500 in the brows
 | Zone | Tables | Written by | Purpose |
 |------|--------|------------|---------|
 | **Frontend** | `user_sessions`, `analysis_runs`, `feedback` | Browser (client-side) | User-facing flow: consent, analysis results, feedback |
-| **Backend** | `ops_runs`, `ops_watchlist_runs`, `ops_date_night_runs` | Server (best-effort mirror) | Admin dashboard durability across restarts |
+| **Backend** | `ops_runs`, `ops_watchlist_runs`, `ops_date_night_runs`, `ops_tasks` | Server (best-effort mirror) | Admin dashboard durability across restarts; `ops_tasks` is also read back at startup to resume desktop-worker jobs (`task_manager.load_pending_tasks()`) |
 
 - Both zones use the **anon (publishable) key only** — no service_role key anywhere.
 - Backend ops tables are best-effort mirrors that swallow errors; an outage never breaks the request path.

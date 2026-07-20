@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app import task_manager
 from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist, worker
 from app import admin, supabase_ops
@@ -53,6 +54,9 @@ async def lifespan(app: FastAPI):
         connector=aiohttp.TCPConnector(limit_per_host=20)
     )
     asyncio.create_task(supabase_ops.check_expected_schema())
+    loaded = await task_manager.load_pending_tasks()
+    if loaded:
+        logger.info("Reloaded %d pending/running task(s) from Supabase.", loaded)
     _cleanup = asyncio.create_task(cleanup_loop())
     _monitor = await start_worker_monitor()
     logger.info("🚀 FastAPI app startup: aiohttp session created.")

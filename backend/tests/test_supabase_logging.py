@@ -184,6 +184,7 @@ async def test_check_expected_schema_warns_on_missing_table(caplog):
     assert "ops_watchlist_runs" in caplog.text
     assert "ops_date_night_runs" in caplog.text
     assert "ops_dashboard_settings" in caplog.text
+    assert "ops_tasks" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -7,6 +7,9 @@ from typing import Any, Dict, Optional
 import uuid
 import secrets
 
+from app import supabase_ops
+from app.config import settings
+
 
 @dataclass
 class TaskState:
@@ -109,6 +112,7 @@ def create_scrape_job(
     )
     _tasks[task_id] = task
     append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
+    _persist_task(task)
     return task_id
 
 
@@ -128,6 +132,7 @@ def create_watchlist_compare_job(usernames: list, owner_key: Optional[str] = Non
     )
     _tasks[task_id] = task
     append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
+    _persist_task(task)
     return task_id
 
 
@@ -147,6 +152,7 @@ def create_date_night_job(usernames: list, owner_key: Optional[str] = None, opti
     )
     _tasks[task_id] = task
     append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
+    _persist_task(task)
     return task_id
 
 
@@ -166,6 +172,7 @@ def create_find_film_job(usernames: list, owner_key: Optional[str] = None, optio
     )
     _tasks[task_id] = task
     append_task_event(task_id, "queued", "Queued on desktop scraper", level="info")
+    _persist_task(task)
     return task_id
 
 
@@ -185,6 +192,7 @@ def claim_next_watchlist_job() -> Optional[TaskState]:
     job.stage = "scraping"
     job.message = "Desktop worker is reading Letterboxd"
     job.claimed_at = datetime.now(timezone.utc)
+    _persist_task(job)
     return job
 
 
@@ -205,6 +213,7 @@ def claim_next_worker_job() -> Optional[TaskState]:
     job.message = "Desktop worker is reading Letterboxd"
     job.claimed_at = datetime.now(timezone.utc)
     append_task_event(job.task_id, "claimed", "Desktop worker claimed the job", level="info")
+    _persist_task(job)
     return job
 
 
@@ -226,6 +235,7 @@ def claim_next_scrape_job() -> Optional[TaskState]:
     job.message = "Desktop worker is reading Letterboxd"
     job.claimed_at = datetime.now(timezone.utc)
     append_task_event(job.task_id, "claimed", "Desktop worker claimed the scrape job", level="info")
+    _persist_task(job)
     return job
 
 
@@ -246,6 +256,64 @@ def _parse_iso_datetime(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+# Only desktop-worker jobs are mirrored to Supabase. "analyze" (CSV upload)
+# tasks read local disk files a restart also wipes, and the worker-job
+# timeout in fail_expired_worker_jobs doesn't apply to them — a reloaded
+# analyze row could hang forever instead of cleanly 404ing. There's nothing
+# to resume for them regardless of what's in Supabase.
+PERSISTED_KINDS = {"scrape", "watchlist"}
+
+
+def _task_row(task: TaskState) -> Dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "kind": task.kind,
+        "job_type": task.job_type,
+        "status": task.status,
+        "stage": task.stage,
+        "message": task.message,
+        "progress": task.progress,
+        "total": task.total,
+        "username": task.username,
+        "avatar_only": task.avatar_only,
+        "usernames": task.usernames,
+        "options": task.options,
+        "claimed": task.claimed,
+        "owner_key": task.owner_key,
+        "poll_token": task.poll_token,
+        "result": task.result,
+        "error": task.error,
+        "error_type": task.error_type,
+        "error_stage": task.error_stage,
+        "error_code": task.error_code,
+        "duration_seconds": task.duration_seconds,
+        "queue_wait_seconds": task.queue_wait_seconds,
+        "worker_seconds": task.worker_seconds,
+        "scrape_seconds": task.scrape_seconds,
+        "analysis_seconds": task.analysis_seconds,
+        "postback_seconds": task.postback_seconds,
+        "trace_events": task.trace_events,
+        "created_at": _iso(task.created_at),
+        "claimed_at": _iso(task.claimed_at),
+        "completed_at": _iso(task.completed_at),
+        "failed_at": _iso(task.failed_at),
+    }
+
+
+def _persist_task(task: TaskState) -> None:
+    """Best-effort write-through mirror of a task transition to Supabase, so
+    a pending/running desktop-worker job survives a backend restart. Called
+    only at create/claim/terminal/requeue transitions, not on every progress
+    tick — resuming a job only needs the transition state, and this keeps
+    write volume low. Never blocks the caller; a Supabase outage just means
+    the next restart loses that one task, same as today."""
+    if not settings.supabase_enabled or task.kind not in PERSISTED_KINDS:
+        return
+    supabase_ops.fire_and_forget(
+        supabase_ops.upsert("ops_tasks", _task_row(task), on_conflict="task_id")
+    )
 
 
 def _apply_telemetry(task: TaskState, telemetry: Optional[Dict[str, Any]]) -> None:
@@ -585,6 +653,58 @@ def get_task_not_found_context() -> Dict[str, Any]:
     }
 
 
+async def load_pending_tasks() -> int:
+    """Reload non-terminal scrape/watchlist tasks from Supabase at startup, so
+    an in-flight browser poll or a pending/claimed desktop-worker job survives
+    a backend restart. Best-effort: no-ops (returns 0) if Supabase isn't
+    configured, or if `ops_tasks` doesn't exist yet — `supabase_ops.select`
+    already swallows that and returns []; `check_expected_schema()` is what
+    surfaces the missing-table cause in logs, not this function."""
+    if not settings.supabase_enabled:
+        return 0
+    rows = await supabase_ops.select("ops_tasks", {"status": "in.(pending,running)", "select": "*"})
+    loaded = 0
+    for row in rows:
+        task_id = row.get("task_id")
+        if not task_id or task_id in _tasks:
+            continue
+        _tasks[task_id] = TaskState(
+            task_id=task_id,
+            status=row.get("status") or "pending",
+            stage=row.get("stage") or "idle",
+            message=row.get("message") or "Queued",
+            progress=row.get("progress") or 0,
+            total=row.get("total") or 0,
+            result=row.get("result"),
+            error=row.get("error"),
+            created_at=_parse_iso_datetime(row.get("created_at")) or datetime.now(timezone.utc),
+            claimed_at=_parse_iso_datetime(row.get("claimed_at")),
+            completed_at=_parse_iso_datetime(row.get("completed_at")),
+            failed_at=_parse_iso_datetime(row.get("failed_at")),
+            duration_seconds=row.get("duration_seconds"),
+            queue_wait_seconds=row.get("queue_wait_seconds"),
+            worker_seconds=row.get("worker_seconds"),
+            scrape_seconds=row.get("scrape_seconds"),
+            analysis_seconds=row.get("analysis_seconds"),
+            postback_seconds=row.get("postback_seconds"),
+            error_type=row.get("error_type"),
+            error_stage=row.get("error_stage"),
+            error_code=row.get("error_code"),
+            kind=row.get("kind") or "scrape",
+            username=row.get("username"),
+            avatar_only=bool(row.get("avatar_only")),
+            usernames=row.get("usernames") or [],
+            job_type=row.get("job_type") or "",
+            options=row.get("options") or {},
+            claimed=bool(row.get("claimed")),
+            trace_events=row.get("trace_events") or [],
+            poll_token=row.get("poll_token") or secrets.token_urlsafe(32),
+            owner_key=row.get("owner_key"),
+        )
+        loaded += 1
+    return loaded
+
+
 def update_task_progress(
     task_id: str,
     stage: str,
@@ -622,6 +742,7 @@ def set_task_done(task_id: str, result: Any, telemetry: Optional[Dict[str, Any]]
         task.queue_wait_seconds = _seconds_between(task.created_at, task.claimed_at)
         task.worker_seconds = _seconds_between(task.claimed_at, task.completed_at)
         _apply_telemetry(task, telemetry)
+        _persist_task(task)
 
 
 def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]] = None) -> None:
@@ -636,6 +757,7 @@ def set_task_failed(task_id: str, error: str, telemetry: Optional[Dict[str, Any]
         task.queue_wait_seconds = _seconds_between(task.created_at, task.claimed_at)
         task.worker_seconds = _seconds_between(task.claimed_at, task.failed_at)
         _apply_telemetry(task, telemetry)
+        _persist_task(task)
 
 
 # ponytail: a scrape running longer than this is treated as a dead worker and
@@ -668,6 +790,7 @@ def requeue_stale_claims(now: Optional[datetime] = None) -> int:
             t.message = "Re-queued after the worker went away mid-scrape"
             t.claimed_at = None
             append_task_event(t.task_id, "requeued", "Worker went away mid-scrape; re-queued", level="warning")
+            _persist_task(t)
             count += 1
     return count
 
@@ -712,3 +835,5 @@ async def cleanup_loop() -> None:
         ]
         for tid in stale:
             _tasks.pop(tid, None)
+        if settings.supabase_enabled:
+            supabase_ops.fire_and_forget(supabase_ops.delete_before("ops_tasks", cutoff.isoformat()))
