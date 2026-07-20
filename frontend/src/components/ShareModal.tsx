@@ -4,9 +4,6 @@ import { X, Download, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
 import ShareCard from './ShareCard';
-import EditorialShareCard from '@/components/share/variants/EditorialShareCard';
-import Variant3ShareCard from '@/components/share/variants/Variant3ShareCard';
-import AppleHIGShareCard from '@/components/share/variants/AppleHIGShareCard';
 import WrappedHeroShareCard from '@/components/share/variants/WrappedHeroShareCard';
 import DossierShareCard from '@/components/share/variants/DossierShareCard';
 import MinimalOutlierShareCard from '@/components/share/variants/MinimalOutlierShareCard';
@@ -116,10 +113,7 @@ export function shareSafeUrl(u: string): string {
 type Orientation = 'horizontal' | 'vertical';
 
 const VARIANTS: { key: ShareVariant; label: string }[] = [
-  { key: 'apple-hig', label: 'Apple' },
   { key: 'default', label: 'Wrapped' },
-  { key: 'editorial', label: 'Editorial' },
-  { key: 'variant-3', label: 'Clean' },
   { key: 'wrapped-hero', label: 'Hero' },
   { key: 'dossier', label: 'Dossier' },
   { key: 'minimal-outlier', label: 'Minimal' },
@@ -281,7 +275,7 @@ export default function ShareModal({
       });
       // Wait for any in-flight decodes so the snapshot captures pixels, not blanks
       await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
-      const bg = variantKey === 'apple-hig' ? '#000000' : '#0B1220';
+      const bg = '#0B1220';
       let blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg);
       if (!blob) { await delay(80); blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg); }
       if (!blob) throw new Error('Export failed');
@@ -560,10 +554,7 @@ const VariantPage = React.memo(function VariantPage({
 }: VariantPageProps) {
   return (
     <ScaledCard target={target} pageW={pageW} pageH={pageH}>
-      {variantKey === 'apple-hig' && <AppleHIGShareCard data={data} orientation={orientation} />}
       {variantKey === 'default' && <ShareCard {...data} orientation={orientation} />}
-      {variantKey === 'editorial' && <EditorialShareCard data={data} orientation={orientation} />}
-      {variantKey === 'variant-3' && <Variant3ShareCard data={data} orientation={orientation} />}
       {variantKey === 'wrapped-hero' && <WrappedHeroShareCard data={data} orientation={orientation} />}
       {variantKey === 'dossier' && <DossierShareCard data={data} orientation={orientation} />}
       {variantKey === 'minimal-outlier' && <MinimalOutlierShareCard data={data} orientation={orientation} />}
