@@ -2,13 +2,6 @@ export type ShareOrientation = 'horizontal' | 'vertical';
 
 export type ShareVariant =
   | 'default'
-  | 'editorial'
-  | 'variant-3'
-  | 'stat-hero'
-  | 'apple-hig'
-  | 'narrative'
-  | 'visual-first'
-  | 'dense-data'
   | 'wrapped-hero'
   | 'dossier'
   | 'minimal-outlier';
