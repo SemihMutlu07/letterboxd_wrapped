@@ -16,7 +16,7 @@
     "@supabase/supabase-js": "^2.56.0",
     "@types/canvas-confetti": "^1.9.0",
     "canvas-confetti": "^1.9.3",
-    "framer-motion": "^12.23.6",
+    "framer-motion": "^12.42.2",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.1",
     "lucide-react": "^0.525.0",
