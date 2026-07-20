@@ -110,7 +110,7 @@ Then split direct deps from the transitive freeze so the next dependency bump is
 - [x] **F007** Drop `matplotlib`/`seaborn` from `requirements.txt`.
 - [ ] **F010** Delete `lib/session.ts`.
 - [ ] **F011** Delete `lib/errorCapture.ts`.
-- [ ] **F012** Delete `app/brutal/` duplicate route.
+- [x] **F012** Delete `app/brutal/` duplicate route. — done 2026-07-20 (WrappedBrutal.jsx removed; all 5 features already ported to `results/page.tsx`)
 - [✓] **F006** Delete both dead Sentry stubs (or install one). — DONE in c2eae18
 - [x] **F008** Reconcile `ALLOW_ALL_NETLIFY` doc vs code — done: removed phantom env var, replaced with documented `FRONTEND_ORIGINS`.
 - [ ] **F014** `utcnow()` → `now(datetime.UTC)` (15 sites, mechanical).
