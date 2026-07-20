@@ -6,7 +6,6 @@
     "_graveyard"
   ],
   "compilerOptions": {
-    "baseUrl": ".",
     "target": "ES2017",
     "lib": [
       "dom",

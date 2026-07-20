@@ -16,7 +16,7 @@ Frontend is a static Next.js export; backend is FastAPI that processes uploads/s
 ## Repo structure
 - `frontend/src/app`: Next.js pages + route handlers (`page.tsx`, `results/page.tsx`, `api/*/route.ts`)
 - `frontend/src/components`: UI components (landing, share modal, feedback, error boundary, etc.)
-- `frontend/src/containers/results`: Results screen sections (incl. `experimental/` for Test Lab)
+- `frontend/src/containers/results`: Results screen sections (incl. `sections/` — core production components; despite past naming, nothing here is a Test Lab experiment)
 - `frontend/src/lib`: API calls, analytics, session handling, Supabase client, utils
 - `frontend/src/hooks`: Custom hooks (performance/visibility)
 - `backend/app/main.py`: FastAPI app factory, lifespan, CORS, router includes, `/` + `/health`
@@ -130,7 +130,7 @@ Before opening a PR, verify:
 ## Known issues (triage order)
 1) `frontend/src/app/api/upload/route.ts` returns 501
    - This is intentional for the static export build. Backend API should be used for all processing.
-2) **Task state does not survive backend restarts**: `task_manager.py` keeps all task/job state in a process-local dict. A Render redeploy or crash silently drops queued and in-flight jobs (including desktop-worker scrape/watchlist jobs), and pollers get a 404 indistinguishable from "expired". Persistence or graceful degradation is deliberately deferred — do not "fix" this in passing without a decision on the approach.
+2) **Task state still does not survive backend restarts (persistence deliberately deferred)**: `task_manager.py` keeps all task/job state in a process-local dict. A Render redeploy or crash silently drops queued and in-flight jobs (including desktop-worker scrape/watchlist jobs). What *was* fixed (2026-07-20): the 404 on `GET /api/progress/{task_id}` now returns `boot_age_seconds`/`likely_server_restart` context (`task_manager.get_task_not_found_context()`), and the frontend poller (`pollTask` in `lib/api.ts`) surfaces a clear "server restarted, please try again" message instead of a generic "not found or expired". Actually persisting/recovering the queue itself is still not done — do not assume redeploys are safe for in-flight jobs.
 
 Resolved (kept for history, do not re-triage):
 - ~~WrappedBrutal orphan gap~~ — the `/brutal` route and `WrappedBrutal.jsx` were deleted 2026-07-20 after all 5 features were ported to `results/page.tsx`. (Note: the old claim that `PageViewTracker` was missing was wrong — it is mounted globally in `layout.tsx`.)

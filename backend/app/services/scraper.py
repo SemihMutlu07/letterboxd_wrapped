@@ -82,7 +82,7 @@ HEADERS = {
     "Referer": "https://letterboxd.com/",
 }
 PAGE_DELAY = float(os.getenv("LETTERBOXD_PAGE_DELAY", "0.25"))
-MAX_PAGES = 60    # safety cap (~3000 films)
+MAX_PAGES = int(os.getenv("LETTERBOXD_MAX_PAGES", "60"))    # safety cap (~3000 films)
 
 
 def _is_cloudflare_block(body: str) -> bool:
@@ -742,7 +742,7 @@ def _crawl_likers_into(
 
 
 # Safety cap: a single popular review must never trigger an unbounded crawl.
-LIKER_MAX_PAGES = 20
+LIKER_MAX_PAGES = int(os.getenv("LETTERBOXD_LIKER_MAX_PAGES", "20"))
 
 
 def _parse_liker_cards(soup: BeautifulSoup) -> list[dict]:
