@@ -189,7 +189,7 @@ export default function CinemaScale({
   };
 
   const alreadyWatched = (needle: string, haystack?: string[]) =>
-    (haystack ?? []).some((h) => h.toLowerCase().trim() === needle.toLowerCase().trim());
+    (haystack ?? []).some((h) => typeof h === 'string' && h.toLowerCase().trim() === needle.toLowerCase().trim());
 
   const getMovieSuggestions = (key: keyof Breakdown): MovieSuggestion[] => {
     let pool: MovieSuggestion[];
