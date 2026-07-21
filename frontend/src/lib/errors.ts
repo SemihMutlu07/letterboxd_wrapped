@@ -193,7 +193,7 @@ export function normalizeError(err: unknown): NormalizedError {
     };
   }
 
-  if (/402|429|rate.?limit/i.test(raw)) {
+  if (/402/i.test(raw)) {
     return {
       title: 'Rate limited',
       message: 'Letterboxd is rate-limiting requests from this server.',
