@@ -5,6 +5,8 @@ from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, List
 
+import pandas as pd
+
 
 def _shannon_entropy(counts: List[int]) -> float:
     """Shannon entropy in bits for a list of counts. Returns 0 for empty/single."""
@@ -33,6 +35,46 @@ def _top_share(counts: List[int], top_n: int = 1) -> float:
         return 0.0
     sorted_counts = sorted(counts, reverse=True)
     return sum(sorted_counts[:top_n]) / total
+
+
+def compute_cinema_scale_inputs(
+    films_enriched: pd.DataFrame,
+    genre_counts: Counter,
+    director_counts: Counter,
+) -> Dict[str, Any]:
+    """Build the keyword-argument dict for compute_cinema_scale() from an
+    enriched film DataFrame: median release year + country/decade/language
+    Counters. genre_counts/director_counts are computed earlier in the
+    pipeline (they need films_df + TMDB profile data) and are passed through
+    unchanged so callers can do a single `compute_cinema_scale(**inputs)`."""
+    median_release_year = None
+    if "release_date" in films_enriched.columns:
+        release_years = (
+            films_enriched["release_date"]
+            .dropna()
+            .apply(lambda d: int(str(d)[:4]) if d and len(str(d)) >= 4 else None)
+            .dropna()
+        )
+        if not release_years.empty:
+            median_release_year = int(release_years.median())
+
+    country_counts = Counter(
+        c for countries in films_enriched["countries"].dropna()
+        if isinstance(countries, list) for c in countries
+    ) if "countries" in films_enriched.columns else Counter()
+
+    decade_counts = Counter(films_enriched["decade"].dropna()) if "decade" in films_enriched.columns else Counter()
+    language_counts = Counter(films_enriched["language"].dropna()) if "language" in films_enriched.columns else Counter()
+
+    return {
+        "country_counts": country_counts,
+        "decade_counts": decade_counts,
+        "language_counts": language_counts,
+        "genre_counts": genre_counts,
+        "director_counts": director_counts,
+        "total_films": len(films_enriched),
+        "median_release_year": median_release_year,
+    }
 
 
 def compute_cinema_scale(

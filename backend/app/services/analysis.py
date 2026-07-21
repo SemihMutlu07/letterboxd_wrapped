@@ -20,7 +20,9 @@ import aiohttp
 import pandas as pd
 
 from app import task_manager
-from app.analysis_utils import compute_cinema_scale
+from app.analysis_utils import compute_cinema_scale, compute_cinema_scale_inputs
+from app.services.film_datasets import compute_data_quality, build_film_datasets
+from app.services.viewing_habits import compute_date_analytics, compute_rewatch_champions
 from app.services.geography import (
     compute_country_analytics,
     compute_country_iso_data,
@@ -84,7 +86,7 @@ async def process_comprehensive_letterboxd_data(
         if task_id:
             task_manager.update_task_progress(task_id, stage, message, progress, total)
         else:
-            print(f"[{stage}] {message} ({progress}/{total})")
+            logger.info("[%s] %s (%d/%d)", stage, message, progress, total)
 
     # -----------------------------------------------------------------------
     # 1. LOAD CSV DATA
@@ -164,54 +166,7 @@ async def process_comprehensive_letterboxd_data(
     # -----------------------------------------------------------------------
     # 3. ENRICHED FILM DATA SUMMARY
     # -----------------------------------------------------------------------
-    stats["enriched_films_summary"] = {
-        "total_enriched": len(films_enriched[films_enriched["tmdb_id"].notna()]),
-        "budget_data_available": len(films_enriched[films_enriched["budget"] > 0]),
-        "revenue_data_available": len(films_enriched[films_enriched["revenue"] > 0]),
-        "popularity_data_available": len(films_enriched[films_enriched["popularity"] > 0]),
-        "keywords_data_available": len(
-            films_enriched[films_enriched["keywords_full"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]
-        ),
-        "countries_data_available": len(
-            films_enriched[films_enriched["production_countries"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]
-        ),
-    }
-
-    total_films = len(films_enriched)
-    stats["data_quality_report"] = {
-        "total_films_analyzed": total_films,
-        "tmdb_match_rate": round(
-            (len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "budget_coverage": round(
-            (len(films_enriched[films_enriched["budget"] > 0]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "revenue_coverage": round(
-            (len(films_enriched[films_enriched["revenue"] > 0]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "popularity_coverage": round(
-            (len(films_enriched[films_enriched["popularity"] > 0]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "keywords_coverage": round(
-            (len(films_enriched[films_enriched["keywords_full"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "countries_coverage": round(
-            (len(films_enriched[films_enriched["production_countries"].apply(
-                lambda x: isinstance(x, list) and len(x) > 0
-            )]) / total_films) * 100, 1
-        ) if total_films > 0 else 0,
-        "storytelling_readiness": (
-            "excellent" if total_films > 0 and (len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) > 0.8
-            else "good" if total_films > 0 and (len(films_enriched[films_enriched["tmdb_id"].notna()]) / total_films) > 0.6
-            else "limited"
-        ),
-    }
+    stats.update(compute_data_quality(films_enriched))
 
     # -----------------------------------------------------------------------
     # 4. BASIC STATS
@@ -224,40 +179,7 @@ async def process_comprehensive_letterboxd_data(
         rewatched_count = int(rewatch_mask.sum())
     stats["rewatched_count"] = rewatched_count
 
-    diary_film_count = 0
-    rewatch_champions: list[dict] = []
-    if not diary_df.empty and "Name" in diary_df.columns:
-        diary_year_col = "Year" if "Year" in diary_df.columns else None
-        group_cols = ["Name", diary_year_col] if diary_year_col else ["Name"]
-        watches_per_film = diary_df.groupby(group_cols, dropna=False).size().reset_index(name="watch_count")
-        diary_film_count = int(len(watches_per_film))
-        top_rewatched = watches_per_film[watches_per_film["watch_count"] >= 2].sort_values(
-            "watch_count", ascending=False
-        ).head(5)
-        for _, row in top_rewatched.iterrows():
-            title = str(row.get("Name") or "")
-            year_val = row.get(diary_year_col) if diary_year_col else None
-            try:
-                year_int: Optional[int] = None if year_val is None or pd.isna(year_val) else int(year_val)
-            except Exception:
-                year_int = None
-            poster = ""
-            if not films_enriched.empty and "title" in films_enriched.columns:
-                match = films_enriched[films_enriched["title"] == title]
-                if year_int is not None and "year" in films_enriched.columns:
-                    match = match[match["year"] == year_int]
-                if not match.empty:
-                    pp = match.iloc[0].get("poster_path")
-                    if isinstance(pp, str):
-                        poster = pp
-            rewatch_champions.append({
-                "title": title,
-                "year": year_int,
-                "poster_path": poster,
-                "watch_count": int(row["watch_count"]),
-            })
-    stats["diary_film_count"] = diary_film_count
-    stats["rewatch_champions"] = rewatch_champions
+    stats.update(compute_rewatch_champions(diary_df, films_enriched))
 
     stats["films_with_metadata"] = len(metadata_df)
     stats["metadata_coverage"] = round((len(metadata_df) / len(unique_films)) * 100, 1) if len(unique_films) > 0 else 0
@@ -300,80 +222,9 @@ async def process_comprehensive_letterboxd_data(
     # -----------------------------------------------------------------------
     # 7. DATE ANALYSIS
     # -----------------------------------------------------------------------
-    if not diary_df.empty:
-        date_column = None
-        for col in ["Watched Date", "Date", "Watch Date", "Watched", "Date Watched", "WatchedDate"]:
-            if col in diary_df.columns:
-                date_column = col
-                break
-
-        if date_column:
-            diary_df["parsed_date"] = pd.to_datetime(diary_df[date_column], errors="coerce")
-            valid_dates = diary_df.dropna(subset=["parsed_date"])
-        else:
-            valid_dates = pd.DataFrame()
-    else:
-        date_column = None
-        valid_dates = pd.DataFrame()
-
-    date_data = None
-    date_source = "diary"
-
-    if date_column and not valid_dates.empty and len(valid_dates) >= 5:
-        date_data = valid_dates
-
-    if date_data is None and not watched_df.empty:
-        watched_date_col = None
-        for col in ["Date", "Watched Date", "Watch Date"]:
-            if col in watched_df.columns:
-                watched_date_col = col
-                break
-
-        if watched_date_col:
-            watched_df["parsed_date"] = pd.to_datetime(watched_df[watched_date_col], errors="coerce")
-            watched_valid = watched_df.dropna(subset=["parsed_date"])
-            if not watched_valid.empty:
-                date_data = watched_valid
-                date_source = "watched"
-
-    if date_data is not None:
-        date_data["year_month"] = date_data["parsed_date"].dt.strftime("%Y-%m")
-        monthly_counts = date_data["year_month"].value_counts().sort_index()
-        stats["monthly_viewing_habits"] = [
-            {"month": ym, "count": int(cnt)} for ym, cnt in monthly_counts.items()
-        ]
-
-        date_data["day_of_week"] = date_data["parsed_date"].dt.dayofweek
-        stats["day_of_week_pattern"] = {
-            "weekday": len(date_data[date_data["day_of_week"] < 5]),
-            "weekend": len(date_data[date_data["day_of_week"] >= 5]),
-        }
-
-        earliest_date = date_data["parsed_date"].min()
-        latest_date = date_data["parsed_date"].max()
-        total_days = (latest_date - earliest_date).days
-
-        if total_days == 0:
-            total_days = 1
-        elif total_days < 30:
-            total_days = max(total_days, 7)
-
-        if total_days == 1:
-            period_description = f"Analyzing your cinematic moment on {earliest_date.strftime('%B %d, %Y')}"
-        elif total_days <= 365:
-            period_description = f"Analyzing your last {total_days} days of cinematic history"
-        elif total_days <= 730:
-            period_description = f"Exploring {total_days} days of your film journey"
-        else:
-            years = total_days // 365
-            period_description = f"Journeying through {years} years of your cinematic legacy"
-
-        stats["data_timeline"] = {
-            "earliest_date": earliest_date.isoformat(),
-            "latest_date": latest_date.isoformat(),
-            "total_days": total_days,
-            "period_description": period_description,
-        }
+    # compute_date_analytics mutates diary_df/watched_df in place (adds
+    # "parsed_date") — Section 13 below depends on that column existing.
+    stats.update(compute_date_analytics(diary_df, watched_df))
 
     # -----------------------------------------------------------------------
     # 8. KEYWORD ANALYTICS + COUNTRY ANALYTICS
@@ -506,38 +357,15 @@ async def process_comprehensive_letterboxd_data(
     # -----------------------------------------------------------------------
     # 14. CINEMA SCALE
     # -----------------------------------------------------------------------
-    median_release_year = None
-    if "release_date" in films_enriched.columns:
-        release_years = (
-            films_enriched["release_date"]
-            .dropna()
-            .apply(lambda d: int(str(d)[:4]) if d and len(str(d)) >= 4 else None)
-            .dropna()
-        )
-        if not release_years.empty:
-            median_release_year = int(release_years.median())
-
-    country_counts = Counter(
-        c for countries in films_enriched["countries"].dropna()
-        if isinstance(countries, list) for c in countries
-    ) if "countries" in films_enriched.columns else Counter()
-
-    decade_counts = Counter(films_enriched["decade"].dropna()) if "decade" in films_enriched.columns else Counter()
-    language_counts = Counter(films_enriched["language"].dropna()) if "language" in films_enriched.columns else Counter()
-
     stats["sinefil_meter"] = compute_cinema_scale(
-        country_counts=country_counts,
-        decade_counts=decade_counts,
-        language_counts=language_counts,
-        genre_counts=genre_counts,
-        director_counts=director_counts,
-        total_films=len(films_enriched),
-        median_release_year=median_release_year,
+        **compute_cinema_scale_inputs(films_enriched, genre_counts, director_counts)
     )
 
     if os.getenv("DEBUG_CINEMA_SCALE"):
-        print(f"[Cinema Scale] score={stats['sinefil_meter']['score']}, "
-              f"breakdown={stats['sinefil_meter']['breakdown']}")
+        logger.info(
+            "[Cinema Scale] score=%s, breakdown=%s",
+            stats["sinefil_meter"]["score"], stats["sinefil_meter"]["breakdown"],
+        )
 
     # -----------------------------------------------------------------------
     # 15. TEST LAB DATASETS
@@ -549,69 +377,7 @@ async def process_comprehensive_letterboxd_data(
         how="left",
     )
 
-    def _clean_year(value: Any) -> Optional[int]:
-        try:
-            if pd.isna(value):
-                return None
-            return int(value)
-        except Exception:
-            return None
-
-    def _clean_rating(value: Any) -> Optional[float]:
-        try:
-            if pd.isna(value):
-                return None
-            return float(value)
-        except Exception:
-            return None
-
-    def _community_rating(value: Any) -> Optional[float]:
-        # TMDB vote_average is a 0–10 community score; normalize to the user's 0–5
-        # scale so per-film deltas are comparable. 0 means "no votes" → no signal.
-        try:
-            if pd.isna(value):
-                return None
-            score = float(value)
-            return round(score / 2.0, 1) if score > 0 else None
-        except Exception:
-            return None
-
-    if "rating" in analysis_df.columns:
-        rated_rows = analysis_df[analysis_df["rating"].notna()]
-        stats["rated_films"] = [
-            {
-                "title": str(row.get("title") or ""),
-                "year": _clean_year(row.get("year")),
-                "rating": float(row.get("rating")),
-                "your_rating": float(row.get("rating")),
-                "community_rating": _community_rating(row.get("vote_average")),
-                "average_rating": float(row.get("vote_average", 0)) / 2.0 if pd.notna(row.get("vote_average")) else None,
-                "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
-                "popularity": float(row.get("popularity", 0)) if pd.notna(row.get("popularity")) else 0.0,
-            }
-            for _, row in rated_rows.sort_values("rating", ascending=False).iterrows()
-        ]
-    else:
-        stats["rated_films"] = []
-
-    stats["all_films"] = [
-        {
-            "title": str(row.get("title") or ""),
-            "year": _clean_year(row.get("year")),
-            "director": row.get("director") if pd.notna(row.get("director")) else None,
-            "genres": row.get("genres") if isinstance(row.get("genres"), list) else [],
-            "countries": row.get("countries") if isinstance(row.get("countries"), list) else [],
-            "language": row.get("language") if pd.notna(row.get("language")) else None,
-            "runtime": _clean_year(row.get("runtime")),
-            "poster_path": row.get("poster_path") if isinstance(row.get("poster_path"), str) else "",
-            "decade": row.get("decade") if pd.notna(row.get("decade")) else None,
-            "rating": _clean_rating(row.get("rating")) if "rating" in analysis_df.columns else None,
-            "cast": row.get("cast") if isinstance(row.get("cast"), list) else [],
-            "average_rating": float(row.get("vote_average", 0)) / 2.0 if pd.notna(row.get("vote_average")) else None,
-            "popularity": float(row.get("popularity", 0)) if pd.notna(row.get("popularity")) else 0.0,
-        }
-        for _, row in analysis_df.iterrows()
-    ]
+    stats.update(build_film_datasets(analysis_df))
 
     # Directors with ratings
     stats["directors_with_ratings"] = compute_directors_with_ratings(director_counts, analysis_df)
