@@ -95,7 +95,7 @@ async def tmdb_get(
                         await f.write(json.dumps(data, ensure_ascii=False, indent=2))
                 return data
         except aiohttp.ClientError as e:
-            print(f"Error fetching {url}: {e}")
+            logger.warning("Error fetching %s: %s", url, e)
             return None
 
     return None
@@ -347,5 +347,5 @@ async def fetch_comprehensive_film_details(
             "backdrop_path": details.get("backdrop_path", ""),
         }
     except Exception as e:
-        print(f"Error fetching comprehensive details for ID {tmdb_id}: {e}")
+        logger.warning("Error fetching comprehensive details for ID %s: %s", tmdb_id, e)
         return {"tmdb_id": tmdb_id}

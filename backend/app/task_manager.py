@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -9,6 +10,8 @@ import secrets
 
 from app import supabase_ops
 from app.config import settings
+
+logger = logging.getLogger("letterboxd_wrapped.task_manager")
 
 
 @dataclass
@@ -719,7 +722,7 @@ def update_task_progress(
         task.progress = progress
         task.total = total
         append_task_event(task_id, stage, message, metrics={"progress": progress, "total": total})
-    print(f"[{task_id[:8]}] {stage}: {message} ({progress}/{total})")
+    logger.info("[%s] %s: %s (%d/%d)", task_id[:8], stage, message, progress, total)
 
 
 def set_task_running(task_id: str) -> None:
