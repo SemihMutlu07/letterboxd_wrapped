@@ -49,6 +49,11 @@ class TaskState:
     owner_key: Optional[str] = None
 
 
+# ponytail: in-memory task queue, single-worker only. `_tasks` and
+# `_last_worker_meta` are process-global dicts — running uvicorn with more
+# than one worker would split state across processes and break polling.
+# Upgrade path: Redis-backed queue or move fully onto the `ops_tasks` table.
+# Keep uvicorn pinned to 1 worker in production (see backend/Dockerfile).
 _tasks: Dict[str, TaskState] = {}
 
 # Task state is process-local and does not survive a backend restart (Render

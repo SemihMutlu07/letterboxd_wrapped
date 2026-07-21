@@ -16,4 +16,6 @@ COPY . /app
 ENV PYTHONPATH=/app:/app/app
 
 # Shell form (not JSON/exec) so the shell expands ${PORT:-8000} correctly.
+# No --workers flag → uvicorn defaults to 1 worker, which is required:
+# task_manager.py keeps in-flight job state in process-global dicts.
 CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
