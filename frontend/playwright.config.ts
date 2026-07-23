@@ -11,7 +11,7 @@ export default defineConfig({
   webServer: {
     command: 'npx next dev --hostname 127.0.0.1 --port 3107',
     url: 'http://127.0.0.1:3107/dev/share-cards',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
