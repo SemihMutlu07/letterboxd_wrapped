@@ -376,7 +376,7 @@ export default function ResultsPage() {
       ? stats.favorite_films
       : (stats?.rated_films ?? []);
     const topFilms = filmSource
-      .slice(0, 4)
+      .slice(0, 5)
       .map((f) => ({
         title: f.title,
         year: f.year ? String(f.year) : '',
@@ -1079,4 +1079,3 @@ function LazyCinemaScale({
     </div>
   );
 }
-

@@ -10,6 +10,7 @@ import ShareModal, {
   shareSafeUrl,
 } from '@/components/ShareModal';
 import type { ShareCardData } from './types';
+import { normalizeShareCardData, SHARE_VARIANTS } from './registry';
 
 vi.mock('next/image', () => ({
   default: ({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; priority?: boolean }) => (
@@ -176,6 +177,45 @@ describe('ShareModal review words', () => {
     const root = within(exportRoot());
     expect(root.queryByText(/review words/i)).not.toBeInTheDocument();
     expect(root.getByText(/peak decade/i)).toBeInTheDocument();
+  });
+});
+
+describe('share registry and privacy', () => {
+  it('keeps the canonical seven-card order', () => {
+    expect(SHARE_VARIANTS.map(({ label }) => label)).toEqual([
+      'Wrapped', 'Apple', 'Editorial', 'Variant 3', 'Double Feature', 'Contact Sheet', 'Admit One',
+    ]);
+  });
+
+  it('normalizes a missing director without dropping film slots', () => {
+    const normalized = normalizeShareCardData({
+      ...baseData,
+      favoriteDirector: null,
+      topFilms: Array.from({ length: 6 }, (_, index) => ({
+        title: `Film ${index}`,
+        year: '2026',
+        posterPath: null,
+      })),
+    });
+    expect(normalized.favoriteDirector).toEqual({
+      name: 'Director unavailable',
+      headshotUrl: '',
+      count: 0,
+    });
+    expect(normalized.topFilms).toHaveLength(5);
+  });
+
+  it('hides the username on every rendered card and resets on reopen', async () => {
+    const props = { ...baseData, username: 'long-letterboxd-name' };
+    const { rerender } = renderShareModal(props);
+    expect(within(exportRoot()).getByText('@long-letterboxd-name')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('switch', { name: /show username/i }));
+    expect(within(exportRoot()).queryByText('@long-letterboxd-name')).not.toBeInTheDocument();
+
+    rerender(<ShareModal open={false} onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} />);
+    rerender(<ShareModal open onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} />);
+    expect(within(exportRoot()).getByText('@long-letterboxd-name')).toBeInTheDocument();
   });
 });
 

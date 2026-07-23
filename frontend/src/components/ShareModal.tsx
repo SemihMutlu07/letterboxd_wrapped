@@ -3,11 +3,12 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallba
 import { X, Download, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
-import ShareCard from './ShareCard';
-import WrappedHeroShareCard from '@/components/share/variants/WrappedHeroShareCard';
-import DossierShareCard from '@/components/share/variants/DossierShareCard';
-import MinimalOutlierShareCard from '@/components/share/variants/MinimalOutlierShareCard';
-import type { ShareCardData, ShareVariant } from '@/components/share/types';
+import type { ShareCardData, ShareCardInput, ShareVariant } from '@/components/share/types';
+import {
+  normalizeShareCardData,
+  SHARE_VARIANTS,
+  ShareVariantRenderer,
+} from '@/components/share/registry';
 import { API_BASE } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 
@@ -137,13 +138,6 @@ export function shareSafeUrl(u: string): string {
 
 type Orientation = 'horizontal' | 'vertical';
 
-const VARIANTS: { key: ShareVariant; label: string }[] = [
-  { key: 'default', label: 'Wrapped' },
-  { key: 'wrapped-hero', label: 'Hero' },
-  { key: 'dossier', label: 'Dossier' },
-  { key: 'minimal-outlier', label: 'Minimal' },
-];
-
 function lastName(name: string): string {
   const parts = name.trim().split(/\s+/);
   return parts[parts.length - 1] || name;
@@ -154,7 +148,7 @@ type Props = {
   onClose: () => void;
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
-  cardProps: ShareCardData;
+  cardProps: ShareCardInput;
   onDownloadSuccess?: () => void;
 };
 
@@ -176,8 +170,9 @@ export default function ShareModal({
   const [swapOpen, setSwapOpen] = useState(false);
   const [showSwapHint, setShowSwapHint] = useState(false);
   const [hintFading, setHintFading] = useState(false);
+  const [showUsername, setShowUsername] = useState(true);
 
-  const variantKey = VARIANTS[Math.max(0, Math.min(VARIANTS.length - 1, activeIdx))].key;
+  const variantKey = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].key;
 
   useEffect(() => {
     if (!open) return;
@@ -185,6 +180,7 @@ export default function ShareModal({
     setDirectorIdx(0);
     setActiveIdx(0);
     setSwapOpen(false);
+    setShowUsername(true);
   }, [open]);
 
   useEffect(() => {
@@ -192,11 +188,12 @@ export default function ShareModal({
     setDirectorIdx(0);
   }, [cardProps]);
 
-  const effectiveCardProps = useMemo<ShareCardData>(() => ({
+  const effectiveCardProps = useMemo<ShareCardData>(() => normalizeShareCardData({
     ...cardProps,
     onScreenCrush: cardProps.topActors?.[actorIdx] ?? cardProps.onScreenCrush,
     favoriteDirector: cardProps.topDirectors?.[directorIdx] ?? cardProps.favoriteDirector,
-  }), [cardProps, actorIdx, directorIdx]);
+    username: showUsername ? cardProps.username : undefined,
+  }), [cardProps, actorIdx, directorIdx, showUsername]);
 
   // Swap hint — show once, persist to localStorage
   const dismissSwapHint = useCallback(() => {
@@ -350,8 +347,8 @@ export default function ShareModal({
           className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0"
           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
         >
-          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * VARIANTS.length}px` : '100%' }}>
-            {VARIANTS.map((v, i) => {
+          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
+            {SHARE_VARIANTS.map((v, i) => {
               const isActive = i === activeIdx;
               const inBudget = Math.abs(i - activeIdx) <= 1;
               return (
@@ -380,7 +377,7 @@ export default function ShareModal({
 
         {/* Page indicator dots */}
         <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
-          {VARIANTS.map((v, i) => (
+          {SHARE_VARIANTS.map((v, i) => (
             <button
               key={v.key}
               onClick={() => jumpTo(i)}
@@ -502,6 +499,22 @@ export default function ShareModal({
             )}
           </div>
 
+          {cardProps.username && (
+            <label className="flex items-center justify-between text-xs text-slate-300">
+              <span>Show @{cardProps.username}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showUsername}
+                aria-label="Show username"
+                onClick={() => setShowUsername((value) => !value)}
+                className={`relative h-6 w-11 rounded-full transition-colors ${showUsername ? 'bg-white' : 'bg-white/20'}`}
+              >
+                <span className={`absolute top-1 h-4 w-4 rounded-full transition-transform ${showUsername ? 'left-6 bg-black' : 'left-1 bg-white'}`} />
+              </button>
+            </label>
+          )}
+
           {/* Single dominant CTA */}
           <button
             onClick={handleSavePNG}
@@ -575,10 +588,7 @@ const VariantPage = React.memo(function VariantPage({
 }: VariantPageProps) {
   return (
     <ScaledCard target={target} pageW={pageW} pageH={pageH}>
-      {variantKey === 'default' && <ShareCard {...data} orientation={orientation} />}
-      {variantKey === 'wrapped-hero' && <WrappedHeroShareCard data={data} orientation={orientation} />}
-      {variantKey === 'dossier' && <DossierShareCard data={data} orientation={orientation} />}
-      {variantKey === 'minimal-outlier' && <MinimalOutlierShareCard data={data} orientation={orientation} />}
+      <ShareVariantRenderer variant={variantKey} data={data} orientation={orientation} />
     </ScaledCard>
   );
 });
