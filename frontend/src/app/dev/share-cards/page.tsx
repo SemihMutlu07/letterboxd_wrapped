@@ -71,7 +71,13 @@ function ShareCardHarness() {
 
   return (
     <main className="min-h-screen bg-neutral-900">
-      <div id="share-card-harness" data-fixture={query.fixture} className="w-fit">
+      <div
+        id="share-card-harness"
+        data-fixture={query.fixture}
+        data-orientation={query.orientation}
+        data-variant={query.variant}
+        className="w-fit"
+      >
         <ShareVariantRenderer variant={query.variant} data={data} orientation={query.orientation} />
       </div>
       <button data-testid="export" onClick={save} className="fixed bottom-2 right-2 bg-white p-2 text-black">Export</button>
