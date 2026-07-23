@@ -4,6 +4,7 @@ import AppleHIGShareCard from './variants/AppleHIGShareCard';
 import EditorialShareCard from './variants/EditorialShareCard';
 import Variant3ShareCard from './variants/Variant3ShareCard';
 import DoubleFeatureShareCard from './variants/DoubleFeatureShareCard';
+import ContactSheetShareCard from './variants/ContactSheetShareCard';
 import type { ShareCardData, ShareCardInput, ShareOrientation, ShareVariant } from './types';
 
 export const SHARE_VARIANTS: ReadonlyArray<{ key: ShareVariant; label: string }> = [
@@ -43,5 +44,6 @@ export function ShareVariantRenderer({ variant, data, orientation }: RendererPro
   if (variant === 'editorial') return <EditorialShareCard data={normalized} orientation={orientation} />;
   if (variant === 'variant-3') return <Variant3ShareCard data={normalized} orientation={orientation} />;
   if (variant === 'double-feature') return <DoubleFeatureShareCard data={normalized} orientation={orientation} />;
+  if (variant === 'contact-sheet') return <ContactSheetShareCard data={normalized} orientation={orientation} />;
   return null;
 }
