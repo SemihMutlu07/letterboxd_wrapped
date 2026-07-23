@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Sliders } from 'lucide-react';
+import { X, Download, LoaderCircle, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
 import type { ShareCardData, ShareCardInput, ShareVariant } from '@/components/share/types';
@@ -55,14 +55,20 @@ export async function readPngDimensions(blob: Blob): Promise<{ width: number; he
 
 export async function exportExactPng(el: HTMLElement, orientation: Orientation, bg: string): Promise<Blob> {
   const config = SHARE_EXPORT_CONFIG[orientation];
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const blob = await exportToBlob(el, config.domWidth, config.domHeight, config.pixelRatio, bg);
-    if (blob) {
-      const dimensions = await readPngDimensions(blob);
-      if (dimensions?.width === config.outputWidth && dimensions.height === config.outputHeight) return blob;
+  let lastError: unknown;
+  for (const retryDelay of [0, 250, 1000]) {
+    if (retryDelay > 0) await delay(retryDelay);
+    try {
+      const blob = await exportToBlob(el, config.domWidth, config.domHeight, config.pixelRatio, bg);
+      if (blob) {
+        const dimensions = await readPngDimensions(blob);
+        if (dimensions?.width === config.outputWidth && dimensions.height === config.outputHeight) return blob;
+      }
+    } catch (error) {
+      lastError = error;
     }
-    if (attempt < 2) await delay(80);
   }
+  if (lastError instanceof Error) throw lastError;
   throw new Error(`Export did not produce ${config.outputWidth}×${config.outputHeight}`);
 }
 
@@ -524,8 +530,8 @@ export default function ShareModal({
             }`}
             style={{ background: isSaving ? '#333' : '#fff', color: isSaving ? '#888' : '#000' }}
           >
-            <Download size={18} />
-            {isSaving ? 'Download starting...' : 'Download PNG'}
+            {isSaving ? <LoaderCircle size={18} className="animate-spin" /> : <Download size={18} />}
+            {isSaving ? 'Preparing full-resolution PNG...' : 'Download PNG'}
           </button>
         </div>
       </div>

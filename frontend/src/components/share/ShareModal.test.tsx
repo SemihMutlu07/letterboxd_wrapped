@@ -10,7 +10,7 @@ import ShareModal, {
   shareSafeUrl,
 } from '@/components/ShareModal';
 import type { ShareCardData } from './types';
-import { normalizeShareCardData, SHARE_VARIANTS } from './registry';
+import { normalizeShareCardData, SHARE_VARIANTS, ShareVariantRenderer } from './registry';
 
 vi.mock('next/image', () => ({
   default: ({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; priority?: boolean }) => (
@@ -91,6 +91,7 @@ async function openSwapDrawer() {
 }
 
 beforeEach(() => {
+  vi.mocked(toBlob).mockReset();
   // jsdom returns 0 for clientWidth/Height by default; the modal sizes its rail
   // off these, so without a mock variants never enter the mount budget.
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 400 });
@@ -239,23 +240,30 @@ describe.each([
   ['horizontal', 1200, 675, 1],
   ['vertical', 1080, 1920, 1.6],
 ] as const)('exact %s export', (orientation, width, height, pixelRatio) => {
-  it('keeps the configured dimensions on low-memory devices', async () => {
+  it('keeps exact output dimensions for every variant on low-memory devices', async () => {
     Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: 1 });
-    vi.mocked(toBlob).mockResolvedValueOnce(pngBlob(width, height));
 
-    const blob = await exportExactPng(document.createElement('div'), orientation, '#000');
+    for (const { key } of SHARE_VARIANTS) {
+      vi.mocked(toBlob).mockResolvedValueOnce(pngBlob(width, height));
+      const rendered = render(<ShareVariantRenderer variant={key} data={baseData} orientation={orientation} />);
+      const root = rendered.container.querySelector<HTMLElement>('[data-export-root="true"]');
+      expect(root, `${key} must expose an export root`).not.toBeNull();
 
-    expect(await readPngDimensions(blob)).toEqual({ width, height });
-    expect(toBlob).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
-      width: SHARE_EXPORT_CONFIG[orientation].domWidth,
-      height: SHARE_EXPORT_CONFIG[orientation].domHeight,
-      pixelRatio,
-    }));
+      const blob = await exportExactPng(root!, orientation, '#000');
+
+      expect(await readPngDimensions(blob)).toEqual({ width, height });
+      expect(toBlob).toHaveBeenLastCalledWith(root, expect.objectContaining({
+        width: SHARE_EXPORT_CONFIG[orientation].domWidth,
+        height: SHARE_EXPORT_CONFIG[orientation].domHeight,
+        pixelRatio,
+      }));
+      rendered.unmount();
+    }
   });
 
-  it('retries null and wrong-sized blobs without lowering quality', async () => {
+  it('retries failures and wrong-sized blobs without lowering quality', async () => {
     vi.mocked(toBlob)
-      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('canvas allocation failed'))
       .mockResolvedValueOnce(pngBlob(1, 1))
       .mockResolvedValueOnce(pngBlob(width, height));
 
