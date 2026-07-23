@@ -2,12 +2,13 @@ export type ShareOrientation = 'horizontal' | 'vertical';
 
 export type ShareVariant =
   | 'default'
+  | 'admit-one'
+  | 'minimal-outlier'
   | 'apple-hig'
   | 'editorial'
   | 'variant-3'
   | 'double-feature'
-  | 'contact-sheet'
-  | 'admit-one';
+  | 'contact-sheet';
 
 export type SharePersonStat = {
   name: string;

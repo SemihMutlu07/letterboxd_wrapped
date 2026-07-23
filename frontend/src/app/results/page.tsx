@@ -745,6 +745,24 @@ export function ResultsContent({
       ),
     },
     {
+      id: 'cinema-scale',
+      render: () => (
+        <SectionContainer theme={theme}>
+          <LazyCinemaScale
+            type={stats.sinefil_meter?.type || 'Independent Cinephile'}
+            description={stats.sinefil_meter?.description}
+            score={cineScore || 50}
+            breakdown={stats.sinefil_meter?.breakdown}
+            topCountries={(stats.top_countries || []).map((c: { name: string }) => c.name)}
+            topLanguages={(stats.top_languages || []).map((l: { name: string }) => l.name)}
+            topGenres={(stats.top_genres || []).map((g: { name: string }) => g.name)}
+            topDirectors={(stats.top_directors || []).map((d: { name: string }) => d.name)}
+            favoriteDecade={stats.favorite_decade?.name}
+          />
+        </SectionContainer>
+      ),
+    },
+    {
       id: 'people',
       render: () => (
         <div className="space-y-3 md:space-y-6">
@@ -770,33 +788,6 @@ export function ResultsContent({
       ),
     },
     {
-      id: 'rating-deviation',
-      render: () => <RatingDeviation stats={stats} />,
-    },
-    {
-      id: 'reviews',
-      render: () =>
-        stats.review_analysis ? (
-          <ReviewAnalysisSection stats={stats} />
-        ) : (
-          <div className="rounded-xl bg-white/5 p-8 text-center text-slate-400">
-            <p className="text-sm">Bu hesapta yazılı review bulunamadı.</p>
-          </div>
-        ),
-    },
-    {
-      id: 'film-history',
-      render: () => (
-        <LazyFilmHistory
-          data={decadeData}
-          max={decadeMax}
-          isMobile={isMobile}
-          allFilms={stats.all_films ?? []}
-          userAvg={stats.average_rating}
-        />
-      ),
-    },
-    {
       id: 'ratings-bar',
       render: () => (
         <LazyRatingsBar
@@ -809,34 +800,20 @@ export function ResultsContent({
         />
       ),
     },
-    ...(stats.rewatch_champions && stats.rewatch_champions.length > 0
-      ? [
-          {
-            id: 'rewatch-champions',
-            render: () => <RewatchChampions films={stats.rewatch_champions} />,
-          },
-        ]
-      : []),
     {
-      id: 'languages',
-      render: () => <LazyLanguages data={stats.top_languages ?? []} allFilms={stats.all_films ?? []} />,
+      id: 'rating-deviation',
+      render: () => <RatingDeviation stats={stats} />,
     },
     {
-      id: 'cinema-scale',
+      id: 'film-history',
       render: () => (
-        <SectionContainer theme={theme}>
-          <LazyCinemaScale
-            type={stats.sinefil_meter?.type || 'Independent Cinephile'}
-            description={stats.sinefil_meter?.description}
-            score={cineScore || 50}
-            breakdown={stats.sinefil_meter?.breakdown}
-            topCountries={(stats.top_countries || []).map((c: { name: string }) => c.name)}
-            topLanguages={(stats.top_languages || []).map((l: { name: string }) => l.name)}
-            topGenres={(stats.top_genres || []).map((g: { name: string }) => g.name)}
-            topDirectors={(stats.top_directors || []).map((d: { name: string }) => d.name)}
-            favoriteDecade={stats.favorite_decade?.name}
-          />
-        </SectionContainer>
+        <LazyFilmHistory
+          data={decadeData}
+          max={decadeMax}
+          isMobile={isMobile}
+          allFilms={stats.all_films ?? []}
+          userAvg={stats.average_rating}
+        />
       ),
     },
     {

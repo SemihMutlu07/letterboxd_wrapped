@@ -6,16 +6,15 @@ import Variant3ShareCard from './variants/Variant3ShareCard';
 import DoubleFeatureShareCard from './variants/DoubleFeatureShareCard';
 import ContactSheetShareCard from './variants/ContactSheetShareCard';
 import AdmitOneShareCard from './variants/AdmitOneShareCard';
+import MinimalOutlierShareCard from './variants/MinimalOutlierShareCard';
 import type { ShareCardData, ShareCardInput, ShareOrientation, ShareVariant } from './types';
 
 export const SHARE_VARIANTS: ReadonlyArray<{ key: ShareVariant; label: string }> = [
-  { key: 'default', label: 'Wrapped' },
-  { key: 'apple-hig', label: 'Apple' },
+  { key: 'default', label: 'Hero Grid' },
+  { key: 'admit-one', label: 'Cinema Ticket' },
+  { key: 'minimal-outlier', label: 'Hot Take' },
+  { key: 'apple-hig', label: 'Glass' },
   { key: 'editorial', label: 'Editorial' },
-  { key: 'variant-3', label: 'Variant 3' },
-  { key: 'double-feature', label: 'Double Feature' },
-  { key: 'contact-sheet', label: 'Contact Sheet' },
-  { key: 'admit-one', label: 'Admit One' },
 ];
 
 export const DIRECTOR_UNAVAILABLE = {
@@ -41,11 +40,12 @@ type RendererProps = {
 export function ShareVariantRenderer({ variant, data, orientation }: RendererProps) {
   const normalized = normalizeShareCardData(data);
   if (variant === 'default') return <ShareCard {...normalized} orientation={orientation} />;
+  if (variant === 'admit-one') return <AdmitOneShareCard data={normalized} orientation={orientation} />;
+  if (variant === 'minimal-outlier') return <MinimalOutlierShareCard data={normalized} orientation={orientation} />;
   if (variant === 'apple-hig') return <AppleHIGShareCard data={normalized} orientation={orientation} />;
   if (variant === 'editorial') return <EditorialShareCard data={normalized} orientation={orientation} />;
   if (variant === 'variant-3') return <Variant3ShareCard data={normalized} orientation={orientation} />;
   if (variant === 'double-feature') return <DoubleFeatureShareCard data={normalized} orientation={orientation} />;
   if (variant === 'contact-sheet') return <ContactSheetShareCard data={normalized} orientation={orientation} />;
-  if (variant === 'admit-one') return <AdmitOneShareCard data={normalized} orientation={orientation} />;
   return null;
 }
