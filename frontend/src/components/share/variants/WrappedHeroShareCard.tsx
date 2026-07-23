@@ -201,7 +201,7 @@ const WrappedHeroShareCard = React.forwardRef<HTMLDivElement, Props>(
       <div
         ref={ref}
         data-export-root="true"
-        className={cx('w-[1200px] h-[630px] grid grid-cols-12', className)}
+        className={cx('w-[1200px] h-[675px] grid grid-cols-12', className)}
         style={{ background: CREAM, fontFamily: 'Avenir Next, Manrope, Segoe UI, system-ui, sans-serif' }}
       >
         <div className="col-span-7 flex flex-col justify-between px-10 py-9">

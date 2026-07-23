@@ -500,7 +500,7 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardPr
       );
     }
 
-    /* ────────────────── HORIZONTAL (1200×630) ────────────────── */
+    /* ────────────────── HORIZONTAL (1200×675) ────────────────── */
     return (
       <div
         ref={ref}
@@ -508,7 +508,7 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardPr
         className={cx(className)}
         style={{
           width: 1200,
-          height: 630,
+          height: 675,
           position: 'relative',
           overflow: 'hidden',
           borderRadius: 24,

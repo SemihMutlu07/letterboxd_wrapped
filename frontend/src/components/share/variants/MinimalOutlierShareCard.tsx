@@ -127,7 +127,7 @@ const MinimalOutlierShareCard = React.forwardRef<HTMLDivElement, Props>(
       <div
         ref={ref}
         data-export-root="true"
-        className={cx('w-[1200px] h-[630px] grid grid-cols-12', className)}
+        className={cx('w-[1200px] h-[675px] grid grid-cols-12', className)}
         style={{ background: SAGE, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif' }}
       >
         <div className="col-span-7 flex flex-col justify-center px-12">

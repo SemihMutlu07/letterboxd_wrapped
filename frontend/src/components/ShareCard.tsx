@@ -346,12 +346,12 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     );
   }
 
-  /* ═══════ HORIZONTAL (1200×630) ═══════ */
+  /* ═══════ HORIZONTAL (1200×675) ═══════ */
   return (
     <div
       ref={ref}
       data-export-root="true"
-      className={cx("w-[1200px] h-[630px] text-white relative overflow-hidden", className)}
+      className={cx("w-[1200px] h-[675px] text-white relative overflow-hidden", className)}
       style={{
         background: BG,
         fontFamily: "'Avenir Next', Manrope, 'Segoe UI', system-ui, sans-serif",

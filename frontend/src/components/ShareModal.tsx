@@ -8,7 +8,6 @@ import WrappedHeroShareCard from '@/components/share/variants/WrappedHeroShareCa
 import DossierShareCard from '@/components/share/variants/DossierShareCard';
 import MinimalOutlierShareCard from '@/components/share/variants/MinimalOutlierShareCard';
 import type { ShareCardData, ShareVariant } from '@/components/share/types';
-import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
 import { API_BASE } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 
@@ -38,6 +37,32 @@ async function exportToBlob(el: HTMLElement, w: number, h: number, pixelRatio: n
     backgroundColor: bg,
     cacheBust: true,
   });
+}
+
+export const SHARE_EXPORT_CONFIG = {
+  horizontal: { domWidth: 1200, domHeight: 675, outputWidth: 1200, outputHeight: 675, pixelRatio: 1 },
+  vertical: { domWidth: 675, domHeight: 1200, outputWidth: 1080, outputHeight: 1920, pixelRatio: 1.6 },
+} as const;
+
+export async function readPngDimensions(blob: Blob): Promise<{ width: number; height: number } | null> {
+  if (blob.size < 24) return null;
+  const bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
+  if (![137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) return null;
+  const view = new DataView(bytes.buffer);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+export async function exportExactPng(el: HTMLElement, orientation: Orientation, bg: string): Promise<Blob> {
+  const config = SHARE_EXPORT_CONFIG[orientation];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const blob = await exportToBlob(el, config.domWidth, config.domHeight, config.pixelRatio, bg);
+    if (blob) {
+      const dimensions = await readPngDimensions(blob);
+      if (dimensions?.width === config.outputWidth && dimensions.height === config.outputHeight) return blob;
+    }
+    if (attempt < 2) await delay(80);
+  }
+  throw new Error(`Export did not produce ${config.outputWidth}×${config.outputHeight}`);
 }
 
 async function shareToSystem(blob: Blob) {
@@ -204,12 +229,10 @@ export default function ShareModal({
     return () => { clearTimeout(t); clearTimeout(t2); };
   }, [open, cardProps]);
 
-  const adaptivePixelRatio = useAdaptivePixelRatio();
-  const target = useMemo(() =>
-    orientation === 'horizontal'
-      ? { w: 1200, h: 630 }
-      : { w: 675, h: 1200 }
-  , [orientation]);
+  const target = useMemo(() => {
+    const config = SHARE_EXPORT_CONFIG[orientation];
+    return { w: config.domWidth, h: config.domHeight };
+  }, [orientation]);
 
   // Lock body scroll while open
   useEffect(() => {
@@ -276,9 +299,7 @@ export default function ShareModal({
       // Wait for any in-flight decodes so the snapshot captures pixels, not blanks
       await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
       const bg = '#0B1220';
-      let blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg);
-      if (!blob) { await delay(80); blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg); }
-      if (!blob) throw new Error('Export failed');
+      const blob = await exportExactPng(exportRoot, orientation, bg);
       let method: 'system_share' | 'file_picker' | 'download' = 'download';
       const shared = await shareToSystem(blob);
       if (shared) { method = 'system_share'; }

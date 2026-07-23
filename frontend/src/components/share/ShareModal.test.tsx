@@ -1,8 +1,14 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { toBlob } from 'html-to-image';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ShareModal, { shareSafeUrl } from '@/components/ShareModal';
+import ShareModal, {
+  exportExactPng,
+  readPngDimensions,
+  SHARE_EXPORT_CONFIG,
+  shareSafeUrl,
+} from '@/components/ShareModal';
 import type { ShareCardData } from './types';
 
 vi.mock('next/image', () => ({
@@ -178,5 +184,46 @@ describe('shareSafeUrl', () => {
     expect(shareSafeUrl('https://image.tmdb.org/t/p/w500/person.jpg')).toBe(
       'http://localhost:8000/tmdb-proxy/t/p/w500/person.jpg',
     );
+  });
+});
+
+function pngBlob(width: number, height: number) {
+  const bytes = new Uint8Array(24);
+  bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  new DataView(bytes.buffer).setUint32(16, width);
+  new DataView(bytes.buffer).setUint32(20, height);
+  return new Blob([bytes], { type: 'image/png' });
+}
+
+describe.each([
+  ['horizontal', 1200, 675, 1],
+  ['vertical', 1080, 1920, 1.6],
+] as const)('exact %s export', (orientation, width, height, pixelRatio) => {
+  it('keeps the configured dimensions on low-memory devices', async () => {
+    Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: 1 });
+    vi.mocked(toBlob).mockResolvedValueOnce(pngBlob(width, height));
+
+    const blob = await exportExactPng(document.createElement('div'), orientation, '#000');
+
+    expect(await readPngDimensions(blob)).toEqual({ width, height });
+    expect(toBlob).toHaveBeenCalledWith(expect.any(HTMLElement), expect.objectContaining({
+      width: SHARE_EXPORT_CONFIG[orientation].domWidth,
+      height: SHARE_EXPORT_CONFIG[orientation].domHeight,
+      pixelRatio,
+    }));
+  });
+
+  it('retries null and wrong-sized blobs without lowering quality', async () => {
+    vi.mocked(toBlob)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(pngBlob(1, 1))
+      .mockResolvedValueOnce(pngBlob(width, height));
+
+    await expect(exportExactPng(document.createElement('div'), orientation, '#000')).resolves.toBeInstanceOf(Blob);
+    expect(vi.mocked(toBlob).mock.calls.slice(-3).map(([, options]) => options?.pixelRatio)).toEqual([
+      pixelRatio,
+      pixelRatio,
+      pixelRatio,
+    ]);
   });
 });

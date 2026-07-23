@@ -508,12 +508,12 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
       );
     }
 
-    /* ═══════ HORIZONTAL (1200×630) ═══════ */
+    /* ═══════ HORIZONTAL (1200×675) ═══════ */
     return (
       <div
         ref={ref}
         data-export-root="true"
-        className={cx('w-[1200px] h-[630px] relative overflow-hidden', className)}
+        className={cx('w-[1200px] h-[675px] relative overflow-hidden', className)}
         style={{
           background: BG,
           fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif",
