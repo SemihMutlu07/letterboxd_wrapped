@@ -251,7 +251,7 @@ const PersonSquare: React.FC<{
   const [broken, setBroken] = useState(false);
   return (
     <div
-      className="relative rounded-2xl overflow-hidden flex flex-col aspect-[2/3]"
+      className="relative rounded-2xl overflow-hidden flex flex-col aspect-[4/3]"
       style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
     >
       <div className="relative flex-1 min-h-0 overflow-hidden" style={{ background: '#2C2C2E' }}>

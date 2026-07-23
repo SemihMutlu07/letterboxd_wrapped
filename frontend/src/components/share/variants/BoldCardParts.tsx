@@ -3,8 +3,8 @@ import React from 'react';
 import { getTmdbImageUrl } from '@/lib/analytics';
 import type { ShareFilmStat, SharePersonStat } from '../types';
 
-export const displayFont = { fontFamily: 'Syne, ui-sans-serif, system-ui, sans-serif' };
-export const utilityFont = { fontFamily: 'Manrope, ui-monospace, SFMono-Regular, monospace' };
+export const displayFont = { fontFamily: 'var(--font-syne), Syne, ui-sans-serif, system-ui, sans-serif' };
+export const utilityFont = { fontFamily: 'var(--font-manrope), Manrope, ui-sans-serif, system-ui, sans-serif' };
 
 function imageUrl(path?: string | null) {
   if (!path) return '';
@@ -20,7 +20,8 @@ export function PersonFrame({
   label: string;
   className?: string;
 }) {
-  const initials = person.name
+  const name = person.name.trim() || 'Unknown';
+  const initials = name
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0])
@@ -40,9 +41,15 @@ export function PersonFrame({
           onError={(event) => { event.currentTarget.style.display = 'none'; }}
         />
       )}
-      <div className="absolute inset-x-0 bottom-0 bg-black/85 p-3">
+      <div className="absolute inset-x-0 bottom-0 bg-black/85 p-3 text-white">
         <div className="text-[11px] uppercase tracking-[0.18em] opacity-70" style={utilityFont}>{label}</div>
-        <div className="line-clamp-2 text-xl font-black leading-[1.05]" style={displayFont}>{person.name}</div>
+        <div
+          className="line-clamp-2 text-xl font-black leading-[1.05]"
+          style={{ ...displayFont, overflowWrap: 'anywhere' }}
+          title={name}
+        >
+          {name}
+        </div>
         <div className="text-[11px] opacity-70" style={utilityFont}>{person.count} films</div>
       </div>
     </div>
@@ -76,7 +83,10 @@ export function PosterSlots({
                 onError={(event) => { event.currentTarget.style.display = 'none'; }}
               />
             )}
-            <div className="absolute inset-x-0 bottom-0 bg-black/85 px-2 py-1 text-[9px] font-bold leading-tight text-white" style={utilityFont}>
+            <div
+              className="absolute inset-x-0 bottom-0 line-clamp-2 bg-black/85 px-2 py-1 text-[9px] font-bold leading-tight text-white"
+              style={{ ...utilityFont, overflowWrap: 'anywhere' }}
+            >
               {film?.title ?? 'No selection'}
             </div>
           </div>
@@ -89,7 +99,11 @@ export function PosterSlots({
 export function Username({ username }: { username?: string }) {
   if (!username) return null;
   return (
-    <div className="max-w-full text-sm font-bold leading-tight" style={{ ...utilityFont, overflowWrap: 'anywhere' }}>
+    <div
+      className="w-full min-w-0 max-w-full overflow-hidden text-sm font-bold leading-tight"
+      style={{ ...utilityFont, overflowWrap: 'anywhere', wordBreak: 'break-all' }}
+      title={`@${username}`}
+    >
       @{username}
     </div>
   );

@@ -231,11 +231,11 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
       >
         {/* Subtle background blobs */}
         <div
-          className="absolute -top-[300px] -right-[200px] w-[700px] h-[700px] rounded-full opacity-[0.12] blur-3xl pointer-events-none"
+          className="absolute top-0 right-0 w-[675px] h-[675px] rounded-full opacity-[0.12] blur-3xl pointer-events-none"
           style={{ background: `radial-gradient(circle, ${ACCENT_START}, transparent)` }}
         />
         <div
-          className="absolute -bottom-[300px] -left-[200px] w-[700px] h-[700px] rounded-full opacity-[0.10] blur-3xl pointer-events-none"
+          className="absolute bottom-0 left-0 w-[675px] h-[675px] rounded-full opacity-[0.10] blur-3xl pointer-events-none"
           style={{ background: `radial-gradient(circle, ${ACCENT_END}, transparent)` }}
         />
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500/50 via-purple-500/50 to-green-500/50" />
@@ -359,11 +359,11 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     >
       {/* Background blobs */}
       <div
-        className="absolute -top-[200px] -right-[100px] w-[500px] h-[500px] rounded-full opacity-[0.10] blur-3xl pointer-events-none"
+        className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full opacity-[0.10] blur-3xl pointer-events-none"
         style={{ background: `radial-gradient(circle, ${ACCENT_START}, transparent)` }}
       />
       <div
-        className="absolute -bottom-[200px] -left-[100px] w-[500px] h-[500px] rounded-full opacity-[0.08] blur-3xl pointer-events-none"
+        className="absolute bottom-0 left-0 w-[500px] h-[500px] rounded-full opacity-[0.08] blur-3xl pointer-events-none"
         style={{ background: `radial-gradient(circle, ${ACCENT_END}, transparent)` }}
       />
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500/50 via-purple-500/50 to-green-500/50" />

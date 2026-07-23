@@ -256,6 +256,7 @@ describe.each([
         width: SHARE_EXPORT_CONFIG[orientation].domWidth,
         height: SHARE_EXPORT_CONFIG[orientation].domHeight,
         pixelRatio,
+        ...(key === 'admit-one' ? { backgroundColor: 'rgb(201, 150, 61)' } : {}),
       }));
       rendered.unmount();
     }

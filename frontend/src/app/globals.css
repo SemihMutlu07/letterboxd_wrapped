@@ -137,3 +137,7 @@ h1, h2, h3 {
 .recharts-surface *:focus {
   outline: none !important;
 }
+
+[data-export-root="true"] {
+  contain: strict;
+}

@@ -40,6 +40,17 @@ async function exportToBlob(el: HTMLElement, w: number, h: number, pixelRatio: n
   });
 }
 
+export function resolveExportBackground(el: HTMLElement, fallback: string): string {
+  const inlineBackground = el.style.backgroundColor.trim();
+  if (inlineBackground) return inlineBackground;
+
+  const computedBackground = getComputedStyle(el).backgroundColor;
+  if (computedBackground && computedBackground !== 'transparent' && computedBackground !== 'rgba(0, 0, 0, 0)') {
+    return computedBackground;
+  }
+  return fallback;
+}
+
 export const SHARE_EXPORT_CONFIG = {
   horizontal: { domWidth: 1200, domHeight: 675, outputWidth: 1200, outputHeight: 675, pixelRatio: 1 },
   vertical: { domWidth: 675, domHeight: 1200, outputWidth: 1080, outputHeight: 1920, pixelRatio: 1.6 },
@@ -55,11 +66,12 @@ export async function readPngDimensions(blob: Blob): Promise<{ width: number; he
 
 export async function exportExactPng(el: HTMLElement, orientation: Orientation, bg: string): Promise<Blob> {
   const config = SHARE_EXPORT_CONFIG[orientation];
+  const exportBackground = resolveExportBackground(el, bg);
   let lastError: unknown;
   for (const retryDelay of [0, 250, 1000]) {
     if (retryDelay > 0) await delay(retryDelay);
     try {
-      const blob = await exportToBlob(el, config.domWidth, config.domHeight, config.pixelRatio, bg);
+      const blob = await exportToBlob(el, config.domWidth, config.domHeight, config.pixelRatio, exportBackground);
       if (blob) {
         const dimensions = await readPngDimensions(blob);
         if (dimensions?.width === config.outputWidth && dimensions.height === config.outputHeight) return blob;
