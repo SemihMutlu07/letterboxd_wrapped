@@ -55,6 +55,24 @@ export interface StatsData {
     persona: string;
     description: string;
   };
+  /**
+   * Signal breakdown behind cinematic_persona. Not yet emitted by the backend
+   * (analysis.py only returns persona/description today) — declared here so
+   * consumers can read it optionally once/if the backend adds it.
+   */
+  cinematic_persona_basis?: {
+    genre?: string;
+    decade?: string;
+    country?: string;
+    match_type?: string;
+  };
+  /** Rating-habit label from compute_rating_personality (analysis.py). */
+  rating_personality?: string;
+  /** Viewing-rhythm narrative from compute_story_analytics (analysis.py). */
+  story_analytics?: {
+    viewing_season?: string | { season?: string; percentage?: number; story?: string };
+    most_active_day?: string | { date?: string; films?: number; story?: string };
+  };
   favorite_genre?: {
     name: string;
     count: number;

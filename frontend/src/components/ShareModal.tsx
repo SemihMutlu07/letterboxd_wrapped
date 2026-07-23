@@ -1,14 +1,14 @@
 'use client';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { X, Download, Sliders } from 'lucide-react';
+import { X, Download, LoaderCircle, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
-import ShareCard from './ShareCard';
-import WrappedHeroShareCard from '@/components/share/variants/WrappedHeroShareCard';
-import DossierShareCard from '@/components/share/variants/DossierShareCard';
-import MinimalOutlierShareCard from '@/components/share/variants/MinimalOutlierShareCard';
-import type { ShareCardData, ShareVariant } from '@/components/share/types';
-import { useAdaptivePixelRatio } from '@/hooks/useDeviceMemory';
+import type { ShareCardData, ShareCardInput, ShareVariant } from '@/components/share/types';
+import {
+  normalizeShareCardData,
+  SHARE_VARIANTS,
+  ShareVariantRenderer,
+} from '@/components/share/registry';
 import { API_BASE } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 
@@ -38,6 +38,50 @@ async function exportToBlob(el: HTMLElement, w: number, h: number, pixelRatio: n
     backgroundColor: bg,
     cacheBust: true,
   });
+}
+
+export function resolveExportBackground(el: HTMLElement, fallback: string): string {
+  const inlineBackground = el.style.backgroundColor.trim();
+  if (inlineBackground) return inlineBackground;
+
+  const computedBackground = getComputedStyle(el).backgroundColor;
+  if (computedBackground && computedBackground !== 'transparent' && computedBackground !== 'rgba(0, 0, 0, 0)') {
+    return computedBackground;
+  }
+  return fallback;
+}
+
+export const SHARE_EXPORT_CONFIG = {
+  horizontal: { domWidth: 1200, domHeight: 675, outputWidth: 1200, outputHeight: 675, pixelRatio: 1 },
+  vertical: { domWidth: 675, domHeight: 1200, outputWidth: 1080, outputHeight: 1920, pixelRatio: 1.6 },
+} as const;
+
+export async function readPngDimensions(blob: Blob): Promise<{ width: number; height: number } | null> {
+  if (blob.size < 24) return null;
+  const bytes = new Uint8Array(await blob.slice(0, 24).arrayBuffer());
+  if (![137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) return null;
+  const view = new DataView(bytes.buffer);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+export async function exportExactPng(el: HTMLElement, orientation: Orientation, bg: string): Promise<Blob> {
+  const config = SHARE_EXPORT_CONFIG[orientation];
+  const exportBackground = resolveExportBackground(el, bg);
+  let lastError: unknown;
+  for (const retryDelay of [0, 250, 1000]) {
+    if (retryDelay > 0) await delay(retryDelay);
+    try {
+      const blob = await exportToBlob(el, config.domWidth, config.domHeight, config.pixelRatio, exportBackground);
+      if (blob) {
+        const dimensions = await readPngDimensions(blob);
+        if (dimensions?.width === config.outputWidth && dimensions.height === config.outputHeight) return blob;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError instanceof Error) throw lastError;
+  throw new Error(`Export did not produce ${config.outputWidth}×${config.outputHeight}`);
 }
 
 async function shareToSystem(blob: Blob) {
@@ -112,13 +156,6 @@ export function shareSafeUrl(u: string): string {
 
 type Orientation = 'horizontal' | 'vertical';
 
-const VARIANTS: { key: ShareVariant; label: string }[] = [
-  { key: 'default', label: 'Wrapped' },
-  { key: 'wrapped-hero', label: 'Hero' },
-  { key: 'dossier', label: 'Dossier' },
-  { key: 'minimal-outlier', label: 'Minimal' },
-];
-
 function lastName(name: string): string {
   const parts = name.trim().split(/\s+/);
   return parts[parts.length - 1] || name;
@@ -129,7 +166,7 @@ type Props = {
   onClose: () => void;
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
-  cardProps: ShareCardData;
+  cardProps: ShareCardInput;
   onDownloadSuccess?: () => void;
 };
 
@@ -151,8 +188,9 @@ export default function ShareModal({
   const [swapOpen, setSwapOpen] = useState(false);
   const [showSwapHint, setShowSwapHint] = useState(false);
   const [hintFading, setHintFading] = useState(false);
+  const [showUsername, setShowUsername] = useState(true);
 
-  const variantKey = VARIANTS[Math.max(0, Math.min(VARIANTS.length - 1, activeIdx))].key;
+  const variantKey = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].key;
 
   useEffect(() => {
     if (!open) return;
@@ -160,6 +198,7 @@ export default function ShareModal({
     setDirectorIdx(0);
     setActiveIdx(0);
     setSwapOpen(false);
+    setShowUsername(true);
   }, [open]);
 
   useEffect(() => {
@@ -167,11 +206,12 @@ export default function ShareModal({
     setDirectorIdx(0);
   }, [cardProps]);
 
-  const effectiveCardProps = useMemo<ShareCardData>(() => ({
+  const effectiveCardProps = useMemo<ShareCardData>(() => normalizeShareCardData({
     ...cardProps,
     onScreenCrush: cardProps.topActors?.[actorIdx] ?? cardProps.onScreenCrush,
     favoriteDirector: cardProps.topDirectors?.[directorIdx] ?? cardProps.favoriteDirector,
-  }), [cardProps, actorIdx, directorIdx]);
+    username: showUsername ? cardProps.username : undefined,
+  }), [cardProps, actorIdx, directorIdx, showUsername]);
 
   // Swap hint — show once, persist to localStorage
   const dismissSwapHint = useCallback(() => {
@@ -204,12 +244,10 @@ export default function ShareModal({
     return () => { clearTimeout(t); clearTimeout(t2); };
   }, [open, cardProps]);
 
-  const adaptivePixelRatio = useAdaptivePixelRatio();
-  const target = useMemo(() =>
-    orientation === 'horizontal'
-      ? { w: 1200, h: 630 }
-      : { w: 675, h: 1200 }
-  , [orientation]);
+  const target = useMemo(() => {
+    const config = SHARE_EXPORT_CONFIG[orientation];
+    return { w: config.domWidth, h: config.domHeight };
+  }, [orientation]);
 
   // Lock body scroll while open
   useEffect(() => {
@@ -276,9 +314,7 @@ export default function ShareModal({
       // Wait for any in-flight decodes so the snapshot captures pixels, not blanks
       await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
       const bg = '#0B1220';
-      let blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg);
-      if (!blob) { await delay(80); blob = await exportToBlob(exportRoot, target.w, target.h, adaptivePixelRatio, bg); }
-      if (!blob) throw new Error('Export failed');
+      const blob = await exportExactPng(exportRoot, orientation, bg);
       let method: 'system_share' | 'file_picker' | 'download' = 'download';
       const shared = await shareToSystem(blob);
       if (shared) { method = 'system_share'; }
@@ -329,8 +365,8 @@ export default function ShareModal({
           className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0"
           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
         >
-          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * VARIANTS.length}px` : '100%' }}>
-            {VARIANTS.map((v, i) => {
+          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
+            {SHARE_VARIANTS.map((v, i) => {
               const isActive = i === activeIdx;
               const inBudget = Math.abs(i - activeIdx) <= 1;
               return (
@@ -359,7 +395,7 @@ export default function ShareModal({
 
         {/* Page indicator dots */}
         <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
-          {VARIANTS.map((v, i) => (
+          {SHARE_VARIANTS.map((v, i) => (
             <button
               key={v.key}
               onClick={() => jumpTo(i)}
@@ -481,6 +517,22 @@ export default function ShareModal({
             )}
           </div>
 
+          {cardProps.username && (
+            <label className="flex items-center justify-between text-xs text-slate-300">
+              <span>Show @{cardProps.username}</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showUsername}
+                aria-label="Show username"
+                onClick={() => setShowUsername((value) => !value)}
+                className={`relative h-6 w-11 rounded-full transition-colors ${showUsername ? 'bg-white' : 'bg-white/20'}`}
+              >
+                <span className={`absolute top-1 h-4 w-4 rounded-full transition-transform ${showUsername ? 'left-6 bg-black' : 'left-1 bg-white'}`} />
+              </button>
+            </label>
+          )}
+
           {/* Single dominant CTA */}
           <button
             onClick={handleSavePNG}
@@ -490,8 +542,8 @@ export default function ShareModal({
             }`}
             style={{ background: isSaving ? '#333' : '#fff', color: isSaving ? '#888' : '#000' }}
           >
-            <Download size={18} />
-            {isSaving ? 'Download starting...' : 'Download PNG'}
+            {isSaving ? <LoaderCircle size={18} className="animate-spin" /> : <Download size={18} />}
+            {isSaving ? 'Preparing full-resolution PNG...' : 'Download PNG'}
           </button>
         </div>
       </div>
@@ -554,10 +606,7 @@ const VariantPage = React.memo(function VariantPage({
 }: VariantPageProps) {
   return (
     <ScaledCard target={target} pageW={pageW} pageH={pageH}>
-      {variantKey === 'default' && <ShareCard {...data} orientation={orientation} />}
-      {variantKey === 'wrapped-hero' && <WrappedHeroShareCard data={data} orientation={orientation} />}
-      {variantKey === 'dossier' && <DossierShareCard data={data} orientation={orientation} />}
-      {variantKey === 'minimal-outlier' && <MinimalOutlierShareCard data={data} orientation={orientation} />}
+      <ShareVariantRenderer variant={variantKey} data={data} orientation={orientation} />
     </ScaledCard>
   );
 });

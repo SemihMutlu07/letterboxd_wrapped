@@ -376,7 +376,7 @@ export default function ResultsPage() {
       ? stats.favorite_films
       : (stats?.rated_films ?? []);
     const topFilms = filmSource
-      .slice(0, 4)
+      .slice(0, 5)
       .map((f) => ({
         title: f.title,
         year: f.year ? String(f.year) : '',
@@ -863,6 +863,15 @@ export function ResultsContent({
               />
               Share Your Wrapped
             </button>
+            <Link
+              href="/story"
+              className="text-sm underline underline-offset-2 transition-colors hover:text-slate-200"
+              style={{
+                color: theme === 'current' ? '#64748b' : theme === 'vhs' ? '#d4955a' : '#6a6a6a',
+              }}
+            >
+              View as Story
+            </Link>
             <p
               className="text-xs text-center"
               style={{
@@ -1070,4 +1079,3 @@ function LazyCinemaScale({
     </div>
   );
 }
-

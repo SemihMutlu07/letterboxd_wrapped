@@ -23,7 +23,7 @@ export default function OrientationToggle({ orientation, onChange }: Props) {
           <Monitor size={18} />
           <div className="text-left">
             <div className="text-sm font-semibold">Horizontal</div>
-            <div className="text-xs opacity-70">1200×630px</div>
+            <div className="text-xs opacity-70">1200×675px</div>
           </div>
         </button>
         <button
@@ -37,7 +37,7 @@ export default function OrientationToggle({ orientation, onChange }: Props) {
           <Smartphone size={18} />
           <div className="text-left">
             <div className="text-sm font-semibold">Vertical</div>
-            <div className="text-xs opacity-70">630×1200px</div>
+            <div className="text-xs opacity-70">1080×1920px</div>
           </div>
         </button>
       </div>

@@ -251,7 +251,7 @@ const PersonSquare: React.FC<{
   const [broken, setBroken] = useState(false);
   return (
     <div
-      className="relative rounded-2xl overflow-hidden flex flex-col aspect-[2/3]"
+      className="relative rounded-2xl overflow-hidden flex flex-col aspect-[4/3]"
       style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
     >
       <div className="relative flex-1 min-h-0 overflow-hidden" style={{ background: '#2C2C2E' }}>
@@ -508,12 +508,12 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
       );
     }
 
-    /* ═══════ HORIZONTAL (1200×630) ═══════ */
+    /* ═══════ HORIZONTAL (1200×675) ═══════ */
     return (
       <div
         ref={ref}
         data-export-root="true"
-        className={cx('w-[1200px] h-[630px] relative overflow-hidden', className)}
+        className={cx('w-[1200px] h-[675px] relative overflow-hidden', className)}
         style={{
           background: BG,
           fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif",

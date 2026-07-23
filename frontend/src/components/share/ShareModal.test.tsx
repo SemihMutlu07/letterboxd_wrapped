@@ -1,9 +1,16 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { toBlob } from 'html-to-image';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ShareModal, { shareSafeUrl } from '@/components/ShareModal';
+import ShareModal, {
+  exportExactPng,
+  readPngDimensions,
+  SHARE_EXPORT_CONFIG,
+  shareSafeUrl,
+} from '@/components/ShareModal';
 import type { ShareCardData } from './types';
+import { normalizeShareCardData, SHARE_VARIANTS, ShareVariantRenderer } from './registry';
 
 vi.mock('next/image', () => ({
   default: ({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean; priority?: boolean }) => (
@@ -84,6 +91,7 @@ async function openSwapDrawer() {
 }
 
 beforeEach(() => {
+  vi.mocked(toBlob).mockReset();
   // jsdom returns 0 for clientWidth/Height by default; the modal sizes its rail
   // off these, so without a mock variants never enter the mount budget.
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 400 });
@@ -173,10 +181,98 @@ describe('ShareModal review words', () => {
   });
 });
 
+describe('share registry and privacy', () => {
+  it('keeps the canonical seven-card order', () => {
+    expect(SHARE_VARIANTS.map(({ label }) => label)).toEqual([
+      'Wrapped', 'Apple', 'Editorial', 'Variant 3', 'Double Feature', 'Contact Sheet', 'Admit One',
+    ]);
+  });
+
+  it('normalizes a missing director without dropping film slots', () => {
+    const normalized = normalizeShareCardData({
+      ...baseData,
+      favoriteDirector: null,
+      topFilms: Array.from({ length: 6 }, (_, index) => ({
+        title: `Film ${index}`,
+        year: '2026',
+        posterPath: null,
+      })),
+    });
+    expect(normalized.favoriteDirector).toEqual({
+      name: 'Director unavailable',
+      headshotUrl: '',
+      count: 0,
+    });
+    expect(normalized.topFilms).toHaveLength(5);
+  });
+
+  it('hides the username on every rendered card and resets on reopen', async () => {
+    const props = { ...baseData, username: 'long-letterboxd-name' };
+    const { rerender } = renderShareModal(props);
+    expect(within(exportRoot()).getByText('@long-letterboxd-name')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('switch', { name: /show username/i }));
+    expect(within(exportRoot()).queryByText('@long-letterboxd-name')).not.toBeInTheDocument();
+
+    rerender(<ShareModal open={false} onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} />);
+    rerender(<ShareModal open onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} />);
+    expect(within(exportRoot()).getByText('@long-letterboxd-name')).toBeInTheDocument();
+  });
+});
+
 describe('shareSafeUrl', () => {
   it('converts direct TMDB image URLs to backend proxy URLs for canvas export', () => {
     expect(shareSafeUrl('https://image.tmdb.org/t/p/w500/person.jpg')).toBe(
       'http://localhost:8000/tmdb-proxy/t/p/w500/person.jpg',
     );
+  });
+});
+
+function pngBlob(width: number, height: number) {
+  const bytes = new Uint8Array(24);
+  bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  new DataView(bytes.buffer).setUint32(16, width);
+  new DataView(bytes.buffer).setUint32(20, height);
+  return new Blob([bytes], { type: 'image/png' });
+}
+
+describe.each([
+  ['horizontal', 1200, 675, 1],
+  ['vertical', 1080, 1920, 1.6],
+] as const)('exact %s export', (orientation, width, height, pixelRatio) => {
+  it('keeps exact output dimensions for every variant on low-memory devices', async () => {
+    Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: 1 });
+
+    for (const { key } of SHARE_VARIANTS) {
+      vi.mocked(toBlob).mockResolvedValueOnce(pngBlob(width, height));
+      const rendered = render(<ShareVariantRenderer variant={key} data={baseData} orientation={orientation} />);
+      const root = rendered.container.querySelector<HTMLElement>('[data-export-root="true"]');
+      expect(root, `${key} must expose an export root`).not.toBeNull();
+
+      const blob = await exportExactPng(root!, orientation, '#000');
+
+      expect(await readPngDimensions(blob)).toEqual({ width, height });
+      expect(toBlob).toHaveBeenLastCalledWith(root, expect.objectContaining({
+        width: SHARE_EXPORT_CONFIG[orientation].domWidth,
+        height: SHARE_EXPORT_CONFIG[orientation].domHeight,
+        pixelRatio,
+        ...(key === 'admit-one' ? { backgroundColor: 'rgb(201, 150, 61)' } : {}),
+      }));
+      rendered.unmount();
+    }
+  });
+
+  it('retries failures and wrong-sized blobs without lowering quality', async () => {
+    vi.mocked(toBlob)
+      .mockRejectedValueOnce(new Error('canvas allocation failed'))
+      .mockResolvedValueOnce(pngBlob(1, 1))
+      .mockResolvedValueOnce(pngBlob(width, height));
+
+    await expect(exportExactPng(document.createElement('div'), orientation, '#000')).resolves.toBeInstanceOf(Blob);
+    expect(vi.mocked(toBlob).mock.calls.slice(-3).map(([, options]) => options?.pixelRatio)).toEqual([
+      pixelRatio,
+      pixelRatio,
+      pixelRatio,
+    ]);
   });
 });

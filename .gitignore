@@ -42,6 +42,9 @@ logs/
 *.log
 *.lcov
 coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 
 # data & artifacts
 *.csv
@@ -71,3 +74,4 @@ Thumbs.db
 # prototype backup (do not track)
 prototype_backup_DO_NOT_TOUCH/
 .deepsec/
+.foglamp/

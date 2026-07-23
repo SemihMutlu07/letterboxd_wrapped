@@ -174,7 +174,7 @@ const DossierShareCard = React.forwardRef<HTMLDivElement, Props>(
       <div
         ref={ref}
         data-export-root="true"
-        className={cx('w-[1200px] h-[630px] grid grid-cols-12', className)}
+        className={cx('w-[1200px] h-[675px] grid grid-cols-12', className)}
         style={{ background: BG, color: '#fff', fontFamily: 'Avenir Next, Manrope, Segoe UI, system-ui, sans-serif' }}
       >
         <div className="col-span-4 p-8" style={{ height: '100%', overflow: 'hidden' }}>

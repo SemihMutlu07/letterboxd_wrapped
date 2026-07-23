@@ -2,9 +2,12 @@ export type ShareOrientation = 'horizontal' | 'vertical';
 
 export type ShareVariant =
   | 'default'
-  | 'wrapped-hero'
-  | 'dossier'
-  | 'minimal-outlier';
+  | 'apple-hig'
+  | 'editorial'
+  | 'variant-3'
+  | 'double-feature'
+  | 'contact-sheet'
+  | 'admit-one';
 
 export type SharePersonStat = {
   name: string;
@@ -49,7 +52,7 @@ export type ShareCardData = {
   topActors?: SharePersonStat[];
   /** All available directors for swap UI (optional) */
   topDirectors?: SharePersonStat[];
-  /** Top-rated films for poster strip (optional, up to 6) */
+  /** Top-rated films for poster strip (optional, up to 5) */
   topFilms?: ShareFilmStat[];
   /** Top distinctive review words from review_analysis.word_frequency (optional, up to 3) */
   topReviewWords?: ShareReviewWordStat[];
@@ -57,4 +60,8 @@ export type ShareCardData = {
   ratingOutlierFilm?: ShareOutlierFilm;
   /** Letterboxd username shown on the card so viewers know whose Wrapped it is. */
   username?: string;
+};
+
+export type ShareCardInput = Omit<ShareCardData, 'favoriteDirector'> & {
+  favoriteDirector: SharePersonStat | null;
 };

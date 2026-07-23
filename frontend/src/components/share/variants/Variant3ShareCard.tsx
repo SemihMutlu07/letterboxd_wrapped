@@ -279,13 +279,13 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProp
     }
 
     /* ============================================================
-       HORIZONTAL (1200 x 630)
+       HORIZONTAL (1200 x 675)
        ============================================================ */
     return (
       <div
         ref={ref}
         data-export-root="true"
-        className={cx('w-[1200px] h-[630px] grid grid-cols-12', className)}
+        className={cx('w-[1200px] h-[675px] grid grid-cols-12', className)}
         style={{ background: CREAM, color: CHARCOAL, ...SERIF }}
       >
         {/* ---- LEFT column (cols 1-6): editorial text + metrics ---- */}
