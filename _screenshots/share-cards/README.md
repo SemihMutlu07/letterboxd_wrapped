@@ -23,3 +23,5 @@ Generate and validate all 14 deterministic baseline PNGs:
 cd frontend
 UPDATE_SHARE_SCREENSHOTS=1 npm run test:share-cards
 ```
+
+Generated from revision: `5c651eb` (`test(share): add visual share card matrix`).
