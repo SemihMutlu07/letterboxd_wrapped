@@ -45,7 +45,10 @@ for (const { key } of SHARE_VARIANTS) {
     test(`${key} ${orientation} baseline and stress stay inside the export root`, async ({ page }, testInfo) => {
       for (const fixture of fixtures) {
         await page.goto(`/dev/share-cards?variant=${key}&orientation=${orientation}&fixture=${fixture}`);
-        await expect(page.locator('#share-card-harness')).toHaveAttribute('data-fixture', fixture);
+        const harness = page.locator('#share-card-harness');
+        await expect(harness).toHaveAttribute('data-fixture', fixture);
+        await expect(harness).toHaveAttribute('data-orientation', orientation);
+        await expect(harness).toHaveAttribute('data-variant', key);
         const root = page.locator('[data-export-root="true"]');
         await expect(root).toBeVisible();
         await waitForCardAssets(page);
@@ -64,6 +67,10 @@ for (const { key } of SHARE_VARIANTS) {
       }
 
       await page.goto(`/dev/share-cards?variant=${key}&orientation=${orientation}&fixture=baseline`);
+      const harness = page.locator('#share-card-harness');
+      await expect(harness).toHaveAttribute('data-fixture', 'baseline');
+      await expect(harness).toHaveAttribute('data-orientation', orientation);
+      await expect(harness).toHaveAttribute('data-variant', key);
       await waitForCardAssets(page);
       const downloadPromise = page.waitForEvent('download');
       await page.getByTestId('export').click();
