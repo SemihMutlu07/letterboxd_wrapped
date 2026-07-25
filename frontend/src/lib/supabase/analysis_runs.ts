@@ -19,6 +19,57 @@ function sliceTop<T>(arr: T[] | undefined, n: number): T[] {
     return arr.slice(0, Math.max(0, n));
 }
 
+function namedCount(value: unknown): { name: string; count: number } | null {
+    if (!value || typeof value !== "object") return null;
+    const item = value as Record<string, unknown>;
+    if (typeof item.name !== "string" || typeof item.count !== "number") return null;
+    return { name: item.name, count: item.count };
+}
+
+function namedCountList(value: unknown, limit: number): { name: string; count: number }[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .map(namedCount)
+        .filter((item): item is { name: string; count: number } => item !== null)
+        .slice(0, limit);
+}
+
+function pickObject(value: unknown, keys: string[]): Record<string, unknown> | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const source = value as Record<string, unknown>;
+    return Object.fromEntries(
+        keys
+            .filter((key) => source[key] !== undefined)
+            .map((key) => [key, source[key]])
+    );
+}
+
+/** Keep only aggregate fields used by analysis listings and cross-user metrics. */
+function buildPersistedDetails(stats: Record<string, unknown>): Record<string, unknown> {
+    return safeJsonSanitize({
+        total_films: stats.total_films ?? null,
+        days_watched: stats.days_watched ?? null,
+        average_rating: stats.average_rating ?? null,
+        total_countries: stats.total_countries ?? null,
+        average_runtime: stats.average_runtime ?? null,
+        top_genres: namedCountList(stats.top_genres, 5),
+        top_directors: namedCountList(stats.top_directors, 5),
+        sinefil_meter: pickObject(stats.sinefil_meter, ["score", "type", "model_version"]),
+        cinematic_persona: pickObject(stats.cinematic_persona, ["persona"]),
+        runtime_persona: typeof stats.runtime_persona === "string" ? stats.runtime_persona : null,
+        favorite_genre: namedCount(stats.favorite_genre),
+        favorite_decade: namedCount(stats.favorite_decade),
+        most_watched_director: namedCount(stats.most_watched_director),
+        analysis_date: typeof stats.analysis_date === "string" ? stats.analysis_date : null,
+        data_timeline: pickObject(stats.data_timeline, [
+            "earliest_date",
+            "latest_date",
+            "total_days",
+            "period_description",
+        ]),
+    });
+}
+
 /** Build small preview for list views: totals + top5 genres/directors + personas + dates. */
 function buildPreview(details: Record<string, unknown>, schemaVersion: string): Record<string, unknown> {
     return {
@@ -47,36 +98,17 @@ function buildPreview(details: Record<string, unknown>, schemaVersion: string): 
     };
 }
 
-/** Drop third-party liker names/avatars from the copy we persist.
- * Aggregate signals (likes / likers_complete) are kept; the live result the
- * user sees in this session is untouched. */
-function redactLikers(details: unknown): void {
-    if (!details || typeof details !== "object") return;
-    const ra = (details as Record<string, unknown>).review_analysis;
-    if (!ra || typeof ra !== "object") return;
-    for (const key of ["reviews", "top_liked_reviews"] as const) {
-        const list = (ra as Record<string, unknown>)[key];
-        if (!Array.isArray(list)) continue;
-        for (const review of list) {
-            if (review && typeof review === "object" && "likers" in review) {
-                (review as Record<string, unknown>).likers = [];
-            }
-        }
-    }
-}
-
-/** Build summary payload: details (full results) + preview (small subset for listings). */
+/** Build an aggregate-only summary payload; full film and review data stays in-session. */
 export function buildSummaryForPersistence(stats: Record<string, unknown>): Record<string, unknown> {
-    const sanitized = safeJsonSanitize(stats);
-    redactLikers(sanitized);
-    const schema_version = "results_v1";
+    const details = buildPersistedDetails(stats);
+    const schema_version = "results_v2_aggregate";
     const saved_at = new Date().toISOString();
 
     return {
         schema_version,
         saved_at,
-        details: sanitized,
-        preview: buildPreview(sanitized, schema_version),
+        details,
+        preview: buildPreview(details, schema_version),
     };
 }
 

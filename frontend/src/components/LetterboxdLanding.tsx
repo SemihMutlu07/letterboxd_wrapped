@@ -213,14 +213,18 @@ export default function LetterboxdLanding() {
       if (detectedUsername) break;
     }
 
+    const hasPersistenceConsent = getConsent() === 'accept';
+
     if (detectedUsername) {
       setDetectedUsername(detectedUsername);
       setUsername(detectedUsername);
-      // Fire-and-forget — Supabase analytics shouldn't block the upload UI.
-      try {
-        await upsertUserSession({ session_id: ensureSessionId(), username: detectedUsername, consent: getConsent() || 'decline', film_count: null, favorite_genre: null });
-      } catch (err) {
-        console.warn('[supabase] session upsert failed (non-blocking):', err);
+      if (hasPersistenceConsent) {
+        // Fire-and-forget — Supabase analytics shouldn't block the upload UI.
+        try {
+          await upsertUserSession({ session_id: ensureSessionId(), username: detectedUsername, consent: 'accept', film_count: null, favorite_genre: null });
+        } catch (err) {
+          console.warn('[supabase] session upsert failed (non-blocking):', err);
+        }
       }
     }
 
@@ -272,7 +276,7 @@ export default function LetterboxdLanding() {
     let startedAt = 0;
 
     try {
-      if (username) {
+      if (hasPersistenceConsent && username) {
         try {
           const runId = crypto?.randomUUID?.();
           analysisRun = await startAnalysis({ id: runId, session_id: sessionId, username });
@@ -299,7 +303,7 @@ export default function LetterboxdLanding() {
           await upsertUserSession({
             session_id: sessionId,
             username: detectedUsername,
-            consent: sessionStorage.getItem('consent_decision') === 'accept' ? 'accept' : 'decline',
+            consent: 'accept',
             film_count: result.stats.total_films || null,
             favorite_genre: result.stats.favorite_genre?.name || null,
           });
@@ -352,13 +356,16 @@ export default function LetterboxdLanding() {
     trackEvent('analyze_started', { username, method: 'scrape' });
 
     const sessionId = ensureSessionId();
+    const hasPersistenceConsent = getConsent() === 'accept';
     let analysisRun: { id: string } | null = null;
     let startedAt = 0;
     try {
-      try {
-        const runId = crypto?.randomUUID?.();
-        analysisRun = await startAnalysis({ id: runId, session_id: sessionId, username });
-      } catch { /* analytics failure is non-fatal */ }
+      if (hasPersistenceConsent) {
+        try {
+          const runId = crypto?.randomUUID?.();
+          analysisRun = await startAnalysis({ id: runId, session_id: sessionId, username });
+        } catch { /* analytics failure is non-fatal */ }
+      }
 
       startedAt = performance.now();
       // The desktop worker scrapes the full profile from a residential IP.
@@ -379,7 +386,7 @@ export default function LetterboxdLanding() {
           await upsertUserSession({
             session_id: sessionId,
             username,
-            consent: sessionStorage.getItem('consent_decision') === 'accept' ? 'accept' : 'decline',
+            consent: 'accept',
             film_count: result.stats.total_films || null,
             favorite_genre: result.stats.favorite_genre?.name || null,
           });
