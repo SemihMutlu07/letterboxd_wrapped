@@ -1,0 +1,86 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+const apiMocks = vi.hoisted(() => ({
+  scrapeProfile: vi.fn(),
+  testBackend: vi.fn(),
+}));
+
+const analysisRunMocks = vi.hoisted(() => ({
+  startAnalysis: vi.fn(),
+  finishAnalysis: vi.fn(),
+  buildSummaryForPersistence: vi.fn((stats: Record<string, unknown>) => ({ details: stats })),
+}));
+
+const sessionMocks = vi.hoisted(() => ({
+  upsertUserSession: vi.fn(),
+}));
+
+vi.mock('@/lib/api', () => ({
+  analyzeFiles: vi.fn(),
+  parseLetterboxdUsername: vi.fn(),
+  scrapeProfile: apiMocks.scrapeProfile,
+  testBackend: apiMocks.testBackend,
+  ERROR_CODE_HINTS: {},
+}));
+
+vi.mock('@/lib/supabase/analysis_runs', () => analysisRunMocks);
+vi.mock('@/lib/supabase/sessions', () => sessionMocks);
+vi.mock('@/lib/analytics', () => ({
+  getTmdbImageUrl: vi.fn(() => null),
+  trackEvent: vi.fn(),
+  trackConsentedEvent: vi.fn(),
+  trackFilmStats: vi.fn(),
+}));
+
+import LetterboxdLanding from './LetterboxdLanding';
+
+describe('LetterboxdLanding persistence consent gate', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.clearAllMocks();
+    apiMocks.testBackend.mockResolvedValue(undefined);
+    apiMocks.scrapeProfile.mockResolvedValue({
+      status: 'success',
+      stats: {
+        scraped_username: 'alice',
+        total_films: 12,
+        favorite_genre: { name: 'Drama', count: 4 },
+      },
+    });
+    analysisRunMocks.startAnalysis.mockResolvedValue({ id: 'run-1' });
+    analysisRunMocks.finishAnalysis.mockResolvedValue(undefined);
+    sessionMocks.upsertUserSession.mockResolvedValue(undefined);
+  });
+
+  async function submitUsername() {
+    const user = userEvent.setup();
+    render(<LetterboxdLanding />);
+    await user.type(screen.getByPlaceholderText('your_username'), 'alice');
+    await user.click(screen.getByRole('button', { name: /analyze/i }));
+    await waitFor(() => expect(apiMocks.scrapeProfile).toHaveBeenCalled());
+  }
+
+  it('does not persist an analysis or user session before explicit acceptance', async () => {
+    await submitUsername();
+
+    expect(analysisRunMocks.startAnalysis).not.toHaveBeenCalled();
+    expect(analysisRunMocks.finishAnalysis).not.toHaveBeenCalled();
+    expect(sessionMocks.upsertUserSession).not.toHaveBeenCalled();
+  });
+
+  it('persists the analysis and user session after explicit acceptance', async () => {
+    sessionStorage.setItem('consent_decision', 'accept');
+
+    await submitUsername();
+
+    await waitFor(() => {
+      expect(analysisRunMocks.startAnalysis).toHaveBeenCalledOnce();
+      expect(analysisRunMocks.finishAnalysis).toHaveBeenCalledOnce();
+      expect(sessionMocks.upsertUserSession).toHaveBeenCalledWith(
+        expect.objectContaining({ username: 'alice', consent: 'accept' }),
+      );
+    });
+  });
+});

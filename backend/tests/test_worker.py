@@ -532,6 +532,20 @@ async def test_scrape_profile_queues_202_when_worker_online(client: AsyncClient)
 
 
 @pytest.mark.asyncio
+async def test_scrape_period_is_forwarded_to_desktop_worker_claim(client: AsyncClient):
+    await _beat(client)
+    queued = await client.post(
+        "/api/scrape-profile",
+        json={"username": "semihmutsuz", "analysis_period": "month"},
+    )
+    assert queued.status_code == 202
+
+    claimed = await client.get("/api/worker/scrape/next", headers=AUTH)
+    assert claimed.status_code == 200
+    assert claimed.json()["job"]["options"] == {"analysis_period": "month"}
+
+
+@pytest.mark.asyncio
 async def test_scrape_profile_offline_when_no_heartbeat(client: AsyncClient):
     r = await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})
     assert r.status_code == 503

@@ -55,7 +55,7 @@ HEARTBEAT_INTERVAL = float(os.getenv("WORKER_HEARTBEAT_INTERVAL", "20"))
 # Short timeout for the small control-plane calls; the scrape itself is unbounded.
 CONTROL_TIMEOUT = aiohttp.ClientTimeout(total=15)
 TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
-WORKER_PROTOCOL_VERSION = 2
+WORKER_PROTOCOL_VERSION = 3
 OUTBOX_DIR = Path(os.getenv("WORKER_OUTBOX_DIR", ".worker_outbox"))
 PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
@@ -195,6 +195,8 @@ class TraceBuffer:
 def _failure_message(username: str, exc: Exception) -> str:
     """Map a pipeline exception to a frontend-readable error string."""
     if isinstance(exc, ScrapeAnalysisEmpty):
+        if exc.period_empty:
+            return f"No diary films found for @{username} in the selected period."
         if exc.scraper_ok:
             return f"Scraped @{username} but the analysis came back empty. Please try again."
         return f"No public films found for @{username}. The profile may be private, empty, or blocked by Letterboxd."
@@ -206,8 +208,12 @@ def _failure_message(username: str, exc: Exception) -> str:
 def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
     """Classify failures enough for the admin dashboard and future fix loops."""
     if isinstance(exc, ScrapeAnalysisEmpty):
-        error_stage = "analysis_empty" if exc.scraper_ok else "scrape_empty"
-        error_code = "analysis_failed" if exc.scraper_ok else "no_films"
+        if exc.period_empty:
+            error_stage = "period_empty"
+            error_code = "no_films_in_period"
+        else:
+            error_stage = "analysis_empty" if exc.scraper_ok else "scrape_empty"
+            error_code = "analysis_failed" if exc.scraper_ok else "no_films"
     elif isinstance(exc, ValueError):
         error_stage = "letterboxd_or_scrape"
         error_code = getattr(exc, "error_code", "scrape_failed")
@@ -423,12 +429,19 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     task_id = job["task_id"]
     username = job["username"]
     avatar_only = bool(job.get("avatar_only"))
+    options = job.get("options") if isinstance(job.get("options"), dict) else {}
+    analysis_period = str(options.get("analysis_period") or "year")
     started = monotonic()
     trace = TraceBuffer()
     trace.add(
         "worker_received",
         "Worker received scrape job",
-        {"username": username, "scrape_transport": "direct_cloudscraper", "avatar_only": avatar_only},
+        {
+            "username": username,
+            "scrape_transport": "direct_cloudscraper",
+            "avatar_only": avatar_only,
+            "analysis_period": analysis_period,
+        },
     )
     trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace))
     logger.info("Processing %s job %s for @%s", "avatar" if avatar_only else "scrape", task_id, username)
@@ -436,7 +449,12 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
         if avatar_only:
             stats = {"profile_avatar_url": await scrape_avatar_only(username)}
         else:
-            stats = await scrape_and_analyze(session, username, trace_callback=trace.add)
+            stats = await scrape_and_analyze(
+                session,
+                username,
+                trace_callback=trace.add,
+                analysis_period=analysis_period,
+            )
     except Exception as exc:  # noqa: BLE001 — any failure must report back, not crash the loop
         message = _failure_message(username, exc)
         duration_seconds = round(monotonic() - started, 1)

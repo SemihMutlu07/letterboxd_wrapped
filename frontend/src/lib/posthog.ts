@@ -51,7 +51,12 @@ function enqueue(event: string, properties?: Record<string, unknown>) {
  * Call AFTER initPostHog() and after capturing consent_decision.
  */
 export function flushQueue() {
-  if (POSTHOG_DISABLED || !posthog.__loaded) return;
+  if (
+    POSTHOG_DISABLED ||
+    typeof window === 'undefined' ||
+    sessionStorage.getItem('consent_decision') !== 'accept' ||
+    !posthog.__loaded
+  ) return;
 
   const queue = loadQueue();
   if (queue.length === 0) return;
@@ -95,7 +100,13 @@ export function hasAnalyticsConsent(): boolean {
 // ── Init (call only on consent accept) ──
 
 export function initPostHog() {
-  if (POSTHOG_DISABLED || typeof window === 'undefined' || posthog.__loaded || isInitialized) return;
+  if (
+    POSTHOG_DISABLED ||
+    typeof window === 'undefined' ||
+    sessionStorage.getItem('consent_decision') !== 'accept' ||
+    posthog.__loaded ||
+    isInitialized
+  ) return;
 
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -146,11 +157,11 @@ export function captureEvent(event: string, properties?: Record<string, unknown>
 
     const consent = sessionStorage.getItem('consent_decision');
 
-    // Declined → drop
-    if (consent === 'decline') return;
+    // No explicit acceptance → drop without storing behavioral data.
+    if (consent !== 'accept') return;
 
     // Accepted + loaded → send immediately
-    if (consent === 'accept' && posthog.__loaded) {
+    if (posthog.__loaded) {
       if (isDev) {
         console.debug(`[posthog] ${event}`, properties ?? {});
       }
@@ -158,7 +169,7 @@ export function captureEvent(event: string, properties?: Record<string, unknown>
       return;
     }
 
-    // No decision yet, or accepted-but-still-loading → queue
+    // Accepted but still loading → queue until init completes
     enqueue(event, properties);
   } catch (error) {
     if (isDev) {

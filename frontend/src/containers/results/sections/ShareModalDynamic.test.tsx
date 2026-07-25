@@ -30,6 +30,8 @@ const baseProps = {
   stats: {
     total_films: 50,
     average_rating: 3.5,
+    days_watched: 1,
+    average_runtime: 100,
     top_directors: [],
     top_actors: [],
     top_genres: [],

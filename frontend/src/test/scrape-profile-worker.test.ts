@@ -21,6 +21,21 @@ describe('scrapeProfile', () => {
 
     const result = await scrapeProfile('semihmutsuz');
     expect(result.stats.total_films).toBe(394);
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({
+      username: 'semihmutsuz',
+      analysis_period: 'year',
+    });
+  });
+
+  it('sends the selected analysis period to the backend', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { status: 'success', stats: {} })));
+
+    await scrapeProfile('semihmutsuz', 'month');
+
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({
+      username: 'semihmutsuz',
+      analysis_period: 'month',
+    });
   });
 
   it('handles a 202 { task_id } by polling /api/progress until done', async () => {

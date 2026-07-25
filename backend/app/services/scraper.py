@@ -12,6 +12,7 @@ import re
 import asyncio
 import logging
 import os
+from datetime import date
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from functools import partial
@@ -491,6 +492,7 @@ def _sync_scrape_diary(
     max_pages: int,
     session: Optional[cloudscraper.CloudScraper] = None,
     trace_callback: Optional[TraceCallback] = None,
+    cutoff_date: Optional[date] = None,
 ) -> list[dict]:
     """Synchronous diary scraper with session cookies."""
     owns_session = session is None
@@ -500,6 +502,8 @@ def _sync_scrape_diary(
         _warm_session(s)
 
     all_films: list[dict] = []
+    last_seen_date: Optional[date] = None
+    monotonic_dates = True
 
     try:
         for page in range(1, max_pages + 1):
@@ -533,6 +537,32 @@ def _sync_scrape_diary(
                 break
 
             all_films.extend(films)
+            parsed_dates: list[date] = []
+            for film in films:
+                try:
+                    parsed_date = date.fromisoformat(str(film.get("watch_date") or ""))
+                except ValueError:
+                    monotonic_dates = False
+                    continue
+                if last_seen_date is not None and parsed_date > last_seen_date:
+                    monotonic_dates = False
+                last_seen_date = parsed_date
+                parsed_dates.append(parsed_date)
+
+            if (
+                cutoff_date is not None
+                and monotonic_dates
+                and len(parsed_dates) == len(films)
+                and parsed_dates
+                and parsed_dates[-1] < cutoff_date
+            ):
+                _trace(
+                    trace_callback,
+                    "diary_period_complete",
+                    "Diary period boundary reached",
+                    {"page": page, "cutoff_date": cutoff_date.isoformat()},
+                )
+                break
             time.sleep(PAGE_DELAY)
     finally:
         if owns_session:
@@ -1004,6 +1034,8 @@ async def scrape_profile_sources(
     max_pages: int = MAX_PAGES,
     include_reviews: bool = False,
     trace_callback: Optional[TraceCallback] = None,
+    diary_cutoff: Optional[date] = None,
+    include_grid: bool = True,
 ) -> ProfileScrapeSources:
     """Scrape diary, grid, overview (and optionally reviews) concurrently.
 
@@ -1014,22 +1046,47 @@ async def scrape_profile_sources(
     shared session) if blocks reappear.
     """
     loop = asyncio.get_event_loop()
-    diary_fut = loop.run_in_executor(None, partial(_sync_scrape_diary, username, max_pages, None, trace_callback))
-    grid_fut = loop.run_in_executor(None, partial(_sync_scrape_films_grid, username, max_pages, None, trace_callback))
+    diary_call = (
+        partial(_sync_scrape_diary, username, max_pages, None, trace_callback)
+        if diary_cutoff is None
+        else partial(
+            _sync_scrape_diary,
+            username,
+            max_pages,
+            None,
+            trace_callback,
+            diary_cutoff,
+        )
+    )
+    diary_fut = loop.run_in_executor(None, diary_call)
+    grid_fut = (
+        loop.run_in_executor(None, partial(_sync_scrape_films_grid, username, max_pages, None, trace_callback))
+        if include_grid
+        else None
+    )
     overview_fut = loop.run_in_executor(None, partial(_sync_scrape_overview, username, None, trace_callback))
-    futures = [diary_fut, grid_fut, overview_fut]
+    futures = [diary_fut]
+    if grid_fut is not None:
+        futures.append(grid_fut)
+    futures.append(overview_fut)
     if include_reviews:
         futures.append(loop.run_in_executor(None, partial(_sync_scrape_reviews, username, max_pages, None, trace_callback, True)))
 
     results = await asyncio.gather(*futures, return_exceptions=True)
-    diary_res, grid_res, overview_res = results[0], results[1], results[2]
-    reviews_res = results[3] if include_reviews else []
+    diary_res = results[0]
+    if include_grid:
+        grid_res, overview_res = results[1], results[2]
+        reviews_res = results[3] if include_reviews else []
+    else:
+        grid_res = []
+        overview_res = results[1]
+        reviews_res = results[2] if include_reviews else []
 
     # Diary + grid are the required film sources. If BOTH failed, surface the
     # error so "user not found" / "blocked" / "rate limit" still reaches callers.
     diary_failed = isinstance(diary_res, BaseException)
     grid_failed = isinstance(grid_res, BaseException)
-    if diary_failed and grid_failed:
+    if diary_failed and (grid_failed or not include_grid):
         raise grid_res if isinstance(grid_res, ValueError) else diary_res
     if diary_failed:
         logger.warning("Diary scrape failed for %s (using grid only): %s", username, diary_res)

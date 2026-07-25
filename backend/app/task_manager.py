@@ -105,6 +105,7 @@ def create_scrape_job(
     username: str,
     avatar_only: bool = False,
     owner_key: Optional[str] = None,
+    options: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Queue a username scrape job for the desktop worker to claim."""
     _ensure_queue_capacity(owner_key)
@@ -115,6 +116,7 @@ def create_scrape_job(
         username=username,
         avatar_only=avatar_only,
         owner_key=owner_key,
+        options=dict(options or {}),
         stage="queued",
         message="Queued on desktop scraper",
     )

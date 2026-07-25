@@ -10,12 +10,15 @@ export type ErrorReason =
   | 'tmdb_rate_limited'
   | 'no_username'
   | 'invalid_username'
+  | 'invalid_analysis_period'
   | 'no_films'
+  | 'no_films_in_period'
   | 'user_not_found'
   | 'scrape_failed'
   | 'scrape_blocked'
   | 'scraper_unavailable'
   | 'desktop_worker_paused'
+  | 'stats_too_large'
   | 'unknown_error';
 
 export interface NormalizedError {
@@ -44,6 +47,17 @@ export function normalizeError(err: unknown): NormalizedError {
         'The analysis server appears to be offline or your connection dropped.',
       action: 'Try again in a moment.',
       reason: 'backend_unreachable',
+    };
+  }
+
+  // Analysis succeeded but the browser refused to store even the trimmed result
+  if (err instanceof Error && err.name === 'StatsTooLargeError') {
+    return {
+      title: 'Result too large to store',
+      message:
+        'Your analysis finished, but this browser ran out of storage before it could be handed to the results page.',
+      action: 'Close other tabs of this site, or clear site data, then try again.',
+      reason: 'stats_too_large',
     };
   }
 
@@ -151,6 +165,26 @@ export function normalizeError(err: unknown): NormalizedError {
       message: raw || 'Letterboxd has temporarily blocked automated profile access.',
       action: 'For the most reliable results, download your Letterboxd export and upload it here.',
       reason: 'scrape_blocked',
+    };
+  }
+
+  // Unsupported analysis window
+  if (/invalid_analysis_period|invalid analysis period/i.test(raw)) {
+    return {
+      title: 'Invalid analysis period',
+      message: raw || 'The selected analysis period is not supported.',
+      action: 'Choose one month, one year, or all time and try again.',
+      reason: 'invalid_analysis_period',
+    };
+  }
+
+  // Valid profile, but no films inside the selected window
+  if (/no_films_in_period|no films.*(?:period|date range)/i.test(raw)) {
+    return {
+      title: 'No films in this period',
+      message: raw || 'No public films were found in the selected period.',
+      action: 'Choose a longer period and try again.',
+      reason: 'no_films_in_period',
     };
   }
 
