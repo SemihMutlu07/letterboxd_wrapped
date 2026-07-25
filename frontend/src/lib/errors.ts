@@ -10,7 +10,9 @@ export type ErrorReason =
   | 'tmdb_rate_limited'
   | 'no_username'
   | 'invalid_username'
+  | 'invalid_analysis_period'
   | 'no_films'
+  | 'no_films_in_period'
   | 'user_not_found'
   | 'scrape_failed'
   | 'scrape_blocked'
@@ -151,6 +153,26 @@ export function normalizeError(err: unknown): NormalizedError {
       message: raw || 'Letterboxd has temporarily blocked automated profile access.',
       action: 'For the most reliable results, download your Letterboxd export and upload it here.',
       reason: 'scrape_blocked',
+    };
+  }
+
+  // Unsupported analysis window
+  if (/invalid_analysis_period|invalid analysis period/i.test(raw)) {
+    return {
+      title: 'Invalid analysis period',
+      message: raw || 'The selected analysis period is not supported.',
+      action: 'Choose one month, one year, or all time and try again.',
+      reason: 'invalid_analysis_period',
+    };
+  }
+
+  // Valid profile, but no films inside the selected window
+  if (/no_films_in_period|no films.*(?:period|date range)/i.test(raw)) {
+    return {
+      title: 'No films in this period',
+      message: raw || 'No public films were found in the selected period.',
+      action: 'Choose a longer period and try again.',
+      reason: 'no_films_in_period',
     };
   }
 

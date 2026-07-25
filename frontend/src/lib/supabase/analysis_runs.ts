@@ -61,6 +61,11 @@ function buildPersistedDetails(stats: Record<string, unknown>): Record<string, u
         favorite_decade: namedCount(stats.favorite_decade),
         most_watched_director: namedCount(stats.most_watched_director),
         analysis_date: typeof stats.analysis_date === "string" ? stats.analysis_date : null,
+        analysis_period: pickObject(stats.analysis_period, [
+            "key",
+            "start_date",
+            "end_date",
+        ]),
         data_timeline: pickObject(stats.data_timeline, [
             "earliest_date",
             "latest_date",
@@ -93,6 +98,7 @@ function buildPreview(details: Record<string, unknown>, schemaVersion: string): 
         },
         dates: {
             analysis_date: details.analysis_date ?? null,
+            analysis_period: details.analysis_period ?? null,
             data_timeline: details.data_timeline ?? null,
         },
     };

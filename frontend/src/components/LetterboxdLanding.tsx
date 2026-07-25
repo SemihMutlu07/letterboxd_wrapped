@@ -4,7 +4,14 @@ import JSZip from 'jszip';
 import Link from 'next/link';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Film, Star, Clock, Globe, Upload, Users, Bug, X } from 'lucide-react';
-import { analyzeFiles, parseLetterboxdUsername, scrapeProfile, testBackend, type ScrapeProgress } from '@/lib/api';
+import {
+  analyzeFiles,
+  parseLetterboxdUsername,
+  scrapeProfile,
+  testBackend,
+  type AnalysisPeriod,
+  type ScrapeProgress,
+} from '@/lib/api';
 import { ERROR_CODE_HINTS } from '@/lib/api';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
@@ -21,6 +28,11 @@ import { POSTER_GAME_MOVIES, type PosterGameMovie } from '@/lib/posterGameData';
 const POSTER_GAME_MAX_LEVEL = 5;
 // Points for a correct guess, indexed by how many wrong guesses/hints were used first.
 const POSTER_ROUND_POINTS = [100, 80, 60, 40, 20];
+const ANALYSIS_PERIOD_OPTIONS: { value: AnalysisPeriod; label: string }[] = [
+  { value: 'month', label: '1 month' },
+  { value: 'year', label: '1 year' },
+  { value: 'lifetime', label: 'All time' },
+];
 
 function drawShuffledMovie(deckRef: React.MutableRefObject<PosterGameMovie[]>, indexRef: React.MutableRefObject<number>): PosterGameMovie {
   if (indexRef.current >= deckRef.current.length) {
@@ -53,6 +65,7 @@ export default function LetterboxdLanding() {
   const [resultReady, setResultReady] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
+  const [analysisPeriod, setAnalysisPeriod] = useState<AnalysisPeriod>('year');
   const [error, setError] = useState<NormalizedError | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
@@ -353,7 +366,7 @@ export default function LetterboxdLanding() {
     deckIndexRef.current = 0;
     setResultReady(null);
     setError(null);
-    trackEvent('analyze_started', { username, method: 'scrape' });
+    trackEvent('analyze_started', { username, method: 'scrape', analysis_period: analysisPeriod });
 
     const sessionId = ensureSessionId();
     const hasPersistenceConsent = getConsent() === 'accept';
@@ -370,7 +383,7 @@ export default function LetterboxdLanding() {
       startedAt = performance.now();
       // The desktop worker scrapes the full profile from a residential IP.
       const method = 'scrape' as const;
-      const result = await scrapeProfile(username, undefined, setScrapeProgress);
+      const result = await scrapeProfile(username, analysisPeriod, undefined, setScrapeProgress);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
@@ -417,7 +430,7 @@ export default function LetterboxdLanding() {
         });
       }
     }
-  }, [usernameInput]);
+  }, [analysisPeriod, usernameInput]);
 
   const handleDebug = useCallback(async () => {
     let raw = usernameInput.trim();
@@ -438,13 +451,13 @@ export default function LetterboxdLanding() {
     setDebugResult(null);
     setDebugError(null);
     try {
-      const result = await scrapeProfile(username);
+      const result = await scrapeProfile(username, analysisPeriod);
       setDebugResult(result);
     } catch (err) {
       setDebugError(err instanceof Error ? err.message : String(err));
     }
     setShowDebug(true);
-  }, [usernameInput]);
+  }, [analysisPeriod, usernameInput]);
 
   const handleCancel = useCallback(() => {
     setIsUploading(false);
@@ -532,12 +545,40 @@ export default function LetterboxdLanding() {
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Just type your username</h2>
               <p className="mt-2 text-sm text-slate-400">We read your public Letterboxd diary — no downloads, no uploads.</p>
 
+              <fieldset className="mx-auto mt-6 max-w-md">
+                <legend className="sr-only">Analysis period</legend>
+                <div
+                  role="group"
+                  aria-label="Analysis period"
+                  className="grid grid-cols-3 rounded-2xl border border-slate-700/60 bg-slate-900/50 p-1"
+                >
+                  {ANALYSIS_PERIOD_OPTIONS.map((option) => {
+                    const selected = analysisPeriod === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setAnalysisPeriod(option.value)}
+                        className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+                          selected
+                            ? 'bg-orange-400 text-slate-950 shadow-sm'
+                            : 'text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   void handleScrape();
                 }}
-                className="mx-auto mt-7 flex max-w-md flex-col gap-3 sm:flex-row"
+                className="mx-auto mt-3 flex max-w-md flex-col gap-3 sm:flex-row"
               >
                 <label className="relative flex-1">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-slate-500">@</span>

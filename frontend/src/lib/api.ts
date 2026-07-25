@@ -5,7 +5,21 @@ export interface LetterboxdStats {
   total_countries?: number;
   average_rating?: number;
   favorite_genre?: { name: string; count: number } | null;
+  analysis_period?: AnalysisPeriodMetadata;
   [key: string]: unknown;
+}
+
+export type AnalysisPeriod = 'month' | 'year' | 'lifetime';
+
+export interface AnalysisPeriodMetadata {
+  key: AnalysisPeriod;
+  start_date: string | null;
+  end_date: string | null;
+}
+
+export interface ScrapeProfileResult {
+  status: string;
+  stats: LetterboxdStats;
 }
 
 export interface WatchlistFilm {
@@ -379,16 +393,17 @@ export async function testBackend(retries = 2, delayMs = 1000) {
 // Either way the caller receives { status, stats }.
 export async function scrapeProfile(
   username: string,
+  analysisPeriod: AnalysisPeriod = 'year',
   signal?: AbortSignal,
   onProgress?: (p: ScrapeProgress) => void,
-) {
+): Promise<ScrapeProfileResult> {
   const url = `${API_BASE}/api/scrape-profile`;
 
   try {
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username }),
+      body: JSON.stringify({ username, analysis_period: analysisPeriod }),
       signal,
     });
 
@@ -400,14 +415,14 @@ export async function scrapeProfile(
 
     // Desktop-worker mode: the job was queued — poll until the worker finishes.
     if (data && data.task_id && !data.stats) {
-      return await pollTask(data.task_id, data.poll_token, { onProgress });
+      return await pollTask<ScrapeProfileResult>(data.task_id, data.poll_token, { onProgress });
     }
 
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Scraping failed');
     }
 
-    return data;
+    return data as ScrapeProfileResult;
   } catch (error) {
     // Pass through AbortError so the caller can distinguish cancellation
     if (error instanceof DOMException && error.name === 'AbortError') {

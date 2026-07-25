@@ -180,7 +180,14 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     if job is None:
         return {"job": None}
     logger.info("Worker claimed scrape job %s for @%s", job.task_id, job.username)
-    return {"job": {"task_id": job.task_id, "username": job.username, "avatar_only": job.avatar_only}}
+    return {
+        "job": {
+            "task_id": job.task_id,
+            "username": job.username,
+            "avatar_only": job.avatar_only,
+            "options": job.options,
+        }
+    }
 
 
 @router.post("/scrape/{task_id}/event")
@@ -357,7 +364,15 @@ async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
         return {"job": None}
     if job.kind == "watchlist":
         return {"job": {"kind": "watchlist", "task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
-    return {"job": {"kind": "scrape", "task_id": job.task_id, "username": job.username, "avatar_only": job.avatar_only}}
+    return {
+        "job": {
+            "kind": "scrape",
+            "task_id": job.task_id,
+            "username": job.username,
+            "avatar_only": job.avatar_only,
+            "options": job.options,
+        }
+    }
 
 
 @router.post("/watchlist/{task_id}/complete")

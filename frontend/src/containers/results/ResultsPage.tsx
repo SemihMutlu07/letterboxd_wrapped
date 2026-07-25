@@ -21,6 +21,7 @@ import {
   trackEvent,
 } from "@/lib/analytics";
 import {
+  buildAnalysisRange,
   buildDecadeData,
   buildRatingData,
   getRuntimeHours,
@@ -157,114 +158,10 @@ export default function ResultsPage() {
     [ratingsArr],
   );
 
-  // Date range calculation
-  const { actualRangeDays, dateRangeText } = useMemo(() => {
-    // Use data_timeline if available
-    if (
-      stats?.data_timeline?.earliest_date &&
-      stats?.data_timeline?.latest_date
-    ) {
-      try {
-        const startDate = new Date(stats.data_timeline.earliest_date);
-        const endDate = new Date(stats.data_timeline.latest_date);
-
-        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-          const daysDiff = Math.max(1, stats.data_timeline.total_days || 1);
-
-          const startText = startDate.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          });
-          const endText = endDate.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          });
-
-          return {
-            actualRangeDays: daysDiff,
-            dateRangeText:
-              startText === endText
-                ? `Analysed on ${startText}`
-                : `Analysed from ${startText} to ${endText}`,
-          };
-        }
-      } catch {
-        // Silent error handling
-      }
-    }
-
-    // Fallback to monthly habits
-    const monthlyHabits = stats?.monthly_viewing_habits;
-    if (monthlyHabits && monthlyHabits.length > 0) {
-      try {
-        const sortedMonths = [...monthlyHabits].sort((a, b) =>
-          a.month.localeCompare(b.month),
-        );
-        const firstMonth = sortedMonths[0].month;
-        const lastMonth = sortedMonths[sortedMonths.length - 1].month;
-
-        // Parse month formats
-        let startDate, endDate;
-
-        if (firstMonth.includes("-") && firstMonth.length >= 7) {
-          startDate = new Date(
-            firstMonth + (firstMonth.length === 7 ? "-01" : ""),
-          );
-          endDate = new Date(lastMonth + (lastMonth.length === 7 ? "-01" : ""));
-        } else if (firstMonth.includes("/")) {
-          const [month, year] = firstMonth.split("/");
-          startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-          const [endMonth, endYear] = lastMonth.split("/");
-          endDate = new Date(parseInt(endYear), parseInt(endMonth) - 1, 1);
-        } else if (/^\d{4}-\d{2}$/.test(firstMonth)) {
-          startDate = new Date(firstMonth + "-01");
-          endDate = new Date(lastMonth + "-01");
-        } else {
-          startDate = new Date(firstMonth);
-          endDate = new Date(lastMonth);
-        }
-
-        if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
-          const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-          let daysDiff = Math.max(
-            1,
-            Math.ceil(diffTime / (1000 * 60 * 60 * 24)),
-          );
-
-          if (firstMonth === lastMonth) {
-            daysDiff = 30;
-          }
-
-          const startText = startDate.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-          });
-          const endText = endDate.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-          });
-
-          return {
-            actualRangeDays: daysDiff,
-            dateRangeText:
-              startText === endText
-                ? `Analysed in ${startText}`
-                : `Analysed from ${startText} to ${endText}`,
-          };
-        }
-      } catch {
-        // Silent error handling
-      }
-    }
-
-    // Default fallback
-    return {
-      actualRangeDays: 365,
-      dateRangeText: "Analysed over the past year",
-    };
-  }, [stats?.data_timeline, stats?.monthly_viewing_habits]);
+  const { actualRangeDays, dateRangeText } = useMemo(
+    () => buildAnalysisRange(stats),
+    [stats],
+  );
 
   const runtimeHours = useMemo(() => getRuntimeHours(stats), [stats]);
 

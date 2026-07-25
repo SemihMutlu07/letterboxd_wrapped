@@ -19,7 +19,11 @@ from app.config import settings
 from app.routes.feedback import _parse_letterboxd_username
 from app.services.analysis import process_comprehensive_letterboxd_data
 from app.services import dashboard_settings
-from app.services.scrape_pipeline import ScrapeAnalysisEmpty, scrape_and_analyze
+from app.services.scrape_pipeline import (
+    ScrapeAnalysisEmpty,
+    normalize_analysis_period,
+    scrape_and_analyze,
+)
 from app.services.run_log import persist_run
 from app.security import client_key, enforce_rate_limit
 
@@ -233,6 +237,13 @@ async def scrape_profile(request: Request):
             status_code=400,
             detail={"error_code": "invalid_username", "message": "Please enter a valid Letterboxd username."},
         )
+    try:
+        analysis_period = normalize_analysis_period(body.get("analysis_period"))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error_code": "invalid_analysis_period", "message": str(exc)},
+        ) from exc
 
     # Desktop-worker mode: route the heavy scrape to the always-on desktop worker.
     if settings.desktop_worker_enabled:
@@ -276,7 +287,11 @@ async def scrape_profile(request: Request):
                 },
             )
         try:
-            task_id = task_manager.create_scrape_job(username, owner_key=client_key(request))
+            task_id = task_manager.create_scrape_job(
+                username,
+                owner_key=client_key(request),
+                options={"analysis_period": analysis_period},
+            )
         except RuntimeError as exc:
             raise _queue_full() from exc
         logger.info("Queued scrape job %s for @%s", task_id, username)
@@ -285,8 +300,20 @@ async def scrape_profile(request: Request):
 
     # Synchronous fallback: no desktop worker configured (local dev).
     try:
-        stats = await scrape_and_analyze(request.app.state.aiohttp_session, username)
+        stats = await scrape_and_analyze(
+            request.app.state.aiohttp_session,
+            username,
+            analysis_period=analysis_period,
+        )
     except ScrapeAnalysisEmpty as exc:
+        if exc.period_empty:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_code": "no_films_in_period",
+                    "message": f"No diary films found for @{username} in the selected period.",
+                },
+            )
         if exc.scraper_ok:
             raise HTTPException(
                 status_code=500,
