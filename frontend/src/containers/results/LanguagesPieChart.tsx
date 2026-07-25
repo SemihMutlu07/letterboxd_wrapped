@@ -5,6 +5,16 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 type Row = { language: string; count: number };
 
+/**
+ * Recharts hands sector callbacks a `PieSectorDataItem`, which both spreads the
+ * original datum and nests it under `payload` depending on the event. Read both
+ * so the handlers survive either shape.
+ */
+function sliceLanguage(data: unknown): string | undefined {
+  const item = data as { language?: string; payload?: { language?: string } } | null;
+  return item?.payload?.language ?? item?.language;
+}
+
 export default function LanguagesPieChart({
   sortedData,
   colors,
@@ -37,8 +47,8 @@ export default function LanguagesPieChart({
           stroke="rgba(15,23,42,0.9)"
           strokeWidth={2}
           isAnimationActive={false}
-          onClick={(entry: Row) => onSliceClick(entry.language)}
-          onMouseEnter={(entry: Row) => onHover(entry.language)}
+          onClick={(entry) => { const lang = sliceLanguage(entry); if (lang) onSliceClick(lang); }}
+          onMouseEnter={(entry) => { const lang = sliceLanguage(entry); if (lang) onHover(lang); }}
           onMouseLeave={onLeave}
         >
           {sortedData.map((entry, i) => (
@@ -55,9 +65,10 @@ export default function LanguagesPieChart({
           isAnimationActive={false}
           position={{ x: 8, y: 8 }}
           allowEscapeViewBox={{ x: true, y: true }}
-          content={({ active, payload }: { active?: boolean; payload?: Array<{ payload: Row }> }) => {
+          content={({ active, payload }: { active?: boolean; payload?: ReadonlyArray<{ payload?: Row }> }) => {
             if (!active || !payload?.length) return null;
             const row = payload[0].payload;
+            if (!row) return null;
             const name = languageLabel[row.language] || row.language.toUpperCase();
             const pct = total ? Math.round((row.count / total) * 100) : 0;
             return (
