@@ -18,6 +18,7 @@ export type ErrorReason =
   | 'scrape_blocked'
   | 'scraper_unavailable'
   | 'desktop_worker_paused'
+  | 'stats_too_large'
   | 'unknown_error';
 
 export interface NormalizedError {
@@ -46,6 +47,17 @@ export function normalizeError(err: unknown): NormalizedError {
         'The analysis server appears to be offline or your connection dropped.',
       action: 'Try again in a moment.',
       reason: 'backend_unreachable',
+    };
+  }
+
+  // Analysis succeeded but the browser refused to store even the trimmed result
+  if (err instanceof Error && err.name === 'StatsTooLargeError') {
+    return {
+      title: 'Result too large to store',
+      message:
+        'Your analysis finished, but this browser ran out of storage before it could be handed to the results page.',
+      action: 'Close other tabs of this site, or clear site data, then try again.',
+      reason: 'stats_too_large',
     };
   }
 

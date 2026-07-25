@@ -13,6 +13,7 @@ import {
   type ScrapeProgress,
 } from '@/lib/api';
 import { ERROR_CODE_HINTS } from '@/lib/api';
+import { persistStats } from '@/lib/stats-storage';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -305,7 +306,7 @@ export default function LetterboxdLanding() {
       if (detectedUsername) setUsername(detectedUsername);
       // Per-tab storage avoids the cross-tab race where a concurrent scrape's
       // result overwrites this tab's data on a shared localStorage key.
-      sessionStorage.setItem('letterboxdStats', JSON.stringify(withPosterGameStats(result.stats)));
+      persistStats(withPosterGameStats(result.stats));
 
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, duration_ms: Math.round(durationMs) });
       trackFilmStats({ total_films: result.stats.total_films, total_countries: result.stats.total_countries, average_rating: result.stats.average_rating });
@@ -389,7 +390,7 @@ export default function LetterboxdLanding() {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
       }
       setUsername(username);
-      sessionStorage.setItem('letterboxdStats', JSON.stringify(withPosterGameStats(result.stats)));
+      persistStats(withPosterGameStats(result.stats));
 
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method });
 
