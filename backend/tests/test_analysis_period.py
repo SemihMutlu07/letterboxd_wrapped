@@ -159,14 +159,50 @@ async def test_lifetime_pipeline_preserves_grid_films(monkeypatch):
     assert stats["analysis_period"]["start_date"] is None
 
 
-@pytest.mark.asyncio
-async def test_empty_bounded_period_is_distinguished_from_empty_profile(monkeypatch):
+def _patch_sources(monkeypatch, sources):
     async def fake_sources(*_args, **_kwargs):
-        return scraper.ProfileScrapeSources(diary=[], grid=[])
+        return sources
 
     monkeypatch.setattr("app.services.scrape_pipeline.scrape_profile_sources", fake_sources)
+
+
+@pytest.mark.asyncio
+async def test_empty_bounded_period_is_reported_only_when_the_scrape_itself_worked(monkeypatch):
+    # Scrape succeeded — films exist, they just fall outside the window.
+    _patch_sources(monkeypatch, scraper.ProfileScrapeSources(
+        diary=[{"title": "Old", "year": "2019", "rating": 4, "watch_date": "2019-01-01"}],
+        grid=[],
+        film_count=1,
+    ))
 
     with pytest.raises(ScrapeAnalysisEmpty) as caught:
         await scrape_and_analyze(object(), "semih", analysis_period="month")
 
     assert caught.value.period_empty is True
+
+
+@pytest.mark.asyncio
+async def test_failed_scrape_is_not_blamed_on_the_period(monkeypatch):
+    # Nothing came back at all — blocked, private or a dead scraper. Reporting
+    # this as "no films in the selected period" would hide the real breakage,
+    # and `year` is the default so it would hide it on the common path.
+    _patch_sources(monkeypatch, scraper.ProfileScrapeSources(diary=[], grid=[], film_count=0))
+
+    with pytest.raises(ScrapeAnalysisEmpty) as caught:
+        await scrape_and_analyze(object(), "semih", analysis_period="month")
+
+    assert caught.value.period_empty is False
+    assert caught.value.scraper_ok is False
+
+
+@pytest.mark.asyncio
+async def test_parse_failure_behind_a_real_film_count_is_not_blamed_on_the_period(monkeypatch):
+    # The profile advertises 412 films but nothing parsed. Whatever that gets
+    # classified as, it must not be reported as an empty period — `year` is the
+    # default, so that would mask the failure for most requests.
+    _patch_sources(monkeypatch, scraper.ProfileScrapeSources(diary=[], grid=[], film_count=412))
+
+    with pytest.raises(ScrapeAnalysisEmpty) as caught:
+        await scrape_and_analyze(object(), "semih", analysis_period="year")
+
+    assert caught.value.period_empty is False

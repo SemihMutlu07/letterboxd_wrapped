@@ -168,9 +168,14 @@ async def scrape_and_analyze(
     films = merge_scraped_films(diary, sources.grid if period == "lifetime" else [])
     csv_dicts = diary_to_csv_dicts(films)
     if not films or not csv_dicts["watched"]:
-        if start_date is not None:
-            raise ScrapeAnalysisEmpty(username, scraper_ok=False, period_empty=True)
-        scraper_ok = sources.film_count > 0 and (len(sources.diary) > 0 or len(sources.grid) > 0)
+        # Classify against the *unfiltered* scrape. Blaming the period whenever
+        # one is set would report a blocked, private or broken scrape as "no
+        # films in the selected period" — and since `year` is the default, that
+        # would hide scraper breakage on the common path.
+        scraped_anything = len(sources.diary) > 0 or len(sources.grid) > 0
+        scraper_ok = sources.film_count > 0 and scraped_anything
+        if start_date is not None and scraped_anything:
+            raise ScrapeAnalysisEmpty(username, scraper_ok=True, period_empty=True)
         raise ScrapeAnalysisEmpty(username, scraper_ok=scraper_ok)
 
     request_dir: Optional[Path] = None
