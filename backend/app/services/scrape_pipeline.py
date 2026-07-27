@@ -173,7 +173,7 @@ async def scrape_and_analyze(
         # films in the selected period" — and since `year` is the default, that
         # would hide scraper breakage on the common path.
         scraped_anything = len(sources.diary) > 0 or len(sources.grid) > 0
-        scraper_ok = sources.film_count > 0 and scraped_anything
+        scraper_ok = sources.film_count > 0 and not scraped_anything
         if start_date is not None and scraped_anything:
             raise ScrapeAnalysisEmpty(username, scraper_ok=True, period_empty=True)
         raise ScrapeAnalysisEmpty(username, scraper_ok=scraper_ok)

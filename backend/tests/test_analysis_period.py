@@ -206,3 +206,4 @@ async def test_parse_failure_behind_a_real_film_count_is_not_blamed_on_the_perio
         await scrape_and_analyze(object(), "semih", analysis_period="year")
 
     assert caught.value.period_empty is False
+    assert caught.value.scraper_ok is True
