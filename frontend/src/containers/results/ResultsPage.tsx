@@ -33,96 +33,6 @@ export { ResultsContent };
 
 // Note: StatsData is imported from @/containers/results/sections/types
 
-/**
- * Client-side fallback when backend sinefil_meter is missing.
- * Mirrors the cine_v2 model with the data available in LetterboxdStats.
- * Shannon entropy computed from the top-N counts the backend provides.
- */
-const calcCinephileScore = (s?: StatsData | null) => {
-  if (!s) return 45;
-
-  const log2 = Math.log2;
-
-  const entropy = (counts: number[]): number => {
-    const total = counts.reduce((a, b) => a + b, 0);
-    if (total === 0) return 0;
-    return -counts
-      .filter((c) => c > 0)
-      .reduce((h, c) => {
-        const p = c / total;
-        return h + p * log2(p);
-      }, 0);
-  };
-
-  const normEntropy = (counts: number[]): number => {
-    const n = counts.filter((c) => c > 0).length;
-    if (n <= 1) return 0;
-    const maxH = log2(n);
-    return maxH > 0 ? entropy(counts) / maxH : 0;
-  };
-
-  const topShare = (counts: number[], n = 1) => {
-    const total = counts.reduce((a, b) => a + b, 0);
-    if (total === 0) return 0;
-    return (
-      counts
-        .sort((a, b) => b - a)
-        .slice(0, n)
-        .reduce((a, b) => a + b, 0) / total
-    );
-  };
-
-  const countries = (s.top_countries || []).map((c) => c.count);
-  const decades = (s.decades || [])
-    .filter((d) => d.decade !== "Unknown")
-    .map((d) => d.count);
-  const languages = (s.top_languages || []).map((l) => l.count);
-  const genres = (s.top_genres || []).map((g) => g.count);
-  const directors = (s.top_directors || []).map((d) => d.count);
-  const total = s.total_films || 1;
-
-  // Geography (0-25)
-  const geoNorm = normEntropy(countries);
-  const geoDom = topShare([...countries]) > 0.8 ? 0.6 : 1.0;
-  const geo = Math.min(25, Math.round(geoNorm * geoDom * 25));
-
-  // Temporal (0-20): decade entropy (12) + age bonus (8)
-  const decNorm = normEntropy(decades);
-  const decPts = Math.min(12, Math.round(decNorm * 12));
-  // Rough median-year estimate from decade midpoints
-  const decadeEntries = (s.decades || []).filter((d) => d.decade !== "Unknown");
-  let agePts = 0;
-  if (decadeEntries.length > 0) {
-    const totalD = decadeEntries.reduce((a, d) => a + d.count, 0);
-    const weightedYear =
-      decadeEntries.reduce((a, d) => {
-        const y = parseInt(String(d.decade).replace("s", ""));
-        return a + (isNaN(y) ? 0 : (y + 5) * d.count);
-      }, 0) / (totalD || 1);
-    const yearsBack = Math.max(0, 2026 - weightedYear);
-    agePts = Math.min(8, Math.round((yearsBack / 40) * 8));
-  }
-  const temporal = Math.min(20, decPts + agePts);
-
-  // Languages (0-15)
-  const langNorm = normEntropy(languages);
-  const langDom = topShare([...languages]) > 0.85 ? 0.5 : 1.0;
-  const lang = Math.min(15, Math.round(langNorm * langDom * 15));
-
-  // Volume (0-15)
-  const vol = Math.min(15, Math.round(Math.log10(Math.max(1, total)) * 6));
-
-  // Genres (0-15)
-  const genreNorm = normEntropy(genres);
-  const genre = Math.min(15, Math.round(genreNorm * 15));
-
-  // Directors (0-10)
-  const top3Dir = topShare([...directors], 3);
-  const dir = Math.min(10, Math.round((1 - top3Dir) * 12));
-
-  return Math.max(0, Math.min(100, geo + temporal + lang + vol + genre + dir));
-};
-
 export default function ResultsPage() {
   const {
     stats,
@@ -183,14 +93,10 @@ export default function ResultsPage() {
     return `${Math.min(percentage, 100)}%`;
   }, [runtimeHours, actualRangeDays]);
 
-  const cineScore = useMemo(
-    () =>
-      Math.max(
-        0,
-        Math.min(100, stats?.sinefil_meter?.score ?? calcCinephileScore(stats)),
-      ),
-    [stats],
-  );
+  const cineScore = useMemo(() => {
+    const score = stats?.sinefil_meter?.score;
+    return score == null ? undefined : Math.max(0, Math.min(100, score));
+  }, [stats]);
 
   // Build top actors & directors list, ensuring no duplicate person across both roles
   const topActors = useMemo(() => {
@@ -274,7 +180,7 @@ export default function ResultsPage() {
       spentDays: Math.round(runtimeHours / 24),
       spentHours: Math.round(runtimeHours),
       timePercent: Number.parseInt(timePct, 10) || 0,
-      cinemaScale: cineScore,
+      cinemaScale: cineScore ?? 0,
       personaLabel: stats?.cinematic_persona?.persona || "",
       minutesAverage: Math.round(stats?.average_runtime || 0),
       mostCommonRating: stats?.most_common_rating || 3.5,
