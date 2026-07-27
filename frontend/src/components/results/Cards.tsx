@@ -69,14 +69,16 @@ export const StatCard: React.FC<{
   color?: string;
   size?: 'normal' | 'large';
   onClick?: () => void;
-}> = React.memo(function StatCard({ value, label, color = 'text-white', size = 'normal', onClick }) {
+  style?: React.CSSProperties;
+}> = React.memo(function StatCard({ value, label, color = 'text-white', size = 'normal', onClick, style }) {
   return (
   <motion.div
     variants={itemVariants}
     onClick={onClick}
-    className={`bg-slate-800/60 backdrop-blur-sm border border-slate-700/60 rounded-2xl p-4 md:p-6 transition-all duration-200 shadow-lg h-full min-h-[120px] md:min-h-[140px] grid place-content-center text-center ${
-      onClick ? 'cursor-pointer hover:scale-[1.04] hover:bg-slate-800/90 hover:border-slate-500/60 active:scale-[0.97]' : 'hover:scale-[1.02] hover:bg-slate-800/80 hover:border-slate-600/60'
+    className={`backdrop-blur-sm border rounded-2xl p-4 md:p-6 transition-all duration-200 shadow-lg h-full min-h-[120px] md:min-h-[140px] grid place-content-center text-center ${
+      onClick ? 'cursor-pointer hover:scale-[1.04] active:scale-[0.97]' : 'hover:scale-[1.02]'
     }`}
+    style={{ backgroundColor: 'rgba(27, 28, 30, 0.6)', borderColor: 'rgba(31, 38, 46, 0.6)' }}
   >
     <div>
       <div
@@ -85,10 +87,11 @@ export const StatCard: React.FC<{
             ? 'text-[clamp(20px,4vw,40px)] md:text-[clamp(24px,2.5vw,36px)]'
             : 'text-[clamp(18px,3.5vw,28px)] md:text-[clamp(20px,2vw,32px)]'
         } font-black ${color} leading-tight tabular-nums`}
+        style={style}
       >
         {typeof value === 'number' ? value.toLocaleString() : value}
       </div>
-      <div className="uppercase tracking-wider opacity-80 font-medium text-[11px] md:text-sm mt-1">
+      <div className="uppercase tracking-wider opacity-80 font-medium text-[11px] md:text-sm mt-1 text-white/70">
         {label}
       </div>
     </div>
