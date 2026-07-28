@@ -57,7 +57,7 @@ describe('LetterboxdLanding persistence consent gate', () => {
   async function submitUsername() {
     const user = userEvent.setup();
     render(<LetterboxdLanding />);
-    await user.type(screen.getByPlaceholderText('your_username'), 'alice');
+    await user.type(document.querySelector('input[name="username"]')!, 'alice');
     await user.click(screen.getByRole('button', { name: /analyze/i }));
     await waitFor(() => expect(apiMocks.scrapeProfile).toHaveBeenCalled());
   }
