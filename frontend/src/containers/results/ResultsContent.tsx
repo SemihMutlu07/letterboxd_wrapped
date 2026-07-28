@@ -54,7 +54,7 @@ interface ResultsContentProps {
   isMobile: boolean;
   ratingsArr: RatingDatum[];
   ratingMax: number;
-  cineScore: number;
+  cineScore: number | undefined;
   showShareModal: boolean;
   setShowShareModal: React.Dispatch<React.SetStateAction<boolean>>;
   shareCardData: ShareCardData;
@@ -300,6 +300,36 @@ export function ResultsContent({
         </div>
       ),
     },
+    ...(stats.sinefil_meter?.score != null
+      ? [
+          {
+            id: "cinema-scale",
+            render: () => (
+              <SectionContainer theme={theme}>
+                <LazyCinemaScale
+                  type={stats.sinefil_meter?.type || "Independent Cinephile"}
+                  description={stats.sinefil_meter?.description}
+                  score={stats.sinefil_meter?.score as number}
+                  breakdown={stats.sinefil_meter?.breakdown}
+                  topCountries={(stats.top_countries || []).map(
+                    (c: { name: string }) => c.name,
+                  )}
+                  topLanguages={(stats.top_languages || []).map(
+                    (l) => (l as typeof l & { name: string }).name,
+                  )}
+                  topGenres={(stats.top_genres || []).map(
+                    (g: { name: string }) => g.name,
+                  )}
+                  topDirectors={(stats.top_directors || []).map(
+                    (d: { name: string }) => d.name,
+                  )}
+                  favoriteDecade={stats.favorite_decade?.name}
+                />
+              </SectionContainer>
+            ),
+          },
+        ]
+      : []),
     {
       id: "rating-deviation",
       render: () => <RatingDeviation stats={stats} />,
@@ -357,32 +387,6 @@ export function ResultsContent({
           data={stats.top_languages ?? []}
           allFilms={stats.all_films ?? []}
         />
-      ),
-    },
-    {
-      id: "cinema-scale",
-      render: () => (
-        <SectionContainer theme={theme}>
-          <LazyCinemaScale
-            type={stats.sinefil_meter?.type || "Independent Cinephile"}
-            description={stats.sinefil_meter?.description}
-            score={cineScore || 50}
-            breakdown={stats.sinefil_meter?.breakdown}
-            topCountries={(stats.top_countries || []).map(
-              (c: { name: string }) => c.name,
-            )}
-            topLanguages={(stats.top_languages || []).map(
-              (l) => (l as typeof l & { name: string }).name,
-            )}
-            topGenres={(stats.top_genres || []).map(
-              (g: { name: string }) => g.name,
-            )}
-            topDirectors={(stats.top_directors || []).map(
-              (d: { name: string }) => d.name,
-            )}
-            favoriteDecade={stats.favorite_decade?.name}
-          />
-        </SectionContainer>
       ),
     },
     {

@@ -34,6 +34,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Browser UA stylesheets don't inherit font-family on form controls by default */
+input, button, textarea, select {
+  font-family: inherit;
+}
+
 /* Full-height sections track the *dynamic* viewport so nothing jumps when
    the mobile URL bar collapses. Overrides Tailwind's 100vh (fallback kept). */
 .min-h-screen {

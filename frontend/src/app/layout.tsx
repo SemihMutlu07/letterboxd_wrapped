@@ -37,19 +37,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-      <link
-        rel="icon"
-        type="image/svg+xml"
-        href="/assets/favicon-16x16-Dark.svg"
-        media="(prefers-color-scheme: dark)"
-      />
-      <link
-          rel="icon"
-          type="image/svg+xml"
-          href="/assets/favicon-16x16-Light.svg"
-          media="(prefers-color-scheme: light)"
-      />  
-      </head>  
+      <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+      <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
+      <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-48x48.png" />
+      <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192x192.png" />
+      <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180x180.png" />
+      <link rel="shortcut icon" href="/favicon.ico" />
+      </head>
         <body className={`${manrope.variable} ${syne.variable} bg-[#1e252d] text-white antialiased`}>
           <ErrorBoundary>
             {children}

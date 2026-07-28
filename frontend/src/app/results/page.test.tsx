@@ -191,7 +191,6 @@ describe('ResultsPage stored-result contracts', () => {
       'film-history',
       'ratings-bar',
       'languages',
-      'cinema-scale',
     ]);
   });
 
