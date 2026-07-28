@@ -3,7 +3,7 @@
 import JSZip from 'jszip';
 import Link from 'next/link';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Globe, Upload, Users, X, UserRound, Sparkles, PartyPopper } from 'lucide-react';
+import { Upload, Users, X, UserRound, Sparkles, PartyPopper } from 'lucide-react';
 import {
   analyzeFiles,
   parseLetterboxdUsername,
@@ -31,8 +31,8 @@ const POSTER_GAME_MAX_LEVEL = 5;
 const POSTER_ROUND_POINTS = [100, 80, 60, 40, 20];
 
 const USERNAME_PLACEHOLDER_EXAMPLES = [
-  'martinscorsese',
-  'gretagerwig',
+  'semihmutsuz',
+  'watchthemengo',
   'denisvilleneuve',
   'meryl_streep',
   'quentintarantino',
@@ -559,9 +559,6 @@ export default function LetterboxdLanding() {
           {/* Username — primary CTA */}
           <section aria-label="Enter your Letterboxd username">
             <div className="mx-auto max-w-xl rounded-3xl p-7 sm:p-9 text-center backdrop-blur-sm" style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}>
-              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl" style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.25)', backgroundColor: 'rgba(255, 127, 0, 0.1)' }}>
-                <Globe className="h-8 w-8" style={{ color: '#ff7f00' }} />
-              </div>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">Just type your username</h2>
 
               <form
@@ -584,8 +581,8 @@ export default function LetterboxdLanding() {
                     autoFocus
                     autoComplete="username"
                     spellCheck={false}
-                    className="w-full rounded-2xl py-5 pl-11 pr-5 text-lg text-white placeholder:text-white/40 focus:outline-none focus:ring-2"
-                    style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(30, 37, 45, 0.7)' }}
+                    className="w-full rounded-2xl py-5 pl-11 pr-5 text-lg font-semibold text-white placeholder:text-white/40 placeholder:font-normal focus:outline-none transition-shadow"
+                    style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(30, 37, 45, 0.7)', boxShadow: usernameFocused ? '0 0 0 2px rgba(255, 127, 0, 0.6)' : undefined }}
                   />
                 </label>
                 <button
