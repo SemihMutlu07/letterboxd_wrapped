@@ -546,30 +546,30 @@ export default function LetterboxdLanding() {
         <div className="absolute -bottom-24 -right-20 h-80 w-80 sm:h-[28rem] sm:w-[28rem] rounded-full blur-3xl" style={{ backgroundColor: 'rgba(255, 127, 0, 0.15)' }} />
       </div>
 
-      <div className="relative mx-auto max-w-[720px] px-4 py-10 sm:py-14">
-        <div className="space-y-10">
+      <div className="relative mx-auto flex min-h-screen max-w-[560px] flex-col items-center justify-center px-4 py-8 sm:py-10">
+        <div className="space-y-7">
           {/* Hero */}
           <header className="text-center">
-            <h1 className="font-black tracking-tight leading-[0.95] text-[clamp(36px,8vw,64px)] text-white">
+            <h1 className="font-black tracking-tight leading-[0.95] text-[clamp(28px,6vw,48px)] text-white">
               Movies Wrapped
             </h1>
-            <p className="mx-auto mt-4 text-lg sm:text-xl leading-relaxed text-white/80">Your Letterboxd year, re-edited.</p>
+            <p className="mx-auto mt-3 text-base sm:text-lg leading-relaxed text-white/80">Your Letterboxd year, re-edited.</p>
           </header>
 
           {/* Username — primary CTA */}
           <section aria-label="Enter your Letterboxd username">
-            <div className="mx-auto max-w-xl rounded-3xl p-7 sm:p-9 text-center backdrop-blur-sm" style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">Just type your username</h2>
+            <div className="mx-auto max-w-lg rounded-2xl p-5 sm:p-6 text-center backdrop-blur-sm" style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Just type your username</h2>
 
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   void handleScrape();
                 }}
-                className="mx-auto mt-8 flex max-w-lg flex-col gap-4 sm:flex-row"
+                className="mx-auto mt-5 flex max-w-md flex-col gap-3 sm:flex-row"
               >
                 <label className="relative flex-1">
-                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-lg font-semibold text-white/40">@</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-white/40">@</span>
                   <input
                     type="text"
                     name="username"
@@ -581,14 +581,14 @@ export default function LetterboxdLanding() {
                     autoFocus
                     autoComplete="username"
                     spellCheck={false}
-                    className="w-full rounded-2xl py-5 pl-11 pr-5 text-lg font-semibold text-white placeholder:text-white/40 placeholder:font-normal focus:outline-none transition-shadow"
+                    className="w-full rounded-xl py-3 pl-9 pr-4 text-base font-semibold text-white placeholder:text-white/40 placeholder:font-normal focus:outline-none transition-shadow"
                     style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(30, 37, 45, 0.7)', boxShadow: usernameFocused ? '0 0 0 2px rgba(255, 127, 0, 0.6)' : undefined }}
                   />
                 </label>
                 <button
                   type="submit"
                   disabled={!usernameInput.trim()}
-                  className="rounded-2xl px-8 py-5 text-lg font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed"
+                  className="rounded-xl px-6 py-3 text-base font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed"
                   style={usernameInput.trim()
                     ? { backgroundColor: '#ff7f00', color: '#1b1c1e' }
                     : { backgroundColor: '#1f262e', color: 'rgba(255,255,255,0.4)' }}
@@ -600,7 +600,7 @@ export default function LetterboxdLanding() {
             </div>
 
             {/* Secondary: upload export */}
-            <div className="mt-6 grid gap-3 sm:flex sm:justify-center">
+            <div className="mt-4 grid gap-2 sm:flex sm:justify-center">
               <button
                 type="button"
                 onClick={() => {
@@ -608,25 +608,25 @@ export default function LetterboxdLanding() {
                   setError(null);
                   trackEvent('upload_modal_opened');
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-base font-medium text-white/70 transition hover:text-white active:scale-[0.98] sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white/70 transition hover:text-white active:scale-[0.98] sm:w-auto"
                 style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}
               >
-                <Upload className="h-5 w-5" />
+                <Upload className="h-4 w-4" />
                 Upload export
               </button>
               <Link
                 href="/watchlist"
-                className="watchlist-glow inline-flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-base font-medium text-white transition active:scale-[0.98] sm:w-auto"
+                className="watchlist-glow inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white transition active:scale-[0.98] sm:w-auto"
                 style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.3)', backgroundColor: 'rgba(27, 28, 30, 0.5)' }}
               >
-                <Users className="h-5 w-5" />
+                <Users className="h-4 w-4" />
                 Compare two watchlists
               </Link>
             </div>
           </section>
 
           {/* How it works */}
-          <section aria-label="How it works" className="mx-auto grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-3">
+          <section aria-label="How it works" className="mx-auto grid max-w-lg grid-cols-1 gap-3 sm:grid-cols-3">
             {[
               { icon: UserRound, title: 'Enter username', desc: 'Type your Letterboxd handle or upload your export.', color: '#ff8000' },
               { icon: Sparkles, title: 'We analyze', desc: 'We crunch every film, rating, and genre you logged.', color: '#00e054' },
@@ -634,21 +634,21 @@ export default function LetterboxdLanding() {
             ].map(({ icon: Icon, title, desc, color }) => (
               <div
                 key={title}
-                className="rounded-2xl p-5 text-center"
+                className="rounded-xl p-4 text-center"
                 style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}
               >
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl" style={{ borderWidth: 1, borderColor: `${color}40`, backgroundColor: `${color}1a` }}>
-                  <Icon className="h-5 w-5" style={{ color }} />
+                <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg" style={{ borderWidth: 1, borderColor: `${color}40`, backgroundColor: `${color}1a` }}>
+                  <Icon className="h-4 w-4" style={{ color }} />
                 </div>
-                <h3 className="text-sm font-semibold text-white">{title}</h3>
-                <p className="mt-1 text-xs leading-relaxed text-white/50">{desc}</p>
+                <h3 className="text-xs font-semibold text-white">{title}</h3>
+                <p className="mt-1 text-[11px] leading-relaxed text-white/50">{desc}</p>
               </div>
             ))}
           </section>
 
           {backendOffline && (
-            <div className="mx-auto max-w-xl rounded-2xl p-4 text-center" style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(255, 127, 0, 0.1)' }}>
-              <p className="text-sm" style={{ color: '#ff7f00' }}>
+            <div className="mx-auto max-w-lg rounded-xl p-3 text-center" style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(255, 127, 0, 0.1)' }}>
+              <p className="text-xs" style={{ color: '#ff7f00' }}>
                 ⚠ Backend server is starting up. Analysis may not work immediately.
               </p>
             </div>
