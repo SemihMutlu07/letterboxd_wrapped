@@ -428,30 +428,16 @@ export function ResultsContent({
             >
               View as Story
             </Link>
-            <p
-              className="text-xs text-center"
-              style={{
-                color:
-                  theme === "current"
-                    ? "#64748b"
-                    : theme === "vhs"
-                      ? "#d4955a"
-                      : "#6a6a6a",
-              }}
-            >
-              Your raw files are never stored. Only anonymous, aggregated usage
-              stats are kept to improve the product.
-            </p>
           </div>
 
           <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
             <p className="text-sm text-slate-300">
-              Built by Semih Mutlu with Berdan Mengünoğlu — many features here
-              were his ideas, and his code.
+              Built by Semih Mutlu with Berdan Mengünoğlu. Many features here
+              were his ideas and his code.
             </p>
             <p className="text-xs text-slate-400">
-              Thanks to our beta testers — Mete, Mehlika Ceylin Aydoğan, Salih
-              Emre Padır, Mert Efe Şentürk, Deniz and Ayberk — for the
+              Thanks to our beta testers: Mete, Mehlika Ceylin Aydoğan, Salih
+              Emre Padır, Mert Efe Şentürk, Deniz and Ayberk for the
               invaluable feedback.
             </p>
             <p className="text-xs text-slate-400">
