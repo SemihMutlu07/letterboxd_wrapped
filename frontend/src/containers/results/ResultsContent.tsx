@@ -285,7 +285,7 @@ export function ResultsContent({
             <button
               onClick={() => {
                 setShowShareModal(true);
-                trackEvent("share_export_started");
+                trackEvent("share_modal_opened");
               }}
               className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:scale-105"
               style={{
@@ -397,7 +397,7 @@ export function ResultsContent({
             <button
               onClick={() => {
                 setShowShareModal(true);
-                trackEvent("share_export_started");
+                trackEvent("share_modal_opened");
               }}
               className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
               style={{
@@ -484,7 +484,6 @@ export function ResultsContent({
         setOrientation={setOrientation}
         cardProps={shareCardData}
         onDownloadSuccess={() => {
-          trackEvent("share_export_succeeded");
           if (!hasTriggeredFeedback) {
             setHasTriggeredFeedback(true);
             feedbackRef.current?.open();

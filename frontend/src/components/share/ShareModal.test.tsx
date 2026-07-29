@@ -1,8 +1,9 @@
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { toBlob } from 'html-to-image';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { trackEvent } from '@/lib/analytics';
 import ShareModal, {
   exportExactPng,
   readPngDimensions,
@@ -92,6 +93,7 @@ async function openSwapDrawer() {
 
 beforeEach(() => {
   vi.mocked(toBlob).mockReset();
+  vi.mocked(trackEvent).mockClear();
   // jsdom returns 0 for clientWidth/Height by default; the modal sizes its rail
   // off these, so without a mock variants never enter the mount budget.
   Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 400 });
@@ -109,6 +111,15 @@ beforeEach(() => {
     return 1;
   });
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
+    configurable: true,
+    value: vi.fn().mockResolvedValue(undefined),
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('ShareModal person swap', () => {
@@ -235,6 +246,58 @@ function pngBlob(width: number, height: number) {
   new DataView(bytes.buffer).setUint32(20, height);
   return new Blob([bytes], { type: 'image/png' });
 }
+
+describe('ShareModal export outcomes', () => {
+  it('treats a cancelled system share as cancellation, not success', async () => {
+    const share = vi.fn().mockRejectedValue(new DOMException('Cancelled', 'AbortError'));
+    vi.stubGlobal('navigator', {
+      userAgent: 'iPhone',
+      platform: 'iPhone',
+      maxTouchPoints: 1,
+      canShare: () => true,
+      share,
+    });
+    vi.mocked(toBlob).mockResolvedValue(pngBlob(1200, 675));
+    const onDownloadSuccess = vi.fn();
+
+    render(
+      <ShareModal
+        open
+        onClose={() => {}}
+        orientation="horizontal"
+        setOrientation={() => {}}
+        cardProps={baseData}
+        onDownloadSuccess={onDownloadSuccess}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /share or save png/i }));
+
+    await waitFor(() => {
+      expect(trackEvent).toHaveBeenCalledWith(
+        'share_export_cancelled',
+        expect.objectContaining({ method: 'system_share' }),
+      );
+    });
+    expect(vi.mocked(trackEvent).mock.calls.some(([name]) => name === 'share_export_succeeded')).toBe(false);
+    expect(onDownloadSuccess).not.toHaveBeenCalled();
+  });
+
+  it('shows a retryable error and records a failed export', async () => {
+    vi.mocked(toBlob).mockRejectedValue(new Error('canvas allocation failed'));
+    renderShareModal();
+
+    await userEvent.click(screen.getByRole('button', { name: /share or save png/i }));
+
+    expect(await screen.findByRole('alert', {}, { timeout: 3_000 })).toHaveTextContent(
+      'Could not export this card. Try again.',
+    );
+    expect(trackEvent).toHaveBeenCalledWith(
+      'share_export_failed',
+      expect.objectContaining({ reason: 'Error' }),
+    );
+  });
+});
 
 describe.each([
   ['horizontal', 1200, 675, 1],

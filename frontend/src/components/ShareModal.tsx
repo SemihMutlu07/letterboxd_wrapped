@@ -86,24 +86,24 @@ export async function exportExactPng(el: HTMLElement, orientation: Orientation, 
 
 async function shareToSystem(blob: Blob) {
   const { isMobile } = getPlatformInfo();
-  if (!isMobile || !navigator.share) return false;
+  if (!isMobile || !navigator.share) return 'unavailable' as const;
   const file = new File([blob], EXPORT_FILE_NAME, { type: 'image/png' });
   const canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
   try {
     if (canShareFiles) {
       await navigator.share({ files: [file], title: 'Movies Wrapped' });
-      return true;
+      return 'shared' as const;
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return true;
+    if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled' as const;
     throw error;
   }
-  return false;
+  return 'unavailable' as const;
 }
 
 async function saveWithFilePicker(blob: Blob) {
   const { isMobile } = getPlatformInfo();
-  if (isMobile || !window.isSecureContext) return false;
+  if (isMobile || !window.isSecureContext) return 'unavailable' as const;
   type WindowWithFilePicker = Window & {
     showSaveFilePicker?: (opts: {
       suggestedName: string;
@@ -111,7 +111,8 @@ async function saveWithFilePicker(blob: Blob) {
     }) => Promise<any>;
   };
   const typedWindow = window as WindowWithFilePicker;
-  if (typedWindow.showSaveFilePicker) {
+  if (!typedWindow.showSaveFilePicker) return 'unavailable' as const;
+  try {
     const handle = await typedWindow.showSaveFilePicker({
       suggestedName: EXPORT_FILE_NAME,
       types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
@@ -119,9 +120,11 @@ async function saveWithFilePicker(blob: Blob) {
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
-    return true;
+    return 'saved' as const;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled' as const;
+    throw error;
   }
-  return false;
 }
 
 function downloadFallback(blob: Blob) {
@@ -189,8 +192,10 @@ export default function ShareModal({
   const [showSwapHint, setShowSwapHint] = useState(false);
   const [hintFading, setHintFading] = useState(false);
   const [showUsername, setShowUsername] = useState(true);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const variantKey = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].key;
+  const variantLabel = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].label;
 
   useEffect(() => {
     if (!open) return;
@@ -199,6 +204,7 @@ export default function ShareModal({
     setActiveIdx(0);
     setSwapOpen(false);
     setShowUsername(true);
+    setExportError(null);
   }, [open]);
 
   useEffect(() => {
@@ -299,11 +305,17 @@ export default function ShareModal({
 
   const handleSavePNG = async () => {
     if (isSaving) return;
+    const exportRoot = findExportRoot();
+    if (!exportRoot) {
+      setExportError('Could not prepare this card. Try again.');
+      trackEvent('share_export_failed', { variant: variantKey, orientation, reason: 'missing_export_root' });
+      return;
+    }
     setIsSaving(true);
+    setExportError(null);
+    trackEvent('share_export_started', { variant: variantKey, orientation });
     const originalSrcs: string[] = [];
     try {
-      const exportRoot = findExportRoot();
-      if (!exportRoot) throw new Error('Export root not found');
       const images = Array.from(exportRoot.querySelectorAll('img'));
       images.forEach((img, i) => {
         originalSrcs[i] = img.src;
@@ -316,19 +328,35 @@ export default function ShareModal({
       const bg = '#0B1220';
       const blob = await exportExactPng(exportRoot, orientation, bg);
       let method: 'system_share' | 'file_picker' | 'download' = 'download';
-      const shared = await shareToSystem(blob);
-      if (shared) { method = 'system_share'; }
-      else { const saved = await saveWithFilePicker(blob); if (saved) method = 'file_picker'; else downloadFallback(blob); }
+      const shareResult = await shareToSystem(blob);
+      if (shareResult === 'cancelled') {
+        trackEvent('share_export_cancelled', { variant: variantKey, orientation, method: 'system_share' });
+        return;
+      }
+      if (shareResult === 'shared') {
+        method = 'system_share';
+      } else {
+        const pickerResult = await saveWithFilePicker(blob);
+        if (pickerResult === 'cancelled') {
+          trackEvent('share_export_cancelled', { variant: variantKey, orientation, method: 'file_picker' });
+          return;
+        }
+        if (pickerResult === 'saved') method = 'file_picker';
+        else downloadFallback(blob);
+      }
       trackEvent('share_export_succeeded', { variant: variantKey, orientation, method });
       onDownloadSuccess?.();
     } catch (err) {
       console.error('Export failed:', err);
+      setExportError('Could not export this card. Try again.');
+      trackEvent('share_export_failed', {
+        variant: variantKey,
+        orientation,
+        reason: err instanceof Error ? err.name : 'unknown',
+      });
     } finally {
-      const exportRoot = findExportRoot();
-      if (exportRoot) {
-        const imgs = exportRoot.querySelectorAll('img');
-        imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
-      }
+      const imgs = exportRoot.querySelectorAll('img');
+      imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
       setIsSaving(false);
     }
   };
@@ -342,15 +370,23 @@ export default function ShareModal({
   return (
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
 
       {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className="relative h-full md:h-[88vh] md:max-h-[920px] md:max-w-[600px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
+      <div className={`relative h-full md:h-[88vh] md:max-h-[920px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden ${
+        orientation === 'horizontal' ? 'md:max-w-[960px]' : 'md:max-w-[600px]'
+      }`}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <span className="text-sm font-semibold text-white/90">Share</span>
+          <div>
+            <span className="block text-sm font-semibold text-white/90">Share</span>
+            <span className="block text-[11px] text-slate-500">
+              {variantLabel} · {activeIdx + 1}/{SHARE_VARIANTS.length}
+            </span>
+          </div>
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="grid place-items-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
             aria-label="Close"
           >
@@ -362,7 +398,9 @@ export default function ShareModal({
         <div
           ref={railRef}
           onScroll={handleRailScroll}
-          className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0"
+          className={`flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0 ${
+            isSaving ? 'pointer-events-none' : ''
+          }`}
           style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
         >
           <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
@@ -399,6 +437,8 @@ export default function ShareModal({
             <button
               key={v.key}
               onClick={() => jumpTo(i)}
+              disabled={isSaving}
+              aria-current={i === activeIdx ? 'true' : undefined}
               aria-label={`Go to ${v.label}`}
               className={`h-1.5 rounded-full transition-all duration-300 ${
                 i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
@@ -420,6 +460,7 @@ export default function ShareModal({
                       <button
                         key={a.name}
                         onClick={() => setActorIdx(i)}
+                        disabled={isSaving}
                         className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                           actorIdx === i
                             ? 'text-pink-300 bg-pink-500/15'
@@ -440,6 +481,7 @@ export default function ShareModal({
                       <button
                         key={d.name}
                         onClick={() => setDirectorIdx(i)}
+                        disabled={isSaving}
                         className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                           directorIdx === i
                             ? 'text-cyan-300 bg-cyan-500/15'
@@ -460,19 +502,23 @@ export default function ShareModal({
             <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
               <button
                 onClick={() => setOrientation('vertical')}
+                disabled={isSaving}
+                aria-pressed={orientation === 'vertical'}
                 className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
                   orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Vert
+                Story
               </button>
               <button
                 onClick={() => setOrientation('horizontal')}
+                disabled={isSaving}
+                aria-pressed={orientation === 'horizontal'}
                 className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
                   orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Horiz
+                X
               </button>
             </div>
             {showSwapTrigger && (
@@ -502,6 +548,7 @@ export default function ShareModal({
                 </AnimatePresence>
                 <button
                   onClick={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
+                  disabled={isSaving}
                   aria-label="Tune actor and director"
                   className={`relative grid place-items-center w-9 h-9 rounded-full transition ${
                     swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
@@ -526,11 +573,18 @@ export default function ShareModal({
                 aria-checked={showUsername}
                 aria-label="Show username"
                 onClick={() => setShowUsername((value) => !value)}
+                disabled={isSaving}
                 className={`relative h-6 w-11 rounded-full transition-colors ${showUsername ? 'bg-white' : 'bg-white/20'}`}
               >
                 <span className={`absolute top-1 h-4 w-4 rounded-full transition-transform ${showUsername ? 'left-6 bg-black' : 'left-1 bg-white'}`} />
               </button>
             </label>
+          )}
+
+          {exportError && (
+            <p role="alert" className="text-xs text-red-300">
+              {exportError}
+            </p>
           )}
 
           {/* Single dominant CTA */}
@@ -543,7 +597,7 @@ export default function ShareModal({
             style={{ background: isSaving ? '#333' : '#fff', color: isSaving ? '#888' : '#000' }}
           >
             {isSaving ? <LoaderCircle size={18} className="animate-spin" /> : <Download size={18} />}
-            {isSaving ? 'Preparing full-resolution PNG...' : 'Download PNG'}
+            {isSaving ? 'Preparing full-resolution PNG...' : 'Share or save PNG'}
           </button>
         </div>
       </div>
