@@ -372,14 +372,17 @@ export default function ShareModal({
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
 
-      {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className={`relative h-full md:h-[88vh] md:max-h-[920px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden ${
-        orientation === 'horizontal' ? 'md:max-w-[960px]' : 'md:max-w-[600px]'
-      }`}>
+      {/* Bottom sheet on mobile, preview workspace on desktop */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-modal-title"
+        className="relative flex h-full flex-col overflow-hidden bg-[#0f0f0f] md:mx-auto md:mt-6 md:h-[calc(100vh-3rem)] md:max-h-[920px] md:w-[calc(100vw-3rem)] md:max-w-[1180px] md:rounded-3xl"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+        <div className="flex items-center justify-between border-b border-transparent px-5 pb-2 pt-4 md:border-white/10 md:px-6 md:py-4">
           <div>
-            <span className="block text-sm font-semibold text-white/90">Share</span>
+            <span id="share-modal-title" className="block text-sm font-semibold text-white/90">Share</span>
             <span className="block text-[11px] text-slate-500">
               {variantLabel} · {activeIdx + 1}/{SHARE_VARIANTS.length}
             </span>
@@ -394,61 +397,64 @@ export default function ShareModal({
           </button>
         </div>
 
-        {/* Rail — horizontal swipeable variant gallery */}
-        <div
-          ref={railRef}
-          onScroll={handleRailScroll}
-          className={`flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0 ${
-            isSaving ? 'pointer-events-none' : ''
-          }`}
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
-        >
-          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
-            {SHARE_VARIANTS.map((v, i) => {
-              const isActive = i === activeIdx;
-              const inBudget = Math.abs(i - activeIdx) <= 1;
-              return (
-                <section
-                  key={v.key}
-                  data-variant={v.key}
-                  data-active={isActive}
-                  className="shrink-0 snap-center snap-always flex items-center justify-center px-4"
-                  style={{ width: pageW || '100%', height: '100%' }}
-                >
-                  {inBudget && pageW > 0 && pageH > 0 && (
-                    <VariantPage
-                      variantKey={v.key}
-                      target={target}
-                      pageW={pageW}
-                      pageH={pageH}
-                      data={effectiveCardProps}
-                      orientation={orientation}
-                    />
-                  )}
-                </section>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Page indicator dots */}
-        <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
-          {SHARE_VARIANTS.map((v, i) => (
-            <button
-              key={v.key}
-              onClick={() => jumpTo(i)}
-              disabled={isSaving}
-              aria-current={i === activeIdx ? 'true' : undefined}
-              aria-label={`Go to ${v.label}`}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col md:bg-black/20">
+            {/* Rail — horizontal swipeable variant gallery */}
+            <div
+              ref={railRef}
+              onScroll={handleRailScroll}
+              className={`min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden ${
+                isSaving ? 'pointer-events-none' : ''
               }`}
-            />
-          ))}
-        </div>
+              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
+            >
+              <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
+                {SHARE_VARIANTS.map((v, i) => {
+                  const isActive = i === activeIdx;
+                  const inBudget = Math.abs(i - activeIdx) <= 1;
+                  return (
+                    <section
+                      key={v.key}
+                      data-variant={v.key}
+                      data-active={isActive}
+                      className="flex shrink-0 snap-center snap-always items-center justify-center px-4"
+                      style={{ width: pageW || '100%', height: '100%' }}
+                    >
+                      {inBudget && pageW > 0 && pageH > 0 && (
+                        <VariantPage
+                          variantKey={v.key}
+                          target={target}
+                          pageW={pageW}
+                          pageH={pageH}
+                          data={effectiveCardProps}
+                          orientation={orientation}
+                        />
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            </div>
 
-        {/* Footer controls */}
-        <div className="relative px-5 pb-6 pt-3 space-y-3">
+            {/* Page indicator dots */}
+            <div className="flex items-center justify-center gap-1.5 pb-3 pt-2 md:pb-5">
+              {SHARE_VARIANTS.map((v, i) => (
+                <button
+                  key={v.key}
+                  onClick={() => jumpTo(i)}
+                  disabled={isSaving}
+                  aria-current={i === activeIdx ? 'true' : undefined}
+                  aria-label={`Go to ${v.label}`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Footer controls on mobile, dedicated sidebar on desktop */}
+          <div className="relative space-y-3 px-5 pb-6 pt-3 md:w-[300px] md:shrink-0 md:space-y-5 md:overflow-y-auto md:border-l md:border-white/10 md:px-6 md:py-5 lg:w-[340px]">
           {/* Swap drawer (slides up over CTA region when open) */}
           {showSwapTrigger && swapOpen && (
             <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
@@ -599,6 +605,7 @@ export default function ShareModal({
             {isSaving ? <LoaderCircle size={18} className="animate-spin" /> : <Download size={18} />}
             {isSaving ? 'Preparing full-resolution PNG...' : 'Share or save PNG'}
           </button>
+          </div>
         </div>
       </div>
     </div>
