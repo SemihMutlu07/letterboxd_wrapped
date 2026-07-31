@@ -73,19 +73,18 @@ export default function ReviewAnalysisSection({ stats }: Props) {
     [ra?.top_liked_reviews]
   );
   const totalLikes = ra?.total_review_likes ?? null;
-  const reviewsWithLikesData = ra?.reviews_with_likes_data ?? null;
   const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
   const longestReview = useMemo(() => {
     const longest = [...allReviews].sort((a, b) =>
-      (charLen(b) - charLen(a))
-      || (wordCountOf(b) - wordCountOf(a))
+      (wordCountOf(b) - wordCountOf(a))
+      || (charLen(b) - charLen(a))
       || (a.title ?? '').localeCompare(b.title ?? '')
     )[0];
     if (longest) {
-      return { title: longest.title, year: longest.year, length: charLen(longest) };
+      return { title: longest.title, year: longest.year, length: wordCountOf(longest) };
     }
-    return ra?.longest_review ?? null;
-  }, [allReviews, ra?.longest_review]);
+    return null;
+  }, [allReviews]);
 
   // Most loyal fan: whoever liked the most of the user's distinct reviews.
   const mostLoyalFan = useMemo(() => {
@@ -141,35 +140,27 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   return (
     <Section title="Your Reviews" subtitle={subtitleParts.join(' · ')}>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 items-stretch w-full">
-        <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+        <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:p-4 min-w-0">
           <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{ra.reviews_with_text}</p>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">reviews written</p>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">written review</p>
         </div>
 
-        <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+        <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:p-4 min-w-0">
           <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{avgWords}</p>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1">avg words / review</p>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">avg word per review</p>
         </div>
 
         {totalLikes !== null && totalLikes > 0 && (
-          <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:p-4 min-w-0">
             <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{totalLikes}</p>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">likes on your reviews</p>
-            {reviewsWithLikesData !== null && reviewsWithLikesData > 0 && (
-              <p className="mt-2 text-xs text-slate-400 leading-snug">
-                Sum across {reviewsWithLikesData} reviews
-                {' · '}
-                avg {(totalLikes / reviewsWithLikesData).toFixed(1)} per review.
-                Counts likes <em>received</em>, never likes you gave.
-              </p>
-            )}
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">total likes on your reviews</p>
           </div>
         )}
 
         {longestReview && (
-          <div className="bg-slate-800/50 rounded-xl p-3 sm:p-4 min-w-0">
+          <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:p-4 min-w-0">
             <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{longestReview.length}</p>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">chars in your longest review</p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">words on your longest review</p>
             <p className="mt-2 text-xs text-slate-400 truncate">
               {longestReview.title}{longestReview.year ? ` (${longestReview.year})` : ''}
             </p>

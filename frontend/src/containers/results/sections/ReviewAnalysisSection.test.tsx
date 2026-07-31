@@ -95,7 +95,7 @@ describe('ReviewAnalysisSection', () => {
     expect(screen.getAllByText(/Review text for film/).length).toBe(3);
   });
 
-  it('derives the longest review from review characters when backend summary disagrees', async () => {
+  it('derives the longest-review stat from word count, but sorts the list by characters', async () => {
     const reviews = [
       { title: 'Many Words', year: '2024', text: 'a b c d e f g', char_length: 13, word_count: 7, likes: 0, rating: 3 },
       { title: 'Character Winner', year: '2023', text: 'abcdefghijklmnop', char_length: 16, word_count: 1, likes: 0, rating: 4 },
@@ -110,7 +110,7 @@ describe('ReviewAnalysisSection', () => {
       },
     }, [], reviews);
 
-    expect(screen.getByText('Character Winner (2023)')).toBeInTheDocument();
+    expect(screen.getByText('Many Words (2024)')).toBeInTheDocument();
     expect(screen.queryByText(/Wrong Summary/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Longest/i }));
     const renderedReviews = screen.getAllByRole('listitem');
