@@ -23,7 +23,6 @@ vi.mock('@/lib/posthog', () => ({
   captureEvent: vi.fn(),
   getFlagVariant: vi.fn(() => Promise.resolve('control')),
 }));
-vi.mock('@/lib/consentFlow', () => ({ saveConsentDecisionToDb: vi.fn() }));
 vi.mock('@/hooks/useRafThrottle', () => ({ useRafThrottle: (fn: () => void) => fn }));
 vi.mock('@/hooks/useIntersectionObserver', () => ({ useLazyMount: () => ({ ref: null, shouldMount: true }) }));
 vi.mock('@/components/ThemeWrapper', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
@@ -205,23 +204,5 @@ describe('ResultsPage stored-result contracts', () => {
     await userEvent.click(completeDownload);
 
     expect(feedbackSpies.open).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows consent once when the session has no recorded decision', async () => {
-    storeStats();
-    render(<ResultsPage />);
-
-    expect(
-      await screen.findByRole('dialog', { name: /help us improve movies wrapped/i }),
-    ).toBeInTheDocument();
-  });
-
-  it('does not show consent when the session already declined', async () => {
-    sessionStorage.setItem('consent_decision', 'decline');
-    storeStats();
-    render(<ResultsPage />);
-
-    await screen.findByTestId('hero-values');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

@@ -26,7 +26,6 @@ export function useResultsSession() {
   const [isMobile, setIsMobile] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState("");
-  const [showConsent, setShowConsent] = useState(false);
 
   const handleResize = useCallback(() => {
     setIsMobile(window.innerWidth < 480);
@@ -81,16 +80,7 @@ export function useResultsSession() {
       setUsername(storedUsername);
     }
     setSessionId(getOrCreateSessionId());
-    const consentDecision = sessionStorage.getItem("consent_decision");
-    setShowConsent(
-      consentDecision !== "accept" && consentDecision !== "decline",
-    );
   }, []);
-
-  const recordConsentDecision = (decision: "accept" | "decline") => {
-    sessionStorage.setItem("consent_decision", decision);
-    setShowConsent(false);
-  };
 
   return {
     stats,
@@ -98,7 +88,5 @@ export function useResultsSession() {
     isMobile,
     username,
     sessionId,
-    showConsent,
-    recordConsentDecision,
   };
 }

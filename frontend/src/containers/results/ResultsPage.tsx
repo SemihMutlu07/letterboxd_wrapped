@@ -7,7 +7,6 @@ import React, {
   useRef,
 } from "react";
 import Link from "next/link";
-import PreResultsConsentModal from "@/components/PreResultsConsentModal";
 import type { ShareCardData } from "@/components/share/types";
 import type { StatsData } from "@/containers/results/sections/types";
 
@@ -38,8 +37,6 @@ export default function ResultsPage() {
     isMobile,
     username,
     sessionId,
-    showConsent,
-    recordConsentDecision,
   } = useResultsSession();
 
   // share
@@ -236,39 +233,31 @@ export default function ResultsPage() {
   }
 
   return (
-    <>
-      <ThemeProvider>
-        <ThemeWrapper>
-          <ResultsContent
-          stats={stats}
-          sessionId={sessionId}
-          username={username}
-          dateRangeText={dateRangeText}
-          timePct={timePct}
-          runtimeHours={runtimeHours}
-          decadeData={decadeData}
-          decadeMax={decadeMax}
-          isMobile={isMobile}
-          ratingsArr={ratingsArr}
-          ratingMax={ratingMax}
-          cineScore={cineScore}
-          showShareModal={showShareModal}
-          setShowShareModal={setShowShareModal}
-          shareCardData={shareCardData}
-          orientation={orientation}
-          setOrientation={setOrientation}
-          hasTriggeredFeedback={hasTriggeredFeedback}
-          setHasTriggeredFeedback={setHasTriggeredFeedback}
-          feedbackRef={feedbackRef}
-          />
-        </ThemeWrapper>
-      </ThemeProvider>
-      <PreResultsConsentModal
-        open={showConsent}
+    <ThemeProvider>
+      <ThemeWrapper>
+        <ResultsContent
+        stats={stats}
         sessionId={sessionId}
-        onAccept={() => recordConsentDecision("accept")}
-        onDecline={() => recordConsentDecision("decline")}
-      />
-    </>
+        username={username}
+        dateRangeText={dateRangeText}
+        timePct={timePct}
+        runtimeHours={runtimeHours}
+        decadeData={decadeData}
+        decadeMax={decadeMax}
+        isMobile={isMobile}
+        ratingsArr={ratingsArr}
+        ratingMax={ratingMax}
+        cineScore={cineScore}
+        showShareModal={showShareModal}
+        setShowShareModal={setShowShareModal}
+        shareCardData={shareCardData}
+        orientation={orientation}
+        setOrientation={setOrientation}
+        hasTriggeredFeedback={hasTriggeredFeedback}
+        setHasTriggeredFeedback={setHasTriggeredFeedback}
+        feedbackRef={feedbackRef}
+        />
+      </ThemeWrapper>
+    </ThemeProvider>
   );
 }
