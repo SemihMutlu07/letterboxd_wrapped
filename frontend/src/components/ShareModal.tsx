@@ -219,36 +219,51 @@ export default function ShareModal({
     username: showUsername ? cardProps.username : undefined,
   }), [cardProps, actorIdx, directorIdx, showUsername]);
 
-  // Swap hint — show once, persist to localStorage
+  // Swap hint — runs every time the modal opens (ponytail: re-enable the
+  // once-per-browser localStorage gate once this is done being tested).
   const dismissSwapHint = useCallback(() => {
     setHintFading(true);
-    setTimeout(() => {
-      setShowSwapHint(false);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lbw_swap_hint_seen', '1');
-      }
-    }, 300);
+    setTimeout(() => setShowSwapHint(false), 300);
   }, []);
 
-  // Show swap hint on first open if swapTrigger is available
+  // Show swap hint on every open if swapTrigger is available
   useEffect(() => {
     if (!open) return;
     const hasActors = (cardProps.topActors?.length ?? 0) >= 2;
     const hasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
     const swapTrigger = hasActors || hasDirectors;
     if (!swapTrigger) return;
-    if (typeof window !== 'undefined' && localStorage.getItem('lbw_swap_hint_seen')) return;
     setShowSwapHint(true);
     setHintFading(false);
     const t = setTimeout(() => setHintFading(true), 4500);
-    const t2 = setTimeout(() => {
-      setShowSwapHint(false);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lbw_swap_hint_seen', '1');
-      }
-    }, 5000);
+    const t2 = setTimeout(() => setShowSwapHint(false), 5000);
     return () => { clearTimeout(t); clearTimeout(t2); };
   }, [open, cardProps]);
+
+  // While the hint bubble is visible, swap the card to the next actor/director
+  // and back on its own — shows what "tap to change" means instead of just
+  // telling you. Reverts to index 0 before the hint disappears.
+  useEffect(() => {
+    if (!showSwapHint) return;
+    const demoHasActors = (cardProps.topActors?.length ?? 0) >= 2;
+    const demoHasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
+    const setDemoIdx = demoHasActors ? setActorIdx : demoHasDirectors ? setDirectorIdx : null;
+    if (!setDemoIdx) return;
+    const t1 = setTimeout(() => setDemoIdx(1), 1200);
+    const t2 = setTimeout(() => setDemoIdx(0), 3200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [showSwapHint, cardProps]);
+
+  // Also auto-open the swap panel itself during the demo window — a bubble of
+  // text is easy to miss next to the dominant Share CTA, but the panel
+  // physically opening and highlighting a different pick is not. Cancels
+  // cleanly if the user manually toggles it (dismissSwapHint ends showSwapHint).
+  useEffect(() => {
+    if (!showSwapHint) return;
+    const t1 = setTimeout(() => setSwapOpen(true), 800);
+    const t2 = setTimeout(() => setSwapOpen(false), 3800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [showSwapHint]);
 
   const target = useMemo(() => {
     const config = SHARE_EXPORT_CONFIG[orientation];
@@ -455,9 +470,11 @@ export default function ShareModal({
 
           {/* Footer controls on mobile, dedicated sidebar on desktop */}
           <div className="relative space-y-3 px-5 pb-6 pt-3 md:w-[300px] md:shrink-0 md:space-y-5 md:overflow-y-auto md:border-l md:border-white/10 md:px-6 md:py-5 lg:w-[340px]">
-          {/* Swap drawer (slides up over CTA region when open) */}
+          {/* Swap drawer: slides up over the CTA region on mobile. On desktop the
+              sidebar scrolls (md:overflow-y-auto), which clips anything positioned
+              above its own top edge — so open downward there instead. */}
           {showSwapTrigger && swapOpen && (
-            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
+            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 z-20 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
               {hasActors && (
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 w-16 shrink-0">Actor</span>
