@@ -31,7 +31,7 @@ Frontend is a static Next.js export; backend is FastAPI that processes uploads/s
 ## Environment variables (never hardcode values)
 Backend:
 - `TMDB_API_KEY` (required)
-- `FRONTEND_ORIGINS` (optional comma-separated extra CORS origins; the 2 production Netlify URLs are already hardcoded)
+- `FRONTEND_ORIGINS` (optional comma-separated extra CORS origins; the custom domain and production Netlify URLs are already hardcoded)
 - `SUPABASE_URL` (new project: `https://ghumergebwwrwlykwjsu.supabase.co`)
 - `SUPABASE_ANON_KEY` (publishable key only — never service_role)
 
@@ -219,4 +219,3 @@ calls (no Supabase JS SDK), always wrapped in try/except that logs warnings inst
 - Migration SQL lives in `backend/migrations/` with sequential naming: `001_*.sql`, `002_*.sql`, etc.
 - Run migrations in Supabase Dashboard → SQL Editor.
 - Backwards-compatible only — new columns must have defaults or be nullable.
-

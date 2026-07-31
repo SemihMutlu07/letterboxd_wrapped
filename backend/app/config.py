@@ -59,6 +59,8 @@ class Settings(BaseSettings):
         base = [
             "http://localhost:3000",
             "http://localhost:3001",
+            "https://movieswrapped.com",
+            "https://www.movieswrapped.com",
             "https://movieswrapped.netlify.app",
             "https://letterboxd-wrapped.netlify.app",
         ]
