@@ -136,7 +136,13 @@ function Stop-WorkerChild {
 
 function Update-RepoFastForward {
     Write-SupervisorLog "verifying desktop_server checkout before worker start"
+    $previousErrorActionPreference = $ErrorActionPreference
     try {
+        # git writes routine progress info (e.g. "From https://...") to stderr; with
+        # $ErrorActionPreference = "Stop" a 2>&1 redirect turns those harmless lines into
+        # terminating errors before the exit-code check below ever runs. Relax it for the
+        # native git calls only.
+        $ErrorActionPreference = "Continue"
         $RepoDir = Split-Path $BackendDir -Parent
         $output = git -C $RepoDir fetch origin desktop_server 2>&1
         foreach ($line in $output) { Write-SupervisorLog ("git: {0}" -f $line) }
@@ -154,6 +160,8 @@ function Update-RepoFastForward {
     } catch {
         Write-SupervisorLog ("git pull failed: {0}" -f $_.Exception.Message)
         throw
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 }
 
