@@ -1,0 +1,19 @@
+# ai.txt — Movies Wrapped (movieswrapped.com)
+# AI agent'lar ve LLM'ler için insan-okunur erişim özeti.
+
+## About
+Movies Wrapped is a free web app that transforms a Letterboxd watch history into a personalized film dossier: total films, average rating, runtime, genres, decades, countries, directors, actors, review analysis, and a cinema-scale score (0-100). No account required.
+
+## Access
+- Full public pages: https://movieswrapped.com/
+- Static HTML, no JavaScript required to read content.
+- See /llms.txt for a structured markdown index.
+- API endpoints (/api/*) are internal; not required for understanding the product.
+
+## Data policy
+- Users upload their Letterboxd export locally; raw files are processed for analysis and are not stored.
+- Anonymous aggregate usage statistics only.
+
+## Best entry points
+- https://movieswrapped.com/ — landing + product explanation
+- https://movieswrapped.com/llms.txt — machine-readable site index
