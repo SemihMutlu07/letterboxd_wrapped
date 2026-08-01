@@ -23,7 +23,7 @@ type Props = {
   events?: { stage?: string; message?: string; metrics?: Record<string, unknown>; elapsed_seconds?: number }[];
   /** Pixelated poster guessing game, shown while scraping. */
   posterGame?: PosterGameProps | null;
-  /** Set once the scrape/analysis is done — shows a "See Wrapped" button instead of auto-redirecting. */
+  /** Legacy transition signal. LoadingScreen intentionally never exposes navigation. */
   resultReady?: string | null;
 };
 
@@ -65,7 +65,6 @@ export default function LoadingScreen({
   typicalSeconds,
   events,
   posterGame,
-  resultReady,
 }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [funMessageIndex, setFunMessageIndex] = useState(0);
@@ -160,17 +159,6 @@ export default function LoadingScreen({
           <div className="mb-5">
             <PosterGuessGame {...posterGame} />
           </div>
-        )}
-
-        {resultReady && (
-          <button
-            onClick={() => {
-              window.location.href = resultReady;
-            }}
-            className="mb-5 w-full rounded-xl bg-orange-500 px-6 py-3 text-base font-bold text-white shadow-lg shadow-orange-500/25 transition hover:bg-orange-400 active:scale-[0.98]"
-          >
-            See Wrapped
-          </button>
         )}
 
         {/* Progress + remaining time */}

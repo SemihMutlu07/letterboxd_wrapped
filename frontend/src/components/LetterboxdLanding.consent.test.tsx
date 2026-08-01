@@ -17,6 +17,15 @@ const sessionMocks = vi.hoisted(() => ({
   upsertUserSession: vi.fn(),
 }));
 
+const routerMocks = vi.hoisted(() => ({
+  prefetch: vi.fn(),
+  push: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => routerMocks,
+}));
+
 vi.mock('@/lib/api', () => ({
   analyzeFiles: vi.fn(),
   parseLetterboxdUsername: vi.fn(),
@@ -82,5 +91,21 @@ describe('LetterboxdLanding persistence consent gate', () => {
         expect.objectContaining({ username: 'alice', consent: 'accept' }),
       );
     });
+  });
+
+  it('sends the selected rolling analysis period to the scraper', async () => {
+    const user = userEvent.setup();
+    render(<LetterboxdLanding />);
+
+    await user.selectOptions(screen.getByLabelText('Analysis period'), 'month');
+    await user.type(document.querySelector('input[name="username"]')!, 'alice');
+    await user.click(screen.getByRole('button', { name: /analyze/i }));
+
+    await waitFor(() => expect(apiMocks.scrapeProfile).toHaveBeenCalledWith(
+      'alice',
+      'month',
+      undefined,
+      expect.any(Function),
+    ));
   });
 });

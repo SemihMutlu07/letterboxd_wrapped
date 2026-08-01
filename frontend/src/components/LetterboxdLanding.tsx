@@ -2,6 +2,7 @@
 
 import JSZip from 'jszip';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Upload, Users, X, UserRound, Sparkles, PartyPopper } from 'lucide-react';
 import {
@@ -99,6 +100,7 @@ function drawShuffledMovie(deckRef: React.MutableRefObject<PosterGameMovie[]>, i
 }
 
 export default function LetterboxdLanding() {
+  const router = useRouter();
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
@@ -111,12 +113,11 @@ export default function LetterboxdLanding() {
   const [posterRoundsPlayed, setPosterRoundsPlayed] = useState(0);
   const shuffledDeckRef = useRef<PosterGameMovie[]>([]);
   const deckIndexRef = useRef(0);
-  const [resultReady, setResultReady] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [usernameFocused, setUsernameFocused] = useState(false);
   const usernamePlaceholder = useTypewriterPlaceholder(USERNAME_PLACEHOLDER_EXAMPLES, !usernameFocused && usernameInput.length === 0);
-  const [analysisPeriod] = useState<AnalysisPeriod>('year');
+  const [analysisPeriod, setAnalysisPeriod] = useState<AnalysisPeriod>('year');
   const [error, setError] = useState<NormalizedError | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
@@ -412,9 +413,10 @@ export default function LetterboxdLanding() {
     setPosterRevealed(false);
     shuffledDeckRef.current = [];
     deckIndexRef.current = 0;
-    setResultReady(null);
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape', analysis_period: analysisPeriod });
+    const destination = resultPath(username);
+    router.prefetch(destination);
 
     const sessionId = ensureSessionId();
     const hasPersistenceConsent = getConsent() === 'accept';
@@ -454,7 +456,7 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setResultReady(resultPath(username));
+      router.push(destination);
     } catch (err) {
       console.error('[scrape] analysis failed:', err);
       const normalized = normalizeError(err);
@@ -478,7 +480,7 @@ export default function LetterboxdLanding() {
         });
       }
     }
-  }, [analysisPeriod, usernameInput]);
+  }, [analysisPeriod, router, usernameInput]);
 
   const handleCancel = useCallback(() => {
     setIsUploading(false);
@@ -491,7 +493,6 @@ export default function LetterboxdLanding() {
     setPosterRevealed(false);
     shuffledDeckRef.current = [];
     deckIndexRef.current = 0;
-    setResultReady(null);
     setError(null);
   }, []);
 
@@ -518,7 +519,6 @@ export default function LetterboxdLanding() {
               }
             : null
         }
-        resultReady={resultReady}
       />
     );
   }
@@ -553,7 +553,7 @@ export default function LetterboxdLanding() {
             <h1 className="font-black tracking-tight leading-[0.95] text-[clamp(28px,6vw,48px)] text-white">
               Movies Wrapped
             </h1>
-            <p className="mx-auto mt-3 text-base sm:text-lg leading-relaxed text-white/80">Your Letterboxd year, re-edited.</p>
+            <p className="mx-auto mt-3 text-base sm:text-lg leading-relaxed text-white/80">Your Letterboxd, re-edited.</p>
           </header>
 
           {/* Username — primary CTA */}
@@ -566,35 +566,53 @@ export default function LetterboxdLanding() {
                   e.preventDefault();
                   void handleScrape();
                 }}
-                className="mx-auto mt-5 flex max-w-md flex-col gap-3 sm:flex-row"
+                className="mx-auto mt-5 max-w-md space-y-3"
               >
-                <label className="relative flex-1">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-white/40">@</span>
-                  <input
-                    type="text"
-                    name="username"
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    onFocus={() => setUsernameFocused(true)}
-                    onBlur={() => setUsernameFocused(false)}
-                    placeholder={usernamePlaceholder}
-                    autoFocus
-                    autoComplete="username"
-                    spellCheck={false}
-                    className="w-full rounded-xl py-3 pl-9 pr-4 text-base font-semibold text-white placeholder:text-white/40 placeholder:font-normal focus:outline-none transition-shadow"
-                    style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(30, 37, 45, 0.7)', boxShadow: usernameFocused ? '0 0 0 2px rgba(255, 127, 0, 0.6)' : undefined }}
-                  />
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <label className="relative flex-1">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-white/40">@</span>
+                    <input
+                      type="text"
+                      name="username"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      onFocus={() => setUsernameFocused(true)}
+                      onBlur={() => setUsernameFocused(false)}
+                      placeholder={usernamePlaceholder}
+                      autoFocus
+                      autoComplete="username"
+                      spellCheck={false}
+                      className="w-full rounded-xl py-3 pl-9 pr-4 text-base font-semibold text-white placeholder:text-white/40 placeholder:font-normal focus:outline-none transition-shadow"
+                      style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(30, 37, 45, 0.7)', boxShadow: usernameFocused ? '0 0 0 2px rgba(255, 127, 0, 0.6)' : undefined }}
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={!usernameInput.trim()}
+                    className="rounded-xl px-6 py-3 text-base font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed"
+                    style={usernameInput.trim()
+                      ? { backgroundColor: '#ff7f00', color: '#1b1c1e' }
+                      : { backgroundColor: '#1f262e', color: 'rgba(255,255,255,0.4)' }}
+                  >
+                    Analyze →
+                  </button>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-left">
+                  <span>
+                    <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Analysis period</span>
+                    <span className="mt-0.5 block text-xs text-white/65">Only films watched in this window</span>
+                  </span>
+                  <select
+                    aria-label="Analysis period"
+                    value={analysisPeriod}
+                    onChange={(event) => setAnalysisPeriod(event.target.value as AnalysisPeriod)}
+                    className="min-h-10 rounded-lg border border-orange-400/25 bg-[#1e252d] px-3 text-sm font-semibold text-orange-300 outline-none focus:border-orange-400"
+                  >
+                    <option value="month">Last 30 days</option>
+                    <option value="year">Last 12 months</option>
+                  </select>
                 </label>
-                <button
-                  type="submit"
-                  disabled={!usernameInput.trim()}
-                  className="rounded-xl px-6 py-3 text-base font-semibold transition active:scale-[0.98] disabled:cursor-not-allowed"
-                  style={usernameInput.trim()
-                    ? { backgroundColor: '#ff7f00', color: '#1b1c1e' }
-                    : { backgroundColor: '#1f262e', color: 'rgba(255,255,255,0.4)' }}
-                >
-                  Analyze →
-                </button>
               </form>
 
             </div>
@@ -630,7 +648,7 @@ export default function LetterboxdLanding() {
             {[
               { icon: UserRound, title: 'Enter username', desc: 'Type your Letterboxd handle or upload your export.', color: '#ff8000' },
               { icon: Sparkles, title: 'We analyze', desc: 'We crunch every film, rating, and genre you logged.', color: '#00e054' },
-              { icon: PartyPopper, title: 'Get your Wrapped', desc: 'A shareable recap of your year in film.', color: '#40bcf4' },
+              { icon: PartyPopper, title: 'Get your Wrapped', desc: 'A shareable recap of your films.', color: '#40bcf4' },
             ].map(({ icon: Icon, title, desc, color }) => (
               <div
                 key={title}
