@@ -285,7 +285,7 @@ export function ResultsContent({
             <button
               onClick={() => {
                 setShowShareModal(true);
-                trackEvent("share_export_started");
+                trackEvent("share_modal_opened");
               }}
               className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl transition-all hover:scale-105"
               style={{
@@ -397,7 +397,7 @@ export function ResultsContent({
             <button
               onClick={() => {
                 setShowShareModal(true);
-                trackEvent("share_export_started");
+                trackEvent("share_modal_opened");
               }}
               className="flex items-center gap-2 px-8 py-4 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 rounded-xl"
               style={{
@@ -428,30 +428,16 @@ export function ResultsContent({
             >
               View as Story
             </Link>
-            <p
-              className="text-xs text-center"
-              style={{
-                color:
-                  theme === "current"
-                    ? "#64748b"
-                    : theme === "vhs"
-                      ? "#d4955a"
-                      : "#6a6a6a",
-              }}
-            >
-              Your raw files are never stored. Only anonymous, aggregated usage
-              stats are kept to improve the product.
-            </p>
           </div>
 
           <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
             <p className="text-sm text-slate-300">
-              Built by Semih Mutlu with Berdan Mengünoğlu — many features here
-              were his ideas, and his code.
+              Built by Semih Mutlu with Berdan Mengünoğlu. Many features here
+              were his ideas and his code.
             </p>
             <p className="text-xs text-slate-400">
-              Thanks to our beta testers — Mete, Mehlika Ceylin Aydoğan, Salih
-              Emre Padır, Mert Efe Şentürk, Deniz and Ayberk — for the
+              Thanks to our beta testers: Mete, Mehlika Ceylin Aydoğan, Salih
+              Emre Padır, Mert Efe Şentürk, Deniz and Ayberk for the
               invaluable feedback.
             </p>
             <p className="text-xs text-slate-400">
@@ -484,7 +470,6 @@ export function ResultsContent({
         setOrientation={setOrientation}
         cardProps={shareCardData}
         onDownloadSuccess={() => {
-          trackEvent("share_export_succeeded");
           if (!hasTriggeredFeedback) {
             setHasTriggeredFeedback(true);
             feedbackRef.current?.open();

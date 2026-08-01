@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ResultsContent } from '../../../app/results/page';
 import { ThemeProvider } from '@/lib/theme';
+import { trackEvent } from '@/lib/analytics';
 
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -98,5 +99,6 @@ describe('ResultsPage ShareModal dynamic loading', () => {
     await waitFor(() => {
       expect(screen.getByTestId('share-modal')).toBeInTheDocument();
     });
+    expect(trackEvent).toHaveBeenCalledWith('share_modal_opened');
   });
 });

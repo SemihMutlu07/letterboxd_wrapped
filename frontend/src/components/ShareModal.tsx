@@ -86,24 +86,24 @@ export async function exportExactPng(el: HTMLElement, orientation: Orientation, 
 
 async function shareToSystem(blob: Blob) {
   const { isMobile } = getPlatformInfo();
-  if (!isMobile || !navigator.share) return false;
+  if (!isMobile || !navigator.share) return 'unavailable' as const;
   const file = new File([blob], EXPORT_FILE_NAME, { type: 'image/png' });
   const canShareFiles = !!(navigator.canShare && navigator.canShare({ files: [file] }));
   try {
     if (canShareFiles) {
       await navigator.share({ files: [file], title: 'Movies Wrapped' });
-      return true;
+      return 'shared' as const;
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return true;
+    if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled' as const;
     throw error;
   }
-  return false;
+  return 'unavailable' as const;
 }
 
 async function saveWithFilePicker(blob: Blob) {
   const { isMobile } = getPlatformInfo();
-  if (isMobile || !window.isSecureContext) return false;
+  if (isMobile || !window.isSecureContext) return 'unavailable' as const;
   type WindowWithFilePicker = Window & {
     showSaveFilePicker?: (opts: {
       suggestedName: string;
@@ -111,7 +111,8 @@ async function saveWithFilePicker(blob: Blob) {
     }) => Promise<any>;
   };
   const typedWindow = window as WindowWithFilePicker;
-  if (typedWindow.showSaveFilePicker) {
+  if (!typedWindow.showSaveFilePicker) return 'unavailable' as const;
+  try {
     const handle = await typedWindow.showSaveFilePicker({
       suggestedName: EXPORT_FILE_NAME,
       types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }],
@@ -119,9 +120,11 @@ async function saveWithFilePicker(blob: Blob) {
     const writable = await handle.createWritable();
     await writable.write(blob);
     await writable.close();
-    return true;
+    return 'saved' as const;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled' as const;
+    throw error;
   }
-  return false;
 }
 
 function downloadFallback(blob: Blob) {
@@ -189,8 +192,10 @@ export default function ShareModal({
   const [showSwapHint, setShowSwapHint] = useState(false);
   const [hintFading, setHintFading] = useState(false);
   const [showUsername, setShowUsername] = useState(true);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const variantKey = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].key;
+  const variantLabel = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].label;
 
   useEffect(() => {
     if (!open) return;
@@ -199,6 +204,7 @@ export default function ShareModal({
     setActiveIdx(0);
     setSwapOpen(false);
     setShowUsername(true);
+    setExportError(null);
   }, [open]);
 
   useEffect(() => {
@@ -213,36 +219,51 @@ export default function ShareModal({
     username: showUsername ? cardProps.username : undefined,
   }), [cardProps, actorIdx, directorIdx, showUsername]);
 
-  // Swap hint — show once, persist to localStorage
+  // Swap hint — runs every time the modal opens (ponytail: re-enable the
+  // once-per-browser localStorage gate once this is done being tested).
   const dismissSwapHint = useCallback(() => {
     setHintFading(true);
-    setTimeout(() => {
-      setShowSwapHint(false);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lbw_swap_hint_seen', '1');
-      }
-    }, 300);
+    setTimeout(() => setShowSwapHint(false), 300);
   }, []);
 
-  // Show swap hint on first open if swapTrigger is available
+  // Show swap hint on every open if swapTrigger is available
   useEffect(() => {
     if (!open) return;
     const hasActors = (cardProps.topActors?.length ?? 0) >= 2;
     const hasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
     const swapTrigger = hasActors || hasDirectors;
     if (!swapTrigger) return;
-    if (typeof window !== 'undefined' && localStorage.getItem('lbw_swap_hint_seen')) return;
     setShowSwapHint(true);
     setHintFading(false);
     const t = setTimeout(() => setHintFading(true), 4500);
-    const t2 = setTimeout(() => {
-      setShowSwapHint(false);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('lbw_swap_hint_seen', '1');
-      }
-    }, 5000);
+    const t2 = setTimeout(() => setShowSwapHint(false), 5000);
     return () => { clearTimeout(t); clearTimeout(t2); };
   }, [open, cardProps]);
+
+  // While the hint bubble is visible, swap the card to the next actor/director
+  // and back on its own — shows what "tap to change" means instead of just
+  // telling you. Reverts to index 0 before the hint disappears.
+  useEffect(() => {
+    if (!showSwapHint) return;
+    const demoHasActors = (cardProps.topActors?.length ?? 0) >= 2;
+    const demoHasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
+    const setDemoIdx = demoHasActors ? setActorIdx : demoHasDirectors ? setDirectorIdx : null;
+    if (!setDemoIdx) return;
+    const t1 = setTimeout(() => setDemoIdx(1), 1200);
+    const t2 = setTimeout(() => setDemoIdx(0), 3200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [showSwapHint, cardProps]);
+
+  // Also auto-open the swap panel itself during the demo window — a bubble of
+  // text is easy to miss next to the dominant Share CTA, but the panel
+  // physically opening and highlighting a different pick is not. Cancels
+  // cleanly if the user manually toggles it (dismissSwapHint ends showSwapHint).
+  useEffect(() => {
+    if (!showSwapHint) return;
+    const t1 = setTimeout(() => setSwapOpen(true), 800);
+    const t2 = setTimeout(() => setSwapOpen(false), 3800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [showSwapHint]);
 
   const target = useMemo(() => {
     const config = SHARE_EXPORT_CONFIG[orientation];
@@ -299,11 +320,17 @@ export default function ShareModal({
 
   const handleSavePNG = async () => {
     if (isSaving) return;
+    const exportRoot = findExportRoot();
+    if (!exportRoot) {
+      setExportError('Could not prepare this card. Try again.');
+      trackEvent('share_export_failed', { variant: variantKey, orientation, reason: 'missing_export_root' });
+      return;
+    }
     setIsSaving(true);
+    setExportError(null);
+    trackEvent('share_export_started', { variant: variantKey, orientation });
     const originalSrcs: string[] = [];
     try {
-      const exportRoot = findExportRoot();
-      if (!exportRoot) throw new Error('Export root not found');
       const images = Array.from(exportRoot.querySelectorAll('img'));
       images.forEach((img, i) => {
         originalSrcs[i] = img.src;
@@ -316,19 +343,35 @@ export default function ShareModal({
       const bg = '#0B1220';
       const blob = await exportExactPng(exportRoot, orientation, bg);
       let method: 'system_share' | 'file_picker' | 'download' = 'download';
-      const shared = await shareToSystem(blob);
-      if (shared) { method = 'system_share'; }
-      else { const saved = await saveWithFilePicker(blob); if (saved) method = 'file_picker'; else downloadFallback(blob); }
+      const shareResult = await shareToSystem(blob);
+      if (shareResult === 'cancelled') {
+        trackEvent('share_export_cancelled', { variant: variantKey, orientation, method: 'system_share' });
+        return;
+      }
+      if (shareResult === 'shared') {
+        method = 'system_share';
+      } else {
+        const pickerResult = await saveWithFilePicker(blob);
+        if (pickerResult === 'cancelled') {
+          trackEvent('share_export_cancelled', { variant: variantKey, orientation, method: 'file_picker' });
+          return;
+        }
+        if (pickerResult === 'saved') method = 'file_picker';
+        else downloadFallback(blob);
+      }
       trackEvent('share_export_succeeded', { variant: variantKey, orientation, method });
       onDownloadSuccess?.();
     } catch (err) {
       console.error('Export failed:', err);
+      setExportError('Could not export this card. Try again.');
+      trackEvent('share_export_failed', {
+        variant: variantKey,
+        orientation,
+        reason: err instanceof Error ? err.name : 'unknown',
+      });
     } finally {
-      const exportRoot = findExportRoot();
-      if (exportRoot) {
-        const imgs = exportRoot.querySelectorAll('img');
-        imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
-      }
+      const imgs = exportRoot.querySelectorAll('img');
+      imgs.forEach((img, i) => { if (originalSrcs[i]) img.src = originalSrcs[i]; });
       setIsSaving(false);
     }
   };
@@ -342,15 +385,26 @@ export default function ShareModal({
   return (
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
 
-      {/* Bottom sheet on mobile, centered modal on desktop */}
-      <div className="relative h-full md:h-[88vh] md:max-h-[920px] md:max-w-[600px] md:mx-auto md:mt-8 flex flex-col bg-[#0f0f0f] md:rounded-3xl overflow-hidden">
+      {/* Bottom sheet on mobile, preview workspace on desktop */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="share-modal-title"
+        className="relative flex h-full flex-col overflow-hidden bg-[#0f0f0f] md:mx-auto md:mt-6 md:h-[calc(100vh-3rem)] md:max-h-[920px] md:w-[calc(100vw-3rem)] md:max-w-[1180px] md:rounded-3xl"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <span className="text-sm font-semibold text-white/90">Share</span>
+        <div className="flex items-center justify-between border-b border-transparent px-5 pb-2 pt-4 md:border-white/10 md:px-6 md:py-4">
+          <div>
+            <span id="share-modal-title" className="block text-sm font-semibold text-white/90">Share</span>
+            <span className="block text-[11px] text-slate-500">
+              {variantLabel} · {activeIdx + 1}/{SHARE_VARIANTS.length}
+            </span>
+          </div>
           <button
             onClick={onClose}
+            disabled={isSaving}
             className="grid place-items-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
             aria-label="Close"
           >
@@ -358,60 +412,69 @@ export default function ShareModal({
           </button>
         </div>
 
-        {/* Rail — horizontal swipeable variant gallery */}
-        <div
-          ref={railRef}
-          onScroll={handleRailScroll}
-          className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory min-h-0"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
-        >
-          <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
-            {SHARE_VARIANTS.map((v, i) => {
-              const isActive = i === activeIdx;
-              const inBudget = Math.abs(i - activeIdx) <= 1;
-              return (
-                <section
-                  key={v.key}
-                  data-variant={v.key}
-                  data-active={isActive}
-                  className="shrink-0 snap-center snap-always flex items-center justify-center px-4"
-                  style={{ width: pageW || '100%', height: '100%' }}
-                >
-                  {inBudget && pageW > 0 && pageH > 0 && (
-                    <VariantPage
-                      variantKey={v.key}
-                      target={target}
-                      pageW={pageW}
-                      pageH={pageH}
-                      data={effectiveCardProps}
-                      orientation={orientation}
-                    />
-                  )}
-                </section>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Page indicator dots */}
-        <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
-          {SHARE_VARIANTS.map((v, i) => (
-            <button
-              key={v.key}
-              onClick={() => jumpTo(i)}
-              aria-label={`Go to ${v.label}`}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col md:bg-black/20">
+            {/* Rail — horizontal swipeable variant gallery */}
+            <div
+              ref={railRef}
+              onScroll={handleRailScroll}
+              className={`min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden ${
+                isSaving ? 'pointer-events-none' : ''
               }`}
-            />
-          ))}
-        </div>
+              style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
+            >
+              <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
+                {SHARE_VARIANTS.map((v, i) => {
+                  const isActive = i === activeIdx;
+                  const inBudget = Math.abs(i - activeIdx) <= 1;
+                  return (
+                    <section
+                      key={v.key}
+                      data-variant={v.key}
+                      data-active={isActive}
+                      className="flex shrink-0 snap-center snap-always items-center justify-center px-4"
+                      style={{ width: pageW || '100%', height: '100%' }}
+                    >
+                      {inBudget && pageW > 0 && pageH > 0 && (
+                        <VariantPage
+                          variantKey={v.key}
+                          target={target}
+                          pageW={pageW}
+                          pageH={pageH}
+                          data={effectiveCardProps}
+                          orientation={orientation}
+                        />
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            </div>
 
-        {/* Footer controls */}
-        <div className="relative px-5 pb-6 pt-3 space-y-3">
-          {/* Swap drawer (slides up over CTA region when open) */}
+            {/* Page indicator dots */}
+            <div className="flex items-center justify-center gap-1.5 pb-3 pt-2 md:pb-5">
+              {SHARE_VARIANTS.map((v, i) => (
+                <button
+                  key={v.key}
+                  onClick={() => jumpTo(i)}
+                  disabled={isSaving}
+                  aria-current={i === activeIdx ? 'true' : undefined}
+                  aria-label={`Go to ${v.label}`}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Footer controls on mobile, dedicated sidebar on desktop */}
+          <div className="relative space-y-3 px-5 pb-6 pt-3 md:w-[300px] md:shrink-0 md:space-y-5 md:overflow-y-auto md:border-l md:border-white/10 md:px-6 md:py-5 lg:w-[340px]">
+          {/* Swap drawer: slides up over the CTA region on mobile. On desktop the
+              sidebar scrolls (md:overflow-y-auto), which clips anything positioned
+              above its own top edge — so open downward there instead. */}
           {showSwapTrigger && swapOpen && (
-            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
+            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 md:bottom-auto md:top-16 md:mb-0 md:mt-2 z-20 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
               {hasActors && (
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 w-16 shrink-0">Actor</span>
@@ -420,6 +483,7 @@ export default function ShareModal({
                       <button
                         key={a.name}
                         onClick={() => setActorIdx(i)}
+                        disabled={isSaving}
                         className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                           actorIdx === i
                             ? 'text-pink-300 bg-pink-500/15'
@@ -440,6 +504,7 @@ export default function ShareModal({
                       <button
                         key={d.name}
                         onClick={() => setDirectorIdx(i)}
+                        disabled={isSaving}
                         className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                           directorIdx === i
                             ? 'text-cyan-300 bg-cyan-500/15'
@@ -460,19 +525,23 @@ export default function ShareModal({
             <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
               <button
                 onClick={() => setOrientation('vertical')}
+                disabled={isSaving}
+                aria-pressed={orientation === 'vertical'}
                 className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
                   orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Vert
+                Story
               </button>
               <button
                 onClick={() => setOrientation('horizontal')}
+                disabled={isSaving}
+                aria-pressed={orientation === 'horizontal'}
                 className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
                   orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Horiz
+                X
               </button>
             </div>
             {showSwapTrigger && (
@@ -502,6 +571,7 @@ export default function ShareModal({
                 </AnimatePresence>
                 <button
                   onClick={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
+                  disabled={isSaving}
                   aria-label="Tune actor and director"
                   className={`relative grid place-items-center w-9 h-9 rounded-full transition ${
                     swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
@@ -526,11 +596,18 @@ export default function ShareModal({
                 aria-checked={showUsername}
                 aria-label="Show username"
                 onClick={() => setShowUsername((value) => !value)}
+                disabled={isSaving}
                 className={`relative h-6 w-11 rounded-full transition-colors ${showUsername ? 'bg-white' : 'bg-white/20'}`}
               >
                 <span className={`absolute top-1 h-4 w-4 rounded-full transition-transform ${showUsername ? 'left-6 bg-black' : 'left-1 bg-white'}`} />
               </button>
             </label>
+          )}
+
+          {exportError && (
+            <p role="alert" className="text-xs text-red-300">
+              {exportError}
+            </p>
           )}
 
           {/* Single dominant CTA */}
@@ -543,8 +620,9 @@ export default function ShareModal({
             style={{ background: isSaving ? '#333' : '#fff', color: isSaving ? '#888' : '#000' }}
           >
             {isSaving ? <LoaderCircle size={18} className="animate-spin" /> : <Download size={18} />}
-            {isSaving ? 'Preparing full-resolution PNG...' : 'Download PNG'}
+            {isSaving ? 'Preparing full-resolution PNG...' : 'Share or save PNG'}
           </button>
+          </div>
         </div>
       </div>
     </div>

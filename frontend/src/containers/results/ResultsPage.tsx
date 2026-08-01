@@ -5,17 +5,14 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-  useCallback,
 } from "react";
 import Link from "next/link";
-import PreResultsConsentModal from "@/components/PreResultsConsentModal";
 import type { ShareCardData } from "@/components/share/types";
 import type { StatsData } from "@/containers/results/sections/types";
 
 import { ThemeProvider } from "@/lib/theme";
 import ThemeWrapper from "@/components/ThemeWrapper";
 import type { FeedbackFabRef } from "@/components/FeedbackFab";
-import { searchPerson } from "@/lib/api";
 import {
   getTmdbImageUrl,
   trackEvent,
@@ -40,8 +37,6 @@ export default function ResultsPage() {
     isMobile,
     username,
     sessionId,
-    showConsent,
-    recordConsentDecision,
   } = useResultsSession();
 
   // share
@@ -49,7 +44,6 @@ export default function ResultsPage() {
   const [orientation, setOrientation] = useState<"horizontal" | "vertical">(
     "vertical",
   );
-  const [directorImageUrl, setDirectorImageUrl] = useState<string>("");
 
   // feedback
   const feedbackRef = useRef<FeedbackFabRef>(null);
@@ -203,30 +197,6 @@ export default function ResultsPage() {
     runtimeHours,
   ]);
 
-  // Load director headshot with lazy loading
-  const loadDirectorImage = useCallback(async () => {
-    const nm = stats?.most_watched_director?.name;
-    if (!nm) return;
-
-    if (process.env.NEXT_PUBLIC_API_BASE) {
-      try {
-        const data = await searchPerson(nm, "director");
-        if (data.found && data.url) {
-          const imageUrl = getTmdbImageUrl(data.url);
-          if (imageUrl && !directorImageUrl) {
-            setDirectorImageUrl(imageUrl);
-          }
-        }
-      } catch {
-        // Silent
-      }
-    }
-  }, [stats?.most_watched_director?.name, directorImageUrl]);
-
-  useEffect(() => {
-    loadDirectorImage();
-  }, [loadDirectorImage]);
-
   useEffect(() => {
     // Analytics for results viewed
     if (stats) {
@@ -263,39 +233,31 @@ export default function ResultsPage() {
   }
 
   return (
-    <>
-      <ThemeProvider>
-        <ThemeWrapper>
-          <ResultsContent
-          stats={stats}
-          sessionId={sessionId}
-          username={username}
-          dateRangeText={dateRangeText}
-          timePct={timePct}
-          runtimeHours={runtimeHours}
-          decadeData={decadeData}
-          decadeMax={decadeMax}
-          isMobile={isMobile}
-          ratingsArr={ratingsArr}
-          ratingMax={ratingMax}
-          cineScore={cineScore}
-          showShareModal={showShareModal}
-          setShowShareModal={setShowShareModal}
-          shareCardData={shareCardData}
-          orientation={orientation}
-          setOrientation={setOrientation}
-          hasTriggeredFeedback={hasTriggeredFeedback}
-          setHasTriggeredFeedback={setHasTriggeredFeedback}
-          feedbackRef={feedbackRef}
-          />
-        </ThemeWrapper>
-      </ThemeProvider>
-      <PreResultsConsentModal
-        open={showConsent}
+    <ThemeProvider>
+      <ThemeWrapper>
+        <ResultsContent
+        stats={stats}
         sessionId={sessionId}
-        onAccept={() => recordConsentDecision("accept")}
-        onDecline={() => recordConsentDecision("decline")}
-      />
-    </>
+        username={username}
+        dateRangeText={dateRangeText}
+        timePct={timePct}
+        runtimeHours={runtimeHours}
+        decadeData={decadeData}
+        decadeMax={decadeMax}
+        isMobile={isMobile}
+        ratingsArr={ratingsArr}
+        ratingMax={ratingMax}
+        cineScore={cineScore}
+        showShareModal={showShareModal}
+        setShowShareModal={setShowShareModal}
+        shareCardData={shareCardData}
+        orientation={orientation}
+        setOrientation={setOrientation}
+        hasTriggeredFeedback={hasTriggeredFeedback}
+        setHasTriggeredFeedback={setHasTriggeredFeedback}
+        feedbackRef={feedbackRef}
+        />
+      </ThemeWrapper>
+    </ThemeProvider>
   );
 }

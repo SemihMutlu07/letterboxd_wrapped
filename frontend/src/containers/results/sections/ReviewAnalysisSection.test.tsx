@@ -95,7 +95,7 @@ describe('ReviewAnalysisSection', () => {
     expect(screen.getAllByText(/Review text for film/).length).toBe(3);
   });
 
-  it('derives the longest review from review characters when backend summary disagrees', async () => {
+  it('derives the longest-review stat from word count, but sorts the list by characters', async () => {
     const reviews = [
       { title: 'Many Words', year: '2024', text: 'a b c d e f g', char_length: 13, word_count: 7, likes: 0, rating: 3 },
       { title: 'Character Winner', year: '2023', text: 'abcdefghijklmnop', char_length: 16, word_count: 1, likes: 0, rating: 4 },
@@ -110,10 +110,25 @@ describe('ReviewAnalysisSection', () => {
       },
     }, [], reviews);
 
-    expect(screen.getByText('Character Winner (2023)')).toBeInTheDocument();
+    expect(screen.getByText('Many Words (2024)')).toBeInTheDocument();
     expect(screen.queryByText(/Wrong Summary/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Longest/i }));
     const renderedReviews = screen.getAllByRole('listitem');
     expect(renderedReviews[0]).toHaveTextContent('Character Winner');
+  });
+
+  it('keeps the backend longest-review summary when the full review list is unavailable', () => {
+    renderSection({
+      review_analysis: {
+        total_reviews: 1, reviews_with_text: 1, review_rate: 1, total_words_written: 20,
+        avg_review_length_words: 20, unique_words_used: 18, vocab_richness: 0.9,
+        word_frequency: [], bigram_frequency: [], avg_length_by_rating: {}, language_mix: {},
+        longest_review: { title: 'Legacy Summary', year: '2022', length: 140 },
+      },
+    }, []);
+
+    expect(screen.getByText('Legacy Summary (2022)')).toBeInTheDocument();
+    expect(screen.getByText('chars in your longest review')).toBeInTheDocument();
+    expect(screen.getByText('140')).toBeInTheDocument();
   });
 });

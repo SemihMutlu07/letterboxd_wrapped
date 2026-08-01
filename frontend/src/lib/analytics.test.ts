@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDirectTmdbImageUrl, getPosterUrl } from './analytics';
+import { getDirectTmdbImageUrl, getPosterUrl, getTmdbImageUrl } from './analytics';
 
 describe('TMDB image URL normalization', () => {
   it.each([
@@ -16,6 +16,14 @@ describe('TMDB image URL normalization', () => {
     expect(getPosterUrl('https://letterboxd.example/poster.jpg', 'grid')).toBe(
       'https://letterboxd.example/poster.jpg',
     );
+  });
+
+  it('preserves bundled development fixture images', () => {
+    const fixtureImage = '/.dev/smt-media/person.jpg';
+    expect(getDirectTmdbImageUrl(fixtureImage)).toBe(fixtureImage);
+    expect(getPosterUrl(fixtureImage, 'grid')).toBe(fixtureImage);
+    expect(getPosterUrl(fixtureImage, 'share')).toBe(fixtureImage);
+    expect(getTmdbImageUrl(fixtureImage)).toBe(fixtureImage);
   });
 
   it('keeps share images on the backend proxy', () => {
