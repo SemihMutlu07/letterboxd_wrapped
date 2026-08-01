@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import type { StatsData } from '@/containers/results/sections/types';
 import { resultPath } from '@/lib/routes';
-import { reviewCharLength } from '@/lib/reviews';
+import { reviewCharLength, reviewWordCount } from '@/lib/reviews';
 
 /**
  * Spotify-Wrapped-style story mode over an existing result.
@@ -312,7 +312,9 @@ function buildSlides(stats: StatsData): Slide[] {
   const reviews = stats.review_analysis?.reviews ?? [];
   if (reviews.length > 0) {
     const longest = reviews.reduce((a, b) =>
-      reviewCharLength(b) > reviewCharLength(a) ? b : a,
+      reviewWordCount(b) !== reviewWordCount(a)
+        ? (reviewWordCount(b) > reviewWordCount(a) ? b : a)
+        : (reviewCharLength(b) > reviewCharLength(a) ? b : a),
     );
     const longestLikes = longest.likes ?? 0;
     slides.push({
@@ -325,7 +327,7 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'hero',
       body: (
         <>
-          <Label>Your longest word</Label>
+          <Label>Your longest review</Label>
           <Big>{longest.title}</Big>
           <Sub>
             {stats.review_analysis?.total_words_written
