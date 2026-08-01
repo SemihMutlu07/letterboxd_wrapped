@@ -116,4 +116,20 @@ describe('ReviewAnalysisSection', () => {
     const renderedReviews = screen.getAllByRole('listitem');
     expect(renderedReviews[0]).toHaveTextContent('Character Winner');
   });
+
+  it('shows the backend longest-review summary when detailed reviews are unavailable', () => {
+    renderSection({
+      review_analysis: {
+        total_reviews: 12, reviews_with_text: 12, review_rate: 1, total_words_written: 800,
+        avg_review_length_words: 67, unique_words_used: 300, vocab_richness: 0.5,
+        word_frequency: [], bigram_frequency: [], avg_length_by_rating: {}, language_mix: {},
+        longest_review: { title: 'Legacy Summary', year: '2022', length: 640 },
+        reviews: [],
+      },
+    }, [], []);
+
+    expect(screen.getByText('Legacy Summary (2022)')).toBeInTheDocument();
+    expect(screen.getByText('640')).toBeInTheDocument();
+    expect(screen.getByText('characters on your longest review')).toBeInTheDocument();
+  });
 });
