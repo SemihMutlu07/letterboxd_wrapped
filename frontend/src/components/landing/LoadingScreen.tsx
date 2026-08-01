@@ -2,12 +2,14 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { PosterGuessGame, type PosterGameProps } from '@/components/landing/PosterGuessGame';
+import { useI18n } from '@/i18n/I18nProvider';
+import type { MessageKey } from '@/i18n/catalogs';
 
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
+function formatElapsed(seconds: number, t: (key: MessageKey) => string): string {
+  if (seconds < 60) return t('landing.loading.seconds').replace('{value}', String(seconds));
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m}m ${s}s`;
+  return t('landing.loading.minutesSeconds').replace('{minutes}', String(m)).replace('{seconds}', String(s));
 }
 
 type Props = {
@@ -27,38 +29,18 @@ type Props = {
   resultReady?: string | null;
 };
 
-const FUN_MESSAGES = [
-  "naber?",
-  "nuri bilge ceylan, hakan taşıyan, müslüm gürses",
-  "The drama çok kötü değil miydi?",
-  "500 film altında izleyenlerin sonuç ekranı gelmiyormuş doğru mu?",
-  "2 cümleden fazla inceleme atıyor musun ona bakıyoruz.",
-  "summer haklıydı",
-  "bu loading ekranına kaç kere baktın hadi söyle",
-  "Her yıl aynı filmi 5 kere izleyenler kulübü başkanı mısın?",
-  "jaz belgesel avangarde falan",
-  "Şu ana kadar hiç 1 yıldız verdiğin film oldu mu?",
-  "Enter the void mu izlesem yoksa 90 günlük yaz tatil mi?",
-  "gaspar noe izleyen çocuktan uzak durucan",
-  "Senin favori filmine arkadaşın 'eh işte' dediğinde hissettiklerin.",
-  "Daha önce bir filmi sırf posteri güzel diye izledin mi?",
-  "3 saatlik filmleri 'bir ara izlerim' diye listeye eklemek.",
-  "🖐️ absolute cinema 🖐️",
-  "En çok hangi film için 'abartılıyor' dedin söyle.",
-  "Hangi filmi izlerken 'acaba bitse de uyusam' dedin?",
-  "Hiç film arasında geçiş yapıp birini yarım bıraktın mı?",
-  "Bir filmi en fazla kaç kere izledin?",
-  "İzlediğin en kötü filmi savunabilir misin?",
-  "Şu listendeki filmlerin yarısını izlememiş olman çok normal.",
-  "Haftada 10 film izleyenler var, sen kaçtasın?",
-  "Filmi başlatıp 10 dakikada kapatanlardan mısın?",
-  // Add more fun messages here
-];
+const FUN_MESSAGE_KEYS = [
+  'landing.loading.fun.1', 'landing.loading.fun.2', 'landing.loading.fun.3', 'landing.loading.fun.4',
+  'landing.loading.fun.5', 'landing.loading.fun.6', 'landing.loading.fun.7', 'landing.loading.fun.8',
+  'landing.loading.fun.9', 'landing.loading.fun.10', 'landing.loading.fun.11', 'landing.loading.fun.12',
+  'landing.loading.fun.13', 'landing.loading.fun.14', 'landing.loading.fun.15', 'landing.loading.fun.16',
+  'landing.loading.fun.17', 'landing.loading.fun.18', 'landing.loading.fun.19', 'landing.loading.fun.20',
+  'landing.loading.fun.21', 'landing.loading.fun.22', 'landing.loading.fun.23', 'landing.loading.fun.24',
+] as const satisfies readonly MessageKey[];
 
 export default function LoadingScreen({
-  title = 'Analyzing Your Films',
-  message = 'Preparing files, running analysis, and building your results.',
-  detail = "Large ZIP files can take a little longer. We'll redirect automatically.",
+  title,
+  message,
   onCancel,
   mode = 'upload',
   estimatedFilms,
@@ -66,6 +48,7 @@ export default function LoadingScreen({
   events,
   posterGame,
 }: Props) {
+  const { t, formatNumber } = useI18n();
   const [elapsed, setElapsed] = useState(0);
   const [funMessageIndex, setFunMessageIndex] = useState(0);
   const isScrape = mode === 'scrape';
@@ -78,7 +61,7 @@ export default function LoadingScreen({
   useEffect(() => {
     if (!isScrape) return;
     const interval = setInterval(() => {
-      setFunMessageIndex((i) => (i + 1) % FUN_MESSAGES.length);
+      setFunMessageIndex((i) => (i + 1) % FUN_MESSAGE_KEYS.length);
     }, 6000);
     return () => clearInterval(interval);
   }, [isScrape]);
@@ -95,15 +78,15 @@ export default function LoadingScreen({
   }, 0);
   const recentEvents = (events ?? []).filter((e) => e.message).slice(-3);
 
-  const displayTitle = isScrape ? 'Scanning Your Profile' : title;
+  const displayTitle = isScrape ? t('landing.loading.scrape.title') : title ?? t('landing.loading.upload.title');
   const displayMessage = isScrape
     ? estimatedFilms && estimatedFilms > 0
-      ? `Reading ${estimatedFilms.toLocaleString()} public films from Letterboxd...`
-      : 'Reading your public Letterboxd diary and film list...'
-    : message;
+      ? t('landing.loading.scrape.readingFilms').replace('{count}', formatNumber(estimatedFilms))
+      : t('landing.loading.scrape.readingProfile')
+    : message ?? t('landing.loading.upload.message');
   const displayDetail = isScrape
-    ? `Elapsed ${formatElapsed(elapsed)}. Most profiles finish in under a minute.`
-    : `Elapsed ${formatElapsed(elapsed)}. Most exports finish in under a minute.`;
+    ? t('landing.loading.elapsed').replace('{time}', formatElapsed(elapsed, t)).replace('{source}', t('landing.loading.source.profiles'))
+    : t('landing.loading.elapsed').replace('{time}', formatElapsed(elapsed, t)).replace('{source}', t('landing.loading.source.exports'));
 
   return (
     <div className="min-h-dvh overflow-y-auto bg-slate-900 text-white flex flex-col items-center justify-start px-4 py-5 sm:justify-center sm:py-8">
@@ -114,7 +97,7 @@ export default function LoadingScreen({
             key={funMessageIndex}
             className="text-lg md:text-xl font-semibold italic leading-snug tracking-tight text-white/80 transition-opacity duration-500"
           >
-            {FUN_MESSAGES[funMessageIndex]}
+            {t(FUN_MESSAGE_KEYS[funMessageIndex])}
           </p>
         </div>
       )}
@@ -126,7 +109,7 @@ export default function LoadingScreen({
             className="group absolute right-4 top-4 flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white/85 shadow-sm shadow-black/20 transition-all duration-200 hover:border-rose-400/40 hover:bg-rose-500/15 hover:text-white hover:shadow-rose-500/15 active:scale-[0.96]"
           >
             <X className="h-3.5 w-3.5 transition-transform duration-200 group-hover:rotate-90" />
-            Cancel
+            {t('landing.loading.cancel')}
           </button>
         )}
 
@@ -137,20 +120,20 @@ export default function LoadingScreen({
         {isScrape && liveFilms > 0 && (
           <p className="mb-2 text-2xl font-black tabular-nums text-orange-300">
             <span key={liveFilms} className="inline-block animate-[score-pop_1.1s_ease-out]">
-              {liveFilms.toLocaleString()}
+              {formatNumber(liveFilms)}
             </span>{' '}
-            <span className="text-sm font-medium text-slate-400">films found</span>
+            <span className="text-sm font-medium text-slate-400">{t('landing.loading.filmsFound')}</span>
           </p>
         )}
 
         {/* Status — two lines: elapsed/almost-there, then trouble hint if it's taking a while */}
         <div className="mb-4 space-y-1">
           <p className="text-xs text-orange-300 font-medium">
-            {remaining <= 0 ? 'Almost there... wrapping up' : displayDetail}
+            {remaining <= 0 ? t('landing.loading.almostThere') : displayDetail}
           </p>
           {elapsed > typical && (
             <p className="text-xs text-amber-300/90 animate-pulse">
-              Having a little trouble — bigger libraries can take a bit longer. Hang tight.
+              {t('landing.loading.slow')}
             </p>
           )}
         </div>
@@ -164,13 +147,13 @@ export default function LoadingScreen({
         {/* Progress + remaining time */}
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between text-sm font-medium">
-            <span className="text-slate-300">Typical</span>
-            <span className="text-slate-200">{formatElapsed(typical)}</span>
+            <span className="text-slate-300">{t('landing.loading.typical')}</span>
+            <span className="text-slate-200">{formatElapsed(typical, t)}</span>
           </div>
           <div
             className="h-2 rounded-full bg-slate-700/80 overflow-hidden"
             role="progressbar"
-            aria-label="Analysis progress"
+            aria-label={t('landing.loading.progress')}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={pct}
@@ -182,8 +165,8 @@ export default function LoadingScreen({
           </div>
           {remaining > 0 && (
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Remaining (est.)</span>
-              <span className="text-orange-300 font-medium">{formatElapsed(remaining)}</span>
+              <span className="text-slate-500">{t('landing.loading.remaining')}</span>
+              <span className="text-orange-300 font-medium">{formatElapsed(remaining, t)}</span>
             </div>
           )}
         </div>

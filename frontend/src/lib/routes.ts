@@ -1,4 +1,11 @@
+import type { Locale } from '@/i18n/locales';
+import { localizePath } from '@/i18n/routing';
+
 const USERNAME_RE = /^[a-z0-9_]+$/;
+
+function withLocale(path: string, locale?: Locale): string {
+  return locale ? localizePath(path, locale) : path;
+}
 
 export function cleanRouteUsername(value: string | null | undefined): string {
   try {
@@ -12,25 +19,25 @@ export function isValidRouteUsername(value: string | null | undefined): value is
   return !!value && USERNAME_RE.test(value);
 }
 
-export function resultPath(username: string | null | undefined): string {
+export function resultPath(username: string | null | undefined, locale?: Locale): string {
   const clean = cleanRouteUsername(username);
-  return isValidRouteUsername(clean) ? `/results?u=${encodeURIComponent(clean)}` : '/results';
+  return withLocale(isValidRouteUsername(clean) ? `/results?u=${encodeURIComponent(clean)}` : '/results', locale);
 }
 
-export function watchlistPath(first: string, second: string): string {
+export function watchlistPath(first: string, second: string, locale?: Locale): string {
   const a = cleanRouteUsername(first);
   const b = cleanRouteUsername(second);
-  if (!isValidRouteUsername(a) || !isValidRouteUsername(b) || a === b) return '/watchlist';
-  return `/watchlist?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`;
+  if (!isValidRouteUsername(a) || !isValidRouteUsername(b) || a === b) return withLocale('/watchlist', locale);
+  return withLocale(`/watchlist?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`, locale);
 }
 
-export function findFilmPath(users: string[]): string {
+export function findFilmPath(users: string[], locale?: Locale): string {
   const clean = [] as string[];
   for (const user of users.map(cleanRouteUsername)) {
     if (isValidRouteUsername(user) && !clean.includes(user)) clean.push(user);
   }
-  if (clean.length < 2) return '/findfilm';
-  return `/findfilm?users=${encodeURIComponent(clean.slice(0, 6).join(','))}`;
+  if (clean.length < 2) return withLocale('/findfilm', locale);
+  return withLocale(`/findfilm?users=${encodeURIComponent(clean.slice(0, 6).join(','))}`, locale);
 }
 
 export function readFindFilmUsersFromLocation(): string[] {
@@ -46,7 +53,7 @@ export function readFindFilmUsersFromLocation(): string[] {
 
 export function readResultUsernameFromLocation(): string {
   if (typeof window === 'undefined') return '';
-  const match = window.location.pathname.match(/^\/results\/([^/?#]+)/);
+  const match = window.location.pathname.match(/^\/(?:en\/|tr\/)?results\/([^/?#]+)/);
   const pathUsername = cleanRouteUsername(match?.[1]);
   if (isValidRouteUsername(pathUsername)) return pathUsername;
 
@@ -57,7 +64,7 @@ export function readResultUsernameFromLocation(): string {
 
 export function readWatchlistUsersFromLocation(): [string, string] {
   if (typeof window === 'undefined') return ['', ''];
-  const match = window.location.pathname.match(/^\/watchlist\/([^/?#]+)\/([^/?#]+)/);
+  const match = window.location.pathname.match(/^\/(?:en\/|tr\/)?watchlist\/([^/?#]+)\/([^/?#]+)/);
   if (match) {
     const first = cleanRouteUsername(match[1]);
     const second = cleanRouteUsername(match[2]);

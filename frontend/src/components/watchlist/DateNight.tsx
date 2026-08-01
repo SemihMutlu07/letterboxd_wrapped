@@ -6,6 +6,7 @@ import { ExternalLink, HeartHandshake, Search } from 'lucide-react';
 import { dateNight, handleApiError, type DateNightResult } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
 import { pickRandomUsernames } from '@/lib/usernames';
+import { useI18n } from '@/i18n/I18nProvider';
 
 function cleanUsername(value: string) {
   return value.trim().replace(/^@/, '').toLowerCase();
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export default function DateNight({ first: controlledFirst, second: controlledSecond, onFirstChange, onSecondChange }: Props = {}) {
+  const { t } = useI18n();
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
   const [localFirst, setLocalFirst] = useState('');
   const [localSecond, setLocalSecond] = useState('');
@@ -62,24 +64,24 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
           <HeartHandshake className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-xl font-black text-stone-100">Date Night Engine</h2>
-          <p className="text-sm text-stone-500">Taste-profile recommendations beyond watchlist overlap.</p>
+          <h2 className="text-xl font-black text-stone-100">{t('dateNight.title')}</h2>
+          <p className="text-sm text-stone-500">{t('dateNight.description')}</p>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
         <label className="block">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">First profile</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">{t('dateNight.firstProfile')}</span>
           <input
             value={first}
             onChange={(event) => changeFirst(event.target.value)}
             placeholder={placeholders[0]}
-            aria-label="First Letterboxd username"
+            aria-label={t('dateNight.firstUsername')}
             className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
           />
         </label>
         <label className="block">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Second profile</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">{t('dateNight.secondProfile')}</span>
           <input
             value={second}
             onChange={(event) => changeSecond(event.target.value)}
@@ -87,7 +89,7 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
               if (event.key === 'Enter') void handleSubmit();
             }}
             placeholder={placeholders[1]}
-            aria-label="Second Letterboxd username"
+            aria-label={t('dateNight.secondUsername')}
             className="mt-2 w-full border border-stone-700 bg-[#0f0d0b] px-4 py-3 text-sm text-stone-100 transition-colors duration-150 ease-out focus:border-red-300 focus:outline-none focus-visible:outline-none"
           />
         </label>
@@ -98,7 +100,7 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
           className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-red-200 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-red-100 active:scale-[0.97] active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-200 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
         >
           <Search className="h-4 w-4" />
-          {loading ? 'Profiling' : 'Find films'}
+          {loading ? t('dateNight.profiling') : t('dateNight.findFilms')}
         </button>
       </div>
 
@@ -111,8 +113,8 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
               <div className="flex items-center gap-4">
                 <span className="h-8 w-8 shrink-0 animate-spin rounded-full border-2 border-red-100/20 border-t-red-200" />
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-red-200">Building mutual profile</p>
-                  <p className="mt-1 text-sm text-stone-400">Scanning both public profiles, finding shared taste signals, then looking for unwatched recommendations.</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-red-200">{t('dateNight.loadingTitle')}</p>
+                  <p className="mt-1 text-sm text-stone-400">{t('dateNight.loadingDescription')}</p>
                 </div>
               </div>
             </div>
@@ -135,32 +137,30 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
         <div
           ref={resultRef}
           role="region"
-          aria-label="Date night results"
+          aria-label={t('dateNight.results')}
           aria-live="polite"
           tabIndex={-1}
           className="space-y-5 outline-none"
         >
           <div className="grid gap-3 md:grid-cols-3">
             <div className="border border-stone-800 bg-[#201b16] p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Genres</p>
-              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.top_genres.join(', ') || 'Mixed'}</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">{t('dateNight.genres')}</p>
+              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.top_genres.join(', ') || t('dateNight.mixed')}</p>
             </div>
             <div className="border border-stone-800 bg-[#201b16] p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Directors</p>
-              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.top_directors.join(', ') || 'No shared auteur yet'}</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">{t('dateNight.directors')}</p>
+              <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.top_directors.join(', ') || t('dateNight.noSharedAuteur')}</p>
             </div>
             <div className="border border-stone-800 bg-[#201b16] p-4">
-              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">Era</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-stone-500">{t('dateNight.era')}</p>
               <p className="mt-2 text-sm text-stone-100">{result.mutual_profile.era_overlap}</p>
             </div>
           </div>
 
           {result.recommendations.length === 0 ? (
             <div className="border border-stone-800 bg-[#201b16] p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No mutual picks</p>
-              <p className="mt-2 text-sm text-stone-400">
-                Zero overlap between your watchlists — no films on both lists. But you can still check what's on <em>their</em> watchlist by scrolling down.
-              </p>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">{t('dateNight.noPicks')}</p>
+              <p className="mt-2 text-sm text-stone-400">{t('dateNight.noPicksDescription')}</p>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -186,7 +186,7 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
                       {posterUrl && !imgError ? (
                         <img
                           src={posterUrl}
-                          alt={`${film.title} poster`}
+                          alt={t('common.posterAlt').replace('{title}', film.title)}
                           width={80}
                           height={120}
                           loading="lazy"
@@ -211,7 +211,7 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
                       <p className="text-xs text-stone-600 line-clamp-2">{overview || '—'}</p>
                       <p className="text-xs italic text-stone-400">{film.reason}</p>
                       {watchlistAddedAt && (
-                        <span className="text-xs text-stone-500">added {watchlistAddedAt}</span>
+                        <span className="text-xs text-stone-500">{t('dateNight.added').replace('{date}', watchlistAddedAt)}</span>
                       )}
                       <a
                         href={letterboxdUrl}
@@ -220,7 +220,7 @@ export default function DateNight({ first: controlledFirst, second: controlledSe
                         className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.14em] text-amber-300 transition-colors duration-150 ease-out hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
-                        View on Letterboxd
+                        {t('dateNight.viewOnLetterboxd')}
                       </a>
                     </div>
                   </article>

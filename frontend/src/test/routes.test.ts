@@ -16,11 +16,13 @@ describe('route helpers', () => {
 
   it('builds canonical result routes', () => {
     expect(resultPath('semihmutsuz')).toBe('/results?u=semihmutsuz');
+    expect(resultPath('semihmutsuz', 'tr')).toBe('/tr/results?u=semihmutsuz');
     expect(resultPath('bad-name')).toBe('/results');
   });
 
   it('builds canonical watchlist routes', () => {
     expect(watchlistPath('alice', 'bob')).toBe('/watchlist?a=alice&b=bob');
+    expect(watchlistPath('alice', 'bob', 'en')).toBe('/en/watchlist?a=alice&b=bob');
     expect(watchlistPath('alice', 'alice')).toBe('/watchlist');
   });
 });

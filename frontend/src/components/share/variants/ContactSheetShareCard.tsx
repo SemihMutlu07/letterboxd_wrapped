@@ -1,12 +1,19 @@
 'use client';
 import React from 'react';
 import type { ShareCardData, ShareOrientation } from '../types';
-import { displayFont, PersonFrame, PosterSlots, Username, utilityFont } from './BoldCardParts';
+import { displayFont, PersonFrame, Username, utilityFont } from './BoldCardParts';
+import { MilestonesRow, Wordmark } from './shared/SchemaBlocks';
 
 type Props = { data: ShareCardData; orientation?: ShareOrientation; className?: string };
 
 function Sprockets() {
-  return <div className="flex justify-between px-4">{Array.from({ length: 14 }, (_, i) => <i key={i} className="h-3 w-7 rounded-sm bg-[#f6d51f]" />)}</div>;
+  return (
+    <div className="flex justify-between px-4">
+      {Array.from({ length: 14 }, (_, i) => (
+        <i key={i} className="h-3 w-7 rounded-sm bg-[#f6d51f]" />
+      ))}
+    </div>
+  );
 }
 
 const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(function ContactSheetShareCard(
@@ -27,7 +34,7 @@ const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(function C
             <PersonFrame person={data.onScreenCrush} label="Frame 01 · Actor" className="border border-[#f6d51f]" />
             <PersonFrame person={data.favoriteDirector} label="Frame 02 · Director" className="border border-[#f6d51f]" />
           </div>
-          <PosterSlots films={data.topFilms} className="mt-3 gap-2" slotClassName="h-[260px]" />
+          <MilestonesRow data={data} containerClassName="mt-3 grid grid-cols-4 gap-2 h-[260px]" cardClassName="flex flex-col items-center justify-center p-2 rounded bg-black border border-[#f6d51f] text-center" labelClassName="text-[10px] font-bold text-[#f6d51f] mb-1" titleClassName="text-xs font-semibold text-white line-clamp-1" yearClassName="text-[10px] text-neutral-400" />
         </div>
         <div className="grid grid-cols-[1fr_auto] gap-5 px-8 py-6">
           <div className="text-[64px] font-black uppercase leading-[0.9]" style={displayFont}>{data.spentHours} hours<br />on film</div>
@@ -38,22 +45,62 @@ const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(function C
       </div>
     );
   }
+
+  // Schema B — Yatay (1200x675)
   return (
-    <div ref={ref} data-export-root="true" className={`h-[675px] w-[1200px] overflow-hidden bg-black py-4 text-white ${className}`}>
+    <div ref={ref} data-export-root="true" className={`h-[675px] w-[1200px] relative overflow-hidden bg-black py-4 text-white ${className}`}>
       <Sprockets />
-      <header className="flex h-[105px] items-end justify-between gap-5 overflow-hidden px-10 pb-4">
-        <div className="grid min-w-0 grid-cols-[auto_minmax(0,220px)] items-end gap-4"><div className="shrink-0 text-[48px] font-black uppercase leading-none" style={displayFont}>35mm contact sheet</div><div className="min-w-0 overflow-hidden"><Username username={data.username} /></div></div>
-        <div className="shrink-0 text-right text-xs text-[#f6d51f]" style={utilityFont}>ROLL {data.watchedFilms} · {data.spentHours}H<br />SCALE {data.cinemaScale}</div>
+      {/* Header line */}
+      <header className="flex h-[80px] items-center justify-between px-10">
+        <div className="flex items-center gap-4">
+          <span className="text-[36px] font-black uppercase leading-none text-white" style={displayFont}>
+            35mm Contact Sheet
+          </span>
+          <Username username={data.username} />
+        </div>
+        <span className="text-xs text-[#f6d51f]" style={utilityFont}>
+          LETTERBOXD WRAPPED
+        </span>
       </header>
-      <div className="mx-6 grid h-[450px] grid-cols-[210px_210px_1fr] gap-3 border-4 border-[#f6d51f] p-3">
-        <PersonFrame person={data.onScreenCrush} label="Actor · 01" className="border border-[#f6d51f]" />
-        <PersonFrame person={data.favoriteDirector} label="Director · 02" className="border border-[#f6d51f]" />
-        <PosterSlots films={data.topFilms} className="gap-2" slotClassName="h-full" />
+
+      {/* Main content grid */}
+      <div className="px-10 flex flex-col gap-4">
+        {/* Headline + Niche Score box */}
+        <div className="flex items-center justify-between bg-white/5 border border-[#f6d51f]/40 rounded-xl p-4">
+          <div>
+            <span className="text-sm font-semibold uppercase text-neutral-400">Headline</span>
+            <h2 className="text-3xl font-black uppercase text-white" style={displayFont}>
+              you watched {data.watchedFilms} films
+            </h2>
+          </div>
+          <div className="flex flex-col items-end border-l border-[#f6d51f]/40 pl-6">
+            <span className="text-xs font-bold uppercase text-[#f6d51f]">Niche Score</span>
+            <span className="text-3xl font-black text-[#f6d51f]" style={utilityFont}>
+              %{Math.round(data.cinemaScale)}
+            </span>
+          </div>
+        </div>
+
+        {/* Milestones row */}
+        {data.milestones && data.milestones.length > 0 && (
+          <MilestonesRow
+            data={data}
+            containerClassName="grid grid-cols-4 gap-3 w-full"
+            cardClassName="flex flex-col items-center p-2 rounded-xl bg-white/5 border border-[#f6d51f]/30 text-center relative overflow-hidden"
+            labelClassName="text-[11px] font-extrabold uppercase tracking-wider text-[#f6d51f] mb-1"
+            titleClassName="text-xs font-semibold text-white line-clamp-1"
+            yearClassName="text-[10px] text-neutral-400"
+          />
+        )}
+
+        {/* Person Cards (crush & director) */}
+        <div className="grid grid-cols-2 gap-4">
+          <PersonFrame person={data.onScreenCrush} label="Actor · 01" className="border border-[#f6d51f] h-[180px]" />
+          <PersonFrame person={data.favoriteDirector} label="Director · 02" className="border border-[#f6d51f] h-[180px]" />
+        </div>
       </div>
-      <div className="flex h-[64px] items-center justify-between px-10">
-        <div className="text-sm uppercase text-[#f6d51f]" style={utilityFont}>{data.peakDecade} · Avg {data.minutesAverage}m · Rating {data.mostCommonRating}</div>
-        {note && <div className="line-clamp-2 max-w-[560px] text-right text-xl font-bold text-[#f6d51f]" style={{ ...utilityFont, overflowWrap: 'anywhere' }}>↗ {note.title}: {note.userRating} vs {note.avgRating}</div>}
-      </div>
+
+      <Wordmark orientation="horizontal" className="text-[#f6d51f]" />
       <Sprockets />
     </div>
   );

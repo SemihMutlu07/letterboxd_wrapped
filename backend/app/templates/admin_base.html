@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Dashboard{% endblock %} — MoviesWrapped Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  .nav-active { background: rgba(249,115,22,0.15); color: #fb923c; border-color: rgba(249,115,22,0.3); }
+  .nav-inactive { color: #94a3b8; border-color: transparent; }
+  .nav-inactive:hover { background: rgba(148,163,184,0.1); color: #e2e8f0; }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+  <div class="flex min-h-screen">
+    <aside class="w-56 shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col">
+      <div class="px-4 py-4 border-b border-slate-800 flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-orange-500/15 border border-orange-400/30 flex items-center justify-center">
+          <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </div>
+        <div>
+          <p class="text-sm font-bold text-white leading-tight">MoviesWrapped</p>
+          <p class="text-[10px] text-slate-500 uppercase tracking-wider">Admin</p>
+        </div>
+      </div>
+      <nav class="flex-1 px-2 py-3 space-y-1">
+        {% for key, href, label in [
+          ("dashboard", "/admin/dashboard", "Overview"),
+          ("analysis", "/admin/analysis", "Analysis Runs"),
+          ("worker", "/admin/worker", "Desktop Worker"),
+          ("compare", "/admin/compare", "Watchlist Compare"),
+          ("date_night", "/admin/date-night", "Date Night"),
+        ] %}
+        <a href="{{ href }}" class="block px-3 py-2 rounded-lg text-xs font-semibold border transition-all {{ 'nav-active' if active_page == key else 'nav-inactive' }}">{{ label }}</a>
+        {% endfor %}
+      </nav>
+      <div class="px-4 py-3 border-t border-slate-800 text-[10px] font-medium">
+        <span id="worker-header-status" class="{% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-500{% endif %}">
+          {% if worker_enabled and worker_status.online %}● Worker live{% elif worker_enabled %}● Worker offline{% else %}● Worker disabled{% endif %}
+        </span>
+      </div>
+    </aside>
+    <div class="flex-1 min-w-0">
+      <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

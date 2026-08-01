@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { motion, AnimatePresence } from 'framer-motion';
 
 import type { StatsData } from '@/containers/results/sections/types';
+import { useI18n } from '@/i18n/I18nProvider';
 import { resultPath } from '@/lib/routes';
 import { reviewCharLength, reviewWordCount } from '@/lib/reviews';
 
@@ -137,7 +138,9 @@ function Sub({ children, className = '' }: { children: ReactNode; className?: st
   return <p className={`mt-3 text-base text-stone-400 ${className}`}>{children}</p>;
 }
 
-function buildSlides(stats: StatsData): Slide[] {
+function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide[] {
+  const tr = locale === 'tr';
+  const copy = (en: string, turkish: string) => tr ? turkish : en;
   const slides: Slide[] = [];
   const username = stats.scraped_username;
   const broadPosters = topRatedPosters(stats, 10);
@@ -154,11 +157,10 @@ function buildSlides(stats: StatsData): Slide[] {
     body: (
       <>
         <Label>Movies Wrapped</Label>
-        <Big>{username ? `@${username}` : 'Your year in film'}</Big>
+        <Big>{username ? `@${username}` : copy('Your year in film', 'Film yılın')}</Big>
         {stats.data_timeline?.period_description && <Sub>{stats.data_timeline.period_description}</Sub>}
         <Sub className="mt-6">
-          They say the movies you choose say more about you than the ones you skip.
-          Let&apos;s find out what yours are saying.
+          {copy('They say the movies you choose say more about you than the ones you skip. Let’s find out what yours are saying.', 'Seçtiğin filmlerin, es geçtiklerinden daha çok şey anlattığı söylenir. Bakalım seninkiler ne diyor.')}
         </Sub>
       </>
     ),
@@ -178,14 +180,14 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'cascade',
       body: (
         <>
-          <Label>Fast forward</Label>
-          <Big>{stats.total_films} films</Big>
+          <Label>{copy('Fast forward', 'Hızlı ileri')}</Label>
+          <Big>{stats.total_films} {copy('films', 'film')}</Big>
           {d || stats.hours_watched ? (
             <Sub>
               {d
-                ? `${d} days of your life, in the dark, watching other people live.`
+                ? copy(`${d} days of your life, in the dark, watching other people live.`, `Hayatının ${d} günü karanlıkta, başka insanların hayatını izleyerek geçti.`)
                 : stats.hours_watched
-                  ? `${Math.round(stats.hours_watched)} hours. That&apos;s not a hobby, that&apos;s a parallel life.`
+                  ? copy(`${Math.round(stats.hours_watched)} hours. That’s not a hobby, that’s a parallel life.`, `${Math.round(stats.hours_watched)} saat. Bu hobi değil, paralel bir hayat.`)
                   : null}
             </Sub>
           ) : null}
@@ -206,11 +208,11 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'mosaic',
       body: (
         <>
-          <Label>Your rhythm</Label>
+          <Label>{copy('Your rhythm', 'Ritmin')}</Label>
           <Big>{peakMonth ? peakMonth.month : viewingSeason}</Big>
           <Sub>
             {peakMonth
-              ? `${peakMonth.count} films that month — you weren't watching, you were processing something.`
+              ? copy(`${peakMonth.count} films that month — you weren’t watching, you were processing something.`, `O ay ${peakMonth.count} film — izlemiyordun, bir şeyleri işliyordun.`)
               : null}
             {mostActiveDay
               ? ` ${mostActiveDay}`
@@ -229,9 +231,9 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'mosaic',
       body: (
         <>
-          <Label>Where you kept returning</Label>
+          <Label>{copy('Where you kept returning', 'Dönüp dolaşıp geldiğin yer')}</Label>
           <Big>{stats.favorite_genre.name}</Big>
-          <Sub>{stats.favorite_genre.count} times. Not a phase, apparently — some places just feel like home.</Sub>
+          <Sub>{copy(`${stats.favorite_genre.count} times. Not a phase, apparently — some places just feel like home.`, `${stats.favorite_genre.count} kez. Görünen o ki geçici bir dönem değil — bazı yerler ev gibi gelir.`)}</Sub>
         </>
       ),
     });
@@ -249,10 +251,10 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'director',
       body: (
         <>
-          <Label>Your comfort zone had subtitles</Label>
+          <Label>{copy('Your comfort zone had subtitles', 'Konfor alanında altyazılar vardı')}</Label>
           <Big>{stats.most_watched_director.name}</Big>
           <Sub>
-            {stats.most_watched_director.count} films together — an auteur you kept returning to.
+            {copy(`${stats.most_watched_director.count} films together — an auteur you kept returning to.`, `${stats.most_watched_director.count} film birlikte — tekrar tekrar döndüğün bir auteur.`)}
           </Sub>
         </>
       ),
@@ -270,11 +272,11 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'hero',
       body: (
         <>
-          <Label>The verdicts</Label>
+          <Label>{copy('The verdicts', 'Hükümler')}</Label>
           <Big>{stats.average_rating.toFixed(2)} ★</Big>
           {stats.total_countries
-            ? <Sub>Your average rating across {stats.total_countries} countries of cinema. Not generous, not cruel — just honest.</Sub>
-            : <Sub>Your average rating. Not generous, not cruel — just honest.</Sub>}
+            ? <Sub>{copy(`Your average rating across ${stats.total_countries} countries of cinema. Not generous, not cruel — just honest.`, `Sinemanın ${stats.total_countries} ülkesi boyunca ortalama puanın. Cömert değil, acımasız değil — sadece dürüst.`)}</Sub>
+            : <Sub>{copy('Your average rating. Not generous, not cruel — just honest.', 'Ortalama puanın. Cömert değil, acımasız değil — sadece dürüst.')}</Sub>}
         </>
       ),
     });
@@ -293,15 +295,15 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: generousPosters.length > 0 ? 'poster-wall' : 'strip',
       body: (
         <>
-          <Label>How you judge</Label>
-          <Big>{stats.rating_personality ?? `${stats.most_common_rating} ★, mostly`}</Big>
+          <Label>{copy('How you judge', 'Nasıl yargılıyorsun')}</Label>
+          <Big>{stats.rating_personality ?? copy(`${stats.most_common_rating} ★, mostly`, `çoğunlukla ${stats.most_common_rating} ★`)}</Big>
           {stats.most_common_rating != null ? (
             <Sub>
               {stats.most_common_rating <= 2.5
-                ? `You gave ${stats.most_common_rating} ★ more than anything else. You know what you don't like, and you're not quiet about it.`
+                ? copy(`You gave ${stats.most_common_rating} ★ more than anything else. You know what you don't like, and you’re not quiet about it.`, `Her şeyden çok ${stats.most_common_rating} ★ verdin. Neyi sevmediğini biliyorsun ve saklamıyorsun.`)
                 : stats.most_common_rating >= 4
-                  ? `You gave ${stats.most_common_rating} ★ more than anything else. An optimist, or just easily pleased?`
-                  : `You gave ${stats.most_common_rating} ★ more than anything else. The solid middle — no regrets, no hype.`}
+                  ? copy(`You gave ${stats.most_common_rating} ★ more than anything else. An optimist, or just easily pleased?`, `Her şeyden çok ${stats.most_common_rating} ★ verdin. İyimser misin, yoksa kolay mı memnun oluyorsun?`)
+                  : copy(`You gave ${stats.most_common_rating} ★ more than anything else. The solid middle — no regrets, no hype.`, `Her şeyden çok ${stats.most_common_rating} ★ verdin. Sağlam orta — pişmanlık yok, abartı yok.`)}
             </Sub>
           ) : null}
         </>
@@ -327,15 +329,15 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'hero',
       body: (
         <>
-          <Label>Your longest review</Label>
+          <Label>{copy('Your longest review', 'En uzun incelemen')}</Label>
           <Big>{longest.title}</Big>
           <Sub>
             {stats.review_analysis?.total_words_written
-              ? `${stats.review_analysis.total_words_written.toLocaleString()} words written total. `
+              ? copy(`${stats.review_analysis.total_words_written.toLocaleString()} words written total. `, `Toplam ${stats.review_analysis.total_words_written.toLocaleString()} kelime yazdın. `)
               : ''}
             {longestLikes === 0
-              ? "Your longest review got 0 likes, but it had conviction. Some stories are for the writer, not the crowd."
-              : `That one got ${longestLikes} like${longestLikes === 1 ? '' : 's'} — someone out there gets you.`}
+              ? copy('Your longest review got 0 likes, but it had conviction. Some stories are for the writer, not the crowd.', 'En uzun incelemen 0 beğeni aldı ama bir duruşu vardı. Bazı hikâyeler kalabalık için değil, yazar içindir.')
+              : copy(`That one got ${longestLikes} like${longestLikes === 1 ? '' : 's'} — someone out there gets you.`, `${longestLikes} beğeni aldı — birileri seni anlıyor.`)}
           </Sub>
         </>
       ),
@@ -352,9 +354,9 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'mosaic',
       body: (
         <>
-          <Label>How deep the rabbit hole goes</Label>
+          <Label>{copy('How deep the rabbit hole goes', 'Tavşan deliğinin derinliği')}</Label>
           <Big>{stats.sinefil_meter.score} / 100</Big>
-          {stats.sinefil_meter.type && <Sub>Your cinema scale says you're a <strong>{stats.sinefil_meter.type}</strong>. You&apos;ve wandered past the mainstream into something more specific.</Sub>}
+          {stats.sinefil_meter.type && <Sub>{copy('Your cinema scale says you’re a ', 'Sinema ölçeğin şunu söylüyor: ')}<strong>{stats.sinefil_meter.type}</strong>{copy('. You’ve wandered past the mainstream into something more specific.', '. Ana akımın ötesine, daha spesifik bir yere yürümüşsün.')}</Sub>}
         </>
       ),
     });
@@ -369,15 +371,15 @@ function buildSlides(stats: StatsData): Slide[] {
       visual: 'poster-wall',
       body: (
         <>
-          <Label>Which makes you</Label>
+          <Label>{copy('Which makes you', 'Bu da seni şuna dönüştürüyor')}</Label>
           <Big>{stats.cinematic_persona.persona}</Big>
           {stats.cinematic_persona.description && <Sub>{stats.cinematic_persona.description}</Sub>}
           {basis?.genre && (
             <Sub className="text-stone-300">
-              {basis.genre} was your most-watched genre
+              {basis.genre} {copy('was your most-watched genre', 'en çok izlediğin türdü')}
               {basis.match_type === 'genre_decade_country'
-                ? `, shaped by your ${basis.decade} and ${basis.country} streak.`
-                : ' — the strongest signal behind this persona.'}
+                ? copy(`, shaped by your ${basis.decade} and ${basis.country} streak.`, `; ${basis.decade} ve ${basis.country} serin bunu şekillendirdi.`)
+                : copy(' — the strongest signal behind this persona.', ' — bu personanın en güçlü sinyali.')}
             </Sub>
           )}
         </>
@@ -396,8 +398,8 @@ function buildSlides(stats: StatsData): Slide[] {
     visual: 'mosaic',
     body: (
       <>
-        <Label>That&apos;s the short version</Label>
-        <Big>The full picture waits.</Big>
+        <Label>{copy('That’s the short version', 'Kısa versiyon buydu')}</Label>
+        <Big>{copy('The full picture waits.', 'Tüm resim seni bekliyor.')}</Big>
       </>
     ),
   });
@@ -488,11 +490,15 @@ function MobileMediaRail({ media, accent }: { media: StoryMedia[]; accent: strin
 }
 
 function StoryImage({ item, className = '', priority = false }: { item: StoryMedia; className?: string; priority?: boolean }) {
+  const { locale } = useI18n();
+  const alt = locale === 'tr'
+    ? item.alt.replace(/ poster$/, ' posteri').replace(/ portrait$/, ' portresi')
+    : item.alt;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={item.url}
-      alt={item.alt}
+      alt={alt}
       className={`h-full w-full object-cover ${className}`}
       loading={priority ? 'eager' : 'lazy'}
       style={{ objectPosition: item.objectPosition ?? (item.type === 'profile' ? '50% 28%' : 'center center') }}
@@ -643,6 +649,7 @@ function PortraitStack({ media, accent }: { media: StoryMedia[]; accent: string 
 }
 
 export default function StoryExperience() {
+  const { locale, t } = useI18n();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [index, setIndex] = useState(0);
@@ -660,7 +667,7 @@ export default function StoryExperience() {
     setLoaded(true);
   }, []);
 
-  const slides = useMemo(() => (stats ? buildSlides(stats) : []), [stats]);
+  const slides = useMemo(() => (stats ? buildSlides(stats, locale) : []), [locale, stats]);
   const isLast = index >= slides.length - 1;
   const username = stats?.scraped_username;
 
@@ -733,8 +740,8 @@ export default function StoryExperience() {
     return (
       <main className="grid min-h-screen place-items-center bg-[#0f0d0b] p-8 text-center">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No result data in this session</p>
-          <p className="mt-3 text-sm text-stone-400">Run an analysis first, or seed one from /dev/load-run.</p>
+          <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">{t('story.empty.title')}</p>
+          <p className="mt-3 text-sm text-stone-400">{t('story.empty.description')}</p>
         </div>
       </main>
     );
@@ -763,12 +770,12 @@ export default function StoryExperience() {
 
       <button
         type="button"
-        aria-label={isPaused ? 'Resume story' : 'Pause story'}
+        aria-label={isPaused ? t('story.resumeAria') : t('story.pauseAria')}
         onClick={() => !isLast && setIsPaused((v) => !v)}
         disabled={isLast}
         className="absolute right-4 top-8 z-50 rounded-full border border-white/15 bg-black/55 px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-stone-200 shadow-xl backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 disabled:cursor-default disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
       >
-        {isPaused ? 'Resume' : 'Pause'}
+        {isPaused ? t('story.resume') : t('story.pause')}
       </button>
 
       {/* Slide */}
@@ -791,13 +798,13 @@ export default function StoryExperience() {
       {/* Tap zones: left third = back, rest = next */}
       <button
         type="button"
-        aria-label="Previous slide"
+        aria-label={t('story.previous')}
         onClick={goPrevious}
         className={`absolute inset-y-0 left-0 w-1/3 cursor-w-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${isLast ? 'z-20' : 'z-30'}`}
       />
       <button
         type="button"
-        aria-label="Next slide"
+        aria-label={t('story.next')}
         onClick={goNext}
         className={`absolute inset-y-0 right-0 w-2/3 cursor-e-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${isLast ? 'z-20' : 'z-30'}`}
       />
@@ -809,20 +816,20 @@ export default function StoryExperience() {
             onClick={goPrevious}
             className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
           >
-            Back
+            {t('story.back')}
           </button>
           <button
             type="button"
             onClick={() => goToSlide(0)}
             className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
           >
-            Replay
+            {t('story.replay')}
           </button>
           <a
-            href={resultPath(username)}
+            href={resultPath(username, locale)}
             className="rounded-full bg-amber-300 px-7 py-3 font-mono text-xs font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
           >
-            Open the dossier
+            {t('story.openResults')}
           </a>
         </div>
       )}

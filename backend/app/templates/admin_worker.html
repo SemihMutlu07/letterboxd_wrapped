@@ -1,0 +1,377 @@
+{% extends "admin_base.html" %}
+{% block title %}Desktop Worker{% endblock %}
+{% block content %}
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Desktop Worker</p>
+          <p id="worker-online" class="text-2xl font-black {% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-600{% endif %}">
+            {% if worker_enabled and worker_status.online %}Live{% elif worker_enabled %}Offline{% else %}Disabled{% endif %}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Job Control</p>
+          <p id="worker-desired-state" class="text-2xl font-black {% if worker_status.control.desired_state == 'pause' %}text-amber-400{% else %}text-emerald-400{% endif %}">
+            {{ "Paused" if worker_status.control.desired_state == "pause" else "Run" }}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Settings Store</p>
+          <p id="worker-settings-store" class="text-2xl font-black {% if settings_store.persistent %}text-emerald-400{% else %}text-amber-400{% endif %}">
+            {{ "Durable" if settings_store.persistent else "Memory" }}
+          </p>
+          <p id="worker-settings-detail" class="mt-1 text-[10px] text-slate-500">
+            {{ settings_store.table or "process state" }}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Child</p>
+          <p id="worker-child-status" class="text-2xl font-black {% if worker_status.supervisor.child_status == 'running' %}text-emerald-400{% elif worker_status.supervisor.child_status == 'unknown' %}text-slate-600{% else %}text-amber-400{% endif %}">
+            {{ worker_status.supervisor.child_status | capitalize }}
+          </p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Heartbeat Age</p>
+          <p id="worker-heartbeat-age" class="text-2xl font-black text-white">{{ worker_status.heartbeat_age_seconds if worker_status.heartbeat_age_seconds is not none else "—" }}s</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Queued Jobs</p>
+          <p id="worker-queued" class="text-2xl font-black text-white">{{ worker_status.queue.queued }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Running Jobs</p>
+          <p id="worker-running" class="text-2xl font-black text-white">{{ worker_status.queue.running }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Completed</p>
+          <p id="worker-completed" class="text-2xl font-black text-emerald-400">{{ worker_status.queue.completed }}</p>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Failed</p>
+          <p id="worker-failed" class="text-2xl font-black {% if worker_status.queue.failed > 0 %}text-red-400{% else %}text-slate-600{% endif %}">{{ worker_status.queue.failed }}</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-white">Remote Control</h2>
+            <p id="worker-control-summary" class="text-xs text-slate-500 mt-1">
+              Desired state: {{ worker_status.control.desired_state }} · restart token {{ worker_status.control.restart_token }}
+            </p>
+            <p id="worker-settings-summary" class="text-xs text-slate-500 mt-1">
+              Settings: {{ settings_store.source }}{% if settings_store.last_saved_at %} · saved {{ settings_store.last_saved_at[:19].replace("T", " ") }}{% endif %}
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="worker-pause-button" onclick="setWorkerDesiredState('pause')" class="px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-40">Pause Jobs</button>
+            <button id="worker-resume-button" onclick="setWorkerDesiredState('run')" class="px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-40">Resume Jobs</button>
+            <button id="worker-restart-button" onclick="requestWorkerRestart()" class="px-3 py-2 rounded-lg border border-orange-500/40 bg-orange-500/10 text-xs font-semibold text-orange-200 hover:bg-orange-500/20 disabled:opacity-40">Restart Worker</button>
+          </div>
+        </div>
+        <p id="worker-control-feedback" class="text-xs text-slate-500 mt-3">Pause blocks new jobs and worker claims; it does not kill active work.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 class="text-sm font-bold text-white mb-3">Lifecycle</h2>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
+            <dt class="text-slate-500">Started</dt><dd id="worker-started" class="text-slate-300">{{ worker_status.last_started_at or "—" }}</dd>
+            <dt class="text-slate-500">Heartbeat</dt><dd id="worker-heartbeat" class="text-slate-300">{{ worker_status.last_heartbeat or "—" }}</dd>
+            <dt class="text-slate-500">Shutdown</dt><dd id="worker-shutdown" class="text-slate-300">{{ worker_status.last_shutdown_at or "—" }}</dd>
+            <dt class="text-slate-500">Backend</dt><dd class="text-slate-300">{% if worker_enabled %}Worker mode enabled{% else %}Worker mode disabled{% endif %}</dd>
+            <dt class="text-slate-500">Version</dt>
+            <dd id="worker-version" class="{% if worker_status.version.mismatch %}text-red-300{% else %}text-slate-300{% endif %}">
+              backend {{ worker_status.version.backend_git_sha or "unknown" }} · worker {{ worker_status.version.worker_git_sha or "unknown" }}
+            </dd>
+            <dt class="text-slate-500">Protocol</dt>
+            <dd id="worker-protocol" class="{% if worker_status.version.mismatch %}text-red-300{% else %}text-emerald-300{% endif %}">
+              {% if worker_status.version.mismatch %}Mismatch{% else %}OK{% endif %} (expected {{ worker_status.version.expected_protocol_version }}, worker {{ worker_status.version.worker_protocol_version or "—" }})
+            </dd>
+          </dl>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 class="text-sm font-bold text-white mb-3">Supervisor</h2>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
+            <dt class="text-slate-500">Last Poll</dt><dd id="worker-supervisor-poll" class="text-slate-300">{{ worker_status.supervisor.last_poll_at or "—" }}</dd>
+            <dt class="text-slate-500">Last Report</dt><dd id="worker-supervisor-report" class="text-slate-300">{{ worker_status.supervisor.last_report_at or "—" }}</dd>
+            <dt class="text-slate-500">Child PID</dt><dd id="worker-child-pid" class="text-slate-300">{{ worker_status.supervisor.child_pid or "—" }}</dd>
+            <dt class="text-slate-500">Child Started</dt><dd id="worker-child-started" class="text-slate-300">{{ worker_status.supervisor.child_started_at or "—" }}</dd>
+            <dt class="text-slate-500">Restart Seen</dt><dd id="worker-restart-seen" class="text-slate-300">{{ worker_status.supervisor.last_restart_token_seen if worker_status.supervisor.last_restart_token_seen is not none else "—" }}</dd>
+            <dt class="text-slate-500">Poll Error</dt><dd id="worker-control-error" class="text-slate-300">{{ worker_status.supervisor.last_control_error or "—" }}</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 class="text-sm font-bold text-white mb-3">Startup Self-Test</h2>
+          {% set self_test = worker_status.self_test %}
+          <dl class="grid grid-cols-[120px_1fr] gap-y-2 text-xs">
+            <dt class="text-slate-500">Status</dt>
+            <dd id="worker-self-test-status" class="{% if self_test and self_test.ok %}text-emerald-400{% elif self_test %}text-red-400{% else %}text-slate-300{% endif %}">
+              {% if self_test and self_test.ok %}OK{% elif self_test %}Failed{% else %}Not reported{% endif %}
+            </dd>
+            <dt class="text-slate-500">Username</dt><dd id="worker-self-test-user" class="text-slate-300">@{{ self_test.username if self_test else "—" }}</dd>
+            <dt class="text-slate-500">Films</dt><dd id="worker-self-test-films" class="text-slate-300">{{ self_test.total_films if self_test and self_test.total_films is defined else "—" }}</dd>
+            <dt class="text-slate-500">Reported</dt><dd id="worker-self-test-time" class="text-slate-300">{{ self_test.reported_at if self_test else "—" }}</dd>
+            <dt class="text-slate-500">Message</dt><dd id="worker-self-test-message" class="text-slate-300">{{ self_test.message if self_test and self_test.message is defined else "—" }}</dd>
+          </dl>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-white">Supervisor Log Tail</h2>
+            <span class="text-[10px] text-slate-500">Last {{ worker_status.supervisor.log_tail|length }} lines</span>
+          </div>
+          <pre id="worker-log-tail" class="scrollbar max-h-64 overflow-auto whitespace-pre-wrap px-4 py-3 text-[11px] leading-relaxed text-slate-300 bg-slate-950/50">{{ worker_status.supervisor.log_tail | join("\n") if worker_status.supervisor.log_tail else "No supervisor log reported yet." }}</pre>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Current Scrape Jobs</h2>
+          <span class="text-[10px] text-slate-500">Auto-refreshes every 15s</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Task</th><th class="text-left px-4 py-2 font-medium">User</th>
+              <th class="text-left px-4 py-2 font-medium">Status</th><th class="text-left px-4 py-2 font-medium">Message</th>
+              <th class="text-left px-4 py-2 font-medium">Latest Event</th><th class="text-right px-4 py-2 font-medium">Elapsed</th>
+              <th class="text-left px-4 py-2 font-medium">Created</th>
+            </tr></thead>
+            <tbody id="worker-jobs">
+              {% for job in worker_status.current_jobs %}
+              <tr class="border-b border-slate-800/50">
+                <td class="px-4 py-2.5 text-slate-500 font-mono">{{ job.task_id[:8] }}</td>
+                <td class="px-4 py-2.5 text-orange-400">@{{ job.username }}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ job.status }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ job.message }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ job.latest_event.stage if job.latest_event else "—" }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ job.elapsed_seconds if job.elapsed_seconds is not none else "—" }}{% if job.elapsed_seconds is not none %}s{% endif %}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ job.created_at[:16].replace("T", " ") }}</td>
+              </tr>
+              {% endfor %}
+              {% if not worker_status.current_jobs %}
+              <tr><td colspan="7" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Recent Worker Failures</h2>
+          <span class="text-[10px] text-slate-500">In-memory, last 10</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Task</th><th class="text-left px-4 py-2 font-medium">User</th>
+              <th class="text-left px-4 py-2 font-medium">Stage</th><th class="text-left px-4 py-2 font-medium">Type</th>
+              <th class="text-right px-4 py-2 font-medium">Duration</th><th class="text-left px-4 py-2 font-medium">Error</th>
+            </tr></thead>
+            <tbody id="worker-failures">
+              {% for failure in worker_status.recent_failures %}
+              <tr class="border-b border-slate-800/50">
+                <td class="px-4 py-2.5 text-slate-500 font-mono">{{ failure.task_id[:8] }}</td>
+                <td class="px-4 py-2.5 text-orange-400">@{{ failure.username }}</td>
+                <td class="px-4 py-2.5 text-red-300">{{ failure.error_stage or "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ failure.error_type or "—" }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ failure.duration_seconds if failure.duration_seconds is not none else "—" }}s</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ failure.message }}</td>
+              </tr>
+              {% endfor %}
+              {% if not worker_status.recent_failures %}
+              <tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No worker failures in memory.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}
+{% block scripts %}
+{% include "admin_js_common.html" %}
+<script>
+    const workerEnabled = {{ worker_enabled|tojson }};
+
+    function setWorkerControlBusy(isBusy) {
+      ['worker-pause-button', 'worker-resume-button', 'worker-restart-button'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = isBusy;
+      });
+    }
+
+    function setWorkerControlFeedback(message, tone = 'neutral') {
+      const node = document.getElementById('worker-control-feedback');
+      if (!node) return;
+      node.textContent = message;
+      node.className = `text-xs mt-3 ${tone === 'error' ? 'text-red-300' : tone === 'ok' ? 'text-emerald-300' : 'text-slate-500'}`;
+    }
+
+    async function setWorkerDesiredState(desiredState) {
+      setWorkerControlBusy(true);
+      try {
+        const response = await fetch(`/admin/api/worker/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ desired_state: desiredState }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setWorkerControlFeedback(desiredState === 'pause' ? 'Paused: new jobs and claims are blocked.' : 'Resumed: new jobs can be claimed.', 'ok');
+        await refreshWorkerStatus();
+      } catch (error) {
+        console.warn('Worker control failed', error);
+        setWorkerControlFeedback('Control request failed. Check backend logs and try again.', 'error');
+      } finally {
+        setWorkerControlBusy(false);
+      }
+    }
+
+    async function requestWorkerRestart() {
+      setWorkerControlBusy(true);
+      try {
+        const response = await fetch(`/admin/api/worker/restart`, { method: 'POST' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setWorkerControlFeedback('Restart requested. The supervisor will relaunch the child on its next poll.', 'ok');
+        await refreshWorkerStatus();
+      } catch (error) {
+        console.warn('Worker restart request failed', error);
+        setWorkerControlFeedback('Restart request failed. Check backend logs and try again.', 'error');
+      } finally {
+        setWorkerControlBusy(false);
+      }
+    }
+
+    function renderWorkerJobs(jobs) {
+      const tbody = document.getElementById('worker-jobs');
+      if (!tbody) return;
+      if (!jobs || jobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-slate-600">No queued or running scrape jobs.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = jobs.map(job => `
+        <tr class="border-b border-slate-800/50">
+          <td class="px-4 py-2.5 text-slate-500 font-mono">${job.task_id.slice(0, 8)}</td>
+          <td class="px-4 py-2.5 text-orange-400">@${job.username || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-300">${job.status}</td>
+          <td class="px-4 py-2.5 text-slate-400">${job.message || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-400">${job.latest_event?.stage || '—'}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${job.elapsed_seconds ?? '—'}${job.elapsed_seconds !== null && job.elapsed_seconds !== undefined ? 's' : ''}</td>
+          <td class="px-4 py-2.5 text-slate-500">${shortTime(job.created_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderWorkerFailures(failures) {
+      const tbody = document.getElementById('worker-failures');
+      if (!tbody) return;
+      if (!failures || failures.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No worker failures in memory.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = failures.map(failure => `
+        <tr class="border-b border-slate-800/50">
+          <td class="px-4 py-2.5 text-slate-500 font-mono">${failure.task_id.slice(0, 8)}</td>
+          <td class="px-4 py-2.5 text-orange-400">@${failure.username || '—'}</td>
+          <td class="px-4 py-2.5 text-red-300">${failure.error_stage || '—'}</td>
+          <td class="px-4 py-2.5 text-slate-300">${failure.error_type || '—'}</td>
+          <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${failure.duration_seconds ?? '—'}${failure.duration_seconds !== null && failure.duration_seconds !== undefined ? 's' : ''}</td>
+          <td class="px-4 py-2.5 text-slate-400">${failure.message || '—'}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function refreshWorkerStatus() {
+      try {
+        const response = await fetch(`/admin/api/worker`);
+        if (!response.ok) return;
+        const body = await response.json();
+        const status = body.status || {};
+        const store = body.settings_store || {};
+        const online = Boolean(body.enabled && status.online);
+        const label = !body.enabled ? 'Disabled' : online ? 'Live' : 'Offline';
+        const header = document.getElementById('worker-header-status');
+        const onlineNode = document.getElementById('worker-online');
+        const color = !body.enabled ? 'text-slate-500' : online ? 'text-emerald-400' : 'text-red-400';
+        header.textContent = `● Worker ${label.toLowerCase()}`;
+        header.className = color;
+        onlineNode.textContent = label;
+        onlineNode.className = `text-2xl font-black ${color.replace('text-slate-500', 'text-slate-600')}`;
+        document.getElementById('worker-heartbeat-age').textContent =
+          status.heartbeat_age_seconds === null || status.heartbeat_age_seconds === undefined ? '—' : `${status.heartbeat_age_seconds}s`;
+        const control = status.control || {};
+        const desiredState = control.desired_state || 'run';
+        const desiredNode = document.getElementById('worker-desired-state');
+        desiredNode.textContent = desiredState === 'pause' ? 'Paused' : 'Run';
+        desiredNode.className = `text-2xl font-black ${desiredState === 'pause' ? 'text-amber-400' : 'text-emerald-400'}`;
+        document.getElementById('worker-control-summary').textContent = `Desired state: ${desiredState} · restart token ${control.restart_token ?? '—'}`;
+        const storeNode = document.getElementById('worker-settings-store');
+        const storeDetail = document.getElementById('worker-settings-detail');
+        const settingsSummary = document.getElementById('worker-settings-summary');
+        const persistent = Boolean(store.persistent);
+        if (storeNode) {
+          storeNode.textContent = persistent ? 'Durable' : 'Memory';
+          storeNode.className = `text-2xl font-black ${persistent ? 'text-emerald-400' : 'text-amber-400'}`;
+        }
+        if (storeDetail) storeDetail.textContent = store.table || 'process state';
+        if (settingsSummary) {
+          const saved = store.last_saved_at ? ` · saved ${shortTime(store.last_saved_at)}` : '';
+          const loaded = store.last_loaded_at ? ` · loaded ${shortTime(store.last_loaded_at)}` : '';
+          const saveState = store.last_save_ok === false ? ' · save failed' : '';
+          settingsSummary.textContent = `Settings: ${store.source || 'memory'}${saved || loaded}${saveState}`;
+          settingsSummary.className = `text-xs mt-1 ${store.last_save_ok === false ? 'text-red-300' : 'text-slate-500'}`;
+        }
+
+        const supervisor = status.supervisor || {};
+        const childStatus = supervisor.child_status || 'unknown';
+        const childNode = document.getElementById('worker-child-status');
+        childNode.textContent = childStatus.charAt(0).toUpperCase() + childStatus.slice(1);
+        childNode.className = `text-2xl font-black ${childStatus === 'running' ? 'text-emerald-400' : childStatus === 'unknown' ? 'text-slate-600' : 'text-amber-400'}`;
+        document.getElementById('worker-supervisor-poll').textContent = shortTime(supervisor.last_poll_at);
+        document.getElementById('worker-supervisor-report').textContent = shortTime(supervisor.last_report_at);
+        document.getElementById('worker-child-pid').textContent = supervisor.child_pid ?? '—';
+        document.getElementById('worker-child-started').textContent = shortTime(supervisor.child_started_at);
+        document.getElementById('worker-restart-seen').textContent = supervisor.last_restart_token_seen ?? '—';
+        document.getElementById('worker-control-error').textContent = supervisor.last_control_error || '—';
+        document.getElementById('worker-log-tail').textContent = (supervisor.log_tail || []).join('\n') || 'No supervisor log reported yet.';
+
+        document.getElementById('worker-queued').textContent = status.queue?.queued ?? 0;
+        document.getElementById('worker-running').textContent = status.queue?.running ?? 0;
+        document.getElementById('worker-completed').textContent = status.queue?.completed ?? 0;
+        const failedCount = status.queue?.failed ?? 0;
+        const failedNode = document.getElementById('worker-failed');
+        failedNode.textContent = failedCount;
+        failedNode.className = `text-2xl font-black ${failedCount > 0 ? 'text-red-400' : 'text-slate-600'}`;
+        document.getElementById('worker-started').textContent = shortTime(status.last_started_at);
+        document.getElementById('worker-heartbeat').textContent = shortTime(status.last_heartbeat);
+        document.getElementById('worker-shutdown').textContent = shortTime(status.last_shutdown_at);
+        const version = status.version || {};
+        const versionNode = document.getElementById('worker-version');
+        const protocolNode = document.getElementById('worker-protocol');
+        versionNode.textContent = `backend ${version.backend_git_sha || 'unknown'} · worker ${version.worker_git_sha || 'unknown'}`;
+        versionNode.className = version.mismatch ? 'text-red-300' : 'text-slate-300';
+        protocolNode.textContent = `${version.mismatch ? 'Mismatch' : 'OK'} (expected ${version.expected_protocol_version ?? '—'}, worker ${version.worker_protocol_version ?? '—'})`;
+        protocolNode.className = version.mismatch ? 'text-red-300' : 'text-emerald-300';
+
+        const selfTest = status.self_test;
+        document.getElementById('worker-self-test-status').textContent = !selfTest ? 'Not reported' : selfTest.ok ? 'OK' : 'Failed';
+        document.getElementById('worker-self-test-status').className = !selfTest ? 'text-slate-300' : selfTest.ok ? 'text-emerald-400' : 'text-red-400';
+        document.getElementById('worker-self-test-user').textContent = selfTest?.username ? `@${selfTest.username}` : '@—';
+        document.getElementById('worker-self-test-films').textContent = selfTest?.total_films ?? '—';
+        document.getElementById('worker-self-test-time').textContent = shortTime(selfTest?.reported_at);
+        document.getElementById('worker-self-test-message').textContent = selfTest?.message || '—';
+        renderWorkerJobs(status.current_jobs);
+        renderWorkerFailures(status.recent_failures);
+      } catch (error) {
+        console.warn('Worker status refresh failed', error);
+      }
+    }
+
+    if (workerEnabled) {
+      setInterval(refreshWorkerStatus, 15000);
+    }
+</script>
+{% endblock %}

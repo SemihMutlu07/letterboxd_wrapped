@@ -1,0 +1,24 @@
+<script>
+  function shortTime(value) {
+    return value ? value.replace('T', ' ').slice(0, 16) : '—';
+  }
+  function escapeHtml(value) {
+    return String(value ?? '—')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+  function fmtSeconds(value) {
+    return value === null || value === undefined ? '—' : `${value}s`;
+  }
+  function okBadge(ok) {
+    return ok === false
+      ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>'
+      : '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>';
+  }
+  function renderUsers(usernames) {
+    return '@' + (usernames || []).map(escapeHtml).join(' × @');
+  }
+</script>

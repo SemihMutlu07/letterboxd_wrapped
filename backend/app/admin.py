@@ -353,13 +353,16 @@ async def admin_session(request: Request):
     return response
 
 
-@router.get("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
+async def _admin_page_guard(request: Request) -> HTMLResponse | None:
+    """Shared login/redirect boilerplate for every /admin/* page route.
+
+    Returns a response to short-circuit with, or None to continue rendering.
+    """
     _admin_secret()  # Keep a missing secret as an explicit setup error.
     if "key" in request.query_params:
         # Scrub a legacy query-key URL from the browser without authenticating
-        # it. The clean dashboard request will render the POST-only login form.
-        return RedirectResponse("/admin/dashboard", status_code=303)
+        # it. The clean page request will render the POST-only login form.
+        return RedirectResponse(request.url.path, status_code=303)
     try:
         _require_admin(request)
     except HTTPException as exc:
@@ -369,31 +372,127 @@ async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
         # the original URL before this application can redirect or scrub it.
         return templates.TemplateResponse("admin_login.html", {"request": request})
     await dashboard_settings.load_worker_control_state()
-    runs = await _load_analysis_runs(limit=limit)
+    return None
+
+
+async def _load_side_runs() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if settings.supabase_enabled:
         watchlist_runs = await _load_watchlist_runs_supabase(limit=SIDE_RUNS_LIMIT)
         date_night_runs = await _load_date_night_runs_supabase(limit=SIDE_RUNS_LIMIT)
     else:
         watchlist_runs = _load_json_dir(WATCHLIST_RUNS_DIR, limit=SIDE_RUNS_LIMIT)
         date_night_runs = _load_json_dir(DATE_NIGHT_RUNS_DIR, limit=SIDE_RUNS_LIMIT)
-    worker_status = task_manager.get_worker_status(
+    return watchlist_runs, date_night_runs
+
+
+def _worker_status_context() -> dict[str, Any]:
+    return task_manager.get_worker_status(
         settings.worker_heartbeat_max_age_seconds,
         expected_protocol_version=settings.worker_protocol_version,
         backend_git_sha=backend_git_sha(),
     )
+
+
+@router.get("/admin/dashboard", response_class=HTMLResponse)
+async def admin_dashboard(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
+    guard = await _admin_page_guard(request)
+    if guard is not None:
+        return guard
+    runs = await _load_analysis_runs(limit=limit)
+    watchlist_runs, date_night_runs = await _load_side_runs()
+    worker_status = _worker_status_context()
     incidents = await _load_operational_incidents(worker_status)
     return templates.TemplateResponse(
-        "admin_dashboard.html",
+        "admin_overview.html",
+        {
+            "request": request,
+            "runs_count": len(runs),
+            "watchlist_count": len(watchlist_runs),
+            "date_night_count": len(date_night_runs),
+            "worker_status": worker_status,
+            "worker_enabled": settings.desktop_worker_enabled,
+            "incidents": incidents,
+            "active_page": "dashboard",
+            "key": "",
+        },
+    )
+
+
+@router.get("/admin/analysis", response_class=HTMLResponse)
+async def admin_analysis(request: Request, limit: int = ANALYSIS_RUNS_LIMIT):
+    guard = await _admin_page_guard(request)
+    if guard is not None:
+        return guard
+    runs = await _load_analysis_runs(limit=limit)
+    worker_status = _worker_status_context()
+    return templates.TemplateResponse(
+        "admin_analysis.html",
         {
             "request": request,
             "runs": runs,
             "run_groups": _group_runs_by_username(runs),
-            "watchlist_runs": watchlist_runs,
-            "date_night_runs": date_night_runs,
+            "worker_status": worker_status,
+            "worker_enabled": settings.desktop_worker_enabled,
+            "active_page": "analysis",
+            "key": "",
+        },
+    )
+
+
+@router.get("/admin/worker", response_class=HTMLResponse)
+async def admin_worker(request: Request):
+    guard = await _admin_page_guard(request)
+    if guard is not None:
+        return guard
+    worker_status = _worker_status_context()
+    return templates.TemplateResponse(
+        "admin_worker.html",
+        {
+            "request": request,
             "worker_status": worker_status,
             "worker_enabled": settings.desktop_worker_enabled,
             "settings_store": dashboard_settings.settings_store_status(),
-            "incidents": incidents,
+            "active_page": "worker",
+            "key": "",
+        },
+    )
+
+
+@router.get("/admin/compare", response_class=HTMLResponse)
+async def admin_compare(request: Request):
+    guard = await _admin_page_guard(request)
+    if guard is not None:
+        return guard
+    watchlist_runs, _ = await _load_side_runs()
+    worker_status = _worker_status_context()
+    return templates.TemplateResponse(
+        "admin_compare.html",
+        {
+            "request": request,
+            "watchlist_runs": watchlist_runs,
+            "worker_status": worker_status,
+            "worker_enabled": settings.desktop_worker_enabled,
+            "active_page": "compare",
+            "key": "",
+        },
+    )
+
+
+@router.get("/admin/date-night", response_class=HTMLResponse)
+async def admin_date_night(request: Request):
+    guard = await _admin_page_guard(request)
+    if guard is not None:
+        return guard
+    _, date_night_runs = await _load_side_runs()
+    worker_status = _worker_status_context()
+    return templates.TemplateResponse(
+        "admin_date_night.html",
+        {
+            "request": request,
+            "date_night_runs": date_night_runs,
+            "worker_status": worker_status,
+            "worker_enabled": settings.desktop_worker_enabled,
+            "active_page": "date_night",
             "key": "",
         },
     )

@@ -26,6 +26,13 @@ export type ShareReviewWordStat = {
   count: number;
 };
 
+export type ShareMilestoneFilm = {
+  ordinal: number;
+  title: string;
+  year: string;
+  posterPath: string | null;
+};
+
 export type ShareOutlierFilm = {
   title: string;
   year: string;
@@ -58,6 +65,8 @@ export type ShareCardData = {
   topReviewWords?: ShareReviewWordStat[];
   /** Single film where user rating diverges most from TMDB community average. */
   ratingOutlierFilm?: ShareOutlierFilm;
+  /** Chronological Nth-watched-film milestones (100/300/500/750), only thresholds reached. */
+  milestones?: ShareMilestoneFilm[];
   /** Letterboxd username shown on the card so viewers know whose Wrapped it is. */
   username?: string;
 };

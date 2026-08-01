@@ -38,11 +38,28 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleGoHome = () => {
-    window.location.href = '/';
+    const locale = document.documentElement.lang === 'tr' ? 'tr' : 'en';
+    window.location.href = `/${locale}`;
   };
 
   render() {
     if (this.state.hasError) {
+      const isTurkish = typeof document !== 'undefined' && document.documentElement.lang === 'tr';
+      const copy = isTurkish
+        ? {
+            title: 'Bir şeyler ters gitti',
+            message: 'Beklenmeyen bir hatayla karşılaştık. Verilerin güvende.',
+            details: 'Hata ayrıntıları (yalnızca geliştirme)',
+            retry: 'Tekrar Dene',
+            home: 'Ana Sayfa',
+          }
+        : {
+            title: 'Something went wrong',
+            message: 'We encountered an unexpected error. Don\'t worry, your data is safe.',
+            details: 'Error details (development only)',
+            retry: 'Try Again',
+            home: 'Go Home',
+          };
       // Custom fallback UI
       if (this.props.fallback) {
         return this.props.fallback;
@@ -57,17 +74,17 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
             
             <h1 className="text-xl font-bold text-white mb-2">
-              Something went wrong
+              {copy.title}
             </h1>
             
             <p className="text-slate-300 mb-6">
-              We encountered an unexpected error. Don&apos;t worry, your data is safe.
+              {copy.message}
             </p>
 
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mb-6 text-left">
                 <summary className="text-sm text-slate-400 cursor-pointer mb-2">
-                  Error details (development only)
+                  {copy.details}
                 </summary>
                 <div className="bg-slate-900 rounded-lg p-3 text-xs font-mono text-red-300 overflow-auto max-h-32">
                   <div className="mb-2">
@@ -91,7 +108,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                Try Again
+                {copy.retry}
               </button>
               
               <button
@@ -99,7 +116,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 <Home className="w-4 h-4" />
-                Go Home
+                {copy.home}
               </button>
             </div>
           </div>

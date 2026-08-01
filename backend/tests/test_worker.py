@@ -755,7 +755,7 @@ async def test_supervisor_report_does_not_pollute_worker_heartbeat(client: Async
 @pytest.mark.asyncio
 async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
-    r = await client.get("/admin/dashboard", headers=ADMIN_AUTH)
+    r = await client.get("/admin/worker", headers=ADMIN_AUTH)
     assert r.status_code == 200
     html = r.text
     assert "Desktop Worker" in html
@@ -764,10 +764,9 @@ async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     assert "Pause Jobs" in html
     assert "Restart Worker" in html
     assert "Settings Store" in html
-    assert "Durable ops dashboard" in html
     assert "Supervisor Log Tail" in html
-    assert "refreshAnalysisRuns" in html
-    assert "/admin/api/runs" in html
+    assert "refreshWorkerStatus" in html
+    assert "/admin/api/worker" in html
 
 
 @pytest.mark.asyncio
@@ -971,7 +970,7 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     assert run["error_stage"] == "letterboxd_or_scrape"
     assert run["error_message"] == "Letterboxd blocked the desktop worker."
 
-    dashboard = await client.get("/admin/dashboard", headers=ADMIN_AUTH)
+    dashboard = await client.get("/admin/analysis", headers=ADMIN_AUTH)
     assert dashboard.status_code == 200
     assert "letterboxd_or_scrape" in dashboard.text
 

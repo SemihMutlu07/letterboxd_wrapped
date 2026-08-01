@@ -1,0 +1,75 @@
+{% extends "admin_base.html" %}
+{% block title %}Watchlist Compare{% endblock %}
+{% block content %}
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Watchlist Comparisons</h2>
+          <span class="text-[10px] text-slate-500">Last 50</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Users</th><th class="text-right px-4 py-2 font-medium">Match</th>
+              <th class="text-right px-4 py-2 font-medium">Common</th><th class="text-left px-4 py-2 font-medium">Device</th>
+              <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
+            </tr></thead>
+            <tbody id="watchlist-runs">
+              {% for w in watchlist_runs[:50] %}
+              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+                <td class="px-4 py-2.5 text-slate-300">@{{ w.usernames | join(" × @") }}</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ w.match_score or "—" }}%</td>
+                <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">{{ w.counts.common if w.counts else "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ w.device.user_agent[:30] if w.device and w.device.user_agent else "—" }}…</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ w._mtime[:16].replace("T", " ") }}</td>
+                <td class="px-4 py-2.5 text-center">
+                  {% if w.ok == false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              {% if not watchlist_runs %}
+              <tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No watchlist comparisons recorded yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}
+{% block scripts %}
+{% include "admin_js_common.html" %}
+<script>
+    function renderWatchlistRuns(runs) {
+      const tbody = document.getElementById('watchlist-runs');
+      if (!tbody) return;
+      if (!runs || runs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No watchlist comparisons recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = runs.map(w => {
+        const ua = w.device && w.device.user_agent ? escapeHtml(w.device.user_agent.slice(0, 30)) + '…' : '—';
+        const common = w.counts ? (w.counts.common ?? '—') : '—';
+        return `
+          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+            <td class="px-4 py-2.5 text-slate-300">${renderUsers(w.usernames)}</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${w.match_score ?? '—'}%</td>
+            <td class="px-4 py-2.5 text-right text-slate-300 tabular-nums">${common}</td>
+            <td class="px-4 py-2.5 text-slate-500">${ua}</td>
+            <td class="px-4 py-2.5 text-slate-500">${shortTime(w._mtime)}</td>
+            <td class="px-4 py-2.5 text-center">${okBadge(w.ok)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function refreshWatchlistRuns() {
+      try {
+        const response = await fetch(`/admin/api/runs`);
+        if (!response.ok) return;
+        const body = await response.json();
+        renderWatchlistRuns(body.watchlist_runs || []);
+      } catch (error) {
+        console.warn('Watchlist runs refresh failed', error);
+      }
+    }
+    setInterval(refreshWatchlistRuns, 15000);
+</script>
+{% endblock %}

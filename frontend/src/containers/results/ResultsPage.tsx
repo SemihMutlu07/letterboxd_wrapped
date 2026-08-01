@@ -25,12 +25,32 @@ import {
 } from "@/containers/results/results-model";
 import { ResultsContent } from "@/containers/results/ResultsContent";
 import { useResultsSession } from "@/containers/results/useResultsSession";
+import { useI18n } from "@/i18n/I18nProvider";
+import { localizePath } from "@/i18n/routing";
 
 export { ResultsContent };
 
 // Note: StatsData is imported from @/containers/results/sections/types
 
 export default function ResultsPage() {
+  const { locale } = useI18n();
+  const copy = locale === 'tr'
+    ? {
+        noData: 'Sonuç verisi bulunamadı',
+        noUserData: (value: string) => `@${value} için bu cihazda kayıtlı sonuç bulunamadı.`,
+        uploadFirst: 'Önce Letterboxd verilerini analiz et.',
+        goBack: 'Geri Dön',
+        unknownActor: 'Bilinmeyen Oyuncu',
+        unknownDirector: 'Bilinmeyen Yönetmen',
+      }
+    : {
+        noData: 'No data found',
+        noUserData: (value: string) => `No local result data found for @${value}.`,
+        uploadFirst: 'Please upload your Letterboxd data first.',
+        goBack: 'Go Back',
+        unknownActor: 'Unknown Actor',
+        unknownDirector: 'Unknown Director',
+      };
   const {
     stats,
     loading,
@@ -144,6 +164,13 @@ export default function ResultsPage() {
       .slice(0, 3)
       .map(({ word, count }) => ({ word, count }));
 
+    const milestones = (stats?.milestones ?? []).map((m) => ({
+      ordinal: m.ordinal,
+      title: m.title,
+      year: m.year != null ? String(m.year) : "",
+      posterPath: m.poster_path && m.poster_path.length > 0 ? m.poster_path : null,
+    }));
+
     const outlier = stats?.rating_outlier_film;
     const ratingOutlierFilm = outlier
       ? {
@@ -161,12 +188,12 @@ export default function ResultsPage() {
 
     return {
       onScreenCrush: topActors[actorIdx] || {
-        name: "Unknown Actor",
+        name: copy.unknownActor,
         headshotUrl: "",
         count: 0,
       },
       favoriteDirector: topDirectors[directorIdx] || {
-        name: "Unknown Director",
+        name: copy.unknownDirector,
         headshotUrl: "",
         count: 0,
       },
@@ -185,6 +212,7 @@ export default function ResultsPage() {
       topFilms,
       topReviewWords,
       ratingOutlierFilm,
+      milestones,
       username: username || undefined,
     };
   }, [
@@ -195,6 +223,8 @@ export default function ResultsPage() {
     timePct,
     username,
     runtimeHours,
+    copy.unknownActor,
+    copy.unknownDirector,
   ]);
 
   useEffect(() => {
@@ -215,17 +245,17 @@ export default function ResultsPage() {
     return (
       <div className="min-h-screen bg-[#1e252d] flex items-center justify-center text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">No data found</h2>
+          <h2 className="text-2xl font-bold mb-4">{copy.noData}</h2>
           <p className="text-gray-400">
             {username
-              ? `No local result data found for @${username}.`
-              : "Please upload your Letterboxd data first."}
+              ? copy.noUserData(username)
+              : copy.uploadFirst}
           </p>
           <Link
-            href="/"
+            href={localizePath('/', locale)}
             className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors"
           >
-            Go Back
+            {copy.goBack}
           </Link>
         </div>
       </div>

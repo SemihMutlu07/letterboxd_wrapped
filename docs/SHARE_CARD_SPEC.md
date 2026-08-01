@@ -7,6 +7,31 @@ alıp kart bileşenlerini üretecek.
 
 ---
 
+## Instagram Story safe zone (hard layout constraint)
+
+Story cards use a full-bleed **1080 × 1920 px** canvas. Backgrounds and
+non-critical decoration may fill it, but every name, stat, logo, CTA, caption,
+and key visual must remain inside the centered **1080 × 1420 px** safe zone:
+
+- top danger zone: `y = 0–250 px` (progress, profile, handle, timestamp, close);
+- safe vertical range: `y = 250–1670 px`;
+- bottom danger zone: `y = 1670–1920 px` (reply, reactions, share controls);
+- side buffer: critical content stays at least `40–60 px` from either edge.
+
+The current export DOM is **675 × 1200 px** and exports at `1.6×`. Its component
+coordinates are therefore `y = 156.25–1043.75 px`, with a `25–37.5 px` side
+buffer. Reviews and tests must use these bounds rather than the raw canvas edge.
+
+Actor/director portraits and film posters are intrinsically vertical assets.
+Keep an explicit vertical aspect ratio (normally `2:3`) and reserve separate,
+non-overlapping grid/flex tracks for them. Never place headline/stat layers over
+portraits or posters, ignore inter-item spacing, or use clipping to conceal a
+collision. Preview responsiveness may scale the complete fixed-ratio card; it
+must not distort the card's internal distribution.
+
+For Reels cross-posting, reserve a `400 px` bottom margin. Story remains the
+primary contract.
+
 ## 1. Semih'in ürün kararları (FINAL — tartışmaya açık değil)
 
 1. **İki format:**
@@ -66,12 +91,9 @@ component bu key'leri render etmiyor. Yeni spec'te bu union daraltılacak.
 
 ### 2.3 Boyutlar / pixel ratio
 
-- `target` boyutu `ShareModal.tsx:208-212`'de sabit:
-  - `horizontal` → **1200×630** (bu OG-image / Facebook standardı, **16:9
-    değil** — oran 1.905:1). Semih'in istediği 1200×675 (tam 16:9) ile
-    **uyuşmuyor**, yeni spec'te düzeltilmeli.
-  - `vertical` → **675×1200** (oran 9:16, doğru — ama hedef 1080×1920'in
-    yarısı boyutunda taban alınıyor).
+- `target` boyutu `ShareModal.tsx`'de tanımlı:
+  - `horizontal` → **1200×675** (16:9 formatı, Twitter/X ve genel yatay paylaşım standardı).
+  - `vertical` → **675×1200** (9:16 oran).
 - Gerçek export çözünürlüğü `target.w/h × pixelRatio`. `pixelRatio`,
   `useAdaptivePixelRatio()` (`frontend/src/hooks/useDeviceMemory.ts`) ile
   cihaz belleğine göre adaptif: **1.1 (≤2GB) / 1.25 (≤4GB) / 1.4 (≤8GB) / 1.6

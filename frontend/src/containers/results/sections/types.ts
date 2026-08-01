@@ -174,6 +174,14 @@ export interface StatsData {
     poster_path?: string;
     watch_count: number;
   }[];
+  /** Nth chronologically-watched film for N in (100, 300, 500, 750). Only reached thresholds present. */
+  milestones?: {
+    ordinal: number;
+    title: string;
+    year?: number | null;
+    poster_path?: string;
+    watched_date: string;
+  }[];
   /**
    * ISO-2 keyed country data emitted from production_countries TMDB field.
    * More reliable than top_countries (which uses name strings only).

@@ -22,6 +22,7 @@ import pandas as pd
 from app import task_manager
 from app.analysis_utils import compute_cinema_scale, compute_cinema_scale_inputs
 from app.services.film_datasets import compute_data_quality, build_film_datasets
+from app.services.milestones import compute_milestones
 from app.services.viewing_habits import compute_date_analytics, compute_rewatch_champions
 from app.services.geography import (
     compute_country_analytics,
@@ -225,6 +226,7 @@ async def process_comprehensive_letterboxd_data(
     # compute_date_analytics mutates diary_df/watched_df in place (adds
     # "parsed_date") — Section 13 below depends on that column existing.
     stats.update(compute_date_analytics(diary_df, watched_df))
+    stats.update(compute_milestones(diary_df, films_enriched))
 
     # -----------------------------------------------------------------------
     # 8. KEYWORD ANALYTICS + COUNTRY ANALYTICS
