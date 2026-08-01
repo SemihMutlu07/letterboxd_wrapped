@@ -81,13 +81,10 @@ export default function ReviewAnalysisSection({ stats }: Props) {
       || (a.title ?? '').localeCompare(b.title ?? '')
     )[0];
     if (longest) {
-      return { title: longest.title, year: longest.year, length: wordCountOf(longest), unit: 'words' as const };
-    }
-    if (ra?.longest_review) {
-      return { ...ra.longest_review, unit: 'chars' as const };
+      return { title: longest.title, year: longest.year, length: wordCountOf(longest) };
     }
     return null;
-  }, [allReviews, ra?.longest_review]);
+  }, [allReviews]);
 
   // Most loyal fan: whoever liked the most of the user's distinct reviews.
   const mostLoyalFan = useMemo(() => {
@@ -163,9 +160,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         {longestReview && (
           <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:p-4 min-w-0">
             <p className="text-2xl sm:text-3xl font-bold text-orange-400 tabular-nums">{longestReview.length}</p>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              {longestReview.unit === 'words' ? 'words on your longest review' : 'chars in your longest review'}
-            </p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">words on your longest review</p>
             <p className="mt-2 text-xs text-slate-400 truncate">
               {longestReview.title}{longestReview.year ? ` (${longestReview.year})` : ''}
             </p>

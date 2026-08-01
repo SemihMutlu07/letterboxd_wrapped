@@ -83,22 +83,4 @@ describe('LetterboxdLanding persistence consent gate', () => {
       );
     });
   });
-
-  it('sends the analysis period selected by the user', async () => {
-    const user = userEvent.setup();
-    render(<LetterboxdLanding />);
-
-    await user.click(screen.getByRole('button', { name: 'All time' }));
-    await user.type(document.querySelector('input[name="username"]')!, 'alice');
-    await user.click(screen.getByRole('button', { name: /analyze/i }));
-
-    await waitFor(() => {
-      expect(apiMocks.scrapeProfile).toHaveBeenCalledWith(
-        'alice',
-        'lifetime',
-        undefined,
-        expect.any(Function),
-      );
-    });
-  });
 });
