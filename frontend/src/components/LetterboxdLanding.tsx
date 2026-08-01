@@ -29,11 +29,6 @@ import { POSTER_GAME_MOVIES, type PosterGameMovie } from '@/lib/posterGameData';
 const POSTER_GAME_MAX_LEVEL = 5;
 // Points for a correct guess, indexed by how many wrong guesses/hints were used first.
 const POSTER_ROUND_POINTS = [100, 80, 60, 40, 20];
-const ANALYSIS_PERIOD_OPTIONS: { value: AnalysisPeriod; label: string }[] = [
-  { value: 'month', label: '1 month' },
-  { value: 'year', label: '1 year' },
-  { value: 'lifetime', label: 'All time' },
-];
 
 const USERNAME_PLACEHOLDER_EXAMPLES = [
   'semihmutsuz',
@@ -121,7 +116,7 @@ export default function LetterboxdLanding() {
   const [usernameInput, setUsernameInput] = useState('');
   const [usernameFocused, setUsernameFocused] = useState(false);
   const usernamePlaceholder = useTypewriterPlaceholder(USERNAME_PLACEHOLDER_EXAMPLES, !usernameFocused && usernameInput.length === 0);
-  const [analysisPeriod, setAnalysisPeriod] = useState<AnalysisPeriod>('year');
+  const [analysisPeriod] = useState<AnalysisPeriod>('year');
   const [error, setError] = useState<NormalizedError | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
@@ -566,41 +561,12 @@ export default function LetterboxdLanding() {
             <div className="mx-auto max-w-lg rounded-2xl p-5 sm:p-6 text-center backdrop-blur-sm" style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}>
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Just type your username</h2>
 
-              <fieldset className="mx-auto mt-4 max-w-md">
-                <legend className="sr-only">Analysis period</legend>
-                <div
-                  role="group"
-                  aria-label="Analysis period"
-                  className="grid grid-cols-3 rounded-xl border border-white/10 bg-black/20 p-1"
-                >
-                  {ANALYSIS_PERIOD_OPTIONS.map((option) => {
-                    const selected = analysisPeriod === option.value;
-
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => setAnalysisPeriod(option.value)}
-                        className={`rounded-lg px-2 py-2 text-xs font-medium transition sm:text-sm ${
-                          selected
-                            ? 'bg-orange-400 text-slate-950 shadow-sm'
-                            : 'text-white/55 hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   void handleScrape();
                 }}
-                className="mx-auto mt-3 flex max-w-md flex-col gap-3 sm:flex-row"
+                className="mx-auto mt-5 flex max-w-md flex-col gap-3 sm:flex-row"
               >
                 <label className="relative flex-1">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold text-white/40">@</span>

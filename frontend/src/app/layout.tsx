@@ -21,8 +21,12 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://movieswrapped.com'),
   title: 'Movies Wrapped - Your Year in Film',
   description: 'Discover your personal film statistics and insights from your Letterboxd data.',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
     type: 'website',
+    url: '/',
     siteName: 'Movies Wrapped',
     title: 'Movies Wrapped - Your Year in Film',
     description: 'Discover your personal film statistics and insights from your Letterboxd data.',

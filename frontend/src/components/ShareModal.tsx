@@ -474,7 +474,7 @@ export default function ShareModal({
               sidebar scrolls (md:overflow-y-auto), which clips anything positioned
               above its own top edge — so open downward there instead. */}
           {showSwapTrigger && swapOpen && (
-            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 md:bottom-auto md:top-16 md:mb-0 md:mt-2 z-20 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
+            <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 z-20 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
               {hasActors && (
                 <div className="flex items-center gap-2">
                   <span className="text-slate-400 w-16 shrink-0">Actor</span>
