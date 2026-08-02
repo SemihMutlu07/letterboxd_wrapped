@@ -6,7 +6,6 @@ from app import task_manager
 from app.models.recommend import DateNightResponse, MutualProfile
 from app.services.recommender import (
     build_mutual_profile,
-    compare_watchlist_sets,
     discover_date_night_recommendations,
     enrich_films,
     enrich_films_concurrent,
@@ -16,7 +15,6 @@ from app.services.recommender import (
 from app.services.scraper import merge_scraped_films
 from app.services.worker_monitor import log_worker_event
 
-WATCHLIST_ENRICH_TIMEOUT = 120
 FIND_FILM_ENRICH_TIMEOUT = 120
 DATE_NIGHT_ENRICH_TIMEOUT = 180
 DATE_NIGHT_PROFILE_TIMEOUT = 60
@@ -53,21 +51,12 @@ async def finalize_watchlist_job(task_id: str, session) -> None:
     task.result = None
     try:
         if task.job_type == "watchlist_compare":
-            result = compare_watchlist_sets(raw.get("first_watchlist", []), raw.get("second_watchlist", []))
-            common, first_only, second_only = await _bounded(
-                asyncio.gather(
-                    enrich_films_concurrent(session, result["common"], limit=50),
-                    enrich_films_concurrent(session, result["first_only"], limit=50),
-                    enrich_films_concurrent(session, result["second_only"], limit=50),
-                ),
-                WATCHLIST_ENRICH_TIMEOUT,
-                "watchlist_enrichment_timeout",
-            )
-            result.update(
-                common=[public_film(f) for f in common],
-                first_only=[public_film(f) for f in first_only],
-                second_only=[public_film(f) for f in second_only],
-            )
+            # Comparison + TMDB enrichment now run on the desktop worker (moved
+            # 2026-08-02) — it already has TMDB_API_KEY and this keeps the CPU/
+            # network-heavy step off Render, matching why scraping itself lives
+            # there. The worker sends a fully finished result; the backend's job
+            # here is just persisting it.
+            result = raw.get("comparison", {})
             final = {"status": "success", "users": task.usernames, **result}
             if not _is_current_processing_task(task_id, task):
                 return

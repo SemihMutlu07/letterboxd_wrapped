@@ -290,8 +290,16 @@ type Props = {
 
 export default function WatchlistCompare({ first: controlledFirst, second: controlledSecond, onFirstChange, onSecondChange }: Props = {}) {
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
-  const [localFirst, setLocalFirst] = useState('');
-  const [localSecond, setLocalSecond] = useState('');
+  const [localFirst, setLocalFirst] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const [routeFirst] = readWatchlistUsersFromLocation();
+    return routeFirst || sessionStorage.getItem('wc_first') || '';
+  });
+  const [localSecond, setLocalSecond] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const [, routeSecond] = readWatchlistUsersFromLocation();
+    return routeSecond || sessionStorage.getItem('wc_second') || '';
+  });
   const first = controlledFirst ?? localFirst;
   const second = controlledSecond ?? localSecond;
   const changeFirst = onFirstChange ?? setLocalFirst;

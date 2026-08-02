@@ -6,15 +6,16 @@ import WatchlistPage from './page';
 
 vi.mock('next/link', () => ({ default: ({ children, ...props }: React.ComponentProps<'a'>) => <a {...props}>{children}</a> }));
 
-describe('WatchlistPage shared profiles', () => {
-  it('keeps Compare and Date Night on one username pair', async () => {
+describe('WatchlistPage independent profiles', () => {
+  it('keeps Compare and Date Night username inputs independent', async () => {
     render(<WatchlistPage />);
     const compareFirst = screen.getByLabelText('First watchlist');
     const dateFirst = screen.getByLabelText('First Letterboxd username');
 
     await userEvent.type(compareFirst, 'semih');
-    expect(dateFirst).toHaveValue('semih');
+    expect(dateFirst).toHaveValue('');
     await userEvent.type(dateFirst, 'mutsuz');
-    expect(compareFirst).toHaveValue('semihmutsuz');
+    expect(compareFirst).toHaveValue('semih');
+    expect(dateFirst).toHaveValue('mutsuz');
   });
 });

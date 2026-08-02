@@ -322,20 +322,29 @@ async def test_progress_read_expires_aged_worker_task_before_cleanup(client: Asy
 
 @pytest.mark.asyncio
 async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncClient, monkeypatch):
-    from unittest.mock import AsyncMock
-    from app.services import watchlist_jobs
     from app.routes import watchlist
 
     await _beat(client)
     monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
-    monkeypatch.setattr(watchlist_jobs, "enrich_films_concurrent", AsyncMock(side_effect=lambda session, films, **kw: films))
     queued = await client.post("/api/watchlist-compare", json={"usernames": ["one", "two"]})
     assert queued.status_code == 202
     body = queued.json()
     assert (await client.get(f"/api/progress/{body['task_id']}")).status_code == 403
     claim = await client.get("/api/worker/next", headers=AUTH)
     assert claim.json()["job"]["task_id"] == body["task_id"]
-    raw = {"first_watchlist": [{"title": "Film", "year": "2024", "slug": "film"}], "second_watchlist": [{"title": "Film", "year": "2024", "slug": "film"}]}
+    # The worker now runs compare_watchlist_sets + TMDB enrichment itself and
+    # reports the finished comparison — the backend just persists it.
+    raw = {
+        "comparison": {
+            "counts": {"first_total": 1, "second_total": 1, "common": 1, "first_only": 0, "second_only": 0},
+            "returned_counts": {"common": 1, "first_only": 0, "second_only": 0},
+            "truncated": {"common": False, "first_only": False, "second_only": False},
+            "match_score": 100.0,
+            "common": [{"title": "Film", "year": "2024", "slug": "film"}],
+            "first_only": [],
+            "second_only": [],
+        }
+    }
     complete = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
     assert complete.status_code == 200
     await __import__("asyncio").sleep(0)
@@ -344,34 +353,6 @@ async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncC
     assert poll.json()["result"]["counts"]["common"] == 1
     duplicate = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
     assert duplicate.status_code == 200 and duplicate.json()["duplicate"] is True
-
-
-@pytest.mark.asyncio
-async def test_watchlist_finalization_failure_surfaces_stable_poll_error_code(client: AsyncClient, monkeypatch):
-    from unittest.mock import AsyncMock
-    from app.services import watchlist_jobs
-    from app.routes import watchlist
-
-    await _beat(client)
-    monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
-    monkeypatch.setattr(
-        watchlist_jobs,
-        "enrich_films_concurrent",
-        AsyncMock(side_effect=RuntimeError("tmdb unavailable")),
-    )
-    queued = await client.post("/api/watchlist-compare", json={"usernames": ["one", "two"]})
-    body = queued.json()
-    await client.get("/api/worker/next", headers=AUTH)
-    raw = {"first_watchlist": [], "second_watchlist": []}
-    await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
-    await __import__("asyncio").sleep(0)
-
-    poll = await client.get(
-        f"/api/progress/{body['task_id']}",
-        headers={"X-Task-Token": body["poll_token"]},
-    )
-    assert poll.json()["status"] == "failed"
-    assert poll.json()["error_code"] == "watchlist_processing_failed"
 
 
 @pytest.mark.asyncio
@@ -406,12 +387,16 @@ async def test_finalizer_does_not_overwrite_terminal_state_changed_during_await(
     from app.services import watchlist_jobs
     from app.routes import watchlist
 
+    # Uses find_film (not watchlist_compare) because watchlist_compare's
+    # compare + TMDB enrichment now runs on the desktop worker — finalize no
+    # longer awaits enrich_films_concurrent for that job type. find_film still
+    # does, so it's the one that exercises this race-during-await protection.
     task_manager._tasks.clear()
-    task_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task_id = task_manager.create_find_film_job(["one", "two"])
     task = task_manager.get_task_state(task_id)
     task.status = "running"
     task.stage = "processing"
-    task.result = {"first_watchlist": [], "second_watchlist": []}
+    task.result = {"watchlists": {"one": [], "two": []}, "watched": {"one": [], "two": []}}
 
     async def terminal_during_enrichment(session, films, **kwargs):
         task_manager.set_task_failed(
@@ -465,12 +450,14 @@ async def test_watchlist_finalization_timeout_is_bounded_and_classified(monkeypa
     from app.services import watchlist_jobs
     from app.routes import watchlist
 
+    # find_film, not watchlist_compare — see the comment on
+    # test_finalizer_does_not_overwrite_terminal_state_changed_during_await.
     task_manager._tasks.clear()
-    task_id = task_manager.create_watchlist_compare_job(["one", "two"])
+    task_id = task_manager.create_find_film_job(["one", "two"])
     task = task_manager.get_task_state(task_id)
     task.status = "running"
     task.stage = "processing"
-    task.result = {"first_watchlist": [], "second_watchlist": []}
+    task.result = {"watchlists": {"one": [], "two": []}, "watched": {"one": [], "two": []}}
     cancelled = []
 
     async def never_finishes(*args, **kwargs):
@@ -481,14 +468,14 @@ async def test_watchlist_finalization_timeout_is_bounded_and_classified(monkeypa
             raise
 
     monkeypatch.setattr(watchlist, "_persist_watchlist_run", lambda *args, **kwargs: None)
-    monkeypatch.setattr(watchlist_jobs, "WATCHLIST_ENRICH_TIMEOUT", 0.001)
+    monkeypatch.setattr(watchlist_jobs, "FIND_FILM_ENRICH_TIMEOUT", 0.001)
     monkeypatch.setattr(watchlist_jobs, "enrich_films_concurrent", never_finishes)
 
     await watchlist_jobs.finalize_watchlist_job(task_id, object())
 
     assert task.status == "failed"
-    assert task.error_code == "watchlist_enrichment_timeout"
-    assert len(cancelled) == 3
+    assert task.error_code == "find_film_enrichment_timeout"
+    assert len(cancelled) == 1
     task_manager._tasks.clear()
 
 
