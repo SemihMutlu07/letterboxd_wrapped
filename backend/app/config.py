@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     worker_offline_after_seconds: int = 300
     queue_depth_alert_threshold: int = 20
     queue_stale_after_seconds: int = 900
+    # Shared secret for POST /api/health/test-alert (X-Health-Alert-Secret
+    # header). Empty disables the endpoint.
+    health_alert_secret: str = ""
+    # healthchecks.io ping URL (dead man's switch). Backend pings it every
+    # health_check_interval_seconds so a backend crash is caught by the
+    # external service. Empty disables the ping.
+    healthcheck_url: str = ""
 
     @property
     def desktop_worker_enabled(self) -> bool:

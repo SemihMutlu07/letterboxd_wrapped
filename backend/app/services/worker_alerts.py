@@ -30,9 +30,14 @@ logger = logging.getLogger("letterboxd_wrapped.worker_alerts")
 # across restarts is unnecessary — a fresh backend re-arms after one cooldown.
 _last_alert_at: dict[str, float] = {}
 
+# True once an offline alert has been sent; cleared after the recovery ping.
+# Lets us notify "worker is back online" exactly once per outage.
+_offline_alert_sent = False
+
 CONDITION_NO_WORKER = "no_worker_heartbeat"
 CONDITION_QUEUE_DEPTH = "queue_depth"
 CONDITION_QUEUE_STALE = "queue_stale"
+CONDITION_RECOVERED = "worker_recovered"
 
 
 def _cooldown_ok(condition: str) -> bool:
@@ -64,6 +69,21 @@ def _condition_messages() -> list[tuple[str, str]]:
     return messages
 
 
+def _recovery_message() -> str | None:
+    """Return a recovery ping message when the worker came back online.
+
+    Emits exactly once per outage: requires a previously-sent offline alert
+    (cooldown-independent) and a worker that is online again.
+    """
+    global _offline_alert_sent
+    if not _offline_alert_sent:
+        return None
+    if not task_manager.is_worker_online(settings.worker_offline_after_seconds):
+        return None
+    _offline_alert_sent = False
+    return "Desktop worker is back online — previous offline alert resolved ✅"
+
+
 async def send_alert(message: str) -> bool:
     """POST one message to the ntfy topic. Best-effort; never raises."""
     try:
@@ -80,16 +100,45 @@ async def send_alert(message: str) -> bool:
         return False
 
 
+async def _ping_dead_mans_switch() -> None:
+    """Ping the healthchecks.io URL so an external service can catch a dead
+    backend (the alert loop lives inside the backend — if the backend dies,
+    so does the alerting). Best-effort; failures are logged, never fatal."""
+    if not settings.healthcheck_url:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(settings.healthcheck_url)
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.error("Dead man's switch ping FAILED (%s): %s", settings.healthcheck_url, exc)
+
+
 async def _run_health_monitor() -> None:
+    global _offline_alert_sent
     while True:
         await asyncio.sleep(settings.health_check_interval_seconds)
         try:
+            await _ping_dead_mans_switch()
+
+            # Recovery ping first (cooldown-independent, fires once per outage).
+            recovery = _recovery_message()
+            if recovery:
+                ok = await send_alert(recovery)
+                if ok:
+                    logger.info("Sent ntfy recovery ping: %s", recovery)
+                else:
+                    # Keep the flag set so the recovery ping retries next tick.
+                    _offline_alert_sent = True
+
             for condition, message in _condition_messages():
                 if not _cooldown_ok(condition):
                     continue
                 ok = await send_alert(message)
                 if ok:
                     _mark_sent(condition)
+                    if condition == CONDITION_NO_WORKER:
+                        _offline_alert_sent = True
                     logger.info("Sent ntfy alert [%s]: %s", condition, message)
                 else:
                     logger.warning("ntfy alert [%s] not sent (send failed) — will retry after cooldown", condition)
@@ -108,5 +157,13 @@ async def start_health_monitor() -> asyncio.Task:
             settings.ntfy_topic,
         )
     else:
-        logger.info("Worker health monitor started but ntfy_topic is empty — alerting disabled")
+        logger.warning(
+            "⚠️ ALERTING DISABLED — NTFY_TOPIC is empty. Worker offline / queue "
+            "backlog alerts will NOT be sent. Set NTFY_TOPIC to enable.",
+        )
+    if not settings.healthcheck_url:
+        logger.warning(
+            "⚠️ DEAD MAN'S SWITCH DISABLED — HEALTHCHECK_URL is empty. A backend "
+            "crash will not be detected by healthchecks.io. Set HEALTHCHECK_URL to enable.",
+        )
     return task

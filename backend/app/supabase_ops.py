@@ -140,6 +140,14 @@ async def check_expected_schema() -> None:
         return
     missing = [t for t in EXPECTED_OPS_TABLES if t not in known_tables]
     if missing:
+        # ops_workers is load-bearing for health tracking — its absence must
+        # be loud. Other ops tables stay a warning (some envs pre-date them).
+        if "ops_workers" in missing:
+            logger.error(
+                "CRITICAL: ops_workers table is MISSING from Supabase — worker "
+                "heartbeats and /api/health/workers will silently fail. Run "
+                "backend/migrations/007_ops_workers.sql in the Supabase SQL Editor.",
+            )
         logger.warning(
             "Supabase schema is missing expected ops table(s) %s — check that "
             "all backend/migrations/*.sql have been run against this project.",
