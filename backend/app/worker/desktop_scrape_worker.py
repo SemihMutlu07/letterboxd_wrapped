@@ -37,6 +37,7 @@ load_dotenv()
 
 import aiohttp
 
+from app.worker.worker_config import WORKER_ID, WORKER_VERSION
 from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     scrape_and_analyze,
@@ -51,11 +52,18 @@ logging.basicConfig(
 logger = logging.getLogger("letterboxd_wrapped.desktop_worker")
 
 POLL_INTERVAL = float(os.getenv("WORKER_POLL_INTERVAL", "5"))
-HEARTBEAT_INTERVAL = float(os.getenv("WORKER_HEARTBEAT_INTERVAL", "20"))
+HEARTBEAT_INTERVAL = float(os.getenv("WORKER_HEARTBEAT_INTERVAL", "30"))
+# Cap for the exponential heartbeat backoff — never poll the backend more
+# than once per this many seconds while it is down.
+HEARTBEAT_MAX_BACKOFF = float(os.getenv("WORKER_HEARTBEAT_MAX_BACKOFF", "300"))
 # Short timeout for the small control-plane calls; the scrape itself is unbounded.
 CONTROL_TIMEOUT = aiohttp.ClientTimeout(total=15)
 TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
 WORKER_PROTOCOL_VERSION = 3
+# V1 processes one job at a time — no concurrency yet.
+MAX_CONCURRENCY = 1
+# Incremented while a job is being processed so heartbeats report load.
+_ACTIVE_JOBS = 0
 OUTBOX_DIR = Path(os.getenv("WORKER_OUTBOX_DIR", ".worker_outbox"))
 PROCESS_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
@@ -123,6 +131,10 @@ def _git_value(*args: str) -> str | None:
 
 def _worker_meta(cfg: WorkerConfig) -> dict[str, Any]:
     return {
+        "worker_id": WORKER_ID,
+        "version": WORKER_VERSION,
+        "active_jobs": _ACTIVE_JOBS,
+        "max_concurrency": MAX_CONCURRENCY,
         "worker_protocol_version": WORKER_PROTOCOL_VERSION,
         "worker_git_sha": os.getenv("WORKER_GIT_SHA") or _git_value("rev-parse", "--short", "HEAD"),
         "worker_branch": os.getenv("WORKER_BRANCH") or _git_value("branch", "--show-current"),
@@ -230,14 +242,27 @@ def _failure_telemetry(exc: Exception, duration_seconds: float) -> dict:
 
 
 async def _heartbeat_loop(session: aiohttp.ClientSession, cfg: WorkerConfig) -> None:
+    """Periodic liveness ping with exponential backoff on failure.
+
+    A dead backend must never kill the worker: on any failure the wait doubles
+    (capped at HEARTBEAT_MAX_BACKOFF) and a successful ping resets it to the
+    nominal interval.
+    """
+    delay = HEARTBEAT_INTERVAL
     while True:
         try:
             async with session.post(f"{cfg.base_url}/api/worker/heartbeat", headers=cfg.headers, json=_worker_meta(cfg), timeout=CONTROL_TIMEOUT) as r:
                 if r.status != 200:
                     logger.warning("Heartbeat rejected: HTTP %s", r.status)
+                    delay = min(delay * 2, HEARTBEAT_MAX_BACKOFF)
+                    continue
+                if delay != HEARTBEAT_INTERVAL:
+                    logger.info("Heartbeat accepted again — resetting to %ss interval", HEARTBEAT_INTERVAL)
+                delay = HEARTBEAT_INTERVAL
         except Exception as exc:
             logger.warning("Heartbeat failed: %s", exc)
-        await asyncio.sleep(HEARTBEAT_INTERVAL)
+            delay = min(delay * 2, HEARTBEAT_MAX_BACKOFF)
+        await asyncio.sleep(delay)
 
 
 async def _report_lifecycle(session: aiohttp.ClientSession, cfg: WorkerConfig, event: str, payload: dict | None = None) -> None:
@@ -507,6 +532,7 @@ async def _post(session: aiohttp.ClientSession, cfg: WorkerConfig, path: str, pa
 
 
 async def run() -> None:
+    global _ACTIVE_JOBS
     cfg = WorkerConfig()
     cfg.validate()
     _set_windows_wakelock(True)
@@ -549,10 +575,14 @@ async def run() -> None:
 
                 # Process one job at a time (V1 — no concurrency).
                 await _flush_outbox(session, cfg)
-                if job.get("kind") == "watchlist":
-                    await _process_watchlist_job(session, cfg, job)
-                else:
-                    await _process_job(session, cfg, job)
+                _ACTIVE_JOBS += 1
+                try:
+                    if job.get("kind") == "watchlist":
+                        await _process_watchlist_job(session, cfg, job)
+                    else:
+                        await _process_job(session, cfg, job)
+                finally:
+                    _ACTIVE_JOBS -= 1
         finally:
             heartbeat.cancel()
             with suppress(asyncio.CancelledError):
