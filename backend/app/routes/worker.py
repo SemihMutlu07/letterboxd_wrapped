@@ -12,10 +12,11 @@ import asyncio
 
 import logging
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from app import task_manager
+from app import supabase_ops, task_manager
 from app.config import backend_git_sha, settings
 from app.services import dashboard_settings
 from app.services.run_log import persist_run
@@ -24,6 +25,44 @@ from app.services.worker_monitor import log_worker_event
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
 router = APIRouter(prefix="/api/worker")
+health_router = APIRouter(prefix="/api/health")
+
+
+@health_router.get("/workers")
+async def worker_health():
+    """Worker fleet + queue health snapshot.
+
+    status per worker: "online" if last_seen_at < 5 min ago, else "offline".
+    Best-effort: if Supabase is not configured the workers list is empty but
+    queue stats still come from the in-memory task manager.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    workers: list[dict] = []
+    if settings.supabase_enabled:
+        rows = await supabase_ops.select(
+            "ops_workers",
+            {"select": "worker_id,last_seen_at,version,active_jobs,max_concurrency,status", "order": "last_seen_at.desc"},
+        )
+        for row in rows:
+            last_seen = row.get("last_seen_at")
+            try:
+                last_seen_dt = datetime.fromisoformat(str(last_seen).replace("Z", "+00:00"))
+                age = (now - last_seen_dt).total_seconds()
+            except (ValueError, TypeError):
+                age = float("inf")
+            workers.append({
+                "worker_id": row.get("worker_id"),
+                "last_seen_at": last_seen,
+                "status": "online" if age < settings.worker_offline_after_seconds else "offline",
+            })
+    queue = task_manager.get_worker_queue_stats()
+    return {
+        "workers": workers,
+        "queue_depth": queue["queue_depth"],
+        "oldest_queued_age_seconds": queue["oldest_queued_age_seconds"],
+    }
 
 
 def _require_worker_token(x_worker_token: str | None) -> None:
@@ -91,7 +130,11 @@ def _worker_version_mismatch() -> dict | None:
 
 @router.post("/heartbeat")
 async def worker_heartbeat(request: Request, x_worker_token: str | None = Header(default=None)):
-    """Worker liveness ping — keeps /api/scrape-profile from reporting offline."""
+    """Worker liveness ping — upserts one row into ops_workers.
+
+    Every 30s heartbeat writes a single row per worker_id (no event-log
+    growth). Only real lifecycle/job events go to ops_worker_events.
+    """
     _require_worker_token(x_worker_token)
     try:
         body = await request.json()
@@ -99,7 +142,20 @@ async def worker_heartbeat(request: Request, x_worker_token: str | None = Header
         body = {}
     body = body if isinstance(body, dict) else {}
     task_manager.record_worker_heartbeat(body)
-    await log_worker_event("heartbeat", {**body, "severity": "info"})
+    worker_id = str(body.get("worker_id") or "").strip()
+    if worker_id:
+        await supabase_ops.upsert(
+            "ops_workers",
+            {
+                "worker_id": worker_id,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+                "version": str(body.get("version") or ""),
+                "active_jobs": body.get("active_jobs", 0),
+                "max_concurrency": body.get("max_concurrency", 1),
+                "status": "online",
+            },
+            on_conflict="worker_id",
+        )
     return {"ok": True}
 
 

@@ -24,6 +24,7 @@ from app.task_manager import cleanup_loop
 from app.routes import analyze, feedback, recommend, tmdb, watchlist, worker
 from app import admin, supabase_ops
 from app.services.worker_monitor import log_worker_event, start_worker_monitor
+from app.services.worker_alerts import start_health_monitor
 from app.services.run_log import cleanup_expired_runs
 
 logger = logging.getLogger("letterboxd_wrapped")
@@ -59,9 +60,11 @@ async def lifespan(app: FastAPI):
         logger.info("Reloaded %d pending/running task(s) from Supabase.", loaded)
     _cleanup = asyncio.create_task(cleanup_loop())
     _monitor = await start_worker_monitor()
+    _alerts = await start_health_monitor()
     logger.info("🚀 FastAPI app startup: aiohttp session created.")
     yield
     _monitor.cancel()
+    _alerts.cancel()
     _cleanup.cancel()
     await app.state.aiohttp_session.close()
     logger.info("🌙 FastAPI app shutdown: aiohttp session closed.")
@@ -126,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(watchlist.router)
     app.include_router(recommend.router)
     app.include_router(worker.router)
+    app.include_router(worker.health_router)
 
     @app.get("/")
     async def root():
