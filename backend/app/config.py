@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     worker_self_test_on_start: bool = False
     worker_self_test_username: str = "semihmutsuz"
 
+    # ntfy.sh alerting for worker/queue health. Topic is the public URL suffix
+    # (no account needed); empty topic disables alerting.
+    ntfy_topic: str = ""
+    # Minimum seconds between alerts for the SAME condition (anti-spam).
+    ntfy_cooldown_seconds: int = 1800
+    # How often the health monitor loop checks conditions.
+    health_check_interval_seconds: int = 60
+    # Thresholds: worker offline after this many seconds without a heartbeat,
+    # queue is "stuck" when the oldest job waited this long.
+    worker_offline_after_seconds: int = 300
+    queue_depth_alert_threshold: int = 20
+    queue_stale_after_seconds: int = 900
+
     @property
     def desktop_worker_enabled(self) -> bool:
         return bool(self.worker_token)

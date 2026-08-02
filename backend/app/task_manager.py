@@ -648,6 +648,20 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
     }
 
 
+def get_worker_queue_stats() -> Dict[str, Any]:
+    """Queue depth + age of the oldest queued job, for health/alerting."""
+    now = datetime.now(timezone.utc)
+    queued = sorted(
+        (t for t in _tasks.values() if t.kind in {"scrape", "watchlist"} and t.status == "pending" and not t.claimed),
+        key=lambda t: t.created_at,
+    )
+    oldest = queued[0].created_at if queued else None
+    return {
+        "queue_depth": len(queued),
+        "oldest_queued_age_seconds": round((now - oldest).total_seconds(), 1) if oldest else 0,
+    }
+
+
 def get_task_state(task_id: str) -> Optional[TaskState]:
     return _tasks.get(task_id)
 

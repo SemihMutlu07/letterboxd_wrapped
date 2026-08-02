@@ -17,6 +17,8 @@ from app.config import settings
 from app.services import dashboard_settings
 from app.worker.desktop_scrape_worker import WorkerConfig, _worker_meta
 
+from datetime import datetime, timedelta, timezone
+
 WORKER_TOKEN = "test-worker-secret"
 AUTH = {"X-Worker-Token": WORKER_TOKEN}
 ADMIN_KEY = "test-admin-secret-rotated"
@@ -205,13 +207,17 @@ async def _beat(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_logs_event_to_ops_worker_events(client: AsyncClient, monkeypatch):
-    """A worker heartbeat must mirror into ops_worker_events with event_type=heartbeat."""
+async def test_heartbeat_upserts_ops_workers_not_event_log(client: AsyncClient, monkeypatch):
+    """A heartbeat must upsert ops_workers and NOT write ops_worker_events."""
     from app.routes import worker as worker_routes
 
+    upserts = []
     logged = []
+    async def fake_upsert(table, row, *, on_conflict):
+        upserts.append((table, row, on_conflict))
     async def fake_log(event_type, meta=None):
-        logged.append((event_type, meta or {}))
+        logged.append(event_type)
+    monkeypatch.setattr(worker_routes.supabase_ops, "upsert", fake_upsert)
     monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
 
     r = await client.post(
@@ -220,12 +226,17 @@ async def test_heartbeat_logs_event_to_ops_worker_events(client: AsyncClient, mo
         json={"worker_id": "desktop-test", "version": "1.0.0", "active_jobs": 1, "max_concurrency": 1},
     )
     assert r.status_code == 200
-    assert any(et == "heartbeat" for et, _ in logged)
-    event_type, meta = logged[-1]
-    assert event_type == "heartbeat"
-    assert meta["worker_id"] == "desktop-test"
-    assert meta["active_jobs"] == 1
-    assert meta["severity"] == "info"
+    assert len(upserts) == 1
+    table, row, on_conflict = upserts[0]
+    assert table == "ops_workers"
+    assert on_conflict == "worker_id"
+    assert row["worker_id"] == "desktop-test"
+    assert row["version"] == "1.0.0"
+    assert row["active_jobs"] == 1
+    assert row["max_concurrency"] == 1
+    assert row["status"] == "online"
+    assert "last_seen_at" in row
+    assert logged == []  # heartbeat must not create an event-log row
 
 
 @pytest.mark.asyncio
@@ -262,6 +273,41 @@ async def test_job_claim_logs_job_claimed_event(client: AsyncClient, monkeypatch
     meta = next(m for et, m in logged if et == "job_claimed")
     assert meta["task_id"] == task_id
     assert meta["username"] == "someuser"
+
+
+@pytest.mark.asyncio
+async def test_health_workers_reports_offline_and_queue_stats(client: AsyncClient, monkeypatch):
+    """GET /api/health/workers must return per-worker status + queue stats."""
+    from app.routes import worker as worker_routes
+
+    async def fake_select(table, params):
+        assert table == "ops_workers"
+        now = datetime.now(timezone.utc)
+        return [
+            {"worker_id": "w1", "last_seen_at": (now - timedelta(minutes=2)).isoformat(), "status": "online"},  # recent
+            {"worker_id": "w2", "last_seen_at": (now - timedelta(hours=2)).isoformat(), "status": "offline"},  # stale
+        ]
+    monkeypatch.setattr(worker_routes.supabase_ops, "select", fake_select)
+    # Pretend Supabase is configured so the select path runs (property is
+    # read-only on the pydantic model, so patch the class property).
+    from unittest.mock import PropertyMock
+    monkeypatch.setattr(type(worker_routes.settings), "supabase_enabled", PropertyMock(return_value=True))
+
+    task_manager._tasks.clear()
+    task_id = task_manager.create_scrape_job("user1")
+    task_manager._tasks[task_id].created_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    task_manager.create_watchlist_compare_job(["u1", "u2"])
+    task_manager.create_scrape_job("user2")
+
+    r = await client.get("/api/health/workers")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["queue_depth"] == 3
+    assert body["oldest_queued_age_seconds"] >= 29 * 60
+    by_id = {w["worker_id"]: w for w in body["workers"]}
+    assert by_id["w1"]["status"] == "online"
+    assert by_id["w2"]["status"] == "offline"
+    task_manager._tasks.clear()
 
 
 async def _complete_raw_watchlist_request(client: AsyncClient, request_coro, raw: dict):
