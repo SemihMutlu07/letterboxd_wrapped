@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ResultsContent } from '../../../app/results/page';
 import { ThemeProvider } from '@/lib/theme';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { trackEvent } from '@/lib/analytics';
 
 vi.mock('next/link', () => ({
@@ -81,9 +82,11 @@ describe('ResultsPage ShareModal dynamic loading', () => {
     function Harness() {
       const [open, setOpen] = React.useState(false);
       return (
-        <ThemeProvider>
-          <ResultsContent {...baseProps} showShareModal={open} setShowShareModal={setOpen} />
-        </ThemeProvider>
+        <I18nProvider locale="en">
+          <ThemeProvider>
+            <ResultsContent {...baseProps} showShareModal={open} setShowShareModal={setOpen} />
+          </ThemeProvider>
+        </I18nProvider>
       );
     }
 
