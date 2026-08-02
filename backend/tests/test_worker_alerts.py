@@ -15,6 +15,7 @@ from app.services import worker_alerts
 
 def _reset_alerts():
     worker_alerts._last_alert_at.clear()
+    worker_alerts._offline_alert_sent = False
 
 
 def test_no_condition_fires_when_worker_online_and_queue_empty(monkeypatch):
@@ -139,3 +140,104 @@ async def test_send_alert_swallows_http_failure(monkeypatch):
     monkeypatch.setattr(worker_alerts.httpx, "AsyncClient", BoomClient)
     # Must return False, never raise — the monitor loop must survive.
     assert await worker_alerts.send_alert("boom") is False
+
+
+# --- Recovery ping ---------------------------------------------------------
+
+
+def test_no_recovery_when_no_offline_alert_sent(monkeypatch):
+    _reset_alerts()
+    monkeypatch.setattr(task_manager, "is_worker_online", lambda *a, **k: True)
+    assert worker_alerts._recovery_message() is None
+
+
+def test_no_recovery_while_still_offline(monkeypatch):
+    _reset_alerts()
+    worker_alerts._offline_alert_sent = True
+    monkeypatch.setattr(task_manager, "is_worker_online", lambda *a, **k: False)
+    assert worker_alerts._recovery_message() is None
+    # Flag stays set — recovery must fire when the worker returns.
+    assert worker_alerts._offline_alert_sent is True
+
+
+def test_recovery_fires_once_when_back_online(monkeypatch):
+    _reset_alerts()
+    worker_alerts._offline_alert_sent = True
+    monkeypatch.setattr(task_manager, "is_worker_online", lambda *a, **k: True)
+    message = worker_alerts._recovery_message()
+    assert message is not None
+    assert "back online" in message
+    # Exactly once: second call returns None.
+    assert worker_alerts._recovery_message() is None
+
+
+# --- Dead man's switch -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dead_mans_switch_pings_when_configured(monkeypatch):
+    monkeypatch.setattr(settings, "healthcheck_url", "https://hc-ping.com/abc")
+    pings = []
+
+    class FakeResp:
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url):
+            pings.append(url)
+            return FakeResp()
+
+    monkeypatch.setattr(worker_alerts.httpx, "AsyncClient", FakeClient)
+    await worker_alerts._ping_dead_mans_switch()
+    assert pings == ["https://hc-ping.com/abc"]
+
+
+@pytest.mark.asyncio
+async def test_dead_mans_switch_noop_when_unconfigured(monkeypatch):
+    monkeypatch.setattr(settings, "healthcheck_url", "")
+    called = []
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            called.append("constructed")
+            raise AssertionError("should not construct a client when URL empty")
+
+    monkeypatch.setattr(worker_alerts.httpx, "AsyncClient", FakeClient)
+    await worker_alerts._ping_dead_mans_switch()
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_dead_mans_switch_failure_logged_not_raised(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "healthcheck_url", "https://hc-ping.com/abc")
+
+    class BoomResp:
+        def raise_for_status(self):
+            raise RuntimeError("hc down")
+
+    class BoomClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url):
+            return BoomResp()
+
+    monkeypatch.setattr(worker_alerts.httpx, "AsyncClient", BoomClient)
+    # Must not raise.
+    await worker_alerts._ping_dead_mans_switch()

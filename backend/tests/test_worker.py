@@ -310,6 +310,50 @@ async def test_health_workers_reports_offline_and_queue_stats(client: AsyncClien
     task_manager._tasks.clear()
 
 
+@pytest.mark.asyncio
+async def test_test_alert_requires_secret_and_sends(client: AsyncClient, monkeypatch):
+    """POST /api/health/test-alert must 401 without the secret and send when authorized."""
+    from app.routes import worker as worker_routes
+
+    monkeypatch.setattr(worker_routes.settings, "health_alert_secret", "test-alert-secret")
+    sent = []
+    async def fake_send_alert(message):
+        sent.append(message)
+        return True
+    monkeypatch.setattr(worker_routes, "send_alert", fake_send_alert)
+
+    # No secret header → 401.
+    r = await client.post("/api/health/test-alert")
+    assert r.status_code == 401
+    assert sent == []
+
+    # Wrong secret → 401.
+    r = await client.post("/api/health/test-alert", headers={"X-Health-Alert-Secret": "wrong"})
+    assert r.status_code == 401
+
+    # Correct secret → sends.
+    r = await client.post("/api/health/test-alert", headers={"X-Health-Alert-Secret": "test-alert-secret"})
+    assert r.status_code == 200
+    assert r.json()["delivered"] is True
+    assert len(sent) == 1
+    assert "Test alert" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_test_alert_disabled_without_secret_config(client: AsyncClient):
+    """With no health_alert_secret configured the endpoint must 404 (disabled)."""
+    from app.routes import worker as worker_routes
+
+    # Ensure unset for this test.
+    original = worker_routes.settings.health_alert_secret
+    worker_routes.settings.health_alert_secret = ""
+    try:
+        r = await client.post("/api/health/test-alert", headers={"X-Health-Alert-Secret": "anything"})
+        assert r.status_code == 404
+    finally:
+        worker_routes.settings.health_alert_secret = original
+
+
 async def _complete_raw_watchlist_request(client: AsyncClient, request_coro, raw: dict):
     import asyncio
 

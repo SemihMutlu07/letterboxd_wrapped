@@ -20,6 +20,7 @@ from app import supabase_ops, task_manager
 from app.config import backend_git_sha, settings
 from app.services import dashboard_settings
 from app.services.run_log import persist_run
+from app.services.worker_alerts import send_alert
 from app.services.worker_monitor import log_worker_event
 
 logger = logging.getLogger("letterboxd_wrapped.worker")
@@ -63,6 +64,29 @@ async def worker_health():
         "queue_depth": queue["queue_depth"],
         "oldest_queued_age_seconds": queue["oldest_queued_age_seconds"],
     }
+
+
+@health_router.post("/test-alert")
+async def test_alert(x_health_alert_secret: str | None = Header(default=None)):
+    """Send a test message to the ntfy topic to verify end-to-end delivery.
+
+    Protected by a shared secret in the X-Health-Alert-Secret header
+    (settings.health_alert_secret). If the secret is not configured the
+    endpoint is disabled (404).
+    """
+    if not settings.health_alert_secret:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "not_configured", "message": "Health alert secret is not configured."},
+        )
+    supplied = x_health_alert_secret or ""
+    if not secrets.compare_digest(supplied, settings.health_alert_secret):
+        raise HTTPException(
+            status_code=401,
+            detail={"error_code": "unauthorized", "message": "Invalid or missing health alert secret."},
+        )
+    ok = await send_alert("Test alert from Letterboxd Wrapped backend ✅")
+    return {"ok": ok, "delivered": ok, "message": "Test alert sent" if ok else "Test alert failed — check backend logs"}
 
 
 def _require_worker_token(x_worker_token: str | None) -> None:
@@ -144,7 +168,7 @@ async def worker_heartbeat(request: Request, x_worker_token: str | None = Header
     task_manager.record_worker_heartbeat(body)
     worker_id = str(body.get("worker_id") or "").strip()
     if worker_id:
-        await supabase_ops.upsert(
+        ok = await supabase_ops.upsert(
             "ops_workers",
             {
                 "worker_id": worker_id,
@@ -156,6 +180,15 @@ async def worker_heartbeat(request: Request, x_worker_token: str | None = Header
             },
             on_conflict="worker_id",
         )
+        if not ok:
+            # Loud failure: a heartbeat that never lands means health tracking
+            # is blind. supabase_ops.upsert already logged the root cause.
+            logger.error(
+                "Heartbeat upsert to ops_workers FAILED for worker_id=%s — "
+                "/api/health/workers will report it offline. Check Supabase "
+                "connectivity and that migration 007 ran.",
+                worker_id,
+            )
     return {"ok": True}
 
 
