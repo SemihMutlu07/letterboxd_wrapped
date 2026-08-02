@@ -7,6 +7,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1's Invoke-RestMethod/Invoke-WebRequest leak memory on every call
+# when progress-bar rendering is left on — this loop calls them twice per poll interval,
+# so over hours the process balloons into gigabytes. Confirmed root cause of repeated
+# MEMORY_MANAGEMENT (0x1A) BSODs on this machine (2026-08-02).
+$ProgressPreference = "SilentlyContinue"
 
 $SupervisorVersion = "2026-06-28"
 $SupervisorStartedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -26,6 +31,17 @@ function Write-SupervisorLog {
     $line = "{0} {1}" -f (Get-Date).ToUniversalTime().ToString("o"), $Message
     Add-Content -Path $SupervisorLog -Value $line
     Write-Host $line
+}
+
+# Only one supervisor (and therefore one worker child) may run at a time — a second
+# launch (e.g. double-clicking the desktop shortcut while it's already running from
+# Startup) would otherwise race the first for scrape claims. The mutex is owned by
+# the OS and released automatically if this process dies, so there's no stale-lock
+# cleanup to worry about.
+$InstanceMutex = New-Object System.Threading.Mutex($false, "Global\LetterboxdDesktopWorkerSupervisor")
+if (-not $InstanceMutex.WaitOne([TimeSpan]::Zero)) {
+    Write-SupervisorLog "another supervisor instance is already running; exiting"
+    exit 0
 }
 
 function Load-DotEnv {
