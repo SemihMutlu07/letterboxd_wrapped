@@ -20,6 +20,7 @@ export interface AnalysisPeriodMetadata {
 export interface ScrapeProfileResult {
   status: string;
   stats: LetterboxdStats;
+  task_id?: string;
 }
 
 export interface WatchlistFilm {
@@ -329,7 +330,7 @@ async function pollTask<T = { status: string; stats: LetterboxdStats }>(
 // Analyze uploaded files — submits the job and polls until completion.
 // The returned shape {status, stats} matches the previous synchronous contract
 // so callers do not need to change.
-export async function analyzeFiles(formData: FormData): Promise<{ status: string; stats: LetterboxdStats }> {
+export async function analyzeFiles(formData: FormData): Promise<{ status: string; stats: LetterboxdStats; task_id?: string }> {
   const url = `${API_BASE}/api/analyze`;
   try {
     if (!formData || formData.entries().next().done) {
@@ -344,12 +345,13 @@ export async function analyzeFiles(formData: FormData): Promise<{ status: string
 
     const data = await r.json();
     if (data && data.task_id) {
-      return await pollTask(data.task_id, data.poll_token);
+      const result = await pollTask<{ status: string; stats: LetterboxdStats }>(data.task_id, data.poll_token);
+      return { ...result, task_id: data.task_id };
     }
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Analysis failed');
     }
-    return data as { status: string; stats: LetterboxdStats };
+    return data as { status: string; stats: LetterboxdStats; task_id?: string };
   } catch (error) {
     throw handleApiError(error, 'file analysis');
   }
@@ -446,7 +448,8 @@ export async function scrapeProfile(
 
     // Desktop-worker mode: the job was queued — poll until the worker finishes.
     if (data && data.task_id && !data.stats) {
-      return await pollTask<ScrapeProfileResult>(data.task_id, data.poll_token, { onProgress });
+      const result = await pollTask<ScrapeProfileResult>(data.task_id, data.poll_token, { onProgress });
+      return { ...result, task_id: data.task_id };
     }
 
     if (!data || data.status === 'error') {

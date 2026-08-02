@@ -420,7 +420,7 @@ export default function LetterboxdLanding() {
 
       if (analysisRun && detectedUsername) {
         try {
-          await finishAnalysis({ id: analysisRun.id, ok: true, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+          await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
           await upsertUserSession({
             session_id: sessionId,
             username: detectedUsername,
@@ -436,7 +436,7 @@ export default function LetterboxdLanding() {
       console.error('[upload] analysis failed:', err);
       const normalized = normalizeError(err);
       if (analysisRun && detectedUsername) {
-        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
+        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message, error_code: normalized.reason }); } catch { /* silent */ }
       }
       trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0 });
       setError(normalized);
@@ -511,7 +511,7 @@ export default function LetterboxdLanding() {
 
       if (analysisRun) {
         try {
-          await finishAnalysis({ id: analysisRun.id, ok: true, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+          await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
           await upsertUserSession({
             session_id: sessionId,
             username,
@@ -527,7 +527,7 @@ export default function LetterboxdLanding() {
       console.error('[scrape] analysis failed:', err);
       const normalized = normalizeError(err);
       if (analysisRun) {
-        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
+        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message, error_code: normalized.reason }); } catch { /* silent */ }
       }
       trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0, method: 'scrape' });
       setError(normalized);

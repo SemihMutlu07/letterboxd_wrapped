@@ -146,6 +146,8 @@ export type AnalysisFinishInput = {
     id: string;
     ok?: boolean | null;
     error_message?: string | null;
+    error_code?: string | null;
+    task_id?: string | null;
     summary?: Record<string, unknown> | null;
     finished_at?: string | null;
 };
@@ -155,6 +157,7 @@ export async function startAnalysis(input: AnalysisStartInput & { id?: string })
     const payload = {
         id: input.id ?? crypto?.randomUUID?.() ?? `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         session_id: input.session_id,
+        anonymous_session_id: input.session_id,
         username: input.username,
         started_at: input.started_at ?? new Date().toISOString(),
     };
@@ -215,21 +218,36 @@ export async function finishAnalysis(input: AnalysisFinishInput) {
 
     // Extract queryable metric columns from the summary (for cross-user SQL queries)
     const metrics = extractMetrics(summaryPayload);
-    
-    
+
+    // analysis_version comes from the backend (stats.sinefil_meter.model_version),
+    // which is the single source of truth — never hardcoded in the frontend.
+    // Only set it when the summary actually carries it, so the DB default
+    // ('cine_v2') is never clobbered by a null on older/error paths.
+    const details = getDetailsFromSummary(summaryPayload) as {
+        sinefil_meter?: { model_version?: string | null } | null;
+    } | null;
+    const analysisVersion = details?.sinefil_meter?.model_version ?? null;
+
+    const updatePayload: Record<string, unknown> = {
+        ok: input.ok ?? null,
+        error_message: input.error_message ?? null,
+        error_code: input.error_code ?? null,
+        task_id: input.task_id ?? null,
+        summary: summaryPayload,
+        finished_at: input.finished_at ?? new Date().toISOString(),
+        total_films: metrics.total_films,
+        sinefil_meter: metrics.sinefil_meter,
+        cinematic_persona: metrics.cinematic_persona,
+        average_rating: metrics.average_rating,
+        total_countries: metrics.total_countries,
+    };
+    if (analysisVersion) {
+        updatePayload.analysis_version = analysisVersion;
+    }
+
     const { error } = await supabase
         .from("analysis_runs")
-        .update({
-            ok: input.ok ?? null,
-            error_message: input.error_message ?? null,
-            summary: summaryPayload,
-            finished_at: input.finished_at ?? new Date().toISOString(),
-            total_films: metrics.total_films,
-            sinefil_meter: metrics.sinefil_meter,
-            cinematic_persona: metrics.cinematic_persona,
-            average_rating: metrics.average_rating,
-            total_countries: metrics.total_countries,
-        })
+        .update(updatePayload)
         .eq("id", input.id)
         .select('id');
     
