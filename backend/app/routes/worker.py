@@ -97,7 +97,9 @@ async def worker_heartbeat(request: Request, x_worker_token: str | None = Header
         body = await request.json()
     except Exception:
         body = {}
-    task_manager.record_worker_heartbeat(body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    task_manager.record_worker_heartbeat(body)
+    await log_worker_event("heartbeat", {**body, "severity": "info"})
     return {"ok": True}
 
 
@@ -109,8 +111,9 @@ async def worker_startup(request: Request, x_worker_token: str | None = Header(d
         body = await request.json()
     except Exception:
         body = {}
-    task_manager.record_worker_startup(body if isinstance(body, dict) else {})
-    await log_worker_event("startup", body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    task_manager.record_worker_startup(body)
+    await log_worker_event("worker_started", {**body, "severity": "info"})
     return {"ok": True}
 
 
@@ -122,8 +125,9 @@ async def worker_shutdown(request: Request, x_worker_token: str | None = Header(
         body = await request.json()
     except Exception:
         body = {}
-    task_manager.record_worker_shutdown(body if isinstance(body, dict) else {})
-    await log_worker_event("shutdown", body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    task_manager.record_worker_shutdown(body)
+    await log_worker_event("worker_stopped", {**body, "severity": "info"})
     return {"ok": True}
 
 
@@ -180,6 +184,11 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     if job is None:
         return {"job": None}
     logger.info("Worker claimed scrape job %s for @%s", job.task_id, job.username)
+    await log_worker_event("job_claimed", {
+        "task_id": job.task_id,
+        "username": job.username,
+        "severity": "info",
+    })
     return {
         "job": {
             "task_id": job.task_id,
@@ -346,6 +355,12 @@ async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)
     if job is None:
         return {"job": None}
     logger.info("Worker claimed watchlist job %s type=%s users=%s", job.task_id, job.job_type, job.usernames)
+    await log_worker_event("job_claimed", {
+        "task_id": job.task_id,
+        "job_type": job.job_type,
+        "usernames": job.usernames,
+        "severity": "info",
+    })
     return {"job": {"task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
 
 
@@ -363,7 +378,18 @@ async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
     if job is None:
         return {"job": None}
     if job.kind == "watchlist":
+        await log_worker_event("job_claimed", {
+            "task_id": job.task_id,
+            "job_type": job.job_type,
+            "usernames": job.usernames,
+            "severity": "info",
+        })
         return {"job": {"kind": "watchlist", "task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+    await log_worker_event("job_claimed", {
+        "task_id": job.task_id,
+        "username": job.username,
+        "severity": "info",
+    })
     return {
         "job": {
             "kind": "scrape",
@@ -390,6 +416,12 @@ async def complete_watchlist(task_id: str, request: Request, x_worker_token: str
     if task.options.get("raw_only"):
         task_manager.set_task_done(task_id, body)
         logger.info("Worker completed raw watchlist job %s", task_id)
+        await log_worker_event("job_completed", {
+            "task_id": task_id,
+            "job_type": task.job_type,
+            "usernames": task.usernames,
+            "severity": "info",
+        })
         return {"ok": True}
     task.result = body
     task.status = "running"
@@ -414,11 +446,12 @@ async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | N
         return {"ok": True, "duplicate": True}
     task_manager.set_task_failed(task_id, message, _request_telemetry(body))
     logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)
-    await log_worker_event("watchlist_job_failed", {
-        "source": "desktop_worker",
-        "severity": "error",
+    await log_worker_event("job_failed", {
         "task_id": task_id,
         "job_type": task.job_type,
+        "usernames": task.usernames,
+        "source": "desktop_worker",
+        "severity": "error",
         "message": message,
         "error_type": _request_telemetry(body).get("error_type"),
         "error_stage": _request_telemetry(body).get("error_stage"),

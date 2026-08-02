@@ -30,6 +30,28 @@ def test_worker_reports_direct_cloudscraper_transport(monkeypatch):
     assert _worker_meta(cfg)["scrape_transport"] == "direct_cloudscraper"
 
 
+def test_worker_meta_includes_identity_and_load(monkeypatch):
+    """Heartbeat payload must carry worker_id/version/active_jobs/max_concurrency."""
+    monkeypatch.setenv("WORKER_BACKEND_URL", "https://backend.example.com")
+    monkeypatch.setenv("WORKER_TOKEN", WORKER_TOKEN)
+    cfg = WorkerConfig()
+    meta = _worker_meta(cfg)
+    assert meta["worker_id"]
+    assert meta["version"]
+    assert meta["active_jobs"] == 0
+    assert meta["max_concurrency"] == 1
+
+
+def test_worker_config_identity_is_env_overrideable(monkeypatch):
+    monkeypatch.setenv("WORKER_ID", "custom-worker")
+    monkeypatch.setenv("WORKER_VERSION", "2.1.0")
+    import importlib
+    from app.worker import worker_config
+    worker_config = importlib.reload(worker_config)
+    assert worker_config.WORKER_ID == "custom-worker"
+    assert worker_config.WORKER_VERSION == "2.1.0"
+
+
 def test_requeue_stale_claims_recovers_dead_worker_jobs():
     """A job claimed then abandoned (desktop offline mid-scrape) must be re-queued,
     not left stuck 'running' until it 404s on the user."""
@@ -180,6 +202,66 @@ async def _beat(client: AsyncClient):
         json={"worker_protocol_version": settings.worker_protocol_version, "worker_git_sha": "test-worker"},
     )
     assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_logs_event_to_ops_worker_events(client: AsyncClient, monkeypatch):
+    """A worker heartbeat must mirror into ops_worker_events with event_type=heartbeat."""
+    from app.routes import worker as worker_routes
+
+    logged = []
+    async def fake_log(event_type, meta=None):
+        logged.append((event_type, meta or {}))
+    monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
+
+    r = await client.post(
+        "/api/worker/heartbeat",
+        headers=AUTH,
+        json={"worker_id": "desktop-test", "version": "1.0.0", "active_jobs": 1, "max_concurrency": 1},
+    )
+    assert r.status_code == 200
+    assert any(et == "heartbeat" for et, _ in logged)
+    event_type, meta = logged[-1]
+    assert event_type == "heartbeat"
+    assert meta["worker_id"] == "desktop-test"
+    assert meta["active_jobs"] == 1
+    assert meta["severity"] == "info"
+
+
+@pytest.mark.asyncio
+async def test_startup_and_shutdown_log_standard_event_types(client: AsyncClient, monkeypatch):
+    """Lifecycle events must use worker_started / worker_stopped, not startup/shutdown."""
+    from app.routes import worker as worker_routes
+
+    logged = []
+    async def fake_log(event_type, meta=None):
+        logged.append((event_type, meta or {}))
+    monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
+
+    r1 = await client.post("/api/worker/startup", headers=AUTH, json={"worker_id": "desktop-test"})
+    r2 = await client.post("/api/worker/shutdown", headers=AUTH, json={"worker_id": "desktop-test"})
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert [et for et, _ in logged] == ["worker_started", "worker_stopped"]
+
+
+@pytest.mark.asyncio
+async def test_job_claim_logs_job_claimed_event(client: AsyncClient, monkeypatch):
+    """Claiming a scrape job must log job_claimed with the task id."""
+    from app.routes import worker as worker_routes
+
+    logged = []
+    async def fake_log(event_type, meta=None):
+        logged.append((event_type, meta or {}))
+    monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
+
+    task_id = task_manager.create_scrape_job("someuser")
+    claim = await client.get("/api/worker/next", headers=AUTH)
+    assert claim.status_code == 200
+    assert claim.json()["job"]["task_id"] == task_id
+    assert any(et == "job_claimed" for et, _ in logged)
+    meta = next(m for et, m in logged if et == "job_claimed")
+    assert meta["task_id"] == task_id
+    assert meta["username"] == "someuser"
 
 
 async def _complete_raw_watchlist_request(client: AsyncClient, request_coro, raw: dict):
