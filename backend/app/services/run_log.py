@@ -51,6 +51,12 @@ async def _mirror_to_supabase(payload: dict[str, Any]) -> None:
         "username": payload.get("username"),
         "ok": payload.get("ok"),
         "total_films": payload.get("total_films"),
+        "task_id": payload.get("task_id"),
+        "job_type": payload.get("job_type"),
+        "source": payload.get("source"),
+        "error_code": payload.get("error_code"),
+        "duration_ms": payload.get("duration_ms"),
+        "worker_id": payload.get("worker_id"),
         "payload": _remote_payload(payload),
     })
 
@@ -66,6 +72,20 @@ TIMING_FIELDS = (
 
 def _safe_username(username: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9_-]", "_", (username or "anon").lower()) or "anon"
+
+
+def _job_type_for_source(source: str) -> Optional[str]:
+    """Map a persist_run source to the ops_runs.job_type column value.
+
+    Desktop-worker runs carry job_type in telemetry (scrape/watchlist/etc.);
+    inline backend runs derive it from their source string. Unknown sources
+    stay NULL — the column is nullable and Phase 2 taxonomy may refine this.
+    """
+    return {
+        "upload": "analyze",
+        "scrape": "scrape",
+        "desktop-worker": None,  # telemetry carries the real job_type
+    }.get(source)
 
 
 def _redact_third_party_likers(stats: dict[str, Any]) -> dict[str, Any]:
@@ -119,11 +139,14 @@ def persist_run(
             "task_id": task_id,
             "username": username,
             "source": source,
+            "job_type": telemetry.get("job_type") or _job_type_for_source(source),
+            "worker_id": telemetry.get("worker_id"),
             "timestamp": ts,
             "ok": ok,
             "error_message": error_message,
             "error_type": error_type,
             "error_stage": error_stage,
+            "error_code": telemetry.get("error_code"),
             "total_films": stats.get("total_films"),
             "sinefil_meter": stats.get("sinefil_meter"),
             "stats": stats,
@@ -140,6 +163,11 @@ def persist_run(
         for field in TIMING_FIELDS:
             value = explicit_timings.get(field)
             payload[field] = telemetry.get(field, value)
+
+        # ms variant for the ops_runs.duration_ms column (nullable; NULL when unknown).
+        duration_seconds_value = payload.get("duration_seconds")
+        if isinstance(duration_seconds_value, (int, float)):
+            payload["duration_ms"] = round(duration_seconds_value * 1000)
 
         if not payload.get("error_type"):
             payload["error_type"] = telemetry.get("error_type")
