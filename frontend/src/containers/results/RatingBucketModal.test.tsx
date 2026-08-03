@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RatingBucketModal } from './FilmAndRatings';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 vi.mock('@/lib/analytics', () => ({
   getPosterUrl: (path: string | null | undefined, _variant?: string) =>
@@ -24,10 +25,12 @@ function buildFilms(n: number) {
 describe('RatingBucketModal', () => {
   it('caps initial poster cards and expands on click', async () => {
     render(
-      <RatingBucketModal
-        bucket={{ rating: 4, label: '4★', films: buildFilms(25) }}
-        onClose={() => {}}
-      />
+      <I18nProvider locale="en">
+        <RatingBucketModal
+          bucket={{ rating: 4, label: '4★', films: buildFilms(25) }}
+          onClose={() => {}}
+        />
+      </I18nProvider>
     );
     const posters = screen.getAllByAltText(/poster/i);
     expect(posters.length).toBe(12);

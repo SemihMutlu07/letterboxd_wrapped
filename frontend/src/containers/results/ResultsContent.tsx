@@ -91,7 +91,7 @@ export function ResultsContent({
   setHasTriggeredFeedback,
   feedbackRef,
 }: ResultsContentProps) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const { theme, config } = useTheme();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -344,7 +344,7 @@ export function ResultsContent({
           <ReviewAnalysisSection stats={stats} />
         ) : (
           <div className="rounded-xl bg-white/5 p-8 text-center text-slate-400">
-            <p className="text-sm">Bu hesapta yazılı review bulunamadı.</p>
+            <p className="text-sm">{t('results.noReviews')}</p>
           </div>
         ),
     },
