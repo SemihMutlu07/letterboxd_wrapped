@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ResultsPage from './page';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 const feedbackSpies = vi.hoisted(() => ({ open: vi.fn() }));
 
@@ -120,7 +121,7 @@ describe('ResultsPage stored-result contracts', () => {
   it('loads matching route data and passes date/runtime/share values to rendered children', async () => {
     window.history.replaceState(null, '', '/results?u=alice');
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
 
     expect(await screen.findByText('Analysed from Jan 1, 2024 to Jan 5, 2024')).toBeInTheDocument();
     expect(screen.getByTestId('hero-values')).toHaveTextContent('5|4%');
@@ -131,7 +132,7 @@ describe('ResultsPage stored-result contracts', () => {
 
   it('canonicalizes a route-less stored username into the results URL', async () => {
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
 
     await screen.findByTestId('hero-values');
     expect(`${window.location.pathname}${window.location.search}`).toBe('/results?u=alice');
@@ -140,7 +141,7 @@ describe('ResultsPage stored-result contracts', () => {
   it('keeps timeline and total-runtime values ahead of monthly and legacy runtime fallbacks', async () => {
     window.history.replaceState(null, '', '/results?u=alice');
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
 
     expect(await screen.findByText('Analysed from Jan 1, 2024 to Jan 5, 2024')).toBeInTheDocument();
     expect(screen.getByTestId('hero-values')).toHaveTextContent('5|4%');
@@ -149,14 +150,14 @@ describe('ResultsPage stored-result contracts', () => {
   it('does not load stored data for a different results route', async () => {
     window.history.replaceState(null, '', '/results?u=other');
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
 
     expect(await screen.findByText('No data found')).toBeInTheDocument();
     expect(screen.getByText('No local result data found for @other.')).toBeInTheDocument();
   });
 
   it('shows the upload fallback when there is no stored result or route username', async () => {
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
 
     expect(await screen.findByText('No data found')).toBeInTheDocument();
     expect(screen.getByText('Please upload your Letterboxd data first.')).toBeInTheDocument();
@@ -164,7 +165,7 @@ describe('ResultsPage stored-result contracts', () => {
 
   it('selects the requested film set and sorts rated films before unrated films', async () => {
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
     await screen.findByTestId('hero-values');
 
     await userEvent.click(screen.getByRole('button', { name: 'Open all films' }));
@@ -179,7 +180,7 @@ describe('ResultsPage stored-result contracts', () => {
 
   it('renders the primary results sections in their slide order', async () => {
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
 
     await screen.findByTestId('hero-values');
     expect(screen.getAllByTestId('section-marker').map((marker) => marker.textContent)).toEqual([
@@ -195,7 +196,7 @@ describe('ResultsPage stored-result contracts', () => {
 
   it('opens feedback only once after repeated completed share downloads', async () => {
     storeStats();
-    render(<ResultsPage />);
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
     await screen.findByTestId('hero-values');
 
     await userEvent.click(screen.getAllByRole('button', { name: /share your wrapped/i })[0]);
