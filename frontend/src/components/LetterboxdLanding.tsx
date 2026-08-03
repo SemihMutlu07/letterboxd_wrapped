@@ -12,6 +12,7 @@ import {
   testBackend,
   type AnalysisPeriod,
   type ScrapeProgress,
+  isWorkerFleetEmpty,
 } from '@/lib/api';
 import { ERROR_CODE_HINTS } from '@/lib/api';
 import { persistStats } from '@/lib/stats-storage';
@@ -158,6 +159,9 @@ export default function LetterboxdLanding() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
+  // Degraded mode: the desktop worker fleet is empty, so a scrape is queued
+  // and may take much longer than usual. Non-fatal — just informs the UI.
+  const [workerQueued, setWorkerQueued] = useState(false);
   // Pixelated poster guessing game, shown while scraping.
   const [posterRound, setPosterRound] = useState<PosterGameMovie | null>(null);
   const [posterLevel, setPosterLevel] = useState(0);
@@ -460,6 +464,13 @@ export default function LetterboxdLanding() {
 
     setIsScraping(true);
     setScrapeProgress(null);
+    setWorkerQueued(false);
+    // Degraded-mode probe: if no desktop worker is online the scrape is queued
+    // and may take much longer. Best-effort — endpoint failure keeps the
+    // normal loading screen (no error shown).
+    isWorkerFleetEmpty().then((empty) => {
+      if (empty) setWorkerQueued(true);
+    }).catch(() => { /* non-fatal */ });
     setPosterRound(null);
     setPosterLevel(0);
     setPosterScore(0);
@@ -540,6 +551,7 @@ export default function LetterboxdLanding() {
     setIsUploading(false);
     setIsScraping(false);
     setScrapeProgress(null);
+    setWorkerQueued(false);
     setPosterRound(null);
     setPosterLevel(0);
     setPosterScore(0);
@@ -559,6 +571,7 @@ export default function LetterboxdLanding() {
         onCancel={handleCancel}
         mode="scrape"
         typicalSeconds={30}
+        queued={workerQueued}
         events={scrapeProgress?.trace_events}
         posterGame={
           posterRound

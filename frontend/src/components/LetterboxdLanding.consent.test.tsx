@@ -32,6 +32,7 @@ vi.mock('@/lib/api', () => ({
   parseLetterboxdUsername: vi.fn(),
   scrapeProfile: apiMocks.scrapeProfile,
   testBackend: apiMocks.testBackend,
+  isWorkerFleetEmpty: vi.fn().mockResolvedValue(false),
   ERROR_CODE_HINTS: {},
 }));
 
