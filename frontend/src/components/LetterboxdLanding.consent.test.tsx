@@ -110,4 +110,16 @@ describe('LetterboxdLanding persistence consent gate', () => {
       expect.any(Function),
     ));
   });
+
+  it('renders the FAQ section with all six questions from the catalog', () => {
+    render(<I18nProvider locale="en"><LetterboxdLanding /></I18nProvider>);
+
+    expect(screen.getByRole('heading', { name: 'Frequently asked questions' })).toBeInTheDocument();
+    expect(screen.getByText('What is Movies Wrapped?')).toBeInTheDocument();
+    expect(screen.getByText('How do I find my Letterboxd username?')).toBeInTheDocument();
+    expect(screen.getByText('Is my data stored?')).toBeInTheDocument();
+    expect(screen.getByText('How long does it take?')).toBeInTheDocument();
+    expect(screen.getByText('Is it free?')).toBeInTheDocument();
+    expect(screen.getByText('Can I upload a CSV?')).toBeInTheDocument();
+  });
 });
