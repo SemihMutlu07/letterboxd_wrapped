@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Upload, Users, X, UserRound, Sparkles, PartyPopper } from 'lucide-react';
+import { Upload, Users, X, UserRound, Sparkles, PartyPopper, ChevronDown } from 'lucide-react';
 import {
   analyzeFiles,
   parseLetterboxdUsername,
@@ -24,6 +24,7 @@ import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics
 import { normalizeError, type NormalizedError } from '@/lib/errors';
 import { useI18n } from '@/i18n/I18nProvider';
 import { localizePath } from '@/i18n/routing';
+import { FAQ_ITEMS } from '@/i18n/faq';
 import ErrorBanner from '@/components/ErrorBanner';
 import LoadingScreen from '@/components/landing/LoadingScreen';
 import UploadZone from '@/components/landing/UploadZone';
@@ -731,6 +732,26 @@ export default function LetterboxdLanding() {
                 <p className="mt-1 text-[11px] leading-relaxed text-white/50">{desc}</p>
               </div>
             ))}
+          </section>
+
+          {/* FAQ */}
+          <section aria-label={t('landing.faq.label')} className="mx-auto max-w-lg">
+            <h2 className="text-center text-lg font-bold tracking-tight text-white">{t('landing.faq.label')}</h2>
+            <div className="mt-4 space-y-2">
+              {FAQ_ITEMS.map(({ q, a }) => (
+                <details
+                  key={q}
+                  className="group rounded-xl p-4"
+                  style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-white [&::-webkit-details-marker]:hidden">
+                    {t(q)}
+                    <ChevronDown className="h-4 w-4 shrink-0 text-white/40 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">{t(a)}</p>
+                </details>
+              ))}
+            </div>
           </section>
 
           <p className="text-center text-xs leading-relaxed text-white/45">
