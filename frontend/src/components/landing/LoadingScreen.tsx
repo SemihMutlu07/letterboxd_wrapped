@@ -27,6 +27,8 @@ type Props = {
   posterGame?: PosterGameProps | null;
   /** Legacy transition signal. LoadingScreen intentionally never exposes navigation. */
   resultReady?: string | null;
+  /** Worker fleet is empty (degraded): the job is queued but may take longer. */
+  queued?: boolean;
 };
 
 const FUN_MESSAGE_KEYS = [
@@ -47,6 +49,7 @@ export default function LoadingScreen({
   typicalSeconds,
   events,
   posterGame,
+  queued,
 }: Props) {
   const { t, formatNumber } = useI18n();
   const [elapsed, setElapsed] = useState(0);
@@ -128,13 +131,21 @@ export default function LoadingScreen({
 
         {/* Status — two lines: elapsed/almost-there, then trouble hint if it's taking a while */}
         <div className="mb-4 space-y-1">
-          <p className="text-xs text-orange-300 font-medium">
-            {remaining <= 0 ? t('landing.loading.almostThere') : displayDetail}
-          </p>
-          {elapsed > typical && (
+          {queued ? (
             <p className="text-xs text-amber-300/90 animate-pulse">
-              {t('landing.loading.slow')}
+              {t('landing.loading.queued')}
             </p>
+          ) : (
+            <>
+              <p className="text-xs text-orange-300 font-medium">
+                {remaining <= 0 ? t('landing.loading.almostThere') : displayDetail}
+              </p>
+              {elapsed > typical && (
+                <p className="text-xs text-amber-300/90 animate-pulse">
+                  {t('landing.loading.slow')}
+                </p>
+              )}
+            </>
           )}
         </div>
 

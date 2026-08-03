@@ -30,8 +30,9 @@ export async function generateMetadata({
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
   const copy = metadataByLocale[locale];
+  const siteUrl = 'https://movieswrapped.com';
   return {
-    metadataBase: new URL('https://movieswrapped.com'),
+    metadataBase: new URL(siteUrl),
     title: copy.title,
     description: copy.description,
     alternates: {
@@ -40,14 +41,14 @@ export async function generateMetadata({
     },
     openGraph: {
       type: 'website',
-      url: `/${locale}`,
+      url: `${siteUrl}/${locale}`,
       siteName: 'Movies Wrapped',
       title: copy.title,
       description: copy.description,
       images: [{
-        url: '/assets/Sosyal%20Medya%20Logo%20-%20Dark.png',
-        width: 1080,
-        height: 1080,
+        url: '/assets/og-image-1200x630.png',
+        width: 1200,
+        height: 630,
         alt: locale === 'tr' ? 'Movies Wrapped — Letterboxd ile sinemada yılın' : 'Movies Wrapped — your year in film from Letterboxd',
       }],
     },
@@ -55,7 +56,7 @@ export async function generateMetadata({
       card: 'summary_large_image',
       title: copy.title,
       description: copy.description,
-      images: ['/assets/Sosyal%20Medya%20Logo%20-%20Dark.png'],
+      images: ['/assets/og-image-1200x630.png'],
     },
     robots: { index: true, follow: true },
   };

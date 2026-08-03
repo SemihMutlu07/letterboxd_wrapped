@@ -386,6 +386,37 @@ export async function testBackend(retries = 2, delayMs = 1000) {
   }
 }
 
+export type WorkerHealth = {
+  workers: { worker_id?: string; last_seen_at?: string | null; status?: string }[];
+  queue_depth?: number;
+  oldest_queued_age_seconds?: number;
+};
+
+/**
+ * Whether the desktop worker fleet is empty (degraded mode).
+ *
+ * Best-effort: returns true only when the endpoint answers and reports zero
+ * workers. Any network error / non-OK response returns false so the UI keeps
+ * showing the normal loading screen instead of an error.
+ */
+export async function isWorkerFleetEmpty(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const r = await fetch(`${API_BASE}/api/health/workers`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!r.ok) return false;
+    const data: WorkerHealth = await r.json();
+    return Array.isArray(data.workers) && data.workers.length === 0;
+  } catch {
+    return false;
+  }
+}
+
 // Scrape a Letterboxd profile by username.
 // Handles two backend contracts transparently:
 //   - synchronous (local / no desktop worker): { status, stats }

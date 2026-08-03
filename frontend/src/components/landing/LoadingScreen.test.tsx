@@ -25,4 +25,26 @@ describe('LoadingScreen result transition', () => {
     expect(screen.getByRole('heading', { name: 'Profilin taranıyor' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'İptal' })).toBeInTheDocument();
   });
+
+  it('shows the queued degraded-state message instead of normal progress when worker fleet is empty', () => {
+    render(
+      <I18nProvider locale="en">
+        <LoadingScreen mode="scrape" queued />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText(/Queued — the analysis worker is starting up/i)).toBeInTheDocument();
+    // Normal "almost there" / elapsed copy must not appear in degraded mode.
+    expect(screen.queryByText(/Almost there/i)).not.toBeInTheDocument();
+  });
+
+  it('hides the queued message when the fleet is healthy', () => {
+    render(
+      <I18nProvider locale="en">
+        <LoadingScreen mode="scrape" queued={false} />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByText(/Queued — the analysis worker is starting up/i)).not.toBeInTheDocument();
+  });
 });
