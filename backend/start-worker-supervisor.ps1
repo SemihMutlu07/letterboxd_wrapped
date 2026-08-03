@@ -2,15 +2,25 @@ param(
     [string]$BackendDir = $PSScriptRoot,
     [int]$PollIntervalSeconds = 10,
     [int]$RestartGraceSeconds = 20,
-    [int]$LogTailLines = 80
+    [int]$LogTailLines = 80,
+    # Hard ceiling on this supervisor's own memory use, checked once per loop.
+    # The 2026-08-02 runaway growth is now fixed at its source (see Get-LogTail), so
+    # this is a backstop for some *future* leak, not the primary defence.
+    # Its known limitation: it is checked from inside the loop, so it cannot fire while
+    # the loop is blocked inside a single call — during the ConvertTo-Json stall the
+    # process passed 1.7GB without ever reaching this line. watchdog-worker-supervisor.ps1
+    # exists precisely to cover that case from outside the process. Do not treat this
+    # in-loop valve as sufficient on its own.
+    [int]$MaxWorkingSetMB = 400
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-# Windows PowerShell 5.1's Invoke-RestMethod/Invoke-WebRequest leak memory on every call
-# when progress-bar rendering is left on — this loop calls them twice per poll interval,
-# so over hours the process balloons into gigabytes. Confirmed root cause of repeated
-# MEMORY_MANAGEMENT (0x1A) BSODs on this machine (2026-08-02).
+# Standard practice for a script that calls Invoke-RestMethod in a loop: progress-bar
+# rendering is pure overhead here. NOTE: this was once believed to be the cause of the
+# MEMORY_MANAGEMENT (0x1A) BSODs and shipped as such in fdf6dd5 — it was not, and the
+# leak continued afterwards. The real cause is documented above Get-LogTail. Keeping
+# this line because it is correct hygiene, not because it fixes anything.
 $ProgressPreference = "SilentlyContinue"
 
 $SupervisorVersion = "2026-06-28"
@@ -29,6 +39,16 @@ $PythonExe = Join-Path $BackendDir ".venv\Scripts\python.exe"
 function Write-SupervisorLog {
     param([string]$Message)
     $line = "{0} {1}" -f (Get-Date).ToUniversalTime().ToString("o"), $Message
+    # This file is append-only and the supervisor runs for months at a time, so without
+    # rotation it grows without bound — and Get-LogTail reads it on every poll. Roll at
+    # 1MB, keeping one previous generation.
+    try {
+        if ((Test-Path $SupervisorLog) -and ((Get-Item $SupervisorLog -Force).Length -gt 1MB)) {
+            Move-Item -Path $SupervisorLog -Destination "$SupervisorLog.1" -Force -ErrorAction SilentlyContinue
+        }
+    } catch {
+        # Rotation is best-effort; never let it take the supervisor down.
+    }
     Add-Content -Path $SupervisorLog -Value $line
     Write-Host $line
 }
@@ -88,7 +108,11 @@ function Invoke-WorkerApi {
         TimeoutSec = 15
     }
     if ($null -ne $Body) {
-        $params.Body = $Body | ConvertTo-Json -Depth 8
+        # Depth 4 is more than the flat supervisor payload needs. It is deliberately low
+        # so that if a future caller ever passes an object graph deeper than expected,
+        # ConvertTo-Json truncates instead of walking off into it (see Get-LogTail for
+        # what that cost us). Anything passed here must be plain strings/numbers/hashtables.
+        $params.Body = $Body | ConvertTo-Json -Depth 4
         $params.ContentType = "application/json"
     }
     return Invoke-RestMethod @params
@@ -150,6 +174,52 @@ function Stop-WorkerChild {
     }
 }
 
+# A worker child started with Start-Process is an independent process, not attached to
+# this supervisor via a job object — so if the supervisor dies (crash, memory valve, kill)
+# the python worker keeps running, keeps polling the backend and keeps serving prod, with
+# its stdout pointing at a log file the next supervisor run will truncate. That is exactly
+# what happened on 2026-08-02/03: prod was being served for 10+ hours by an orphan nobody
+# knew was there, invisible because worker.log read empty.
+#
+# Left alone, the next supervisor start adds a *second* worker that races the orphan for
+# job claims — the repeated "Fair claim failed: HTTP 409" in worker-error.log. So adopt
+# the machine's state before starting anything: kill any pre-existing worker process.
+#
+# Fail-safe by construction: a process whose command line we cannot read (a more
+# privileged process than us) is skipped rather than guessed at, so this can never kill
+# something it has not positively identified as our worker.
+function Stop-OrphanWorkers {
+    $marker = "app.worker.desktop_scrape_worker"
+    $orphans = @()
+    $pythons = @()
+    try {
+        $pythons = @(Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction Stop)
+        $orphans = @($pythons | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($marker) })
+    } catch {
+        Write-SupervisorLog ("orphan scan failed, continuing: {0}" -f $_.Exception.Message)
+        return
+    }
+    # The fail-safe skip above turns into a silent one when this supervisor is not
+    # elevated: an elevated orphan's command line reads back $null, so it is invisible
+    # rather than merely unkillable, and we would start a second worker to race it.
+    # Say so, otherwise the next 409 storm looks like it came from nowhere.
+    $unreadable = @($pythons | Where-Object { -not $_.CommandLine })
+    if ($unreadable.Count -gt 0) {
+        Write-SupervisorLog ("WARN {0} python process(es) have unreadable command lines (pids: {1}); if one is an orphaned worker it cannot be identified or stopped from a non-elevated supervisor, and will race this one for job claims" -f `
+            $unreadable.Count, (($unreadable | ForEach-Object { $_.ProcessId }) -join ","))
+    }
+    if ($orphans.Count -eq 0) {
+        return
+    }
+    foreach ($orphan in $orphans) {
+        Write-SupervisorLog ("killing orphaned worker from a previous supervisor pid={0}" -f $orphan.ProcessId)
+        taskkill.exe /PID $orphan.ProcessId /T /F | Out-Null
+    }
+    # Give the backend a moment to time out their in-flight claims before we start a new
+    # worker, so the fresh child does not immediately collide with jobs the orphan held.
+    Start-Sleep -Seconds 3
+}
+
 function Update-RepoFastForward {
     Write-SupervisorLog "verifying desktop_server checkout before worker start"
     $previousErrorActionPreference = $ErrorActionPreference
@@ -181,6 +251,23 @@ function Update-RepoFastForward {
     }
 }
 
+# DO NOT hand raw Get-Content output to ConvertTo-Json — that was the BSOD.
+#
+# In Windows PowerShell 5.1 every string Get-Content returns is wrapped in a PSObject
+# carrying ETS note properties: PSPath, PSParentPath, PSChildName, ReadCount, and
+# critically PSDrive (PSDriveInfo) and PSProvider (ProviderInfo). Those last two are
+# rich objects whose own properties point back into the provider graph, so
+# ConvertTo-Json -Depth 8 walks that graph once per log line and never returns.
+#
+# Measured 2026-08-03 on the same 5 lines of text, sole difference the decoration:
+#   [string]-cast  -> 51 ms, 528 JSON chars
+#   raw Get-Content -> never returned (killed at 45s), ~9 MB/s unbounded growth
+# With $LogTailLines = 80 in production that is the 6-10GB MEMORY_MANAGEMENT (0x1A)
+# BSOD, confirmed experimentally rather than theorised. It also explains why
+# TimeoutSec never helped: the stall is in ConvertTo-Json, before Invoke-RestMethod
+# is ever reached.
+#
+# The per-element [string] cast below is what strips the decoration. Keep it.
 function Get-LogTail {
     $lines = @()
     if (Test-Path $SupervisorLog) {
@@ -191,7 +278,18 @@ function Get-LogTail {
         $lines += "--- worker ---"
         $lines += Get-Content $WorkerLog -Tail $LogTailLines -ErrorAction SilentlyContinue
     }
-    return @($lines | Select-Object -Last $LogTailLines)
+    # The line cap is a second guard: the python child's stderr has been observed
+    # emitting single lines padded with thousands of characters (a \r-based progress
+    # indicator degrading when stdout is redirected to a file), and an unbounded line
+    # would bloat the request body even once the ETS problem is gone.
+    return [string[]]@(
+        $lines |
+            Select-Object -Last $LogTailLines |
+            ForEach-Object {
+                $text = [string]$_
+                if ($text.Length -gt 2000) { $text.Substring(0, 2000) + "...[truncated]" } else { $text }
+            }
+    )
 }
 
 function Get-ControlPath {
@@ -227,6 +325,7 @@ function Report-Supervisor {
 }
 
 Load-DotEnv
+Stop-OrphanWorkers
 Update-RepoFastForward
 $RepoDir = Split-Path $BackendDir -Parent
 $branch = git -C $RepoDir branch --show-current
@@ -234,7 +333,18 @@ $sha = git -C $RepoDir rev-parse HEAD
 Write-SupervisorLog ("worker supervisor verified interpreter={0} branch={1} sha={2}" -f $PythonExe, $branch, $sha)
 Write-SupervisorLog "worker supervisor starting"
 
+$script:LoopCount = 0
 while ($true) {
+    $script:LoopCount++
+    # A quiet loop by default. The per-step DIAG breadcrumbs that found the ConvertTo-Json
+    # stall wrote 5 lines per poll (~43k lines/day) into the same file Get-LogTail reads;
+    # this periodic line keeps the memory trend observable at ~1/1000th the volume.
+    if ($script:LoopCount % 30 -eq 1) {
+        Write-SupervisorLog ("alive loop={0} mem={1}MB child={2}" -f `
+            $script:LoopCount,
+            [Math]::Round(([System.Diagnostics.Process]::GetCurrentProcess()).WorkingSet64 / 1MB, 1),
+            $(if (Test-ChildRunning) { "running" } else { "stopped" }))
+    }
     try {
         $control = Invoke-WorkerApi -Method "GET" -Path (Get-ControlPath)
         $script:LastControlError = $null
@@ -264,6 +374,14 @@ while ($true) {
         Report-Supervisor
     } catch {
         Write-SupervisorLog ("supervisor report failed: {0}" -f $_.Exception.Message)
+    }
+
+    $currentWorkingSetMB = [Math]::Round(([System.Diagnostics.Process]::GetCurrentProcess()).WorkingSet64 / 1MB, 1)
+    if ($currentWorkingSetMB -gt $MaxWorkingSetMB) {
+        Write-SupervisorLog ("memory safety valve tripped: {0} MB > {1} MB limit; stopping child and exiting for a clean restart" -f $currentWorkingSetMB, $MaxWorkingSetMB)
+        Stop-WorkerChild
+        $InstanceMutex.ReleaseMutex() | Out-Null
+        exit 1
     }
 
     Start-Sleep -Seconds $PollIntervalSeconds
