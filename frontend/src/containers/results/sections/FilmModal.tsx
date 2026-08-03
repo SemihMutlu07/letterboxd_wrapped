@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useI18n } from '@/i18n/I18nProvider';
 
 interface FilmModalProps {
   open: boolean;
@@ -20,6 +21,7 @@ interface FilmModalProps {
 }
 
 export default function FilmModal({ open, onClose, film, userAvg }: FilmModalProps) {
+  const { t } = useI18n();
   const diff = ((film.rating ?? 0) - (film.communityRating ?? 0)).toFixed(1);
   const diffSign = parseFloat(diff) > 0 ? '+' : '';
 
@@ -75,7 +77,7 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
                 <p className="text-sm font-semibold text-white">{film.language || '—'}</p>
               </div>
               <div className="bg-slate-800/40 rounded-lg p-3">
-                <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">Your rating</p>
+                <p className="text-xs text-slate-500 uppercase tracking-widest mb-1">{t('results.filmModal.yourRating')}</p>
                 <p className="text-sm font-semibold text-orange-400">★ {(film.rating ?? 0).toFixed(1)}</p>
               </div>
             </div>
@@ -84,7 +86,7 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
             <div className="bg-slate-800/40 rounded-lg p-4 border border-white/4">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1">
-                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Community avg</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">{t('results.filmModal.communityAvg')}</p>
                   <p className="text-2xl font-bold text-white">★ {(film.communityRating ?? 0).toFixed(1)}</p>
                 </div>
                 <div className="h-12 w-px bg-white/10" />
@@ -105,7 +107,7 @@ export default function FilmModal({ open, onClose, film, userAvg }: FilmModalPro
             )}
             {!film.review_text && (
               <div className="bg-slate-800/20 rounded-lg p-4 text-center">
-                <p className="text-xs text-slate-500 italic">No written review</p>
+                <p className="text-xs text-slate-500 italic">{t('results.filmModal.noReview')}</p>
               </div>
             )}
 

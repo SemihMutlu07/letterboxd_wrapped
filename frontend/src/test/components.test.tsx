@@ -231,7 +231,7 @@ const ratingDeviationStats: StatsData = {
 
 describe('RatingDeviation', () => {
   it('uses a two-column grid and clipped captions for mobile outlier cards', () => {
-    const { container } = render(<RatingDeviation stats={ratingDeviationStats} />);
+    const { container } = render(<I18nProvider locale="en"><RatingDeviation stats={ratingDeviationStats} /></I18nProvider>);
 
     const grid = container.querySelector('.grid');
     expect(grid?.className).toContain('grid-cols-2');

@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ReviewAnalysisSection from './ReviewAnalysisSection';
 import type { StatsData } from './types';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 const baseStats: Partial<StatsData> = {};
 
@@ -51,7 +52,7 @@ function renderSection(
     },
     ...(reviewOverrides as Partial<StatsData>),
   };
-  return render(<ReviewAnalysisSection stats={stats} />);
+  return render(<I18nProvider locale="en"><ReviewAnalysisSection stats={stats} /></I18nProvider>);
 }
 
 describe('ReviewAnalysisSection', () => {

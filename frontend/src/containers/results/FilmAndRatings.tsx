@@ -8,6 +8,7 @@ import Section from '@/components/results/Section';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 import FilmModal from '@/containers/results/sections/FilmModal';
+import { useI18n } from '@/i18n/I18nProvider';
 
 const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
 const LineChart = dynamic(() => import('recharts').then(m => m.LineChart), { ssr: false });
@@ -31,6 +32,7 @@ export function FilmHistory({
   allFilms?: RatingSourceFilm[];
   userAvg?: number | null;
 }) {
+  const { t } = useI18n();
   const primary = '#f97316';
   const [selectedDecade, setSelectedDecade] = useState<DecadeBucket | null>(null);
   const [selectedFilm, setSelectedFilm] = useState<RatingBucketFilm | null>(null);
@@ -128,7 +130,7 @@ export function FilmHistory({
                       <p className="font-bold text-sm md:text-lg mb-1">{String(label)}</p>
                       <p className="text-orange-400 font-semibold text-xs md:text-sm">{`${payload[0].value} films`}</p>
                       {filmsByDecade.size > 0 && (
-                        <p className="text-slate-400 text-[10px] mt-1">Click the point to see the films</p>
+                        <p className="text-slate-400 text-[10px] mt-1">{t('results.films.clickPoint')}</p>
                       )}
                     </div>
                   ) : null
@@ -177,6 +179,7 @@ export function RatingsBar({
   allFilms?: RatingSourceFilm[];
   userAvg?: number | null;
 }) {
+  const { t } = useI18n();
   const rating = '#eab308';
   const [selectedBucket, setSelectedBucket] = useState<RatingBucket | null>(null);
 
@@ -226,7 +229,7 @@ export function RatingsBar({
       <Section title="Rating Patterns" subtitle="How you rate films">
         {mostCommonRating != null && (
           <div className="mb-3 flex items-center gap-2">
-            <span className="text-xs uppercase tracking-wider text-slate-500 font-medium">Most given rating</span>
+            <span className="text-xs uppercase tracking-wider text-slate-500 font-medium">{t('results.films.mostGivenRating')}</span>
             <span className="text-sm font-black text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1">{mostCommonRating}★</span>
           </div>
         )}
@@ -332,6 +335,7 @@ export function RatingBucketModal({
   bucket: RatingBucket | null;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [posterPage, setPosterPage] = useState(1);
 
   useEffect(() => {
@@ -381,7 +385,7 @@ export function RatingBucketModal({
           >
             <header className="flex items-start justify-between gap-4 border-b border-white/[0.06] px-5 py-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300/70">Rating bucket</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-yellow-300/70">{t('results.films.ratingBucket')}</p>
                 <h3 className="mt-1 text-2xl font-black text-white">{bucket.label}</h3>
                 <p className="mt-1 text-sm text-slate-400">
                   {bucket.films.length} film{bucket.films.length === 1 ? '' : 's'} sorted by community rating

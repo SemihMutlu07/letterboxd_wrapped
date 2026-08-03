@@ -4,6 +4,7 @@ import React from 'react';
 import Section from '@/components/results/Section';
 import { getSinefilPercentile } from '@/lib/supabase/analysis_runs';
 import { searchMovie } from '@/lib/api';
+import { useI18n } from '@/i18n/I18nProvider';
 
 interface Breakdown {
   geography: number;
@@ -116,6 +117,8 @@ export default function CinemaScale({
   topDirectors?: string[];
   favoriteDecade?: string;
 }) {
+  const { t } = useI18n();
+
   // Score interpretation
   const getScoreMessage = (score: number) => {
     if (score >= 90) return "Top 5% of film enthusiasts";
@@ -285,7 +288,7 @@ export default function CinemaScale({
             {percentile !== null && `More adventurous than ${percentile}% of viewers`}
           </div>
           {!revealed && (
-            <div className="text-xs text-slate-500 mt-3 animate-pulse">Click to reveal your score</div>
+            <div className="text-xs text-slate-500 mt-3 animate-pulse">{t('results.cinemaScale.reveal')}</div>
           )}
         </div>
 
@@ -299,7 +302,7 @@ export default function CinemaScale({
           </div>
           {/* Score markers */}
           <div className="flex justify-between text-xs text-slate-500 mt-2">
-            <span>Mainstream</span>
+            <span>{t('results.cinemaScale.mainstream')}</span>
             <span>Balanced</span>
             <span>Arthouse</span>
           </div>
@@ -394,11 +397,11 @@ export default function CinemaScale({
               </button>
             </div>
             <div>
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">How it's scored</div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">{t('results.cinemaScale.howScored')}</div>
               <p className="text-sm text-slate-300 leading-relaxed">{axisInfo[selectedAxis].info}</p>
             </div>
             <div>
-              <div className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2">Try these to improve it</div>
+              <div className="text-xs font-semibold text-blue-400 uppercase tracking-wide mb-2">{t('results.cinemaScale.improve')}</div>
               <ul className="space-y-2">
                 {getMovieSuggestions(selectedAxis).map((movie) => {
                   const poster = posterUrls[movie.title];

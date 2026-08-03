@@ -5,6 +5,7 @@ import Section from '@/components/results/Section';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 import type { StatsData, ReviewLiker } from './types';
+import { useI18n } from '@/i18n/I18nProvider';
 
 /** char length; used as a "Longest" tie-break, falls back to raw text length. */
 function charLen(r: { char_length?: number; text?: string }): number {
@@ -59,6 +60,7 @@ function scaledWordSize(count: number, max: number): string {
 }
 
 export default function ReviewAnalysisSection({ stats }: Props) {
+  const { t } = useI18n();
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [reviewSort, setReviewSort] = useState<ReviewSort>('likes');
   const [reviewPage, setReviewPage] = useState(1);
@@ -346,7 +348,7 @@ export default function ReviewAnalysisSection({ stats }: Props) {
           <div className="w-full rounded-xl bg-slate-800/35 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-widest text-orange-300">All written reviews</p>
+                <p className="text-xs uppercase tracking-widest text-orange-300">{t('results.reviews.all')}</p>
                 <p className="mt-1 text-xs text-slate-300">
                   Sort without extra scraping — likes come from the review listing page.
                   {hiddenLinkOnlyCount > 0
@@ -450,10 +452,11 @@ function LikerRow({
   likers?: ReviewLiker[];
   complete?: boolean;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
   if (likeCount <= 0) {
-    return <span className="text-xs text-slate-500">Not yet liked</span>;
+    return <span className="text-xs text-slate-500">{t('results.reviews.notLiked')}</span>;
   }
 
   const list = likers ?? [];
@@ -563,6 +566,7 @@ function ReviewSortButton({
 }
 
 function FullReviewCard({ review }: { review: ReviewItem }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const text = review.text ?? '';
   const likes = review.likes ?? 0;
@@ -597,7 +601,7 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
               likes > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-800 text-slate-400'
             }`}>
-              {likes > 0 ? `♥ ${likes}` : 'Not yet liked'}
+              {likes > 0 ? `♥ ${likes}` : t('results.reviews.notLiked')}
             </span>
           </header>
           <p className={`mt-3 text-sm leading-relaxed text-slate-200 ${expanded ? 'whitespace-pre-line' : 'line-clamp-4'}`}>
