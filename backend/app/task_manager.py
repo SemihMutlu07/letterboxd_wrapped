@@ -402,6 +402,16 @@ def record_worker_heartbeat(meta: Optional[Dict[str, Any]] = None) -> None:
         _last_worker_meta = {**_last_worker_meta, **meta}
 
 
+def get_last_worker_id() -> Optional[str]:
+    """Worker_id from the most recent heartbeat meta, if any.
+
+    Used when persisting runs so ops_runs.worker_id links the run to the
+    worker that actually executed it (desktop-worker runs only).
+    """
+    worker_id = _last_worker_meta.get("worker_id")
+    return str(worker_id) if worker_id else None
+
+
 def record_worker_startup(meta: Optional[Dict[str, Any]] = None) -> None:
     global _last_worker_started_at, _last_worker_meta
     _last_worker_started_at = datetime.now(timezone.utc)

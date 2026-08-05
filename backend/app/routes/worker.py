@@ -121,6 +121,8 @@ def _task_telemetry(task: task_manager.TaskState) -> dict:
         "error_type": task.error_type,
         "error_stage": task.error_stage,
         "error_code": task.error_code,
+        "job_type": task.job_type,
+        "worker_id": task_manager.get_last_worker_id(),
     }
 
 
