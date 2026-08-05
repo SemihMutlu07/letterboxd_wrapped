@@ -1,5 +1,24 @@
-import { describe, expect, it } from 'vitest';
-import { buildSummaryForPersistence } from './analysis_runs';
+import { describe, expect, it, vi } from 'vitest';
+import { buildSummaryForPersistence, finishAnalysis } from './analysis_runs';
+
+// Supabase client is mocked at module level; finishAnalysis uses it via getSupabase().
+vi.mock('@/lib/supabaseClient', () => ({
+  getSupabase: () => supabaseMock,
+  safeSupabaseCall: async (fn: () => unknown) => fn(),
+}));
+
+let capturedPayload: Record<string, unknown> | null = null;
+const supabaseMock = {
+  from: () => ({
+    update: (payload: Record<string, unknown>) => {
+      capturedPayload = payload;
+      return {
+        eq: () => ({ select: () => Promise.resolve({ error: null }) }),
+      };
+    },
+    insert: () => Promise.resolve({ error: null }),
+  }),
+};
 
 describe('buildSummaryForPersistence', () => {
   it('persists only allowlisted aggregate result fields', () => {
@@ -50,5 +69,44 @@ describe('buildSummaryForPersistence', () => {
     expect(summary.schema_version).toBe('results_v2_aggregate');
     expect(JSON.stringify(summary)).not.toContain('Private');
     expect(JSON.stringify(summary)).not.toContain('Sensitive prose');
+  });
+});
+
+describe('finishAnalysis', () => {
+  it('writes task_id, error_code and analysis_version alongside the summary', async () => {
+    capturedPayload = null;
+
+    const summary = buildSummaryForPersistence({
+      total_films: 5,
+      sinefil_meter: { score: 60, type: 'Explorer', model_version: 'cine_v2' },
+    });
+
+    await finishAnalysis({
+      id: 'run-1',
+      ok: true,
+      task_id: 'task-123',
+      summary,
+    });
+
+    expect(capturedPayload).toMatchObject({
+      ok: true,
+      task_id: 'task-123',
+      error_code: null,
+      analysis_version: 'cine_v2',
+    });
+  });
+
+  it('does not clobber analysis_version with null when summary lacks model_version', async () => {
+    capturedPayload = null;
+
+    await finishAnalysis({
+      id: 'run-2',
+      ok: false,
+      error_message: 'boom',
+      error_code: 'scrape_failed',
+    });
+
+    expect(capturedPayload).toMatchObject({ ok: false, error_code: 'scrape_failed' });
+    expect(capturedPayload).not.toHaveProperty('analysis_version'); // DB default stays
   });
 });

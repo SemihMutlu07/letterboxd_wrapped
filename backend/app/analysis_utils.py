@@ -7,6 +7,12 @@ from typing import Any, Dict, List
 
 import pandas as pd
 
+# Single source of truth for the analysis algorithm version. The cine scoring
+# algorithm is versioned here; bump it when the scoring changes so persisted
+# analysis_runs.analysis_version (and stats.sinefil_meter.model_version) stay
+# comparable across releases.
+ANALYSIS_VERSION = "cine_v2"
+
 
 def _shannon_entropy(counts: List[int]) -> float:
     """Shannon entropy in bits for a list of counts. Returns 0 for empty/single."""
@@ -88,7 +94,7 @@ def compute_cinema_scale(
     current_year: int | None = None,
 ) -> Dict[str, Any]:
     """
-    Compute a 0-100 cinema diversity score (model_version cine_v2).
+    Compute a 0-100 cinema diversity score (model_version ANALYSIS_VERSION).
 
     Axes and max points:
         geography  25   — country entropy + dominance penalty
@@ -182,5 +188,5 @@ def compute_cinema_scale(
             'genres': genre_score,
             'directors': dir_score,
         },
-        'model_version': 'cine_v2',
+        'model_version': ANALYSIS_VERSION,
     }
