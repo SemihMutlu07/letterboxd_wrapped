@@ -42,7 +42,7 @@ from app.services.scrape_pipeline import (
     ScrapeAnalysisEmpty,
     scrape_and_analyze,
 )
-from app.services.recommender import film_key
+from app.services.recommender import compare_watchlist_sets, enrich_films_concurrent, film_key, public_film
 from app.services.scraper import scrape_films_grid, scrape_watchlist, scrape_profile_sources, scrape_avatar_only
 
 logging.basicConfig(
@@ -59,7 +59,9 @@ HEARTBEAT_MAX_BACKOFF = float(os.getenv("WORKER_HEARTBEAT_MAX_BACKOFF", "300"))
 # Short timeout for the small control-plane calls; the scrape itself is unbounded.
 CONTROL_TIMEOUT = aiohttp.ClientTimeout(total=15)
 TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
-WORKER_PROTOCOL_VERSION = 3
+WORKER_PROTOCOL_VERSION = 4
+# Watchlist-compare enrichment has its own timeout (the scrape itself is unbounded).
+WATCHLIST_ENRICH_TIMEOUT = 120
 # V1 processes one job at a time — no concurrency yet.
 MAX_CONCURRENCY = 1
 # Incremented while a job is being processed so heartbeats report load.
@@ -319,6 +321,7 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
     task_id = job["task_id"]
     job_type = job["job_type"]
     usernames = job["usernames"]
+    options = job.get("options") or {}
     logger.info("Processing watchlist job %s type=%s users=%s", task_id, job_type, "/".join(usernames))
 
     try:
@@ -328,7 +331,28 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
                 scrape_watchlist(first, max_pages=40),
                 scrape_watchlist(second, max_pages=40),
             )
-            payload = {"first_watchlist": first_wl, "second_watchlist": second_wl}
+            if options.get("raw_only"):
+                # /api/recommend-from-compare and /api/watchlist-enrich claim
+                # jobs this way and do their own (differently-scoped) compare +
+                # enrichment on the raw lists — skip the full 3-way enrichment
+                # below, it would just be wasted TMDB calls on this path.
+                payload = {"first_watchlist": first_wl, "second_watchlist": second_wl}
+            else:
+                result = compare_watchlist_sets(first_wl, second_wl)
+                common, first_only, second_only = await asyncio.wait_for(
+                    asyncio.gather(
+                        enrich_films_concurrent(session, result["common"], limit=50),
+                        enrich_films_concurrent(session, result["first_only"], limit=50),
+                        enrich_films_concurrent(session, result["second_only"], limit=50),
+                    ),
+                    timeout=WATCHLIST_ENRICH_TIMEOUT,
+                )
+                result.update(
+                    common=[public_film(f) for f in common],
+                    first_only=[public_film(f) for f in first_only],
+                    second_only=[public_film(f) for f in second_only],
+                )
+                payload = {"comparison": result}
         elif job_type == "find_film":
             wl_lists = await asyncio.gather(*(scrape_watchlist(u, max_pages=20) for u in usernames))
             watchlists = dict(zip(usernames, wl_lists))
