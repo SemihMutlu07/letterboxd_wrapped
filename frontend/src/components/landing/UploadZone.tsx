@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { FolderOpen, Upload } from 'lucide-react';
+import { useI18n } from '@/i18n/I18nProvider';
 
 type Props = {
   onFiles: (files: FileList | File[] | null) => void;
@@ -114,6 +115,7 @@ async function collectDroppedEntryFiles(entry: FileSystemEntryLike, path = ''): 
 }
 
 export default function UploadZone({ onFiles }: Props) {
+  const { t } = useI18n();
   const folderInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -198,7 +200,7 @@ export default function UploadZone({ onFiles }: Props) {
   }, []);
 
   return (
-    <section aria-label="Upload your Letterboxd data">
+    <section aria-label={t('landing.upload.zoneLabel')}>
       <div
         data-testid="upload-drop-zone"
         className={`group flex min-h-[220px] items-center justify-center rounded-2xl border p-8 text-center transition-all duration-300 sm:min-h-[260px] md:p-10 max-w-3xl mx-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/50 ${
@@ -233,9 +235,9 @@ export default function UploadZone({ onFiles }: Props) {
           <div className="mb-5 h-14 w-14 rounded-2xl bg-orange-500/10 border border-orange-400/25 flex items-center justify-center transition-colors group-hover:bg-orange-500/20">
             <Upload className="w-7 h-7 text-orange-300" />
           </div>
-          <p className="text-xl sm:text-2xl font-bold tracking-tight">Begin Your Cinema Reveal</p>
+          <p className="text-xl sm:text-2xl font-bold tracking-tight">{t('landing.upload.zoneTitle')}</p>
           <p className="mt-2 text-sm text-slate-400">
-            {isDragging ? 'Drop to upload your export.' : 'Drag a ZIP, CSV files, or an extracted export folder here.'}
+            {isDragging ? t('landing.upload.drop') : t('landing.upload.drag')}
           </p>
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <button
@@ -244,7 +246,7 @@ export default function UploadZone({ onFiles }: Props) {
               className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-orange-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
             >
               <Upload className="h-4 w-4" />
-              Choose ZIP or CSV
+              {t('landing.upload.chooseFiles')}
             </button>
             <button
               type="button"
@@ -252,10 +254,10 @@ export default function UploadZone({ onFiles }: Props) {
               className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-600 bg-slate-900/70 px-5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:border-orange-300/70 hover:text-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
             >
               <FolderOpen className="h-4 w-4" />
-              Choose Export Folder
+              {t('landing.upload.chooseFolder')}
             </button>
           </div>
-          <p className="mt-3 text-xs text-slate-500">Use the folder button if your browser blocks folder drag-and-drop.</p>
+          <p className="mt-3 text-xs text-slate-500">{t('landing.upload.folderHelp')}</p>
         </div>
       </div>
     </section>

@@ -20,6 +20,7 @@ export interface AnalysisPeriodMetadata {
 export interface ScrapeProfileResult {
   status: string;
   stats: LetterboxdStats;
+  task_id?: string;
 }
 
 export interface WatchlistFilm {
@@ -329,7 +330,7 @@ async function pollTask<T = { status: string; stats: LetterboxdStats }>(
 // Analyze uploaded files — submits the job and polls until completion.
 // The returned shape {status, stats} matches the previous synchronous contract
 // so callers do not need to change.
-export async function analyzeFiles(formData: FormData): Promise<{ status: string; stats: LetterboxdStats }> {
+export async function analyzeFiles(formData: FormData): Promise<{ status: string; stats: LetterboxdStats; task_id?: string }> {
   const url = `${API_BASE}/api/analyze`;
   try {
     if (!formData || formData.entries().next().done) {
@@ -344,12 +345,13 @@ export async function analyzeFiles(formData: FormData): Promise<{ status: string
 
     const data = await r.json();
     if (data && data.task_id) {
-      return await pollTask(data.task_id, data.poll_token);
+      const result = await pollTask<{ status: string; stats: LetterboxdStats }>(data.task_id, data.poll_token);
+      return { ...result, task_id: data.task_id };
     }
     if (!data || data.status === 'error') {
       throw new Error(data?.detail || 'Analysis failed');
     }
-    return data as { status: string; stats: LetterboxdStats };
+    return data as { status: string; stats: LetterboxdStats; task_id?: string };
   } catch (error) {
     throw handleApiError(error, 'file analysis');
   }
@@ -386,6 +388,37 @@ export async function testBackend(retries = 2, delayMs = 1000) {
   }
 }
 
+export type WorkerHealth = {
+  workers: { worker_id?: string; last_seen_at?: string | null; status?: string }[];
+  queue_depth?: number;
+  oldest_queued_age_seconds?: number;
+};
+
+/**
+ * Whether the desktop worker fleet is empty (degraded mode).
+ *
+ * Best-effort: returns true only when the endpoint answers and reports zero
+ * workers. Any network error / non-OK response returns false so the UI keeps
+ * showing the normal loading screen instead of an error.
+ */
+export async function isWorkerFleetEmpty(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const r = await fetch(`${API_BASE}/api/health/workers`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!r.ok) return false;
+    const data: WorkerHealth = await r.json();
+    return Array.isArray(data.workers) && data.workers.length === 0;
+  } catch {
+    return false;
+  }
+}
+
 // Scrape a Letterboxd profile by username.
 // Handles two backend contracts transparently:
 //   - synchronous (local / no desktop worker): { status, stats }
@@ -393,7 +426,7 @@ export async function testBackend(retries = 2, delayMs = 1000) {
 // Either way the caller receives { status, stats }.
 export async function scrapeProfile(
   username: string,
-  analysisPeriod: AnalysisPeriod = 'year',
+  analysisPeriod: AnalysisPeriod = 'lifetime',
   signal?: AbortSignal,
   onProgress?: (p: ScrapeProgress) => void,
 ): Promise<ScrapeProfileResult> {
@@ -415,7 +448,8 @@ export async function scrapeProfile(
 
     // Desktop-worker mode: the job was queued — poll until the worker finishes.
     if (data && data.task_id && !data.stats) {
-      return await pollTask<ScrapeProfileResult>(data.task_id, data.poll_token, { onProgress });
+      const result = await pollTask<ScrapeProfileResult>(data.task_id, data.poll_token, { onProgress });
+      return { ...result, task_id: data.task_id };
     }
 
     if (!data || data.status === 'error') {

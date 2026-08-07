@@ -1,0 +1,55 @@
+{% extends "admin_base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+    <section class="bg-slate-900 border {% if incidents %}border-red-500/30{% else %}border-slate-800{% endif %} rounded-xl overflow-hidden" aria-labelledby="incidents-title">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 id="incidents-title" class="text-sm font-bold text-white">Operational Incidents</h2>
+          <p class="text-[10px] text-slate-500 mt-0.5">Worker health, backend failures and frontend diagnostic reports</p>
+        </div>
+        {% if incidents %}
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">{{ incidents|length }} active/recent</span>
+        {% endif %}
+      </div>
+      {% if incidents %}
+      <div class="divide-y divide-slate-800/70 max-h-72 overflow-y-auto scrollbar">
+        {% for incident in incidents %}
+        <div class="px-4 py-3 flex items-start justify-between gap-3 text-xs">
+          <div class="min-w-0">
+            <p class="{% if incident.severity == 'error' %}text-red-300{% elif incident.severity == 'warning' %}text-amber-300{% else %}text-slate-300{% endif %} font-medium truncate">{{ incident.message }}</p>
+            <p class="text-slate-500 mt-0.5">{{ incident.type }} · {{ incident.source }}{% if incident.detail %} · {{ incident.detail }}{% endif %}</p>
+          </div>
+          <span class="text-slate-500 shrink-0">{{ incident.created_at[:16].replace("T", " ") if incident.created_at else "—" }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="px-4 py-6 text-center text-xs text-slate-600">No operational incidents recorded.</div>
+      {% endif %}
+    </section>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <a href="/admin/analysis" class="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-orange-400/40 transition-colors">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Analysis Runs</p>
+        <p class="text-2xl font-black text-white">{{ runs_count }}</p>
+      </a>
+      <a href="/admin/worker" class="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-orange-400/40 transition-colors">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Desktop Worker</p>
+        <p class="text-2xl font-black {% if worker_enabled and worker_status.online %}text-emerald-400{% elif worker_enabled %}text-red-400{% else %}text-slate-600{% endif %}">
+          {% if worker_enabled and worker_status.online %}Live{% elif worker_enabled %}Offline{% else %}Disabled{% endif %}
+        </p>
+      </a>
+      <a href="/admin/compare" class="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-orange-400/40 transition-colors">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Watchlist Compare</p>
+        <p class="text-2xl font-black text-white">{{ watchlist_count }}</p>
+      </a>
+      <a href="/admin/date-night" class="bg-slate-900 border border-slate-800 rounded-xl p-4 hover:border-orange-400/40 transition-colors">
+        <p class="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">Date Night</p>
+        <p class="text-2xl font-black text-white">{{ date_night_count }}</p>
+      </a>
+    </div>
+
+    <div class="text-center text-[10px] text-slate-600 pt-4 pb-8">
+      MoviesWrapped Admin · Durable ops dashboard
+    </div>
+{% endblock %}

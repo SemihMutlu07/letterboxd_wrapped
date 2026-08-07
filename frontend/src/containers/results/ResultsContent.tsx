@@ -34,6 +34,8 @@ import type {
 import { useLazyMount } from "@/hooks/useIntersectionObserver";
 import { trackEvent } from "@/lib/analytics";
 import { useTheme } from "@/lib/theme";
+import { useI18n } from "@/i18n/I18nProvider";
+import { localizePath } from "@/i18n/routing";
 
 const ShareModal = dynamic(() => import("@/components/ShareModal"), {
   ssr: false,
@@ -89,6 +91,7 @@ export function ResultsContent({
   setHasTriggeredFeedback,
   feedbackRef,
 }: ResultsContentProps) {
+  const { locale, t } = useI18n();
   const { theme, config } = useTheme();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -341,7 +344,7 @@ export function ResultsContent({
           <ReviewAnalysisSection stats={stats} />
         ) : (
           <div className="rounded-xl bg-white/5 p-8 text-center text-slate-400">
-            <p className="text-sm">Bu hesapta yazılı review bulunamadı.</p>
+            <p className="text-sm">{t('results.noReviews')}</p>
           </div>
         ),
     },
@@ -415,7 +418,7 @@ export function ResultsContent({
               Share Your Wrapped
             </button>
             <Link
-              href="/story"
+              href={localizePath('/story', locale)}
               className="text-sm underline underline-offset-2 transition-colors hover:text-slate-200"
               style={{
                 color:
@@ -431,10 +434,6 @@ export function ResultsContent({
           </div>
 
           <div className="mt-12 pt-8 border-t border-white/[0.06] text-center space-y-3">
-            <p className="text-sm text-slate-300">
-              Built by Semih Mutlu with Berdan Mengünoğlu. Many features here
-              were his ideas and his code.
-            </p>
             <p className="text-xs text-slate-400">
               Thanks to our beta testers: Mete, Mehlika Ceylin Aydoğan, Salih
               Emre Padır, Mert Efe Şentürk, Deniz and Ayberk for the

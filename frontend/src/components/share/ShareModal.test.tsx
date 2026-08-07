@@ -11,6 +11,7 @@ import ShareModal, {
   shareSafeUrl,
 } from '@/components/ShareModal';
 import type { ShareCardData } from './types';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import { normalizeShareCardData, SHARE_VARIANTS, ShareVariantRenderer } from './registry';
 
 vi.mock('next/image', () => ({
@@ -71,13 +72,13 @@ const baseData: ShareCardData = {
 
 function renderShareModal(cardProps = baseData, orientation: 'horizontal' | 'vertical' = 'horizontal') {
   return render(
-    <ShareModal
+    <I18nProvider locale="en"><ShareModal
       open
       onClose={() => {}}
       orientation={orientation}
       setOrientation={() => {}}
       cardProps={cardProps}
-    />,
+    /></I18nProvider>,
   );
 }
 
@@ -160,13 +161,13 @@ describe('ShareModal person swap', () => {
     };
 
     rerender(
-      <ShareModal
+      <I18nProvider locale="en"><ShareModal
         open
         onClose={() => {}}
         orientation="horizontal"
         setOrientation={() => {}}
         cardProps={nextData}
-      />,
+      /></I18nProvider>,
     );
 
     expect(within(exportRoot()).getByText('Actor Three')).toBeInTheDocument();
@@ -225,8 +226,8 @@ describe('share registry and privacy', () => {
     await userEvent.click(screen.getByRole('switch', { name: /show username/i }));
     expect(within(exportRoot()).queryByText('@long-letterboxd-name')).not.toBeInTheDocument();
 
-    rerender(<ShareModal open={false} onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} />);
-    rerender(<ShareModal open onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} />);
+    rerender(<I18nProvider locale="en"><ShareModal open={false} onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} /></I18nProvider>);
+    rerender(<I18nProvider locale="en"><ShareModal open onClose={() => {}} orientation="horizontal" setOrientation={() => {}} cardProps={props} /></I18nProvider>);
     expect(within(exportRoot()).getByText('@long-letterboxd-name')).toBeInTheDocument();
   });
 });
@@ -261,14 +262,14 @@ describe('ShareModal export outcomes', () => {
     const onDownloadSuccess = vi.fn();
 
     render(
-      <ShareModal
+      <I18nProvider locale="en"><ShareModal
         open
         onClose={() => {}}
         orientation="horizontal"
         setOrientation={() => {}}
         cardProps={baseData}
         onDownloadSuccess={onDownloadSuccess}
-      />,
+      /></I18nProvider>,
     );
 
     await userEvent.click(screen.getByRole('button', { name: /share or save png/i }));
@@ -308,7 +309,7 @@ describe.each([
 
     for (const { key } of SHARE_VARIANTS) {
       vi.mocked(toBlob).mockResolvedValueOnce(pngBlob(width, height));
-      const rendered = render(<ShareVariantRenderer variant={key} data={baseData} orientation={orientation} />);
+      const rendered = render(<I18nProvider locale="en"><ShareVariantRenderer variant={key} data={baseData} orientation={orientation} /></I18nProvider>);
       const root = rendered.container.querySelector<HTMLElement>('[data-export-root="true"]');
       expect(root, `${key} must expose an export root`).not.toBeNull();
 
@@ -339,3 +340,61 @@ describe.each([
     ]);
   });
 });
+
+describe('Schema A and Schema B rendering across all 7 variants', () => {
+  const baseDataWithMilestones: ShareCardData = {
+    ...baseData,
+    milestones: [
+      { ordinal: 100, title: 'The Matrix', year: '1999', posterPath: '/p1.jpg' },
+      { ordinal: 300, title: 'Inception', year: '2010', posterPath: '/p2.jpg' },
+    ],
+  };
+
+  const schemaAVariants: ShareCardData['personaLabel'][] = ['apple-hig', 'editorial', 'variant-3', 'double-feature', 'admit-one'];
+  const schemaBVariants: ShareCardData['personaLabel'][] = ['default', 'contact-sheet'];
+
+  it.each(SHARE_VARIANTS)('renders horizontal layout correctly for variant %s', ({ key }) => {
+    const { container } = render(
+      <I18nProvider locale="en">
+        <ShareVariantRenderer variant={key} data={baseDataWithMilestones} orientation="horizontal" />
+      </I18nProvider>
+    );
+
+    // Every variant should render movieswrapped.com wordmark
+    expect(container.textContent).toContain('movieswrapped.com');
+
+    // Every variant should render crush and director
+    expect(container.textContent).toContain('Actor One');
+    expect(container.textContent).toContain('Director One');
+
+    if (schemaAVariants.includes(key)) {
+      // Schema A variants must contain Stat Grid elements
+      expect(container.textContent).toMatch(/Niche Score|Cinema Scale|Peak Decade/i);
+    }
+
+    if (schemaBVariants.includes(key)) {
+      // Schema B variants must render milestone titles when present
+      expect(container.textContent).toContain('The Matrix');
+      expect(container.textContent).toContain('100th');
+    }
+  });
+
+  it.each(schemaAVariants)('renders vertical layout correctly for Schema A variant %s', (key) => {
+    const { container } = render(
+      <I18nProvider locale="en">
+        <ShareVariantRenderer variant={key as any} data={baseDataWithMilestones} orientation="vertical" />
+      </I18nProvider>
+    );
+
+    // Wordmark
+    expect(container.textContent).toContain('movieswrapped.com');
+
+    // Person cards
+    expect(container.textContent).toContain('Actor One');
+    expect(container.textContent).toContain('Director One');
+
+    // Vertical stat stack (Cinema scale xx/100)
+    expect(container.textContent).toMatch(/Cinema Scale|72\/100|72.0/i);
+  });
+});
+

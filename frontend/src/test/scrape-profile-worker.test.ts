@@ -23,7 +23,7 @@ describe('scrapeProfile', () => {
     expect(result.stats.total_films).toBe(394);
     expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)).toEqual({
       username: 'semihmutsuz',
-      analysis_period: 'year',
+      analysis_period: 'lifetime',
     });
   });
 

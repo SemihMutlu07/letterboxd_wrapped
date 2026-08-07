@@ -8,15 +8,9 @@ import type { WatchlistFilm } from '@/lib/api';
 import { getPosterUrl } from '@/lib/analytics';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
 import { curatedLists, type CuratedList } from '@/lib/curatedLists';
+import { useI18n } from '@/i18n/I18nProvider';
 
 type SortMode = 'popularity' | 'rating' | 'year' | 'most_watched';
-
-const SORT_LABELS: Record<SortMode, string> = {
-  popularity: 'Most popular',
-  rating: 'Highest rated',
-  year: 'Newest',
-  most_watched: 'Most watched',
-};
 
 function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
   const sorted = [...films];
@@ -34,6 +28,7 @@ function sortFilms(films: WatchlistFilm[], mode: SortMode): WatchlistFilm[] {
 }
 
 export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
+  const { t } = useI18n();
   const [sortMode, setSortMode] = useState<SortMode>('popularity');
   const [curatedSlug, setCuratedSlug] = useState<CuratedList['slug']>('all');
   const [index, setIndex] = useState(0);
@@ -54,6 +49,10 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
   const sorted = useMemo(() => sortFilms(filtered, sortMode), [filtered, sortMode]);
   const current = sorted[index];
   const isDone = index >= sorted.length;
+  const sortLabels: Record<SortMode, string> = {
+    popularity: t('watchlist.swipe.popularity'), rating: t('watchlist.swipe.rating'),
+    year: t('watchlist.swipe.year'), most_watched: t('watchlist.swipe.mostWatched'),
+  };
 
   const resetForFilter = () => {
     setIndex(0);
@@ -109,8 +108,8 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
   if (films.length === 0) {
     return (
       <section className="border border-stone-800 bg-[#171411] p-8 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No films to swipe</p>
-        <p className="mt-2 text-sm text-stone-400">The shared shelf is empty.</p>
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">{t('watchlist.swipe.emptyTitle')}</p>
+        <p className="mt-2 text-sm text-stone-400">{t('watchlist.swipe.emptyDescription')}</p>
       </section>
     );
   }
@@ -120,9 +119,9 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
       {/* Controls */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-500">Sort by</span>
+          <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-500">{t('watchlist.swipe.sortBy')}</span>
           <div className="flex gap-1">
-            {(Object.keys(SORT_LABELS) as SortMode[]).map((mode) => (
+            {(Object.keys(sortLabels) as SortMode[]).map((mode) => (
               <button
                 key={mode}
                 type="button"
@@ -133,7 +132,7 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
                     : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
                 }`}
               >
-                {SORT_LABELS[mode]}
+                {sortLabels[mode]}
               </button>
             ))}
           </div>
@@ -144,7 +143,7 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
           <select
             value={curatedSlug}
             onChange={(e) => handleCuratedChange(e.target.value as CuratedList['slug'])}
-            aria-label="Filter by curated list"
+            aria-label={t('watchlist.swipe.filter')}
             className="border border-stone-700 bg-[#0f0d0b] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-stone-300 focus:border-amber-300 focus:outline-none"
           >
             {curatedLists.map((list) => (
@@ -158,18 +157,18 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
 
       <p className="mb-3 font-mono text-[11px] text-stone-500">
         {selectedList.slug !== 'all' && `${selectedList.description} · `}
-        {index} / {sorted.length} · {kept.length} kept
+        {index} / {sorted.length} · {t('watchlist.swipe.kept').replace('{count}', String(kept.length))}
       </p>
 
       {isDone || sorted.length === 0 ? (
         <div className="py-8 text-center">
           <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">
-            {sorted.length === 0 ? 'No films match this filter' : 'All done'}
+            {sorted.length === 0 ? t('watchlist.swipe.noMatches') : t('watchlist.swipe.done')}
           </p>
           <p className="mt-2 text-sm text-stone-400">
             {sorted.length === 0
-              ? 'Try another curated list or sort option.'
-              : `You kept ${kept.length} and skipped ${skipped.length} of ${sorted.length} films.`}
+              ? t('watchlist.swipe.tryAnother')
+              : t('watchlist.swipe.summary').replace('{kept}', String(kept.length)).replace('{skipped}', String(skipped.length)).replace('{total}', String(sorted.length))}
           </p>
           {kept.length > 0 && (
             <div className="mx-auto mt-4 max-w-sm space-y-1">
@@ -187,7 +186,7 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
             onClick={handleReset}
             className="mt-4 border border-stone-700 px-4 py-2 font-mono text-xs uppercase tracking-[0.14em] text-stone-300 transition-colors hover:border-stone-500 hover:text-stone-100"
           >
-            Start over
+            {t('watchlist.swipe.startOver')}
           </button>
         </div>
       ) : (
@@ -235,7 +234,7 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
               type="button"
               onClick={handleSkip}
               className="grid h-14 w-14 place-items-center rounded-full border-2 border-stone-700 text-stone-400 transition-all hover:border-red-500 hover:text-red-400 active:scale-90"
-              aria-label="Skip film"
+              aria-label={t('watchlist.swipe.skip')}
             >
               <X className="h-6 w-6" />
             </button>
@@ -243,13 +242,13 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
               type="button"
               onClick={handleKeep}
               className="grid h-14 w-14 place-items-center rounded-full border-2 border-stone-700 text-stone-400 transition-all hover:border-amber-300 hover:text-amber-300 active:scale-90"
-              aria-label="Keep film"
+              aria-label={t('watchlist.swipe.keep')}
             >
               <Heart className="h-6 w-6" />
             </button>
           </div>
           <p className="mt-2 text-center font-mono text-[11px] text-stone-600">
-            Drag left to skip · Drag right to keep
+            {t('watchlist.swipe.hint')}
           </p>
         </>
       )}
@@ -258,6 +257,7 @@ export default function SwipeDeck({ films }: { films: WatchlistFilm[] }) {
 }
 
 function SwipeCard({ film }: { film: WatchlistFilm }) {
+  const { formatNumber, t } = useI18n();
   // poster_path is the TMDB-enriched field; poster_url is the raw scraper
   // value (often a broken /image-150/ AJAX endpoint, not an image).
   const poster = getPosterUrl(film.poster_path) || getPosterUrl(film.poster_url);
@@ -270,7 +270,7 @@ function SwipeCard({ film }: { film: WatchlistFilm }) {
           <>
             <img
               src={poster}
-              alt={`${film.title} poster`}
+              alt={t('common.posterAlt').replace('{title}', film.title)}
               className="h-full w-full object-cover"
               referrerPolicy="no-referrer"
               loading="lazy"
@@ -317,7 +317,7 @@ function SwipeCard({ film }: { film: WatchlistFilm }) {
           )}
           {film.vote_count != null && film.vote_count > 0 && (
             <span className="font-mono text-[10px] text-stone-600">
-              {film.vote_count.toLocaleString()} votes
+              {t('watchlist.swipe.votes').replace('{count}', formatNumber(film.vote_count))}
             </span>
           )}
         </div>

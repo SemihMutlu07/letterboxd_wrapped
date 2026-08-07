@@ -5,6 +5,9 @@ import userEvent from '@testing-library/user-event';
 import StoryPage from '@/app/story/page';
 import { buildSlides } from '@/components/StoryExperience';
 import type { StatsData } from '@/containers/results/sections/types';
+import { I18nProvider } from '@/i18n/I18nProvider';
+
+const renderStory = () => render(<I18nProvider locale="en"><StoryPage /></I18nProvider>);
 
 const STATS = {
   scraped_username: 'semihmutsuz',
@@ -25,13 +28,13 @@ describe('StoryPage', () => {
   });
 
   it('shows the empty state when no stats are stored', async () => {
-    render(<StoryPage />);
+    renderStory();
     expect(await screen.findByText(/No result data in this session/i)).toBeInTheDocument();
   });
 
   it('renders the intro slide from stored stats and advances on tap', async () => {
     sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
-    render(<StoryPage />);
+    renderStory();
 
     expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
 
@@ -44,7 +47,7 @@ describe('StoryPage', () => {
 
   it('walks through to the persona and outro slides', async () => {
     sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
-    render(<StoryPage />);
+    renderStory();
     await screen.findByText('@semihmutsuz');
 
     const next = screen.getByLabelText('Next slide');
@@ -65,7 +68,7 @@ describe('StoryPage', () => {
 
   it('can pause and resume the story timeline', async () => {
     sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
-    render(<StoryPage />);
+    renderStory();
     expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
 
     await userEvent.click(screen.getByLabelText('Pause story'));
@@ -84,7 +87,7 @@ describe('StoryPage', () => {
         { title: 'Heat', rating: 4.5, poster_path: '/heat.jpg' },
       ],
     }));
-    render(<StoryPage />);
+    renderStory();
 
     expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
     expect(screen.getAllByAltText('Aftersun poster').length).toBeGreaterThan(0);

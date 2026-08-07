@@ -11,6 +11,7 @@ import {
 } from '@/components/share/registry';
 import { API_BASE } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
+import { useI18n } from '@/i18n/I18nProvider';
 
 const EXPORT_FILE_NAME = 'movies-wrapped.png';
 const IOS_RE = /iPhone|iPad|iPod/i;
@@ -181,6 +182,7 @@ export default function ShareModal({
   cardProps,
   onDownloadSuccess,
 }: Props) {
+  const { t } = useI18n();
   const railRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [pageW, setPageW] = useState(0);
@@ -322,7 +324,7 @@ export default function ShareModal({
     if (isSaving) return;
     const exportRoot = findExportRoot();
     if (!exportRoot) {
-      setExportError('Could not prepare this card. Try again.');
+      setExportError(t('share.prepareError'));
       trackEvent('share_export_failed', { variant: variantKey, orientation, reason: 'missing_export_root' });
       return;
     }
@@ -363,7 +365,7 @@ export default function ShareModal({
       onDownloadSuccess?.();
     } catch (err) {
       console.error('Export failed:', err);
-      setExportError('Could not export this card. Try again.');
+      setExportError(t('share.exportError'));
       trackEvent('share_export_failed', {
         variant: variantKey,
         orientation,
@@ -397,7 +399,7 @@ export default function ShareModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-transparent px-5 pb-2 pt-4 md:border-white/10 md:px-6 md:py-4">
           <div>
-            <span id="share-modal-title" className="block text-sm font-semibold text-white/90">Share</span>
+            <span id="share-modal-title" className="block text-sm font-semibold text-white/90">{t('share.title')}</span>
             <span className="block text-[11px] text-slate-500">
               {variantLabel} · {activeIdx + 1}/{SHARE_VARIANTS.length}
             </span>
@@ -406,7 +408,7 @@ export default function ShareModal({
             onClick={onClose}
             disabled={isSaving}
             className="grid place-items-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
-            aria-label="Close"
+            aria-label={t('share.close')}
           >
             <X size={18} strokeWidth={2.5} />
           </button>
@@ -459,7 +461,7 @@ export default function ShareModal({
                   onClick={() => jumpTo(i)}
                   disabled={isSaving}
                   aria-current={i === activeIdx ? 'true' : undefined}
-                  aria-label={`Go to ${v.label}`}
+                  aria-label={t('share.goTo').replace('{variant}', v.label)}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
                     i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
                   }`}
@@ -477,7 +479,7 @@ export default function ShareModal({
             <div className="absolute left-0 right-0 bottom-full mx-5 mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 z-20 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur px-4 py-3 space-y-2 text-xs">
               {hasActors && (
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400 w-16 shrink-0">Actor</span>
+                  <span className="text-slate-400 w-16 shrink-0">{t('share.actor')}</span>
                   <div className="flex items-center gap-1 flex-wrap">
                     {cardProps.topActors!.slice(0, 3).map((a, i) => (
                       <button
@@ -498,7 +500,7 @@ export default function ShareModal({
               )}
               {hasDirectors && (
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400 w-16 shrink-0">Director</span>
+                  <span className="text-slate-400 w-16 shrink-0">{t('share.director')}</span>
                   <div className="flex items-center gap-1 flex-wrap">
                     {cardProps.topDirectors!.slice(0, 3).map((d, i) => (
                       <button
@@ -531,7 +533,7 @@ export default function ShareModal({
                   orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Story
+                {t('share.story')}
               </button>
               <button
                 onClick={() => setOrientation('horizontal')}
@@ -541,7 +543,7 @@ export default function ShareModal({
                   orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                X
+                {t('share.landscape')}
               </button>
             </div>
             {showSwapTrigger && (
@@ -556,11 +558,11 @@ export default function ShareModal({
                       transition={{ duration: 0.2 }}
                       className="absolute right-0 bottom-full mb-2 z-20 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/10 backdrop-blur shadow-lg whitespace-nowrap"
                     >
-                      <span className="text-xs text-slate-300">Swap actor & director</span>
+                      <span className="text-xs text-slate-300">{t('share.swapHint')}</span>
                       <button
                         onClick={(e) => { e.stopPropagation(); dismissSwapHint(); }}
                         className="text-slate-500 hover:text-white transition-colors leading-none"
-                        aria-label="Dismiss hint"
+                        aria-label={t('share.dismissHint')}
                       >
                         <X size={12} strokeWidth={2.5} />
                       </button>
@@ -572,7 +574,7 @@ export default function ShareModal({
                 <button
                   onClick={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
                   disabled={isSaving}
-                  aria-label="Tune actor and director"
+                  aria-label={t('share.tune')}
                   className={`relative grid place-items-center w-9 h-9 rounded-full transition ${
                     swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
@@ -589,12 +591,12 @@ export default function ShareModal({
 
           {cardProps.username && (
             <label className="flex items-center justify-between text-xs text-slate-300">
-              <span>Show @{cardProps.username}</span>
+              <span>{t('share.showUsernameValue').replace('{username}', cardProps.username)}</span>
               <button
                 type="button"
                 role="switch"
                 aria-checked={showUsername}
-                aria-label="Show username"
+                aria-label={t('share.showUsername')}
                 onClick={() => setShowUsername((value) => !value)}
                 disabled={isSaving}
                 className={`relative h-6 w-11 rounded-full transition-colors ${showUsername ? 'bg-white' : 'bg-white/20'}`}
@@ -620,7 +622,7 @@ export default function ShareModal({
             style={{ background: isSaving ? '#333' : '#fff', color: isSaving ? '#888' : '#000' }}
           >
             {isSaving ? <LoaderCircle size={18} className="animate-spin" /> : <Download size={18} />}
-            {isSaving ? 'Preparing full-resolution PNG...' : 'Share or save PNG'}
+            {isSaving ? t('share.preparing') : t('share.save')}
           </button>
           </div>
         </div>

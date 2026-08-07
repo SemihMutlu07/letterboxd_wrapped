@@ -12,18 +12,81 @@ import asyncio
 
 import logging
 import secrets
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from app import task_manager
+from app import supabase_ops, task_manager
 from app.config import backend_git_sha, settings
 from app.services import dashboard_settings
 from app.services.run_log import persist_run
+from app.services.worker_alerts import send_alert
 from app.services.worker_monitor import log_worker_event
 
 logger = logging.getLogger("letterboxd_wrapped.worker")
 
 router = APIRouter(prefix="/api/worker")
+health_router = APIRouter(prefix="/api/health")
+
+
+@health_router.get("/workers")
+async def worker_health():
+    """Worker fleet + queue health snapshot.
+
+    status per worker: "online" if last_seen_at < 5 min ago, else "offline".
+    Best-effort: if Supabase is not configured the workers list is empty but
+    queue stats still come from the in-memory task manager.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    workers: list[dict] = []
+    if settings.supabase_enabled:
+        rows = await supabase_ops.select(
+            "ops_workers",
+            {"select": "worker_id,last_seen_at,version,active_jobs,max_concurrency,status", "order": "last_seen_at.desc"},
+        )
+        for row in rows:
+            last_seen = row.get("last_seen_at")
+            try:
+                last_seen_dt = datetime.fromisoformat(str(last_seen).replace("Z", "+00:00"))
+                age = (now - last_seen_dt).total_seconds()
+            except (ValueError, TypeError):
+                age = float("inf")
+            workers.append({
+                "worker_id": row.get("worker_id"),
+                "last_seen_at": last_seen,
+                "status": "online" if age < settings.worker_offline_after_seconds else "offline",
+            })
+    queue = task_manager.get_worker_queue_stats()
+    return {
+        "workers": workers,
+        "queue_depth": queue["queue_depth"],
+        "oldest_queued_age_seconds": queue["oldest_queued_age_seconds"],
+    }
+
+
+@health_router.post("/test-alert")
+async def test_alert(x_health_alert_secret: str | None = Header(default=None)):
+    """Send a test message to the ntfy topic to verify end-to-end delivery.
+
+    Protected by a shared secret in the X-Health-Alert-Secret header
+    (settings.health_alert_secret). If the secret is not configured the
+    endpoint is disabled (404).
+    """
+    if not settings.health_alert_secret:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "not_configured", "message": "Health alert secret is not configured."},
+        )
+    supplied = x_health_alert_secret or ""
+    if not secrets.compare_digest(supplied, settings.health_alert_secret):
+        raise HTTPException(
+            status_code=401,
+            detail={"error_code": "unauthorized", "message": "Invalid or missing health alert secret."},
+        )
+    ok = await send_alert("Test alert from Letterboxd Wrapped backend ✅")
+    return {"ok": ok, "delivered": ok, "message": "Test alert sent" if ok else "Test alert failed — check backend logs"}
 
 
 def _require_worker_token(x_worker_token: str | None) -> None:
@@ -58,6 +121,8 @@ def _task_telemetry(task: task_manager.TaskState) -> dict:
         "error_type": task.error_type,
         "error_stage": task.error_stage,
         "error_code": task.error_code,
+        "job_type": task.job_type,
+        "worker_id": task_manager.get_last_worker_id(),
     }
 
 
@@ -91,13 +156,41 @@ def _worker_version_mismatch() -> dict | None:
 
 @router.post("/heartbeat")
 async def worker_heartbeat(request: Request, x_worker_token: str | None = Header(default=None)):
-    """Worker liveness ping — keeps /api/scrape-profile from reporting offline."""
+    """Worker liveness ping — upserts one row into ops_workers.
+
+    Every 30s heartbeat writes a single row per worker_id (no event-log
+    growth). Only real lifecycle/job events go to ops_worker_events.
+    """
     _require_worker_token(x_worker_token)
     try:
         body = await request.json()
     except Exception:
         body = {}
-    task_manager.record_worker_heartbeat(body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    task_manager.record_worker_heartbeat(body)
+    worker_id = str(body.get("worker_id") or "").strip()
+    if worker_id:
+        ok = await supabase_ops.upsert(
+            "ops_workers",
+            {
+                "worker_id": worker_id,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+                "version": str(body.get("version") or ""),
+                "active_jobs": body.get("active_jobs", 0),
+                "max_concurrency": body.get("max_concurrency", 1),
+                "status": "online",
+            },
+            on_conflict="worker_id",
+        )
+        if not ok:
+            # Loud failure: a heartbeat that never lands means health tracking
+            # is blind. supabase_ops.upsert already logged the root cause.
+            logger.error(
+                "Heartbeat upsert to ops_workers FAILED for worker_id=%s — "
+                "/api/health/workers will report it offline. Check Supabase "
+                "connectivity and that migration 007 ran.",
+                worker_id,
+            )
     return {"ok": True}
 
 
@@ -109,8 +202,9 @@ async def worker_startup(request: Request, x_worker_token: str | None = Header(d
         body = await request.json()
     except Exception:
         body = {}
-    task_manager.record_worker_startup(body if isinstance(body, dict) else {})
-    await log_worker_event("startup", body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    task_manager.record_worker_startup(body)
+    await log_worker_event("worker_started", {**body, "severity": "info"})
     return {"ok": True}
 
 
@@ -122,8 +216,9 @@ async def worker_shutdown(request: Request, x_worker_token: str | None = Header(
         body = await request.json()
     except Exception:
         body = {}
-    task_manager.record_worker_shutdown(body if isinstance(body, dict) else {})
-    await log_worker_event("shutdown", body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    task_manager.record_worker_shutdown(body)
+    await log_worker_event("worker_stopped", {**body, "severity": "info"})
     return {"ok": True}
 
 
@@ -180,6 +275,11 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
     if job is None:
         return {"job": None}
     logger.info("Worker claimed scrape job %s for @%s", job.task_id, job.username)
+    await log_worker_event("job_claimed", {
+        "task_id": job.task_id,
+        "username": job.username,
+        "severity": "info",
+    })
     return {
         "job": {
             "task_id": job.task_id,
@@ -346,6 +446,12 @@ async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)
     if job is None:
         return {"job": None}
     logger.info("Worker claimed watchlist job %s type=%s users=%s", job.task_id, job.job_type, job.usernames)
+    await log_worker_event("job_claimed", {
+        "task_id": job.task_id,
+        "job_type": job.job_type,
+        "usernames": job.usernames,
+        "severity": "info",
+    })
     return {"job": {"task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
 
 
@@ -363,7 +469,18 @@ async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
     if job is None:
         return {"job": None}
     if job.kind == "watchlist":
+        await log_worker_event("job_claimed", {
+            "task_id": job.task_id,
+            "job_type": job.job_type,
+            "usernames": job.usernames,
+            "severity": "info",
+        })
         return {"job": {"kind": "watchlist", "task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+    await log_worker_event("job_claimed", {
+        "task_id": job.task_id,
+        "username": job.username,
+        "severity": "info",
+    })
     return {
         "job": {
             "kind": "scrape",
@@ -390,6 +507,12 @@ async def complete_watchlist(task_id: str, request: Request, x_worker_token: str
     if task.options.get("raw_only"):
         task_manager.set_task_done(task_id, body)
         logger.info("Worker completed raw watchlist job %s", task_id)
+        await log_worker_event("job_completed", {
+            "task_id": task_id,
+            "job_type": task.job_type,
+            "usernames": task.usernames,
+            "severity": "info",
+        })
         return {"ok": True}
     task.result = body
     task.status = "running"
@@ -414,11 +537,12 @@ async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | N
         return {"ok": True, "duplicate": True}
     task_manager.set_task_failed(task_id, message, _request_telemetry(body))
     logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)
-    await log_worker_event("watchlist_job_failed", {
-        "source": "desktop_worker",
-        "severity": "error",
+    await log_worker_event("job_failed", {
         "task_id": task_id,
         "job_type": task.job_type,
+        "usernames": task.usernames,
+        "source": "desktop_worker",
+        "severity": "error",
         "message": message,
         "error_type": _request_telemetry(body).get("error_type"),
         "error_stage": _request_telemetry(body).get("error_stage"),

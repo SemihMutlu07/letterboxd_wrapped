@@ -4,14 +4,14 @@ import JSZip from 'jszip';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Upload, Users, X, UserRound, Sparkles, PartyPopper } from 'lucide-react';
+import { Upload, Users, X, UserRound, Sparkles, PartyPopper, ChevronDown } from 'lucide-react';
 import {
   analyzeFiles,
   parseLetterboxdUsername,
   scrapeProfile,
   testBackend,
-  type AnalysisPeriod,
   type ScrapeProgress,
+  isWorkerFleetEmpty,
 } from '@/lib/api';
 import { ERROR_CODE_HINTS } from '@/lib/api';
 import { persistStats } from '@/lib/stats-storage';
@@ -21,6 +21,9 @@ import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/ses
 import { resultPath } from '@/lib/routes';
 import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
 import { normalizeError, type NormalizedError } from '@/lib/errors';
+import { useI18n } from '@/i18n/I18nProvider';
+import { localizePath } from '@/i18n/routing';
+import { FAQ_ITEMS } from '@/i18n/faq';
 import ErrorBanner from '@/components/ErrorBanner';
 import LoadingScreen from '@/components/landing/LoadingScreen';
 import UploadZone from '@/components/landing/UploadZone';
@@ -99,11 +102,66 @@ function drawShuffledMovie(deckRef: React.MutableRefObject<PosterGameMovie[]>, i
   return movie;
 }
 
+function localizeLandingError(error: NormalizedError, t: (key: import('@/i18n/catalogs').MessageKey) => string): NormalizedError {
+  if (error.title === 'prepare_folder') {
+    return {
+      ...error,
+      title: t('landing.error.prepareFolder.title'),
+      message: t('landing.error.prepareFolder.message'),
+      action: t('landing.error.prepareFolder.action'),
+    };
+  }
+  if (error.title === 'prepare_files') {
+    return {
+      ...error,
+      title: t('landing.error.prepareFiles.title'),
+      message: t('landing.error.prepareFiles.message'),
+      action: t('landing.error.prepareFiles.action'),
+    };
+  }
+  const messages = {
+    no_files_selected: ['landing.error.noFiles.title', 'landing.error.noFiles.message'],
+    file_too_large: ['landing.error.fileTooLarge.title', 'landing.error.fileTooLarge.message', 'landing.error.fileTooLarge.action'],
+    invalid_file_type: ['landing.error.invalidFile.title', 'landing.error.invalidFile.message'],
+    no_csv_files: ['landing.error.noCsv.title', 'landing.error.noCsv.message', 'landing.error.noCsv.action'],
+    corrupt_zip: ['landing.error.corruptZip.title', 'landing.error.corruptZip.message'],
+    missing_required_files: ['landing.error.missingFiles.title', 'landing.error.missingFiles.message', 'landing.error.missingFiles.action'],
+    backend_unreachable: ['landing.error.backendUnreachable.title', 'landing.error.backendUnreachable.message', 'landing.error.backendUnreachable.action'],
+    tmdb_timeout: ['landing.error.tmdbTimeout.title', 'landing.error.tmdbTimeout.message', 'landing.error.tmdbTimeout.action'],
+    tmdb_rate_limited: ['landing.error.rateLimited.title', 'landing.error.rateLimited.message', 'landing.error.rateLimited.action'],
+    no_username: ['landing.error.noUsername.title', 'landing.error.noUsername.message'],
+    invalid_username: ['landing.error.invalidUsername.title', 'landing.error.invalidUsername.message'],
+    invalid_analysis_period: ['landing.error.invalidPeriod.title', 'landing.error.invalidPeriod.message', 'landing.error.invalidPeriod.action'],
+    no_films: ['landing.error.noFilms.title', 'landing.error.noFilms.message', 'landing.error.noFilms.action'],
+    no_films_in_period: ['landing.error.noFilmsPeriod.title', 'landing.error.noFilmsPeriod.message', 'landing.error.noFilmsPeriod.action'],
+    user_not_found: ['landing.error.userNotFound.title', 'landing.error.userNotFound.message', 'landing.error.userNotFound.action'],
+    scrape_failed: ['landing.error.scrapeFailed.title', 'landing.error.scrapeFailed.message', 'landing.error.scrapeFailed.action'],
+    scrape_blocked: ['landing.error.scrapeBlocked.title', 'landing.error.scrapeBlocked.message', 'landing.error.scrapeBlocked.action'],
+    scraper_unavailable: ['landing.error.scraperUnavailable.title', 'landing.error.scraperUnavailable.message', 'landing.error.scraperUnavailable.action'],
+    desktop_worker_paused: ['landing.error.desktopPaused.title', 'landing.error.desktopPaused.message', 'landing.error.desktopPaused.action'],
+    stats_too_large: ['landing.error.statsTooLarge.title', 'landing.error.statsTooLarge.message', 'landing.error.statsTooLarge.action'],
+  } as const;
+  const copy = messages[error.reason as keyof typeof messages];
+  if (!copy) {
+    return {
+      ...error,
+      title: t('landing.error.unknown.title'),
+      message: error.message || t('landing.error.unknown.message'),
+      action: error.action || t('landing.error.unknown.action'),
+    };
+  }
+  return { ...error, title: t(copy[0]), message: t(copy[1]), action: copy[2] ? t(copy[2]) : undefined };
+}
+
 export default function LetterboxdLanding() {
   const router = useRouter();
+  const { locale, t } = useI18n();
   const [isUploading, setIsUploading] = useState(false);
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeProgress, setScrapeProgress] = useState<ScrapeProgress | null>(null);
+  // Degraded mode: the desktop worker fleet is empty, so a scrape is queued
+  // and may take much longer than usual. Non-fatal — just informs the UI.
+  const [workerQueued, setWorkerQueued] = useState(false);
   // Pixelated poster guessing game, shown while scraping.
   const [posterRound, setPosterRound] = useState<PosterGameMovie | null>(null);
   const [posterLevel, setPosterLevel] = useState(0);
@@ -117,7 +175,6 @@ export default function LetterboxdLanding() {
   const [usernameInput, setUsernameInput] = useState('');
   const [usernameFocused, setUsernameFocused] = useState(false);
   const usernamePlaceholder = useTypewriterPlaceholder(USERNAME_PLACEHOLDER_EXAMPLES, !usernameFocused && usernameInput.length === 0);
-  const [analysisPeriod, setAnalysisPeriod] = useState<AnalysisPeriod>('year');
   const [error, setError] = useState<NormalizedError | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
@@ -308,7 +365,7 @@ export default function LetterboxdLanding() {
         uploadFiles = [await zipFiles(csvFiles)];
       } catch (err) {
         console.error('[upload] folder zip packaging failed:', err);
-        setError({ title: 'Failed to prepare folder', message: 'Could not package the selected folder for upload.', action: 'Please try again or upload the original .zip file instead.', reason: 'unknown_error' });
+        setError({ title: 'prepare_folder', message: '', reason: 'unknown_error' });
         setIsUploading(false);
         trackEvent('analyze_failed', { reason: 'zip_pack_failed', step: 'preparation' });
         return;
@@ -322,7 +379,7 @@ export default function LetterboxdLanding() {
         uploadFiles = [await zipFiles(files)];
       } catch (err) {
         console.error('[upload] file zip packaging failed:', err);
-        setError({ title: 'Failed to prepare files', message: 'Could not package the selected files for upload.', action: 'Please try again or upload as a single ZIP.', reason: 'unknown_error' });
+        setError({ title: 'prepare_files', message: '', reason: 'unknown_error' });
         setIsUploading(false);
         trackEvent('analyze_failed', { reason: 'zip_pack_failed', step: 'preparation' });
         return;
@@ -361,7 +418,7 @@ export default function LetterboxdLanding() {
 
       if (analysisRun && detectedUsername) {
         try {
-          await finishAnalysis({ id: analysisRun.id, ok: true, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+          await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
           await upsertUserSession({
             session_id: sessionId,
             username: detectedUsername,
@@ -372,18 +429,18 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setTimeout(() => { window.location.href = resultPath(detectedUsername); }, 100);
+      setTimeout(() => { window.location.href = resultPath(detectedUsername, locale); }, 100);
     } catch (err) {
       console.error('[upload] analysis failed:', err);
       const normalized = normalizeError(err);
       if (analysisRun && detectedUsername) {
-        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
+        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message, error_code: normalized.reason }); } catch { /* silent */ }
       }
       trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0 });
       setError(normalized);
       setIsUploading(false);
     }
-  }, [zipFiles]);
+  }, [locale, zipFiles]);
 
   const handleScrape = useCallback(async () => {
     let raw = usernameInput.trim();
@@ -406,6 +463,13 @@ export default function LetterboxdLanding() {
 
     setIsScraping(true);
     setScrapeProgress(null);
+    setWorkerQueued(false);
+    // Degraded-mode probe: if no desktop worker is online the scrape is queued
+    // and may take much longer. Best-effort — endpoint failure keeps the
+    // normal loading screen (no error shown).
+    isWorkerFleetEmpty().then((empty) => {
+      if (empty) setWorkerQueued(true);
+    }).catch(() => { /* non-fatal */ });
     setPosterRound(null);
     setPosterLevel(0);
     setPosterScore(0);
@@ -414,8 +478,8 @@ export default function LetterboxdLanding() {
     shuffledDeckRef.current = [];
     deckIndexRef.current = 0;
     setError(null);
-    trackEvent('analyze_started', { username, method: 'scrape', analysis_period: analysisPeriod });
-    const destination = resultPath(username);
+    trackEvent('analyze_started', { username, method: 'scrape', analysis_period: 'lifetime' });
+    const destination = resultPath(username, locale);
     router.prefetch(destination);
 
     const sessionId = ensureSessionId();
@@ -433,7 +497,7 @@ export default function LetterboxdLanding() {
       startedAt = performance.now();
       // The desktop worker scrapes the full profile from a residential IP.
       const method = 'scrape' as const;
-      const result = await scrapeProfile(username, analysisPeriod, undefined, setScrapeProgress);
+      const result = await scrapeProfile(username, 'lifetime', undefined, setScrapeProgress);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
@@ -445,7 +509,7 @@ export default function LetterboxdLanding() {
 
       if (analysisRun) {
         try {
-          await finishAnalysis({ id: analysisRun.id, ok: true, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+          await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
           await upsertUserSession({
             session_id: sessionId,
             username,
@@ -461,7 +525,7 @@ export default function LetterboxdLanding() {
       console.error('[scrape] analysis failed:', err);
       const normalized = normalizeError(err);
       if (analysisRun) {
-        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message }); } catch { /* silent */ }
+        try { await finishAnalysis({ id: analysisRun.id, ok: false, error_message: normalized.message, error_code: normalized.reason }); } catch { /* silent */ }
       }
       trackEvent('analyze_failed', { reason: normalized.reason, duration_ms: startedAt > 0 ? Math.round(performance.now() - startedAt) : 0, method: 'scrape' });
       setError(normalized);
@@ -480,12 +544,13 @@ export default function LetterboxdLanding() {
         });
       }
     }
-  }, [analysisPeriod, router, usernameInput]);
+  }, [locale, router, usernameInput]);
 
   const handleCancel = useCallback(() => {
     setIsUploading(false);
     setIsScraping(false);
     setScrapeProgress(null);
+    setWorkerQueued(false);
     setPosterRound(null);
     setPosterLevel(0);
     setPosterScore(0);
@@ -496,6 +561,8 @@ export default function LetterboxdLanding() {
     setError(null);
   }, []);
 
+  const translatedError = error ? localizeLandingError(error, t) : null;
+
   if (isUploading) return <LoadingScreen onCancel={handleCancel} typicalSeconds={45} />;
   if (isScraping) {
     return (
@@ -503,6 +570,7 @@ export default function LetterboxdLanding() {
         onCancel={handleCancel}
         mode="scrape"
         typicalSeconds={30}
+        queued={workerQueued}
         events={scrapeProgress?.trace_events}
         posterGame={
           posterRound
@@ -553,13 +621,13 @@ export default function LetterboxdLanding() {
             <h1 className="font-black tracking-tight leading-[0.95] text-[clamp(28px,6vw,48px)] text-white">
               Movies Wrapped
             </h1>
-            <p className="mx-auto mt-3 text-base sm:text-lg leading-relaxed text-white/80">Your Letterboxd, re-edited.</p>
+            <p className="mx-auto mt-3 text-base sm:text-lg leading-relaxed text-white/80">{t('landing.hero.tagline')}</p>
           </header>
 
           {/* Username — primary CTA */}
-          <section aria-label="Enter your Letterboxd username">
+          <section aria-label={t('landing.username.section')}>
             <div className="mx-auto max-w-lg rounded-2xl p-5 sm:p-6 text-center backdrop-blur-sm" style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Just type your username</h2>
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">{t('landing.username.title')}</h2>
 
               <form
                 onSubmit={(e) => {
@@ -594,25 +662,9 @@ export default function LetterboxdLanding() {
                       ? { backgroundColor: '#ff7f00', color: '#1b1c1e' }
                       : { backgroundColor: '#1f262e', color: 'rgba(255,255,255,0.4)' }}
                   >
-                    Analyze →
+                    {t('landing.username.analyze')} →
                   </button>
                 </div>
-
-                <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-left">
-                  <span>
-                    <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Analysis period</span>
-                    <span className="mt-0.5 block text-xs text-white/65">Only films watched in this window</span>
-                  </span>
-                  <select
-                    aria-label="Analysis period"
-                    value={analysisPeriod}
-                    onChange={(event) => setAnalysisPeriod(event.target.value as AnalysisPeriod)}
-                    className="min-h-10 rounded-lg border border-orange-400/25 bg-[#1e252d] px-3 text-sm font-semibold text-orange-300 outline-none focus:border-orange-400"
-                  >
-                    <option value="month">Last 30 days</option>
-                    <option value="year">Last 12 months</option>
-                  </select>
-                </label>
               </form>
 
             </div>
@@ -630,25 +682,25 @@ export default function LetterboxdLanding() {
                 style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}
               >
                 <Upload className="h-4 w-4" />
-                Upload export
+                {t('landing.upload.open')}
               </button>
               <Link
-                href="/watchlist"
+                href={localizePath('/watchlist', locale)}
                 className="watchlist-glow inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white transition active:scale-[0.98] sm:w-auto"
                 style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.3)', backgroundColor: 'rgba(27, 28, 30, 0.5)' }}
               >
                 <Users className="h-4 w-4" />
-                Compare two watchlists
+                {t('landing.watchlist.compare')}
               </Link>
             </div>
           </section>
 
           {/* How it works */}
-          <section aria-label="How it works" className="mx-auto grid max-w-lg grid-cols-1 gap-3 sm:grid-cols-3">
+          <section aria-label={t('landing.howItWorks.label')} className="mx-auto grid max-w-lg grid-cols-1 gap-3 sm:grid-cols-3">
             {[
-              { icon: UserRound, title: 'Enter username', desc: 'Type your Letterboxd handle or upload your export.', color: '#ff8000' },
-              { icon: Sparkles, title: 'We analyze', desc: 'We crunch every film, rating, and genre you logged.', color: '#00e054' },
-              { icon: PartyPopper, title: 'Get your Wrapped', desc: 'A shareable recap of your films.', color: '#40bcf4' },
+              { icon: UserRound, title: t('landing.howItWorks.enter.title'), desc: t('landing.howItWorks.enter.description'), color: '#ff8000' },
+              { icon: Sparkles, title: t('landing.howItWorks.analyze.title'), desc: t('landing.howItWorks.analyze.description'), color: '#00e054' },
+              { icon: PartyPopper, title: t('landing.howItWorks.wrapped.title'), desc: t('landing.howItWorks.wrapped.description'), color: '#40bcf4' },
             ].map(({ icon: Icon, title, desc, color }) => (
               <div
                 key={title}
@@ -664,15 +716,39 @@ export default function LetterboxdLanding() {
             ))}
           </section>
 
+          {/* FAQ */}
+          <section aria-label={t('landing.faq.label')} className="mx-auto max-w-lg">
+            <h2 className="text-center text-lg font-bold tracking-tight text-white">{t('landing.faq.label')}</h2>
+            <div className="mt-4 space-y-2">
+              {FAQ_ITEMS.map(({ q, a }) => (
+                <details
+                  key={q}
+                  className="group rounded-xl p-4"
+                  style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.4)' }}
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-white [&::-webkit-details-marker]:hidden">
+                    {t(q)}
+                    <ChevronDown className="h-4 w-4 shrink-0 text-white/40 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <p className="mt-2 text-sm leading-relaxed text-white/60">{t(a)}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+
+          <p className="text-center text-xs leading-relaxed text-white/45">
+            {t('landing.attribution')}
+          </p>
+
           {backendOffline && (
             <div className="mx-auto max-w-lg rounded-xl p-3 text-center" style={{ borderWidth: 1, borderColor: 'rgba(255, 127, 0, 0.4)', backgroundColor: 'rgba(255, 127, 0, 0.1)' }}>
               <p className="text-xs" style={{ color: '#ff7f00' }}>
-                ⚠ Backend server is starting up. Analysis may not work immediately.
+                ⚠ {t('landing.backend.starting')}
               </p>
             </div>
           )}
 
-          {error && <ErrorBanner error={error} onDismiss={() => setError(null)} onRetry={() => setError(null)} />}
+          {translatedError && <ErrorBanner error={translatedError} onDismiss={() => setError(null)} onRetry={() => setError(null)} />}
         </div>
       </div>
 
@@ -687,7 +763,7 @@ export default function LetterboxdLanding() {
           <div className="relative z-10 w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 shadow-2xl" style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(30, 37, 45, 0.95)' }}>
             <button
               onClick={() => setShowUploadModal(false)}
-              aria-label="Close upload"
+              aria-label={t('landing.upload.close')}
               className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full text-white/70 transition hover:text-white"
               style={{ borderWidth: 1, borderColor: '#1f262e', backgroundColor: 'rgba(27, 28, 30, 0.6)' }}
             >
@@ -695,8 +771,8 @@ export default function LetterboxdLanding() {
             </button>
 
             <div className="mb-5 pr-12">
-              <h3 className="text-xl font-bold tracking-tight sm:text-2xl text-white">Upload your Letterboxd export</h3>
-              <p className="mt-1 text-sm text-white/50">For the most complete analysis. Follow the steps below to get your file.</p>
+              <h3 className="text-xl font-bold tracking-tight sm:text-2xl text-white">{t('landing.upload.modalTitle')}</h3>
+              <p className="mt-1 text-sm text-white/50">{t('landing.upload.modalDescription')}</p>
             </div>
 
             <ExportInstructions />
@@ -706,7 +782,7 @@ export default function LetterboxdLanding() {
             </div>
 
             <p className="mt-4 text-center text-xs text-white/40">
-              Prefer the quick path? Close this and just type your username.
+              {t('landing.upload.quickPath')}
             </p>
           </div>
         </div>

@@ -57,9 +57,9 @@ TraceCallback = Callable[[str, str, Optional[dict[str, Any]]], None]
 
 
 def normalize_analysis_period(value: Any) -> str:
-    """Validate the public analysis-period contract, defaulting to one year."""
+    """Validate the public analysis-period contract, defaulting to lifetime."""
     if value is None:
-        return "year"
+        return "lifetime"
     period = str(value).strip().lower()
     if period not in VALID_ANALYSIS_PERIODS:
         raise ValueError("analysis_period must be one of: month, year, lifetime")
@@ -97,13 +97,130 @@ def _date_in_period(value: Any, start_date: date, end_date: date) -> bool:
     return start_date <= parsed <= end_date
 
 
+async def _analyze_window(
+    session,
+    username: str,
+    films: list[dict],
+    diary: list[dict],
+    reviews: list[dict],
+    sources,
+    *,
+    period_key: str,
+    start_date: date | None,
+    end_date: date,
+    request_dir: Path,
+    filename_prefix: str,
+    trace_callback: Optional[TraceCallback] = None,
+) -> dict:
+    """Write one window's CSVs and run the shared analysis pipeline over them.
+
+    Shared by the primary (lifetime) pass and the last-12-months pass so both
+    reuse the same TMDB disk cache (keyed by title+year) — the second pass is
+    cheap as long as the lifetime pass ran first and warmed it.
+    """
+    import pandas as pd
+
+    csv_dicts = diary_to_csv_dicts(films)
+
+    watched_path = request_dir / f"{filename_prefix}watched.csv"
+    pd.DataFrame(csv_dicts["watched"]).to_csv(watched_path, index=False)
+    csv_files = {"watched.csv": str(watched_path)}
+
+    if csv_dicts["ratings"]:
+        ratings_path = request_dir / f"{filename_prefix}ratings.csv"
+        pd.DataFrame(csv_dicts["ratings"]).to_csv(ratings_path, index=False)
+        csv_files["ratings.csv"] = str(ratings_path)
+
+    if csv_dicts.get("diary"):
+        diary_path = request_dir / f"{filename_prefix}diary.csv"
+        pd.DataFrame(csv_dicts["diary"]).to_csv(diary_path, index=False)
+        csv_files["diary.csv"] = str(diary_path)
+
+    # Synthesize reviews.csv from scraped HTML so the existing
+    # compute_review_metrics path is reused for both upload and scrape flows.
+    if reviews:
+        reviews_path = request_dir / f"{filename_prefix}reviews.csv"
+        review_rows = [
+            {
+                "Date": r.get("date", ""),
+                "Name": r.get("title", ""),
+                "Year": r.get("year", ""),
+                "Rating": r.get("rating"),
+                "Rewatch": "",
+                "Review": r.get("review_text", ""),
+                "Tags": "",
+                "Watched Date": "",
+                "Likes": r.get("like_count") if r.get("like_count") is not None else "",
+                "Slug": r.get("slug", ""),
+            }
+            for r in reviews
+        ]
+        pd.DataFrame(review_rows).to_csv(reviews_path, index=False)
+        csv_files["reviews.csv"] = str(reviews_path)
+
+    if trace_callback:
+        trace_callback(
+            "analysis_started", "Analysis started",
+            {"films": len(films), "window": period_key},
+        )
+    analysis_started = monotonic()
+    stats = await process_comprehensive_letterboxd_data(session, csv_files)
+    analysis_seconds = round(monotonic() - analysis_started, 1)
+    if trace_callback:
+        trace_callback(
+            "analysis_done", "Analysis completed",
+            {"analysis_seconds": analysis_seconds, "window": period_key},
+        )
+    stats["scraped_username"] = username
+    stats["scraped_film_count"] = len(films)
+    stats["scraped_diary_count"] = len(diary)
+    stats["scraped_grid_only_count"] = len(films) - len(diary)
+    stats["scraped_review_count"] = sources.review_count
+    stats["scraped_film_count_estimated"] = sources.film_count
+    stats["scraped_reviews_with_text"] = sum(1 for r in reviews if r.get("review_text"))
+    stats["profile_avatar_url"] = sources.profile_avatar_url
+    stats["analysis_period"] = {
+        "key": period_key,
+        "start_date": start_date.isoformat() if start_date else None,
+        "end_date": end_date.isoformat(),
+    }
+
+    # Merge scraped liker identities + poster paths into the review payload.
+    # The reviews.csv round-trip above is lossy (drops likers/review_path),
+    # so re-attach from the rich scraped objects, matched by title+year.
+    if reviews and isinstance(stats.get("review_analysis"), dict):
+        enrich_scraped_reviews(
+            stats["review_analysis"], reviews, stats.get("all_films", [])
+        )
+
+    # Enrich profile favorite films with poster_path via title match against enriched data
+    if sources.favorite_films:
+        poster_by_title = {
+            f["title"].lower(): f.get("poster_path", "")
+            for f in stats.get("all_films", [])
+            if f.get("title")
+        }
+        stats["favorite_films"] = [
+            {
+                "title": f["title"],
+                "year": f.get("year"),
+                "poster_path": poster_by_title.get(f["title"].lower(), ""),
+            }
+            for f in sources.favorite_films
+        ]
+    else:
+        stats["favorite_films"] = []
+
+    return stats
+
+
 async def scrape_and_analyze(
     session,
     username: str,
     *,
     max_pages: int = 60,
     trace_callback: Optional[TraceCallback] = None,
-    analysis_period: str = "year",
+    analysis_period: str = "lifetime",
 ) -> dict:
     """Scrape a public profile and run the full analysis pipeline.
 
@@ -180,93 +297,45 @@ async def scrape_and_analyze(
 
     request_dir: Optional[Path] = None
     try:
-        import pandas as pd
-
         request_dir = Path("uploads") / str(uuid.uuid4())
         request_dir.mkdir(parents=True, exist_ok=True)
 
-        watched_path = request_dir / "watched.csv"
-        pd.DataFrame(csv_dicts["watched"]).to_csv(watched_path, index=False)
-        csv_files = {"watched.csv": str(watched_path)}
+        stats = await _analyze_window(
+            session, username, films, diary, reviews, sources,
+            period_key=period, start_date=start_date, end_date=end_date,
+            request_dir=request_dir, filename_prefix="",
+            trace_callback=trace_callback,
+        )
 
-        if csv_dicts["ratings"]:
-            ratings_path = request_dir / "ratings.csv"
-            pd.DataFrame(csv_dicts["ratings"]).to_csv(ratings_path, index=False)
-            csv_files["ratings.csv"] = str(ratings_path)
-
-        if csv_dicts.get("diary"):
-            diary_path = request_dir / "diary.csv"
-            pd.DataFrame(csv_dicts["diary"]).to_csv(diary_path, index=False)
-            csv_files["diary.csv"] = str(diary_path)
-
-        # Synthesize reviews.csv from scraped HTML so the existing
-        # compute_review_metrics path is reused for both upload and scrape flows.
-        if reviews:
-            reviews_path = request_dir / "reviews.csv"
-            review_rows = [
-                {
-                    "Date": r.get("date", ""),
-                    "Name": r.get("title", ""),
-                    "Year": r.get("year", ""),
-                    "Rating": r.get("rating"),
-                    "Rewatch": "",
-                    "Review": r.get("review_text", ""),
-                    "Tags": "",
-                    "Watched Date": "",
-                    "Likes": r.get("like_count") if r.get("like_count") is not None else "",
-                    "Slug": r.get("slug", ""),
-                }
-                for r in reviews
-            ]
-            pd.DataFrame(review_rows).to_csv(reviews_path, index=False)
-            csv_files["reviews.csv"] = str(reviews_path)
-
-        if trace_callback:
-            trace_callback("analysis_started", "Analysis started", {"films": len(films)})
-        analysis_started = monotonic()
-        stats = await process_comprehensive_letterboxd_data(session, csv_files)
-        analysis_seconds = round(monotonic() - analysis_started, 1)
-        if trace_callback:
-            trace_callback("analysis_done", "Analysis completed", {"analysis_seconds": analysis_seconds})
-        stats["scraped_username"] = username
-        stats["scraped_film_count"] = len(films)
-        stats["scraped_diary_count"] = len(diary)
-        stats["scraped_grid_only_count"] = len(films) - len(diary)
-        stats["scraped_review_count"] = sources.review_count
-        stats["scraped_film_count_estimated"] = sources.film_count
-        stats["scraped_reviews_with_text"] = sum(1 for r in reviews if r.get("review_text"))
-        stats["profile_avatar_url"] = sources.profile_avatar_url
-        stats["analysis_period"] = {
-            "key": period,
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat(),
-        }
-
-        # Merge scraped liker identities + poster paths into the review payload.
-        # The reviews.csv round-trip above is lossy (drops likers/review_path),
-        # so re-attach from the rich scraped objects, matched by title+year.
-        if reviews and isinstance(stats.get("review_analysis"), dict):
-            enrich_scraped_reviews(
-                stats["review_analysis"], reviews, stats.get("all_films", [])
-            )
-
-        # Enrich profile favorite films with poster_path via title match against enriched data
-        if sources.favorite_films:
-            poster_by_title = {
-                f["title"].lower(): f.get("poster_path", "")
-                for f in stats.get("all_films", [])
-                if f.get("title")
-            }
-            stats["favorite_films"] = [
-                {
-                    "title": f["title"],
-                    "year": f.get("year"),
-                    "poster_path": poster_by_title.get(f["title"].lower(), ""),
-                }
-                for f in sources.favorite_films
-            ]
-        else:
-            stats["favorite_films"] = []
+        # Only the lifetime pass gets a second "last 12 months" computation —
+        # a bounded request (month/year) is already a windowed view, so a
+        # second window on top of it would be redundant. Reuses the same
+        # scraped diary/reviews already in memory (no re-scrape) and the same
+        # TMDB disk cache warmed by the pass above, so this is cheap.
+        if period == "lifetime":
+            try:
+                year_start, year_end = analysis_period_bounds("year", today=end_date)
+                year_diary = [
+                    f for f in sources.diary
+                    if _date_in_period(f.get("watch_date"), year_start, year_end)
+                ]
+                year_reviews = [
+                    r for r in sources.reviews
+                    if _date_in_period(r.get("date"), year_start, year_end)
+                ]
+                year_films = merge_scraped_films(year_diary, [])
+                if year_films:
+                    stats["last_12_months"] = await _analyze_window(
+                        session, username, year_films, year_diary, year_reviews, sources,
+                        period_key="year", start_date=year_start, end_date=year_end,
+                        request_dir=request_dir, filename_prefix="y_",
+                        trace_callback=trace_callback,
+                    )
+            except Exception:
+                logger.warning(
+                    "scrape_and_analyze: last_12_months window failed for %s, omitting", username,
+                    exc_info=True,
+                )
 
         return stats
     finally:

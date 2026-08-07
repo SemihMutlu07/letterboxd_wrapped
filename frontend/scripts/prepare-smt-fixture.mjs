@@ -16,6 +16,7 @@ if (process.argv.includes('--clean')) {
 const fixtureDir = resolve(frontendDir, 'dev-fixtures/analysis-runs');
 const source = resolve(fixtureDir, 'semihmutsuz.json');
 const mediaSource = resolve(fixtureDir, 'semihmutsuz-media');
+const shareCardMediaManifest = resolve(fixtureDir, 'semihmutsuz-share-card-media.json');
 
 function localizeFixtureMedia(value, mediaFiles) {
   if (Array.isArray(value)) {
@@ -39,13 +40,36 @@ function localizeFixtureMedia(value, mediaFiles) {
 
 try {
   const fixture = JSON.parse(await readFile(source, 'utf8'));
+  const shareCardMedia = JSON.parse(await readFile(shareCardMediaManifest, 'utf8'));
   const mediaFiles = new Set(await readdir(mediaSource));
-  const localizedFixture = localizeFixtureMedia(fixture, mediaFiles);
+  const requiredShareCardMedia = [
+    ...shareCardMedia.people.map(({ file }) => file),
+    ...shareCardMedia.posters.map(({ file }) => file),
+  ];
+  const missingShareCardMedia = requiredShareCardMedia.filter((file) => !mediaFiles.has(file));
+
+  if (shareCardMedia.people.length !== 2 || shareCardMedia.posters.length !== 10) {
+    throw new Error('Share-card media manifest must contain exactly 2 people and 10 posters.');
+  }
+  if (missingShareCardMedia.length > 0) {
+    throw new Error(`Missing share-card media: ${missingShareCardMedia.join(', ')}`);
+  }
+
+  const shareCardMediaFiles = new Set(requiredShareCardMedia);
+  const localizedFixture = localizeFixtureMedia(fixture, shareCardMediaFiles);
 
   await mkdir(destinationDir, { recursive: true });
-  await cp(mediaSource, mediaDestination, { recursive: true });
+  await rm(mediaDestination, { force: true, recursive: true });
+  await mkdir(mediaDestination, { recursive: true });
+  await Promise.all(
+    requiredShareCardMedia.map((file) =>
+      cp(resolve(mediaSource, file), resolve(mediaDestination, file)),
+    ),
+  );
   await writeFile(destination, `${JSON.stringify(localizedFixture, null, 2)}\n`);
-  console.log(`[smt] Prepared Semih's local fixture with ${mediaFiles.size} bundled images.`);
+  console.log(
+    `[smt] Prepared Semih's local fixture with 2 portraits and 10 posters.`,
+  );
 } catch (error) {
   await rm(destinationDir, { force: true, recursive: true });
   const detail = error instanceof Error ? error.message : String(error);

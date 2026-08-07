@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { AlertTriangle, RefreshCw, X, MessageSquare } from 'lucide-react';
+import { useI18n } from '@/i18n/I18nProvider';
 import type { NormalizedError } from '@/lib/errors';
 
 interface ErrorBannerProps {
@@ -12,6 +13,10 @@ interface ErrorBannerProps {
 }
 
 export default function ErrorBanner({ error, onDismiss, onRetry, onReport }: ErrorBannerProps) {
+  const { locale } = useI18n();
+  const copy = locale === 'tr'
+    ? { dismiss: 'Hatayı kapat', retry: 'Tekrar dene', report: 'Sorunu bildir' }
+    : { dismiss: 'Dismiss error', retry: 'Try again', report: 'Report issue' };
   return (
     <div className="mx-auto max-w-xl rounded-2xl border border-red-700/50 bg-slate-800/90 p-4 sm:p-5">
       <div className="flex items-start gap-3">
@@ -25,7 +30,7 @@ export default function ErrorBanner({ error, onDismiss, onRetry, onReport }: Err
             <button
               onClick={onDismiss}
               className="flex-shrink-0 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors"
-              aria-label="Dismiss error"
+              aria-label={copy.dismiss}
             >
               <X className="h-4 w-4" />
             </button>
@@ -44,7 +49,7 @@ export default function ErrorBanner({ error, onDismiss, onRetry, onReport }: Err
                 className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 px-3 py-1.5 text-xs font-medium text-white transition-colors"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                Try again
+                {copy.retry}
               </button>
             )}
 
@@ -54,7 +59,7 @@ export default function ErrorBanner({ error, onDismiss, onRetry, onReport }: Err
                 className="inline-flex items-center gap-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
-                Report issue
+                {copy.report}
               </button>
             )}
           </div>

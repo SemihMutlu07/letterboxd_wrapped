@@ -25,12 +25,37 @@ import {
 } from "@/containers/results/results-model";
 import { ResultsContent } from "@/containers/results/ResultsContent";
 import { useResultsSession } from "@/containers/results/useResultsSession";
+import { useI18n } from "@/i18n/I18nProvider";
+import { localizePath } from "@/i18n/routing";
+import { toggleClass, trackToggleChanged } from "@/containers/results/sections/section-utils";
 
 export { ResultsContent };
 
 // Note: StatsData is imported from @/containers/results/sections/types
 
 export default function ResultsPage() {
+  const { locale } = useI18n();
+  const copy = locale === 'tr'
+    ? {
+        noData: 'Sonuç verisi bulunamadı',
+        noUserData: (value: string) => `@${value} için bu cihazda kayıtlı sonuç bulunamadı.`,
+        uploadFirst: 'Önce Letterboxd verilerini analiz et.',
+        goBack: 'Geri Dön',
+        unknownActor: 'Bilinmeyen Oyuncu',
+        unknownDirector: 'Bilinmeyen Yönetmen',
+        allTime: 'Tüm Zamanlar',
+        last12Months: 'Son 12 Ay',
+      }
+    : {
+        noData: 'No data found',
+        noUserData: (value: string) => `No local result data found for @${value}.`,
+        uploadFirst: 'Please upload your Letterboxd data first.',
+        goBack: 'Go Back',
+        unknownActor: 'Unknown Actor',
+        unknownDirector: 'Unknown Director',
+        allTime: 'All Time',
+        last12Months: 'Last 12 Months',
+      };
   const {
     stats,
     loading,
@@ -38,6 +63,15 @@ export default function ResultsPage() {
     username,
     sessionId,
   } = useResultsSession();
+
+  // stats window toggle (all-time vs last 12 months, computed once during the scrape)
+  const [statsWindow, setStatsWindow] = useState<"lifetime" | "year">("lifetime");
+  const activeStats =
+    statsWindow === "year" && stats?.last_12_months ? stats.last_12_months : stats;
+  const handleStatsWindowChange = (next: "lifetime" | "year") => {
+    setStatsWindow(next);
+    trackToggleChanged("stats_window", next);
+  };
 
   // share
   const [showShareModal, setShowShareModal] = useState(false);
@@ -50,24 +84,24 @@ export default function ResultsPage() {
   const [hasTriggeredFeedback, setHasTriggeredFeedback] = useState(false);
 
   // Derived data - maintain hook order
-  const decadeData = useMemo(() => buildDecadeData(stats), [stats]);
+  const decadeData = useMemo(() => buildDecadeData(activeStats), [activeStats]);
   const decadeMax = useMemo(
     () => Math.max(0, ...decadeData.map((d) => d.count)),
     [decadeData],
   );
 
-  const ratingsArr = useMemo(() => buildRatingData(stats), [stats]);
+  const ratingsArr = useMemo(() => buildRatingData(activeStats), [activeStats]);
   const ratingMax = useMemo(
     () => Math.max(0, ...ratingsArr.map((d) => d.count)),
     [ratingsArr],
   );
 
   const { actualRangeDays, dateRangeText } = useMemo(
-    () => buildAnalysisRange(stats),
-    [stats],
+    () => buildAnalysisRange(activeStats),
+    [activeStats],
   );
 
-  const runtimeHours = useMemo(() => getRuntimeHours(stats), [stats]);
+  const runtimeHours = useMemo(() => getRuntimeHours(activeStats), [activeStats]);
 
   const timePct = useMemo(() => {
     const safeRangeDays = Math.max(1, actualRangeDays);
@@ -88,24 +122,24 @@ export default function ResultsPage() {
   }, [runtimeHours, actualRangeDays]);
 
   const cineScore = useMemo(() => {
-    const score = stats?.sinefil_meter?.score;
+    const score = activeStats?.sinefil_meter?.score;
     return score == null ? undefined : Math.max(0, Math.min(100, score));
-  }, [stats]);
+  }, [activeStats]);
 
   // Build top actors & directors list, ensuring no duplicate person across both roles
   const topActors = useMemo(() => {
-    return (stats?.top_actors || []).slice(0, 5).map((a) => ({
+    return (activeStats?.top_actors || []).slice(0, 5).map((a) => ({
       name: a.name,
       headshotUrl: getTmdbImageUrl(a.profile_path) || "",
       count: a.count,
     }));
-  }, [stats]);
+  }, [activeStats]);
 
   const topDirectors = useMemo(() => {
     const actorsSet = new Set(
-      (stats?.top_actors || []).slice(0, 5).map((a) => a.name),
+      (activeStats?.top_actors || []).slice(0, 5).map((a) => a.name),
     );
-    return (stats?.top_directors || [])
+    return (activeStats?.top_directors || [])
       .filter((d) => !actorsSet.has(d.name))
       .slice(0, 5)
       .map((d) => ({
@@ -113,7 +147,7 @@ export default function ResultsPage() {
         headshotUrl: getTmdbImageUrl(d.profile_path) || "",
         count: d.count,
       }));
-  }, [stats]);
+  }, [activeStats]);
 
   const shareCardData = useMemo<ShareCardData>(() => {
     // Avoid crush being same person as director
@@ -129,9 +163,9 @@ export default function ResultsPage() {
       directorIdx = topDirectors.length > 1 ? 1 : 0;
     }
 
-    const filmSource = stats?.favorite_films?.length
-      ? stats.favorite_films
-      : (stats?.rated_films ?? []);
+    const filmSource = activeStats?.favorite_films?.length
+      ? activeStats.favorite_films
+      : (activeStats?.rated_films ?? []);
     const topFilms = filmSource.slice(0, 5).map((f) => ({
       title: f.title,
       year: f.year ? String(f.year) : "",
@@ -139,12 +173,19 @@ export default function ResultsPage() {
         f.poster_path && f.poster_path.length > 0 ? f.poster_path : null,
     }));
 
-    const topReviewWords = (stats?.review_analysis?.word_frequency ?? [])
+    const topReviewWords = (activeStats?.review_analysis?.word_frequency ?? [])
       .filter(({ word }) => word && word.trim().length > 0)
       .slice(0, 3)
       .map(({ word, count }) => ({ word, count }));
 
-    const outlier = stats?.rating_outlier_film;
+    const milestones = (activeStats?.milestones ?? []).map((m) => ({
+      ordinal: m.ordinal,
+      title: m.title,
+      year: m.year != null ? String(m.year) : "",
+      posterPath: m.poster_path && m.poster_path.length > 0 ? m.poster_path : null,
+    }));
+
+    const outlier = activeStats?.rating_outlier_film;
     const ratingOutlierFilm = outlier
       ? {
           title: outlier.title,
@@ -161,40 +202,43 @@ export default function ResultsPage() {
 
     return {
       onScreenCrush: topActors[actorIdx] || {
-        name: "Unknown Actor",
+        name: copy.unknownActor,
         headshotUrl: "",
         count: 0,
       },
       favoriteDirector: topDirectors[directorIdx] || {
-        name: "Unknown Director",
+        name: copy.unknownDirector,
         headshotUrl: "",
         count: 0,
       },
-      watchedFilms: stats?.total_films || 0,
+      watchedFilms: activeStats?.total_films || 0,
       spentDays: Math.round(runtimeHours / 24),
       spentHours: Math.round(runtimeHours),
       timePercent: Number.parseInt(timePct, 10) || 0,
       cinemaScale: cineScore ?? 0,
-      personaLabel: stats?.cinematic_persona?.persona || "",
-      minutesAverage: Math.round(stats?.average_runtime || 0),
-      mostCommonRating: stats?.most_common_rating || 3.5,
-      peakDecade: stats?.favorite_decade?.name || "2020s",
-      peakDecadeCount: stats?.favorite_decade?.count || 0,
+      personaLabel: activeStats?.cinematic_persona?.persona || "",
+      minutesAverage: Math.round(activeStats?.average_runtime || 0),
+      mostCommonRating: activeStats?.most_common_rating || 3.5,
+      peakDecade: activeStats?.favorite_decade?.name || "2020s",
+      peakDecadeCount: activeStats?.favorite_decade?.count || 0,
       topActors,
       topDirectors,
       topFilms,
       topReviewWords,
       ratingOutlierFilm,
+      milestones,
       username: username || undefined,
     };
   }, [
-    stats,
+    activeStats,
     topActors,
     topDirectors,
     cineScore,
     timePct,
     username,
     runtimeHours,
+    copy.unknownActor,
+    copy.unknownDirector,
   ]);
 
   useEffect(() => {
@@ -215,17 +259,17 @@ export default function ResultsPage() {
     return (
       <div className="min-h-screen bg-[#1e252d] flex items-center justify-center text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">No data found</h2>
+          <h2 className="text-2xl font-bold mb-4">{copy.noData}</h2>
           <p className="text-gray-400">
             {username
-              ? `No local result data found for @${username}.`
-              : "Please upload your Letterboxd data first."}
+              ? copy.noUserData(username)
+              : copy.uploadFirst}
           </p>
           <Link
-            href="/"
+            href={localizePath('/', locale)}
             className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors"
           >
-            Go Back
+            {copy.goBack}
           </Link>
         </div>
       </div>
@@ -235,8 +279,26 @@ export default function ResultsPage() {
   return (
     <ThemeProvider>
       <ThemeWrapper>
+        {stats.last_12_months && (
+          <div className="sticky top-0 z-40 flex justify-center py-3 bg-[#1e252d]/90 backdrop-blur">
+            <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
+              <button
+                className={toggleClass(statsWindow === "lifetime")}
+                onClick={() => handleStatsWindowChange("lifetime")}
+              >
+                {copy.allTime}
+              </button>
+              <button
+                className={toggleClass(statsWindow === "year")}
+                onClick={() => handleStatsWindowChange("year")}
+              >
+                {copy.last12Months}
+              </button>
+            </div>
+          </div>
+        )}
         <ResultsContent
-        stats={stats}
+        stats={activeStats ?? stats}
         sessionId={sessionId}
         username={username}
         dateRangeText={dateRangeText}

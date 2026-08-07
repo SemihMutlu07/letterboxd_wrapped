@@ -17,6 +17,7 @@ import { readWatchlistUsersFromLocation, watchlistPath } from '@/lib/routes';
 import { pickRandomUsernames } from '@/lib/usernames';
 import { PosterPlaceholder } from '@/components/results/Placeholders';
 import { getPosterUrl } from '@/lib/analytics';
+import { useI18n } from '@/i18n/I18nProvider';
 import SwipeDeck from './SwipeDeck';
 
 const COLLAPSED_FILM_LIMIT = 10;
@@ -34,6 +35,7 @@ function LoadingPanel({
   showPosterRail?: boolean;
   onClose?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="border border-amber-300/60 bg-[#171411] p-5 relative">
       {onClose && (
@@ -41,7 +43,7 @@ function LoadingPanel({
           type="button"
           onClick={onClose}
           className="absolute right-3 top-3 p-1 text-stone-500 hover:text-stone-200 transition-colors"
-          aria-label="Close loading panel"
+          aria-label={t('watchlist.loading.close')}
         >
           <X className="h-4 w-4" />
         </button>
@@ -86,6 +88,7 @@ const USERNAME_RE = /^[a-z0-9_]+$/;
 /* ── Shared film-row renderer (used by both open + accordion) ──────────────── */
 
 function FilmRows({ films }: { films: WatchlistFilm[] }) {
+  const { t } = useI18n();
   return (
     <>
       {films.map((film) => {
@@ -99,7 +102,7 @@ function FilmRows({ films }: { films: WatchlistFilm[] }) {
                 <>
                   <img
                     src={posterUrl}
-                    alt={`${film.title} poster`}
+                    alt={t('common.posterAlt').replace('{title}', film.title)}
                     width={40}
                     height={60}
                     loading="lazy"
@@ -162,6 +165,7 @@ function FilmListOpen({
   truncated?: boolean;
   emptyMessage?: string;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? films : films.slice(0, COLLAPSED_FILM_LIMIT);
   const remaining = films.length - visible.length;
@@ -172,7 +176,7 @@ function FilmListOpen({
       <ul className="mt-4 divide-y divide-stone-800/80">
         {films.length === 0 && (
           <li className="py-2 text-sm text-stone-500">
-            {emptyMessage || 'No films in this bucket.'}
+            {emptyMessage || t('watchlist.emptyBucket')}
           </li>
         )}
         <FilmRows films={visible} />
@@ -186,12 +190,14 @@ function FilmListOpen({
               onClick={() => setExpanded((v) => !v)}
               className="w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
             >
-              {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT}` : `Show ${remaining} more`}
+              {expanded
+                ? t('watchlist.hide').replace('{count}', String(films.length - COLLAPSED_FILM_LIMIT))
+                : t('watchlist.showMore').replace('{count}', String(remaining))}
             </button>
           )}
           {truncated && (
             <p className="font-mono text-[11px] text-stone-500">
-              Showing {films.length} of {totalCount}. Backend caps each bucket at {films.length}.
+              {t('watchlist.showingCapped').replace('{shown}', String(films.length)).replace('{total}', String(totalCount)).replace('{cap}', String(films.length))}
             </p>
           )}
         </div>
@@ -211,6 +217,7 @@ function WatchlistAccordion({
   count: number;
   films: WatchlistFilm[];
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? films : films.slice(0, COLLAPSED_FILM_LIMIT);
@@ -224,7 +231,7 @@ function WatchlistAccordion({
         className="flex w-full items-center justify-between border border-stone-700 bg-[#171411] px-4 py-3 text-left transition-colors duration-150 ease-out hover:border-stone-500 hover:bg-[#1e1a14]"
       >
         <span className="font-mono text-xs uppercase tracking-[0.14em] text-stone-300">
-          Only @{user} <span className="ml-1 text-amber-300">({count})</span>
+          {t('watchlist.only').replace('{user}', user)} <span className="ml-1 text-amber-300">({count})</span>
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-stone-500" />
       </button>
@@ -239,7 +246,7 @@ function WatchlistAccordion({
         className="mb-3 flex w-full items-center justify-between text-left"
       >
         <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-amber-300">
-          Only @{user} <span className="text-stone-400">({count})</span>
+          {t('watchlist.only').replace('{user}', user)} <span className="text-stone-400">({count})</span>
         </h3>
         <ChevronUp className="h-4 w-4 shrink-0 text-stone-500" />
       </button>
@@ -254,7 +261,9 @@ function WatchlistAccordion({
           onClick={() => setExpanded((v) => !v)}
           className="mt-3 w-full border border-stone-700 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-stone-300 transition-colors duration-150 ease-out hover:border-stone-500 hover:text-stone-100"
         >
-          {expanded ? `Hide ${films.length - COLLAPSED_FILM_LIMIT}` : `Show ${remaining} more`}
+          {expanded
+            ? t('watchlist.hide').replace('{count}', String(films.length - COLLAPSED_FILM_LIMIT))
+            : t('watchlist.showMore').replace('{count}', String(remaining))}
         </button>
       )}
     </section>
@@ -264,11 +273,12 @@ function WatchlistAccordion({
 /* ── Recommendation strip ──────────────────────────────────────────────────── */
 
 function RecommendationStrip({ recommendation }: { recommendation: FilmRecommendation }) {
+  const { t } = useI18n();
   return (
     <div className="border border-amber-400/40 bg-amber-300 p-4 text-stone-950">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em]">Tonight's pick</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em]">{t('watchlist.recommendation.tonight')}</p>
           <p className="mt-1 text-2xl font-black leading-tight">{recommendation.title}</p>
           <p className="mt-1 font-mono text-xs text-stone-700">{recommendation.year}</p>
         </div>
@@ -289,6 +299,7 @@ type Props = {
 };
 
 export default function WatchlistCompare({ first: controlledFirst, second: controlledSecond, onFirstChange, onSecondChange }: Props = {}) {
+  const { locale, t } = useI18n();
   const placeholders = useMemo(() => pickRandomUsernames(2), []);
   const [localFirst, setLocalFirst] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -321,13 +332,13 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
   const validationMessage = useMemo(() => {
     const filled = normalized.filter(Boolean);
     if (filled.some((username) => !USERNAME_RE.test(username))) {
-      return 'Use only lowercase letters, numbers, or underscores for Letterboxd usernames.';
+      return t('watchlist.invalidUsername');
     }
     if (normalized[0] && normalized[1] && normalized[0] === normalized[1]) {
-      return 'Enter two different Letterboxd usernames.';
+      return t('watchlist.sameUsername');
     }
     return null;
-  }, [normalized]);
+  }, [normalized, t]);
   const canSubmit = normalized[0].length > 0 && normalized[1].length > 0 && !validationMessage;
 
   // Persist inputs so users don't re-type after error / refresh
@@ -351,7 +362,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
       const next = await compareWatchlists(normalized[0], normalized[1]);
       setResult(next);
       setRecommendation(null);
-      const nextPath = watchlistPath(normalized[0], normalized[1]);
+      const nextPath = watchlistPath(normalized[0], normalized[1], locale);
       if (typeof window !== 'undefined' && `${window.location.pathname}${window.location.search}` !== nextPath) {
         window.history.pushState(null, '', nextPath);
       }
@@ -360,7 +371,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
     } finally {
       setLoading(false);
     }
-  }, [canSubmit, normalized]);
+  }, [canSubmit, locale, normalized]);
 
   useEffect(() => {
     const [routeFirst, routeSecond] = readWatchlistUsersFromLocation();
@@ -417,7 +428,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
       <section className="border border-stone-800 bg-[#201b16] p-5 shadow-2xl shadow-black/20">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <label className="block">
-            <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">First watchlist</span>
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">{t('watchlist.first')}</span>
             <input
               value={first}
               onChange={(event) => changeFirst(event.target.value)}
@@ -426,7 +437,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
             />
           </label>
           <label className="block">
-            <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">Second watchlist</span>
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-stone-500">{t('watchlist.second')}</span>
             <input
               value={second}
               onChange={(event) => changeSecond(event.target.value)}
@@ -444,7 +455,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
             className="mt-6 inline-flex h-[46px] items-center justify-center gap-2 bg-amber-300 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-[background-color,transform,opacity] duration-150 ease-out hover:bg-amber-200 active:scale-[0.97] active:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
           >
             <Clapperboard className="h-4 w-4" />
-            {loading ? 'Reading' : 'Compare'}
+            {loading ? t('watchlist.reading') : t('watchlist.compare')}
           </button>
         </div>
         {validationMessage && <p className="mt-4 border border-amber-900/70 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{validationMessage}</p>}
@@ -457,7 +468,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
               className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-red-300 hover:text-red-100 transition-colors"
             >
               <Clapperboard className="h-3.5 w-3.5" />
-              Try again
+              {t('common.tryAgain')}
             </button>
           </div>
         )}
@@ -465,21 +476,21 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
 
       {loading && !dismissLoading && (
         <LoadingPanel
-          title="Comparing watchlists"
-          message="Reading both public watchlists and sorting the shared shelf from the one-sided picks."
+          title={t('watchlist.loading.comparingTitle')}
+          message={t('watchlist.loading.comparingMessage')}
           onClose={() => setDismissLoading(true)}
         />
       )}
 
       {result && (
-        <div ref={resultRef} tabIndex={-1} aria-live="polite" aria-label="Watchlist comparison results" className="space-y-8 outline-none">
+        <div ref={resultRef} tabIndex={-1} aria-live="polite" aria-label={t('watchlist.results.label')} className="space-y-8 outline-none">
           {/* Match score header */}
           <section className="border border-amber-400/40 bg-[#0f0d0b] p-5 text-center">
-            <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">Match score</p>
+            <p className="font-mono text-xs uppercase tracking-[0.18em] text-amber-300">{t('watchlist.matchScore')}</p>
             <p className="mt-2 text-7xl font-black leading-none text-stone-50">{result.match_score}%</p>
             <p className="mt-2 text-sm text-stone-400">
               <span className="font-semibold text-orange-400">@{result.users[0]}</span>
-              <span className="mx-1.5 text-stone-600">vs</span>
+              <span className="mx-1.5 text-stone-600">{t('watchlist.vs')}</span>
               <span className="font-semibold text-emerald-400">@{result.users[1]}</span>
             </p>
           </section>
@@ -488,19 +499,19 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
           <section className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
             <div className="border border-orange-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
               <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-orange-400 truncate">
-                Only @{result.users[0]}
+                {t('watchlist.only').replace('{user}', result.users[0])}
               </p>
               <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.first_only ?? 0}</p>
             </div>
             <div className="border border-amber-300/40 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
               <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-amber-300">
-                Both
+                {t('watchlist.both')}
               </p>
               <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.common ?? 0}</p>
             </div>
             <div className="border border-emerald-500/30 bg-[#171411] p-2 sm:p-4 text-center min-w-0">
               <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.08em] sm:tracking-[0.12em] text-emerald-400 truncate">
-                Only @{result.users[1]}
+                {t('watchlist.only').replace('{user}', result.users[1])}
               </p>
               <p className="mt-1 text-lg sm:text-2xl font-black text-stone-100 leading-none">{counts?.second_only ?? 0}</p>
             </div>
@@ -508,13 +519,13 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
 
           {/* Proportional bar */}
           <section className="border border-stone-800 bg-[#171411] p-5">
-            <div className="flex w-full gap-0.5" aria-label="Watchlist share percentages">
+            <div className="flex w-full gap-0.5" aria-label={t('watchlist.sharePercentages')}>
               {counts && (
                 <>
                   {counts.first_only > 0 && <div
                     style={{ width: formatPct(counts.first_only) }}
                     className="group relative h-12 bg-orange-500/80"
-                    title={`Only @${result.users[0]}: ${counts.first_only} (${formatPct(counts.first_only)})`}
+                    title={`${t('watchlist.only').replace('{user}', result.users[0])}: ${counts.first_only} (${formatPct(counts.first_only)})`}
                   >
                     <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.first_only)}
@@ -523,7 +534,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
                   {counts.common > 0 && <div
                     style={{ width: formatPct(counts.common) }}
                     className="group relative h-12 bg-amber-300"
-                    title={`Both: ${counts.common} (${formatPct(counts.common)})`}
+                    title={`${t('watchlist.both')}: ${counts.common} (${formatPct(counts.common)})`}
                   >
                     <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-stone-950 opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.common)}
@@ -532,7 +543,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
                   {counts.second_only > 0 && <div
                     style={{ width: formatPct(counts.second_only) }}
                     className="group relative h-12 bg-emerald-500/80"
-                    title={`Only @${result.users[1]}: ${counts.second_only} (${formatPct(counts.second_only)})`}
+                    title={`${t('watchlist.only').replace('{user}', result.users[1])}: ${counts.second_only} (${formatPct(counts.second_only)})`}
                   >
                     <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity">
                       {formatPct(counts.second_only)}
@@ -542,9 +553,9 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
               )}
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 font-mono text-xs uppercase tracking-[0.08em] sm:grid-cols-3 sm:tracking-[0.12em]">
-              <span className="text-orange-400/90 text-center">Only @{result.users[0]}: {counts?.first_only} · {formatPct(counts?.first_only ?? 0)}</span>
-              <span className="text-amber-300 text-center">Both: {counts?.common} · {formatPct(counts?.common ?? 0)}</span>
-              <span className="text-emerald-400/90 text-center">Only @{result.users[1]}: {counts?.second_only} · {formatPct(counts?.second_only ?? 0)}</span>
+              <span className="text-orange-400/90 text-center">{t('watchlist.only').replace('{user}', result.users[0])}: {counts?.first_only} · {formatPct(counts?.first_only ?? 0)}</span>
+              <span className="text-amber-300 text-center">{t('watchlist.both')}: {counts?.common} · {formatPct(counts?.common ?? 0)}</span>
+              <span className="text-emerald-400/90 text-center">{t('watchlist.only').replace('{user}', result.users[1])}: {counts?.second_only} · {formatPct(counts?.second_only ?? 0)}</span>
             </div>
           </section>
 
@@ -561,7 +572,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
                 }`}
               >
                 <List className="h-3.5 w-3.5" />
-                List
+                {t('watchlist.list')}
               </button>
               <button
                 type="button"
@@ -573,7 +584,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
                 }`}
               >
                 <Layers className="h-3.5 w-3.5" />
-                Swipe
+                {t('watchlist.swipe')}
               </button>
             </div>
           )}
@@ -581,10 +592,10 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
           {/* Common shelf — list view */}
           {viewMode === 'list' && (
             <FilmListOpen
-              title="Shared shelf"
+              title={t('watchlist.sharedShelf')}
               films={result.common}
               totalCount={result.counts.common}
-              emptyMessage="Zero shared films in both watchlists."
+              emptyMessage={t('watchlist.zeroShared')}
             />
           )}
 
@@ -593,7 +604,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
             enriching ? (
               <section className="border border-stone-800 bg-[#171411] p-8 text-center">
                 <span className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-amber-200/20 border-t-amber-300" />
-                <p className="mt-3 font-mono text-xs uppercase tracking-[0.14em] text-stone-400">Enriching films with TMDB data…</p>
+                <p className="mt-3 font-mono text-xs uppercase tracking-[0.14em] text-stone-400">{t('watchlist.enriching')}</p>
               </section>
             ) : enrichedFilms ? (
               <SwipeDeck films={enrichedFilms} />
@@ -616,16 +627,14 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
 
           {result.counts.common === 0 && (
             <section className="border border-stone-800 bg-[#171411] p-5">
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">No overlap yet</p>
-              <p className="mt-2 text-sm text-stone-400">
-                Zero shared films. Expand individual watchlists above to see what each person wants to watch.
-              </p>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">{t('watchlist.noOverlap')}</p>
+              <p className="mt-2 text-sm text-stone-400">{t('watchlist.noOverlapDescription')}</p>
             </section>
           )}
 
           <section className="grid gap-4 border border-stone-800 bg-[#201b16] p-5 md:grid-cols-[1fr_auto]">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">What should we watch?</p>
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-stone-500">{t('watchlist.recommendation.question')}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {(['random', 'highest_rated', 'newest'] as RecommendationStrategy[]).map((item) => (
                   <button
@@ -636,7 +645,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
                       strategy === item ? 'border-amber-300 bg-amber-300 text-stone-950' : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-100'
                     }`}
                   >
-                    {item.replace('_', ' ')}
+                    {item === 'random' ? t('watchlist.recommendation.random') : item === 'highest_rated' ? t('watchlist.recommendation.highestRated') : t('watchlist.recommendation.newest')}
                   </button>
                 ))}
               </div>
@@ -648,7 +657,7 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
               className="inline-flex h-[46px] items-center justify-center gap-2 bg-stone-100 px-5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-950 transition-colors duration-150 ease-out hover:bg-white active:scale-[0.97] active:opacity-90 disabled:bg-stone-800 disabled:text-stone-500 disabled:active:scale-100 disabled:active:opacity-100"
             >
               <Shuffle className="h-4 w-4" />
-              {recommending ? 'Choosing' : 'Pick one'}
+              {recommending ? t('watchlist.recommendation.choosing') : t('watchlist.recommendation.pickOne')}
             </button>
           </section>
 
@@ -658,8 +667,8 @@ export default function WatchlistCompare({ first: controlledFirst, second: contr
 
       {recommending && (
         <LoadingPanel
-          title="Choosing from the overlap"
-          message="Enriching shared watchlist films with TMDB data before picking one."
+          title={t('watchlist.loading.choosingTitle')}
+          message={t('watchlist.loading.choosingMessage')}
           showPosterRail
           onClose={() => {/* recommending state is handled by the async call, can't be dismissed mid-flight */}}
         />

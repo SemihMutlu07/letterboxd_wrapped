@@ -76,6 +76,21 @@ describe('persistStats', () => {
     expect(stored.all_films).toBeUndefined();
   });
 
+  it('sheds heavy fields from the nested last_12_months window too', () => {
+    // Enough room for both core summaries, not for either window's film-level arrays.
+    const storage = makeStorage(35_000);
+    const fixture = { ...statsFixture(), last_12_months: statsFixture() };
+
+    const result = persistStats(fixture, storage);
+
+    expect(result.dropped).toContain('all_films');
+    const stored = JSON.parse(storage.getItem(STATS_STORAGE_KEY)!);
+    expect(stored.total_films).toBe(823);
+    expect(stored.all_films).toBeUndefined();
+    expect(stored.last_12_months.total_films).toBe(823);
+    expect(stored.last_12_months.all_films).toBeUndefined();
+  });
+
   it('throws StatsTooLargeError when even the core summary does not fit', () => {
     const storage = makeStorage(10);
 

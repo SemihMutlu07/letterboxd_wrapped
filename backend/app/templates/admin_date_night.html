@@ -1,0 +1,77 @@
+{% extends "admin_base.html" %}
+{% block title %}Date Night{% endblock %}
+{% block content %}
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="text-sm font-bold text-white">Date Night Engine</h2>
+          <span class="text-[10px] text-slate-500">Last 50</span>
+        </div>
+        <div class="overflow-x-auto scrollbar">
+          <table class="w-full text-xs">
+            <thead><tr class="text-slate-500 border-b border-slate-800">
+              <th class="text-left px-4 py-2 font-medium">Users</th><th class="text-left px-4 py-2 font-medium">Era</th>
+              <th class="text-left px-4 py-2 font-medium">Top Genres</th><th class="text-left px-4 py-2 font-medium">Picks</th>
+              <th class="text-left px-4 py-2 font-medium">When</th><th class="text-center px-4 py-2 font-medium">Status</th>
+            </tr></thead>
+            <tbody id="datenight-runs">
+              {% for d in date_night_runs[:50] %}
+              <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+                <td class="px-4 py-2.5 text-slate-300">@{{ d.usernames | join(" × @") }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ d.mutual_profile.era_overlap or "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-400">{{ (d.mutual_profile.top_genres or [])[:3] | join(", ") or "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-300">{{ d.recommendations | join(", ") if d.recommendations else "—" }}</td>
+                <td class="px-4 py-2.5 text-slate-500">{{ d._mtime[:16].replace("T", " ") }}</td>
+                <td class="px-4 py-2.5 text-center">
+                  {% if d.ok == false %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">● Fail</span>{% else %}<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">● OK</span>{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+              {% if not date_night_runs %}
+              <tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No date-night runs recorded yet.</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+{% endblock %}
+{% block scripts %}
+{% include "admin_js_common.html" %}
+<script>
+    function renderDateNightRuns(runs) {
+      const tbody = document.getElementById('datenight-runs');
+      if (!tbody) return;
+      if (!runs || runs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-600">No date-night runs recorded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = runs.map(d => {
+        const mp = d.mutual_profile || {};
+        const era = mp.era_overlap || '—';
+        const genres = (mp.top_genres || []).slice(0, 3).map(g => escapeHtml(g)).join(', ') || '—';
+        const picks = d.recommendations && d.recommendations.length ? d.recommendations.map(r => escapeHtml(r)).join(', ') : '—';
+        return `
+          <tr class="border-b border-slate-800/50 hover:bg-slate-800/40 transition-colors">
+            <td class="px-4 py-2.5 text-slate-300">${renderUsers(d.usernames)}</td>
+            <td class="px-4 py-2.5 text-slate-400">${escapeHtml(era)}</td>
+            <td class="px-4 py-2.5 text-slate-400">${genres}</td>
+            <td class="px-4 py-2.5 text-slate-300">${picks}</td>
+            <td class="px-4 py-2.5 text-slate-500">${shortTime(d._mtime)}</td>
+            <td class="px-4 py-2.5 text-center">${okBadge(d.ok)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function refreshDateNightRuns() {
+      try {
+        const response = await fetch(`/admin/api/runs`);
+        if (!response.ok) return;
+        const body = await response.json();
+        renderDateNightRuns(body.date_night_runs || []);
+      } catch (error) {
+        console.warn('Date night runs refresh failed', error);
+      }
+    }
+    setInterval(refreshDateNightRuns, 15000);
+</script>
+{% endblock %}

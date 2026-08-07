@@ -2,7 +2,9 @@ import React, { useMemo, useState } from "react";
 import Image from "next/image";
 import { Heart, User, Clock, Star, Calendar, Film } from "lucide-react";
 import { getTmdbImageUrl } from "@/lib/analytics";
-import type { ShareFilmStat, ShareReviewWordStat } from "@/components/share/types";
+import type { ShareFilmStat, ShareReviewWordStat, ShareMilestoneFilm } from "@/components/share/types";
+import { MilestonesRow, Wordmark } from "@/components/share/variants/shared/SchemaBlocks";
+import { useI18n } from '@/i18n/I18nProvider';
 
 // ==================== Types ====================
 export type ShareCardProps = {
@@ -20,6 +22,7 @@ export type ShareCardProps = {
   peakDecadeCount: number;
   topFilms?: ShareFilmStat[];
   topReviewWords?: ShareReviewWordStat[];
+  milestones?: ShareMilestoneFilm[];
   username?: string;
   className?: string;
   orientation?: "horizontal" | "vertical";
@@ -115,20 +118,23 @@ const TimeCallout: React.FC<{ hours: number; percent: number; compact?: boolean 
 }) => (
   <div className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-br from-zinc-900 via-zinc-950 to-emerald-950/35 px-6 py-5">
     <div className="absolute right-0 top-0 h-24 w-24 translate-x-1/3 -translate-y-1/3 rounded-full bg-green-400/10 blur-2xl" />
-    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-500">
-      Time on screen
-    </p>
-    <div className="mt-2 flex items-end gap-3">
-      <GiantNumber className={compact ? "text-[54px]" : "text-[72px]"}>
-        {Math.max(0, Math.round(hours)).toLocaleString()}
-      </GiantNumber>
-      <span className="pb-2 text-2xl font-black text-neutral-300">hours</span>
-    </div>
-    <p className="mt-2 text-sm font-bold text-green-300">
-      {Math.max(0, percent)}% of your year went to film
-    </p>
+    <TimeCopy hours={hours} percent={percent} compact={compact} />
   </div>
 );
+
+const TimeCopy: React.FC<{ hours: number; percent: number; compact: boolean }> = ({ hours, percent, compact }) => {
+  const { formatNumber, t } = useI18n();
+  return <>
+    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-neutral-500">{t('share.card.timeOnScreen')}</p>
+    <div className="mt-2 flex items-end gap-3">
+      <GiantNumber className={compact ? "text-[54px]" : "text-[72px]"}>
+        {formatNumber(Math.max(0, Math.round(hours)))}
+      </GiantNumber>
+      <span className="pb-2 text-2xl font-black text-neutral-300">{t('share.card.hours')}</span>
+    </div>
+    <p className="mt-2 text-sm font-bold text-green-300">{t('share.card.yearToFilm').replace('{percent}', String(Math.max(0, percent)))}</p>
+  </>;
+};
 
 const PersonCard: React.FC<{
   label: string;
@@ -139,6 +145,7 @@ const PersonCard: React.FC<{
   fallback: React.ReactNode;
   gradient: string;
 }> = ({ label, name, count, countLabel, imageUrl, fallback, gradient }) => {
+  const { t } = useI18n();
   const [broken, setBroken] = useState(false);
 
   return (
@@ -165,7 +172,7 @@ const PersonCard: React.FC<{
 
         <div className="flex-1 min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-neutral-500">{label}</p>
-          <p className="mt-1.5 text-[22px] font-black leading-tight text-white truncate">{name || "Unknown"}</p>
+          <p className="mt-1.5 text-[22px] font-black leading-tight text-white truncate">{name || t('share.card.unknown')}</p>
           <p className="mt-1 text-sm text-neutral-400">
             <span className="font-bold text-white">{count}</span> {countLabel}
           </p>
@@ -190,12 +197,14 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     peakDecade,
     peakDecadeCount,
     topReviewWords,
+    milestones,
     username,
     className = "",
     orientation = "horizontal",
   },
   ref
 ) {
+  const { formatNumber, t } = useI18n();
   const isVertical = orientation === "vertical";
 
   const crushUrl = useMemo(
@@ -244,23 +253,19 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           {/* Header */}
           <div>
             <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-neutral-400">
-              Year In Film
+              {t('share.card.yearInFilm')}
             </p>
             <h1 className="mt-3 text-[42px] font-black leading-none">
-              Your{" "}
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-purple-400 to-green-400">
-                Letterboxd
-              </span>{" "}
-              Wrapped
+              {t('share.card.yourWrapped')}
             </h1>
           </div>
 
           {/* Hero stat */}
           <div>
-            <SectionLabel>You watched</SectionLabel>
+            <SectionLabel>{t('share.card.youWatched')}</SectionLabel>
             <div className="flex items-start justify-between">
               <GiantNumber className="text-[120px] mt-1">
-                {watchedFilms.toLocaleString()}
+                {formatNumber(watchedFilms)}
               </GiantNumber>
               {username && (
                 <span className="mt-4 text-[15px] font-bold text-neutral-400 tracking-wide">
@@ -268,7 +273,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
                 </span>
               )}
             </div>
-            <p className="mt-2 text-xl font-bold text-neutral-400">films this year</p>
+            <p className="mt-2 text-xl font-bold text-neutral-400">{t('share.card.filmsThisYear')}</p>
           </div>
 
           {/* Divider */}
@@ -277,19 +282,19 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           {/* Person cards */}
           <div className="flex flex-col gap-4">
             <PersonCard
-              label="On-Screen Crush"
+              label={t('share.card.onScreenCrush')}
               name={onScreenCrush.name}
               count={onScreenCrush.count}
-              countLabel="movies together"
+              countLabel={t('share.card.moviesTogether')}
               imageUrl={crushUrl}
               fallback={<Heart className="w-8 h-8" />}
               gradient="bg-gradient-to-br from-purple-600/[0.18] to-fuchsia-600/[0.10]"
             />
             <PersonCard
-              label="Favorite Director"
+              label={t('share.card.favoriteDirector')}
               name={favoriteDirector.name}
               count={favoriteDirector.count}
-              countLabel="movies directed"
+              countLabel={t('share.card.moviesDirected')}
               imageUrl={directorUrl}
               fallback={<User className="w-8 h-8" />}
               gradient="bg-gradient-to-br from-emerald-600/[0.18] to-teal-600/[0.10]"
@@ -346,12 +351,12 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
     );
   }
 
-  /* ═══════ HORIZONTAL (1200×675) ═══════ */
+  /* ═══════ HORIZONTAL (1200×675 - Schema B) ═══════ */
   return (
     <div
       ref={ref}
       data-export-root="true"
-      className={cx("w-[1200px] h-[675px] text-white relative overflow-hidden", className)}
+      className={cx("w-[1200px] h-[675px] text-white relative overflow-hidden flex flex-col justify-between p-10", className)}
       style={{
         background: BG,
         fontFamily: "'Avenir Next', Manrope, 'Segoe UI', system-ui, sans-serif",
@@ -368,61 +373,62 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
       />
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500/50 via-purple-500/50 to-green-500/50" />
 
-      <div className="relative z-10 h-full grid grid-cols-12 gap-8 px-10 py-10">
-        {/* LEFT (7 cols) */}
-        <div className="col-span-7 flex flex-col justify-between">
-          {/* Header */}
-          <div>
-            <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-neutral-400">
-              Year In Film
-            </p>
-            <h1 className="mt-2 text-[48px] font-black leading-none">
-              Your{" "}
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-purple-400 to-green-400">
-                Letterboxd
-              </span>{" "}
-              Wrapped
-            </h1>
-          </div>
+      {/* Header line */}
+      <div className="flex items-center justify-between z-10">
+        <div>
+          <p className="text-[13px] font-bold uppercase tracking-[0.22em] text-neutral-400">
+            Year In Film
+          </p>
+          <h1 className="text-3xl font-black leading-none">
+            Your <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-purple-400 to-green-400">Letterboxd</span> Wrapped
+          </h1>
+        </div>
+        {username && (
+          <span className="text-sm font-bold text-neutral-400">@{username}</span>
+        )}
+      </div>
 
-          {/* Hero number */}
+      {/* Main content area */}
+      <div className="relative z-10 flex flex-col gap-5 my-auto">
+        {/* Headline + Niche Score box */}
+        <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-5">
           <div>
             <SectionLabel>You watched</SectionLabel>
-            <div className="flex items-start justify-between">
-              <GiantNumber className="text-[110px] mt-1">
-                {watchedFilms.toLocaleString()}
-              </GiantNumber>
-              {username && (
-                <span className="mt-4 text-[14px] font-bold text-neutral-400 tracking-wide">
-                  @{username}
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-lg font-bold text-neutral-400">films this year</p>
+            <GiantNumber className="text-5xl mt-1">
+              you watched {watchedFilms.toLocaleString()} films
+            </GiantNumber>
           </div>
-
-          {/* Pills row 1 */}
-          <div className="grid grid-cols-4 gap-3">
-            <StatPill icon={<Clock size={16} />} label="Days" value={`${spentDays}`} accent="text-green-400" />
-            <StatPill icon={<Star size={16} />} label="Rating" value={`${mostCommonRating}★`} accent="text-yellow-400" />
-            <StatPill icon={<Film size={16} />} label="Scale" value={`${cinemaScale.toFixed(1)}`} accent="text-violet-400" />
-            {reviewWordsText ? (
-              <StatPill icon={<Calendar size={16} />} label="Review" value={reviewWordsText} accent="text-purple-300" />
-            ) : (
-              <StatPill icon={<Calendar size={16} />} label="Decade" value={peakDecade} accent="text-purple-400" />
-            )}
+          <div className="flex flex-col items-end border-l border-white/10 pl-8">
+            <span className="text-xs font-bold uppercase tracking-wider text-violet-400">Niche Score</span>
+            <span className="text-4xl font-black text-white tabular-nums">
+              %{Math.round(cinemaScale)}
+            </span>
           </div>
-
-          <TimeCallout hours={spentHours} percent={timePercent} compact />
-
-          {/* Footer */}
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-neutral-600">
-            movieswrapped.com
-          </p>
         </div>
 
-        {/* RIGHT (5 cols) — Person cards */}
-        <div className="col-span-5 flex flex-col justify-center gap-5">
+        {/* Milestones row */}
+        {milestones && milestones.length > 0 && (
+          <MilestonesRow
+            data={{
+              onScreenCrush,
+              favoriteDirector,
+              watchedFilms,
+              spentDays,
+              spentHours,
+              timePercent,
+              cinemaScale,
+              personaLabel: "",
+              minutesAverage,
+              mostCommonRating,
+              peakDecade,
+              peakDecadeCount,
+              milestones,
+            }}
+          />
+        )}
+
+        {/* Person cards */}
+        <div className="grid grid-cols-2 gap-5">
           <PersonCard
             label="On-Screen Crush"
             name={onScreenCrush.name}
@@ -443,6 +449,8 @@ const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>(function Shar
           />
         </div>
       </div>
+
+      <Wordmark orientation="horizontal" />
     </div>
   );
 });

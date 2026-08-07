@@ -17,6 +17,8 @@ from app.config import settings
 from app.services import dashboard_settings
 from app.worker.desktop_scrape_worker import WorkerConfig, _worker_meta
 
+from datetime import datetime, timedelta, timezone
+
 WORKER_TOKEN = "test-worker-secret"
 AUTH = {"X-Worker-Token": WORKER_TOKEN}
 ADMIN_KEY = "test-admin-secret-rotated"
@@ -28,6 +30,28 @@ def test_worker_reports_direct_cloudscraper_transport(monkeypatch):
     monkeypatch.setenv("WORKER_TOKEN", WORKER_TOKEN)
     cfg = WorkerConfig()
     assert _worker_meta(cfg)["scrape_transport"] == "direct_cloudscraper"
+
+
+def test_worker_meta_includes_identity_and_load(monkeypatch):
+    """Heartbeat payload must carry worker_id/version/active_jobs/max_concurrency."""
+    monkeypatch.setenv("WORKER_BACKEND_URL", "https://backend.example.com")
+    monkeypatch.setenv("WORKER_TOKEN", WORKER_TOKEN)
+    cfg = WorkerConfig()
+    meta = _worker_meta(cfg)
+    assert meta["worker_id"]
+    assert meta["version"]
+    assert meta["active_jobs"] == 0
+    assert meta["max_concurrency"] == 1
+
+
+def test_worker_config_identity_is_env_overrideable(monkeypatch):
+    monkeypatch.setenv("WORKER_ID", "custom-worker")
+    monkeypatch.setenv("WORKER_VERSION", "2.1.0")
+    import importlib
+    from app.worker import worker_config
+    worker_config = importlib.reload(worker_config)
+    assert worker_config.WORKER_ID == "custom-worker"
+    assert worker_config.WORKER_VERSION == "2.1.0"
 
 
 def test_requeue_stale_claims_recovers_dead_worker_jobs():
@@ -180,6 +204,154 @@ async def _beat(client: AsyncClient):
         json={"worker_protocol_version": settings.worker_protocol_version, "worker_git_sha": "test-worker"},
     )
     assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_upserts_ops_workers_not_event_log(client: AsyncClient, monkeypatch):
+    """A heartbeat must upsert ops_workers and NOT write ops_worker_events."""
+    from app.routes import worker as worker_routes
+
+    upserts = []
+    logged = []
+    async def fake_upsert(table, row, *, on_conflict):
+        upserts.append((table, row, on_conflict))
+    async def fake_log(event_type, meta=None):
+        logged.append(event_type)
+    monkeypatch.setattr(worker_routes.supabase_ops, "upsert", fake_upsert)
+    monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
+
+    r = await client.post(
+        "/api/worker/heartbeat",
+        headers=AUTH,
+        json={"worker_id": "desktop-test", "version": "1.0.0", "active_jobs": 1, "max_concurrency": 1},
+    )
+    assert r.status_code == 200
+    assert len(upserts) == 1
+    table, row, on_conflict = upserts[0]
+    assert table == "ops_workers"
+    assert on_conflict == "worker_id"
+    assert row["worker_id"] == "desktop-test"
+    assert row["version"] == "1.0.0"
+    assert row["active_jobs"] == 1
+    assert row["max_concurrency"] == 1
+    assert row["status"] == "online"
+    assert "last_seen_at" in row
+    assert logged == []  # heartbeat must not create an event-log row
+
+
+@pytest.mark.asyncio
+async def test_startup_and_shutdown_log_standard_event_types(client: AsyncClient, monkeypatch):
+    """Lifecycle events must use worker_started / worker_stopped, not startup/shutdown."""
+    from app.routes import worker as worker_routes
+
+    logged = []
+    async def fake_log(event_type, meta=None):
+        logged.append((event_type, meta or {}))
+    monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
+
+    r1 = await client.post("/api/worker/startup", headers=AUTH, json={"worker_id": "desktop-test"})
+    r2 = await client.post("/api/worker/shutdown", headers=AUTH, json={"worker_id": "desktop-test"})
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert [et for et, _ in logged] == ["worker_started", "worker_stopped"]
+
+
+@pytest.mark.asyncio
+async def test_job_claim_logs_job_claimed_event(client: AsyncClient, monkeypatch):
+    """Claiming a scrape job must log job_claimed with the task id."""
+    from app.routes import worker as worker_routes
+
+    logged = []
+    async def fake_log(event_type, meta=None):
+        logged.append((event_type, meta or {}))
+    monkeypatch.setattr(worker_routes, "log_worker_event", fake_log)
+
+    task_id = task_manager.create_scrape_job("someuser")
+    claim = await client.get("/api/worker/next", headers=AUTH)
+    assert claim.status_code == 200
+    assert claim.json()["job"]["task_id"] == task_id
+    assert any(et == "job_claimed" for et, _ in logged)
+    meta = next(m for et, m in logged if et == "job_claimed")
+    assert meta["task_id"] == task_id
+    assert meta["username"] == "someuser"
+
+
+@pytest.mark.asyncio
+async def test_health_workers_reports_offline_and_queue_stats(client: AsyncClient, monkeypatch):
+    """GET /api/health/workers must return per-worker status + queue stats."""
+    from app.routes import worker as worker_routes
+
+    async def fake_select(table, params):
+        assert table == "ops_workers"
+        now = datetime.now(timezone.utc)
+        return [
+            {"worker_id": "w1", "last_seen_at": (now - timedelta(minutes=2)).isoformat(), "status": "online"},  # recent
+            {"worker_id": "w2", "last_seen_at": (now - timedelta(hours=2)).isoformat(), "status": "offline"},  # stale
+        ]
+    monkeypatch.setattr(worker_routes.supabase_ops, "select", fake_select)
+    # Pretend Supabase is configured so the select path runs (property is
+    # read-only on the pydantic model, so patch the class property).
+    from unittest.mock import PropertyMock
+    monkeypatch.setattr(type(worker_routes.settings), "supabase_enabled", PropertyMock(return_value=True))
+
+    task_manager._tasks.clear()
+    task_id = task_manager.create_scrape_job("user1")
+    task_manager._tasks[task_id].created_at = datetime.now(timezone.utc) - timedelta(minutes=30)
+    task_manager.create_watchlist_compare_job(["u1", "u2"])
+    task_manager.create_scrape_job("user2")
+
+    r = await client.get("/api/health/workers")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["queue_depth"] == 3
+    assert body["oldest_queued_age_seconds"] >= 29 * 60
+    by_id = {w["worker_id"]: w for w in body["workers"]}
+    assert by_id["w1"]["status"] == "online"
+    assert by_id["w2"]["status"] == "offline"
+    task_manager._tasks.clear()
+
+
+@pytest.mark.asyncio
+async def test_test_alert_requires_secret_and_sends(client: AsyncClient, monkeypatch):
+    """POST /api/health/test-alert must 401 without the secret and send when authorized."""
+    from app.routes import worker as worker_routes
+
+    monkeypatch.setattr(worker_routes.settings, "health_alert_secret", "test-alert-secret")
+    sent = []
+    async def fake_send_alert(message):
+        sent.append(message)
+        return True
+    monkeypatch.setattr(worker_routes, "send_alert", fake_send_alert)
+
+    # No secret header → 401.
+    r = await client.post("/api/health/test-alert")
+    assert r.status_code == 401
+    assert sent == []
+
+    # Wrong secret → 401.
+    r = await client.post("/api/health/test-alert", headers={"X-Health-Alert-Secret": "wrong"})
+    assert r.status_code == 401
+
+    # Correct secret → sends.
+    r = await client.post("/api/health/test-alert", headers={"X-Health-Alert-Secret": "test-alert-secret"})
+    assert r.status_code == 200
+    assert r.json()["delivered"] is True
+    assert len(sent) == 1
+    assert "Test alert" in sent[0]
+
+
+@pytest.mark.asyncio
+async def test_test_alert_disabled_without_secret_config(client: AsyncClient):
+    """With no health_alert_secret configured the endpoint must 404 (disabled)."""
+    from app.routes import worker as worker_routes
+
+    # Ensure unset for this test.
+    original = worker_routes.settings.health_alert_secret
+    worker_routes.settings.health_alert_secret = ""
+    try:
+        r = await client.post("/api/health/test-alert", headers={"X-Health-Alert-Secret": "anything"})
+        assert r.status_code == 404
+    finally:
+        worker_routes.settings.health_alert_secret = original
 
 
 async def _complete_raw_watchlist_request(client: AsyncClient, request_coro, raw: dict):
@@ -742,7 +914,7 @@ async def test_supervisor_report_does_not_pollute_worker_heartbeat(client: Async
 @pytest.mark.asyncio
 async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     await client.post("/api/worker/startup", headers=AUTH, json={"self_test_username": "semihmutsuz"})
-    r = await client.get("/admin/dashboard", headers=ADMIN_AUTH)
+    r = await client.get("/admin/worker", headers=ADMIN_AUTH)
     assert r.status_code == 200
     html = r.text
     assert "Desktop Worker" in html
@@ -751,10 +923,9 @@ async def test_admin_dashboard_renders_worker_panel(client: AsyncClient):
     assert "Pause Jobs" in html
     assert "Restart Worker" in html
     assert "Settings Store" in html
-    assert "Durable ops dashboard" in html
     assert "Supervisor Log Tail" in html
-    assert "refreshAnalysisRuns" in html
-    assert "/admin/api/runs" in html
+    assert "refreshWorkerStatus" in html
+    assert "/admin/api/worker" in html
 
 
 @pytest.mark.asyncio
@@ -958,7 +1129,7 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     assert run["error_stage"] == "letterboxd_or_scrape"
     assert run["error_message"] == "Letterboxd blocked the desktop worker."
 
-    dashboard = await client.get("/admin/dashboard", headers=ADMIN_AUTH)
+    dashboard = await client.get("/admin/analysis", headers=ADMIN_AUTH)
     assert dashboard.status_code == 200
     assert "letterboxd_or_scrape" in dashboard.text
 

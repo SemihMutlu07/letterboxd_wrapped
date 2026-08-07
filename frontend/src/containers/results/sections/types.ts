@@ -55,6 +55,8 @@ export interface StatsData {
   };
   /** Explicit scrape window selected by the user. */
   analysis_period?: AnalysisPeriodMetadata;
+  /** Same shape, computed over the last 12 months only. Present on scrape-profile results only. */
+  last_12_months?: StatsData;
   cinematic_persona?: {
     persona: string;
     description: string;
@@ -173,6 +175,14 @@ export interface StatsData {
     year?: number | null;
     poster_path?: string;
     watch_count: number;
+  }[];
+  /** Nth chronologically-watched film for N in (100, 300, 500, 750). Only reached thresholds present. */
+  milestones?: {
+    ordinal: number;
+    title: string;
+    year?: number | null;
+    poster_path?: string;
+    watched_date: string;
   }[];
   /**
    * ISO-2 keyed country data emitted from production_countries TMDB field.

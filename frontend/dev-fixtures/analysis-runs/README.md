@@ -2,17 +2,18 @@
 
 `semihmutsuz.json` is the development payload loaded by `/smt`.
 
-`semihmutsuz-media/` contains the public TMDB poster and person images required
-by the ShareModal sample:
+`semihmutsuz-share-card-media.json` is the deterministic local ShareModal media
+contract. It records exactly:
 
-- the first five rated-film posters used by the share-card film strip;
-- the available first five actor portraits;
-- the first five non-duplicate director portraits.
+- two selected portraits: Woody Allen and Martin Scorsese;
+- the first ten `rated_films` posters. The live card currently renders the first
+  five; the next five are saved for rapid layout iteration.
 
-`scripts/prepare-smt-fixture.mjs` copies both the payload and media into the
-ignored `public/.dev/` directory. Matching `poster_path` and `profile_path`
-values are rewritten to local URLs, so the visual fixture does not depend on a
-running backend or desktop worker.
+`scripts/prepare-smt-fixture.mjs` validates that contract and copies only those
+12 files into the ignored `public/.dev/` directory. Matching `poster_path` and
+`profile_path` values are rewritten to local URLs. The script performs no
+downloads, so the visual fixture does not depend on the network, backend, or
+desktop worker.
 
 When the fixture ranking changes, update the JSON and the corresponding media
 files together. A data-only fixture is not considered visually complete.

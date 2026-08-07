@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 const apiMocks = vi.hoisted(() => ({
   scrapeProfile: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('@/lib/api', () => ({
   parseLetterboxdUsername: vi.fn(),
   scrapeProfile: apiMocks.scrapeProfile,
   testBackend: apiMocks.testBackend,
+  isWorkerFleetEmpty: vi.fn().mockResolvedValue(false),
   ERROR_CODE_HINTS: {},
 }));
 
@@ -65,7 +67,7 @@ describe('LetterboxdLanding persistence consent gate', () => {
 
   async function submitUsername() {
     const user = userEvent.setup();
-    render(<LetterboxdLanding />);
+    render(<I18nProvider locale="en"><LetterboxdLanding /></I18nProvider>);
     await user.type(document.querySelector('input[name="username"]')!, 'alice');
     await user.click(screen.getByRole('button', { name: /analyze/i }));
     await waitFor(() => expect(apiMocks.scrapeProfile).toHaveBeenCalled());
@@ -93,19 +95,26 @@ describe('LetterboxdLanding persistence consent gate', () => {
     });
   });
 
-  it('sends the selected rolling analysis period to the scraper', async () => {
-    const user = userEvent.setup();
-    render(<LetterboxdLanding />);
+  it('always scrapes lifetime — there is no period selector on the landing page', async () => {
+    await submitUsername();
 
-    await user.selectOptions(screen.getByLabelText('Analysis period'), 'month');
-    await user.type(document.querySelector('input[name="username"]')!, 'alice');
-    await user.click(screen.getByRole('button', { name: /analyze/i }));
-
-    await waitFor(() => expect(apiMocks.scrapeProfile).toHaveBeenCalledWith(
+    expect(apiMocks.scrapeProfile).toHaveBeenCalledWith(
       'alice',
-      'month',
+      'lifetime',
       undefined,
       expect.any(Function),
-    ));
+    );
+  });
+
+  it('renders the FAQ section with all six questions from the catalog', () => {
+    render(<I18nProvider locale="en"><LetterboxdLanding /></I18nProvider>);
+
+    expect(screen.getByRole('heading', { name: 'Frequently asked questions' })).toBeInTheDocument();
+    expect(screen.getByText('What is Movies Wrapped?')).toBeInTheDocument();
+    expect(screen.getByText('How do I find my Letterboxd username?')).toBeInTheDocument();
+    expect(screen.getByText('Is my data stored?')).toBeInTheDocument();
+    expect(screen.getByText('How long does it take?')).toBeInTheDocument();
+    expect(screen.getByText('Is it free?')).toBeInTheDocument();
+    expect(screen.getByText('Can I upload a CSV?')).toBeInTheDocument();
   });
 });

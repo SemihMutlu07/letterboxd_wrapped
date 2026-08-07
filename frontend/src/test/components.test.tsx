@@ -1,6 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { I18nProvider } from '@/i18n/I18nProvider';
 
 vi.mock('@/lib/api', () => ({
   compareWatchlists: vi.fn(),
@@ -60,19 +61,19 @@ import UploadZone from '@/components/landing/UploadZone';
 
 describe('UploadZone', () => {
   it('renders upload prompt text', () => {
-    render(<UploadZone onFiles={() => {}} />);
+    render(<I18nProvider locale="en"><UploadZone onFiles={() => {}} /></I18nProvider>);
     expect(screen.getByText(/Begin Your Cinema Reveal/i)).toBeInTheDocument();
     expect(screen.getByText(/Drag a ZIP, CSV files/i)).toBeInTheDocument();
   });
 
   it('has an accessible region label', () => {
-    render(<UploadZone onFiles={() => {}} />);
+    render(<I18nProvider locale="en"><UploadZone onFiles={() => {}} /></I18nProvider>);
     expect(screen.getByRole('region', { name: /upload your letterboxd data/i })).toBeInTheDocument();
   });
 
   it('calls onFiles with dropped files', async () => {
     const onFiles = vi.fn();
-    render(<UploadZone onFiles={onFiles} />);
+    render(<I18nProvider locale="en"><UploadZone onFiles={onFiles} /></I18nProvider>);
     const dropZone = screen.getByTestId('upload-drop-zone');
 
     const file = new File(['content'], 'export.zip', { type: 'application/zip' });
@@ -83,7 +84,7 @@ describe('UploadZone', () => {
   });
 
   it('has a hidden file input that accepts zip and csv', () => {
-    render(<UploadZone onFiles={() => {}} />);
+    render(<I18nProvider locale="en"><UploadZone onFiles={() => {}} /></I18nProvider>);
     const input = document.getElementById('upload-zone-input') as HTMLInputElement;
     expect(input).not.toBeNull();
     expect(input.accept).toContain('.zip');
@@ -120,7 +121,7 @@ describe('WatchlistCompare', () => {
       second_only: [{ title: 'Past Lives', year: '2023', slug: '/film/past-lives/' }],
     });
 
-    render(<WatchlistCompare />);
+    render(<I18nProvider locale="en"><WatchlistCompare /></I18nProvider>);
     await userEvent.type(screen.getByLabelText('First watchlist'), 'alice');
     await userEvent.type(screen.getByLabelText('Second watchlist'), 'bob');
     await userEvent.click(screen.getByRole('button', { name: /compare/i }));
@@ -163,7 +164,7 @@ describe('WatchlistCompare', () => {
       alternatives: [],
     });
 
-    render(<WatchlistCompare />);
+    render(<I18nProvider locale="en"><WatchlistCompare /></I18nProvider>);
     await userEvent.type(screen.getByLabelText('First watchlist'), 'alice');
     await userEvent.type(screen.getByLabelText('Second watchlist'), 'bob');
     await userEvent.click(screen.getByRole('button', { name: /compare/i }));
@@ -171,7 +172,7 @@ describe('WatchlistCompare', () => {
     expect(screen.getByRole('button', { name: /pick one/i })).not.toBeDisabled();
 
     await userEvent.click(screen.getByRole('button', { name: /pick one/i }));
-    expect(await screen.findByText("Tonight's pick")).toBeInTheDocument();
+    expect(await screen.findByText(/Tonight.?.?s pick/i)).toBeInTheDocument();
     expect(screen.getAllByText('Aftersun').length).toBeGreaterThan(0);
   });
 });
@@ -188,7 +189,7 @@ describe('DateNight', () => {
     });
     const scrollIntoView = vi.fn();
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
-    render(<DateNight first="alice" second="bob" />);
+    render(<I18nProvider locale="en"><DateNight first="alice" second="bob" /></I18nProvider>);
 
     await userEvent.click(screen.getByRole('button', { name: /find films/i }));
 
@@ -230,7 +231,7 @@ const ratingDeviationStats: StatsData = {
 
 describe('RatingDeviation', () => {
   it('uses a two-column grid and clipped captions for mobile outlier cards', () => {
-    const { container } = render(<RatingDeviation stats={ratingDeviationStats} />);
+    const { container } = render(<I18nProvider locale="en"><RatingDeviation stats={ratingDeviationStats} /></I18nProvider>);
 
     const grid = container.querySelector('.grid');
     expect(grid?.className).toContain('grid-cols-2');

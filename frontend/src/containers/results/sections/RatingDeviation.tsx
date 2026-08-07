@@ -21,6 +21,7 @@ import { PosterImage } from '@/components/results/Placeholders';
 import FilmModal from './FilmModal';
 import type { StatsData } from './types';
 import type { GateResult } from './section-utils';
+import { useI18n } from '@/i18n/I18nProvider';
 import {
   gateOk,
   gateFail,
@@ -91,6 +92,7 @@ export default function RatingDeviation({ stats }: { stats: StatsData }) {
 }
 
 function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<SubTab>('higher');
   const [selectedFilm, setSelectedFilm] = useState<EnrichedFilm | null>(null);
 
@@ -162,7 +164,7 @@ function RatingDeviationInner({ stats }: { stats: StatsWithAverageRating }) {
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h3 className="text-base font-bold text-white">Your Rating Outliers</h3>
+            <h3 className="text-base font-bold text-white">{t('results.ratingOutliers.title')}</h3>
             <p className="text-xs text-slate-300 mt-0.5">
               Where your rating diverges most from the crowd · your avg ★ {userAvg.toFixed(2)}
             </p>

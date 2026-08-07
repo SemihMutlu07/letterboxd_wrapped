@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { POSTER_GAME_MOVIES, SUGGESTION_ONLY_TITLES, type PosterGameMovie } from '@/lib/posterGameData';
 import { isFuzzyMatch } from '@/lib/fuzzyMatch';
 import { usePixelatedImage } from '@/lib/usePixelatedImage';
+import { useI18n } from '@/i18n/I18nProvider';
 
 const MAX_SUGGESTIONS = 4;
 
@@ -63,6 +64,7 @@ export function PosterGuessGame({
   onCorrectGuess,
   revealedAnswer,
 }: PosterGameProps) {
+  const { t } = useI18n();
   const [guess, setGuess] = useState('');
   const [feedback, setFeedback] = useState<'wrong' | null>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -165,12 +167,12 @@ export function PosterGuessGame({
   return (
     <div className="rounded-2xl border border-orange-400/30 bg-orange-500/10 p-4">
       <div className="mb-3 flex items-center justify-between text-xs uppercase tracking-wide text-orange-300/80">
-        <span>Guess the poster</span>
+        <span>{t('landing.poster.title')}</span>
         <span className="relative inline-block">
           <span
             className={`inline-block ${justScored ? 'animate-[score-pop_1.1s_ease-out]' : ''}`}
           >
-            Score: {score}
+            {t('landing.poster.score').replace('{score}', String(score))}
           </span>
           {justScored && (
             <span
@@ -180,7 +182,9 @@ export function PosterGuessGame({
                   : 'text-base text-orange-300'
               }`}
             >
-              {earnedPoints >= 100 ? `PERFECT +${earnedPoints}` : `+${earnedPoints}`}
+              {earnedPoints >= 100
+                ? t('landing.poster.perfect').replace('{points}', String(earnedPoints))
+                : t('landing.poster.points').replace('{points}', String(earnedPoints))}
             </span>
           )}
         </span>
@@ -197,12 +201,12 @@ export function PosterGuessGame({
           )}
           {!loaded && !error && (
             <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">
-              Loading…
+              {t('landing.poster.loading')}
             </div>
           )}
           {error && (
             <div className="absolute inset-0 flex items-center justify-center px-3 text-center text-sm text-slate-400">
-              Poster unavailable
+              {t('landing.poster.unavailable')}
             </div>
           )}
         </div>
@@ -235,7 +239,7 @@ export function PosterGuessGame({
               }}
               onBlur={() => setTimeout(() => setSuggestionsOpen(false), 100)}
               onKeyDown={handleInputKeyDown}
-              placeholder="What movie is this? (start typing for suggestions)"
+              placeholder={t('landing.poster.placeholder')}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
@@ -252,7 +256,7 @@ export function PosterGuessGame({
               type="submit"
               className="shrink-0 rounded-lg bg-orange-500/90 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-500"
             >
-              Guess
+              {t('landing.poster.guess')}
             </button>
           </form>
 
@@ -275,7 +279,7 @@ export function PosterGuessGame({
                 </li>
               ))}
               <li aria-hidden="true" className="hidden select-none border-t border-slate-700 px-3 py-1.5 text-[11px] text-slate-500 sm:block">
-                ↑↓ browse · Enter guess · Esc close
+                {t('landing.poster.keyboardHelp')}
               </li>
             </ul>
           )}
@@ -284,7 +288,7 @@ export function PosterGuessGame({
 
       {feedback === 'wrong' && !revealedAnswer && (
         <div className="mt-2 text-center">
-          <p className="text-xs text-orange-300/80">Not quite — poster sharpened.</p>
+          <p className="text-xs text-orange-300/80">{t('landing.poster.wrong')}</p>
           {hint && (
             <p className="mt-1 font-mono text-sm tracking-widest text-orange-200/90">{hint}</p>
           )}

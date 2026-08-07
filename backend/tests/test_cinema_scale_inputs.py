@@ -49,7 +49,7 @@ class TestComputeCinemaScaleInputs:
         assert result["total_films"] == 2
 
     def test_output_is_directly_usable_by_compute_cinema_scale(self):
-        from app.analysis_utils import compute_cinema_scale
+        from app.analysis_utils import ANALYSIS_VERSION, compute_cinema_scale
 
         films_enriched = pd.DataFrame({
             "countries": [["US"], ["FR"]],
@@ -60,4 +60,5 @@ class TestComputeCinemaScaleInputs:
         inputs = compute_cinema_scale_inputs(films_enriched, Counter({"Drama": 2}), Counter({"Dir": 2}))
         result = compute_cinema_scale(**inputs)
         assert 0 <= result["score"] <= 100
-        assert result["model_version"] == "cine_v2"
+        assert result["model_version"] == ANALYSIS_VERSION
+        assert ANALYSIS_VERSION == "cine_v2"  # single source of truth stays stable

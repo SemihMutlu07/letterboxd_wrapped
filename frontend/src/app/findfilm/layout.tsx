@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import RootDocument from '@/app/RootDocument';
+
 // Hidden page: reachable by direct URL only, never linked or indexed.
 export const metadata: Metadata = {
   title: 'Find a film',
@@ -8,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function FindFilmLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <RootDocument locale="en">{children}</RootDocument>;
 }

@@ -402,6 +402,16 @@ def record_worker_heartbeat(meta: Optional[Dict[str, Any]] = None) -> None:
         _last_worker_meta = {**_last_worker_meta, **meta}
 
 
+def get_last_worker_id() -> Optional[str]:
+    """Worker_id from the most recent heartbeat meta, if any.
+
+    Used when persisting runs so ops_runs.worker_id links the run to the
+    worker that actually executed it (desktop-worker runs only).
+    """
+    worker_id = _last_worker_meta.get("worker_id")
+    return str(worker_id) if worker_id else None
+
+
 def record_worker_startup(meta: Optional[Dict[str, Any]] = None) -> None:
     global _last_worker_started_at, _last_worker_meta
     _last_worker_started_at = datetime.now(timezone.utc)
@@ -645,6 +655,20 @@ def get_worker_status(max_age_seconds: int, *, expected_protocol_version: int = 
             }
             for t in sorted(failed, key=lambda task: task.failed_at or task.created_at, reverse=True)
         ][:10],
+    }
+
+
+def get_worker_queue_stats() -> Dict[str, Any]:
+    """Queue depth + age of the oldest queued job, for health/alerting."""
+    now = datetime.now(timezone.utc)
+    queued = sorted(
+        (t for t in _tasks.values() if t.kind in {"scrape", "watchlist"} and t.status == "pending" and not t.claimed),
+        key=lambda t: t.created_at,
+    )
+    oldest = queued[0].created_at if queued else None
+    return {
+        "queue_depth": len(queued),
+        "oldest_queued_age_seconds": round((now - oldest).total_seconds(), 1) if oldest else 0,
     }
 
 

@@ -1,0 +1,56 @@
+{
+  "people": [
+    {
+      "role": "on_screen_crush",
+      "name": "Woody Allen",
+      "file": "wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+    },
+    {
+      "role": "favorite_director",
+      "name": "Martin Scorsese",
+      "file": "g3DjfKsgZQWZiw30I20hZVk1oMX.jpg"
+    }
+  ],
+  "posters": [
+    {
+      "title": "Prisoners",
+      "file": "jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg"
+    },
+    {
+      "title": "Yellow Letters",
+      "file": "8Sxp3QIdamyoAfgLsUaGCQ1Z1ID.jpg"
+    },
+    {
+      "title": "thirtyfour",
+      "file": "sygbYtKWMBPphvXBVKTuIJAEMlW.jpg"
+    },
+    {
+      "title": "A Soccer Game Journal",
+      "file": "um2klyo0wXEf6ydi5SE0j2TYpxe.jpg"
+    },
+    {
+      "title": "Rear Window",
+      "file": "ILVF0eJxHMddjxeQhswFtpMtqx.jpg"
+    },
+    {
+      "title": "Another Woman",
+      "file": "ds4CcnlACh0r1r3VGa7y85dz72R.jpg"
+    },
+    {
+      "title": "La Commune (Paris, 1871)",
+      "file": "rz39nFOxbeHAHx56ac4ao27OJbw.jpg"
+    },
+    {
+      "title": "The Supplement",
+      "file": "daHZGSCMeOASEgjxVqZT2a0yikq.jpg"
+    },
+    {
+      "title": "My Dead Dad's Porno Tapes",
+      "file": "4gfJQrD1Hk1wowbk7s0ZPIzFdj2.jpg"
+    },
+    {
+      "title": "The Worst Person in the World",
+      "file": "1NxGNQchGBTHXJ6RShLY1IlZqWn.jpg"
+    }
+  ]
+}
