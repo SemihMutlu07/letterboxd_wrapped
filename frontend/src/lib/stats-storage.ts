@@ -62,6 +62,10 @@ export function persistStats(
         delete payload[field];
         dropped.push(field);
       }
+      const nested = payload.last_12_months as Record<string, unknown> | undefined;
+      if (nested && field in nested) {
+        delete nested[field];
+      }
     }
   }
 }

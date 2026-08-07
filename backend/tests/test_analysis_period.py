@@ -1,5 +1,5 @@
 """Contracts for bounded public-profile Wrapped analyses."""
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -27,7 +27,7 @@ async def api_client():
 
 
 @pytest.mark.asyncio
-async def test_scrape_route_defaults_to_year_and_rejects_invalid_period(api_client, monkeypatch):
+async def test_scrape_route_defaults_to_lifetime_and_rejects_invalid_period(api_client, monkeypatch):
     from app.config import settings
 
     original_token = settings.worker_token
@@ -36,7 +36,7 @@ async def test_scrape_route_defaults_to_year_and_rejects_invalid_period(api_clie
         with patch("app.routes.analyze.scrape_and_analyze", new=AsyncMock(return_value={"total_films": 1})) as analyze:
             response = await api_client.post("/api/scrape-profile", json={"username": "semih"})
         assert response.status_code == 200
-        assert analyze.await_args.kwargs["analysis_period"] == "year"
+        assert analyze.await_args.kwargs["analysis_period"] == "lifetime"
 
         invalid = await api_client.post(
             "/api/scrape-profile", json={"username": "semih", "analysis_period": "week"}
@@ -66,7 +66,7 @@ async def test_scrape_route_maps_empty_bounded_period_to_actionable_error(api_cl
 
 
 def test_analysis_period_defaults_to_year_and_rejects_unknown_values():
-    assert normalize_analysis_period(None) == "year"
+    assert normalize_analysis_period(None) == "lifetime"
     assert normalize_analysis_period("year") == "year"
     assert normalize_analysis_period("month") == "month"
     assert normalize_analysis_period("lifetime") == "lifetime"
@@ -157,6 +157,70 @@ async def test_lifetime_pipeline_preserves_grid_films(monkeypatch):
     assert captured["diary_cutoff"] is None
     assert captured["titles"] == ["Dated", "Undated"]
     assert stats["analysis_period"]["start_date"] is None
+
+
+@pytest.mark.asyncio
+async def test_lifetime_pipeline_attaches_last_12_months_window(monkeypatch):
+    today = date.today()
+    recent_date = (today - timedelta(days=30)).isoformat()
+    old_date = (today - timedelta(days=800)).isoformat()
+    sources = scraper.ProfileScrapeSources(
+        diary=[
+            {"title": "Recent", "year": "2026", "rating": 4, "watch_date": recent_date},
+            {"title": "Old", "year": "2023", "rating": 3, "watch_date": old_date},
+        ],
+        grid=[],
+    )
+
+    async def fake_sources(*_args, **_kwargs):
+        return sources
+
+    seen_watched_titles = []
+
+    async def fake_analysis(_session, csv_files, *_args):
+        import pandas as pd
+        titles = pd.read_csv(csv_files["watched.csv"])["Name"].tolist()
+        seen_watched_titles.append(titles)
+        return {"total_films": len(titles), "all_films": []}
+
+    monkeypatch.setattr("app.services.scrape_pipeline.scrape_profile_sources", fake_sources)
+    monkeypatch.setattr("app.services.scrape_pipeline.process_comprehensive_letterboxd_data", fake_analysis)
+
+    stats = await scrape_and_analyze(object(), "semih", analysis_period="lifetime")
+
+    assert seen_watched_titles[0] == ["Recent", "Old"]
+    assert seen_watched_titles[1] == ["Recent"]
+    assert stats["total_films"] == 2
+    assert stats["last_12_months"]["analysis_period"]["key"] == "year"
+    assert stats["last_12_months"]["total_films"] == 1
+
+
+@pytest.mark.asyncio
+async def test_lifetime_pipeline_omits_last_12_months_when_window_is_empty(monkeypatch):
+    today = date.today()
+    old_date = (today - timedelta(days=800)).isoformat()
+    sources = scraper.ProfileScrapeSources(
+        diary=[{"title": "Old", "year": "2023", "rating": 3, "watch_date": old_date}],
+        grid=[],
+    )
+
+    async def fake_sources(*_args, **_kwargs):
+        return sources
+
+    call_count = 0
+
+    async def fake_analysis(_session, _csv_files, *_args):
+        nonlocal call_count
+        call_count += 1
+        return {"total_films": 1, "all_films": []}
+
+    monkeypatch.setattr("app.services.scrape_pipeline.scrape_profile_sources", fake_sources)
+    monkeypatch.setattr("app.services.scrape_pipeline.process_comprehensive_letterboxd_data", fake_analysis)
+
+    stats = await scrape_and_analyze(object(), "semih", analysis_period="lifetime")
+
+    assert "last_12_months" not in stats
+    assert call_count == 1
 
 
 def _patch_sources(monkeypatch, sources):

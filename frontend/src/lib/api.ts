@@ -426,7 +426,7 @@ export async function isWorkerFleetEmpty(): Promise<boolean> {
 // Either way the caller receives { status, stats }.
 export async function scrapeProfile(
   username: string,
-  analysisPeriod: AnalysisPeriod = 'year',
+  analysisPeriod: AnalysisPeriod = 'lifetime',
   signal?: AbortSignal,
   onProgress?: (p: ScrapeProgress) => void,
 ): Promise<ScrapeProfileResult> {

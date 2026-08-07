@@ -55,6 +55,8 @@ export interface StatsData {
   };
   /** Explicit scrape window selected by the user. */
   analysis_period?: AnalysisPeriodMetadata;
+  /** Same shape, computed over the last 12 months only. Present on scrape-profile results only. */
+  last_12_months?: StatsData;
   cinematic_persona?: {
     persona: string;
     description: string;

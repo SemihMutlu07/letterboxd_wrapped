@@ -33,9 +33,10 @@ export type SectionId =
   | 'cast_grid'
   | 'rating_deviation'
   | 'countries_section'
-  | 'world_map';
+  | 'world_map'
+  | 'stats_window';
 
-export type SectionToggle = 'most_watched' | 'highest_rated';
+export type SectionToggle = 'most_watched' | 'highest_rated' | 'lifetime' | 'year';
 
 /** Fire once when the section scrolls into view. Pre-consent queue (always allowed). */
 export function trackSectionViewed(sectionId: SectionId): void {

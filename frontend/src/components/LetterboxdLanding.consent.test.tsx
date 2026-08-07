@@ -95,20 +95,15 @@ describe('LetterboxdLanding persistence consent gate', () => {
     });
   });
 
-  it('sends the selected rolling analysis period to the scraper', async () => {
-    const user = userEvent.setup();
-    render(<I18nProvider locale="en"><LetterboxdLanding /></I18nProvider>);
+  it('always scrapes lifetime — there is no period selector on the landing page', async () => {
+    await submitUsername();
 
-    await user.selectOptions(screen.getByLabelText('Analysis period'), 'month');
-    await user.type(document.querySelector('input[name="username"]')!, 'alice');
-    await user.click(screen.getByRole('button', { name: /analyze/i }));
-
-    await waitFor(() => expect(apiMocks.scrapeProfile).toHaveBeenCalledWith(
+    expect(apiMocks.scrapeProfile).toHaveBeenCalledWith(
       'alice',
-      'month',
+      'lifetime',
       undefined,
       expect.any(Function),
-    ));
+    );
   });
 
   it('renders the FAQ section with all six questions from the catalog', () => {

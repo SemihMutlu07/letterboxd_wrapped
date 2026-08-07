@@ -10,7 +10,6 @@ import {
   parseLetterboxdUsername,
   scrapeProfile,
   testBackend,
-  type AnalysisPeriod,
   type ScrapeProgress,
   isWorkerFleetEmpty,
 } from '@/lib/api';
@@ -176,7 +175,6 @@ export default function LetterboxdLanding() {
   const [usernameInput, setUsernameInput] = useState('');
   const [usernameFocused, setUsernameFocused] = useState(false);
   const usernamePlaceholder = useTypewriterPlaceholder(USERNAME_PLACEHOLDER_EXAMPLES, !usernameFocused && usernameInput.length === 0);
-  const [analysisPeriod, setAnalysisPeriod] = useState<AnalysisPeriod>('year');
   const [error, setError] = useState<NormalizedError | null>(null);
   const [backendOffline, setBackendOffline] = useState(false);
   const [, setDetectedUsername] = useState<string | null>(null);
@@ -480,7 +478,7 @@ export default function LetterboxdLanding() {
     shuffledDeckRef.current = [];
     deckIndexRef.current = 0;
     setError(null);
-    trackEvent('analyze_started', { username, method: 'scrape', analysis_period: analysisPeriod });
+    trackEvent('analyze_started', { username, method: 'scrape', analysis_period: 'lifetime' });
     const destination = resultPath(username, locale);
     router.prefetch(destination);
 
@@ -499,7 +497,7 @@ export default function LetterboxdLanding() {
       startedAt = performance.now();
       // The desktop worker scrapes the full profile from a residential IP.
       const method = 'scrape' as const;
-      const result = await scrapeProfile(username, analysisPeriod, undefined, setScrapeProgress);
+      const result = await scrapeProfile(username, 'lifetime', undefined, setScrapeProgress);
       const returnedUsername = (result.stats as { scraped_username?: string })?.scraped_username;
       if (returnedUsername && returnedUsername !== username) {
         throw new Error(`Username mismatch: requested @${username}, got @${returnedUsername}`);
@@ -546,7 +544,7 @@ export default function LetterboxdLanding() {
         });
       }
     }
-  }, [analysisPeriod, locale, router, usernameInput]);
+  }, [locale, router, usernameInput]);
 
   const handleCancel = useCallback(() => {
     setIsUploading(false);
@@ -667,22 +665,6 @@ export default function LetterboxdLanding() {
                     {t('landing.username.analyze')} →
                   </button>
                 </div>
-
-                <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-2 text-left">
-                  <span>
-                    <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">{t('landing.period.label')}</span>
-                    <span className="mt-0.5 block text-xs text-white/65">{t('landing.period.description')}</span>
-                  </span>
-                  <select
-                    aria-label={t('landing.period.label')}
-                    value={analysisPeriod}
-                    onChange={(event) => setAnalysisPeriod(event.target.value as AnalysisPeriod)}
-                    className="min-h-10 rounded-lg border border-orange-400/25 bg-[#1e252d] px-3 text-sm font-semibold text-orange-300 outline-none focus:border-orange-400"
-                  >
-                    <option value="month">{t('landing.period.month')}</option>
-                    <option value="year">{t('landing.period.year')}</option>
-                  </select>
-                </label>
               </form>
 
             </div>

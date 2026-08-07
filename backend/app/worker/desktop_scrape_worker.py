@@ -479,7 +479,7 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     username = job["username"]
     avatar_only = bool(job.get("avatar_only"))
     options = job.get("options") if isinstance(job.get("options"), dict) else {}
-    analysis_period = str(options.get("analysis_period") or "year")
+    analysis_period = str(options.get("analysis_period") or "lifetime")
     started = monotonic()
     trace = TraceBuffer()
     trace.add(
