@@ -48,6 +48,11 @@ export function persistStats(
   storage.removeItem(STATS_STORAGE_KEY);
 
   const payload: Record<string, unknown> = { ...stats };
+  // Clone the nested window too, so shedding from it below never mutates the
+  // caller's original stats object (payload started as only a shallow copy).
+  if (payload.last_12_months && typeof payload.last_12_months === 'object') {
+    payload.last_12_months = { ...(payload.last_12_months as Record<string, unknown>) };
+  }
   const dropped: string[] = [];
 
   for (let attempt = 0; ; attempt++) {
@@ -58,14 +63,17 @@ export function persistStats(
       if (!isQuotaError(err)) throw err;
       if (attempt >= SHEDDABLE_FIELDS.length) throw new StatsTooLargeError();
       const field = SHEDDABLE_FIELDS[attempt];
+      let shed = false;
       if (field in payload) {
         delete payload[field];
-        dropped.push(field);
+        shed = true;
       }
       const nested = payload.last_12_months as Record<string, unknown> | undefined;
       if (nested && field in nested) {
         delete nested[field];
+        shed = true;
       }
+      if (shed) dropped.push(field);
     }
   }
 }
