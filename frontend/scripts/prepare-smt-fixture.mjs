@@ -4,7 +4,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const frontendDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const destinationDir = resolve(frontendDir, 'public/.dev');
+const destinationDir = resolve(frontendDir, 'public/demo');
 const destination = resolve(destinationDir, 'smt-fixture.json');
 const mediaDestination = resolve(destinationDir, 'smt-media');
 
@@ -31,7 +31,7 @@ function localizeFixtureMedia(value, mediaFiles) {
         typeof item === 'string' &&
         mediaFiles.has(basename(item))
       ) {
-        return [key, `/.dev/smt-media/${basename(item)}`];
+        return [key, `/demo/smt-media/${basename(item)}`];
       }
       return [key, localizeFixtureMedia(item, mediaFiles)];
     }),

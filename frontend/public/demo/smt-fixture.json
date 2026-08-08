@@ -966,7 +966,7 @@
           "countries": [
             "Canada"
           ],
-          "poster_path": "/.dev/smt-media/4gfJQrD1Hk1wowbk7s0ZPIzFdj2.jpg",
+          "poster_path": "/demo/smt-media/4gfJQrD1Hk1wowbk7s0ZPIzFdj2.jpg",
           "average_rating": 3.6
         },
         {
@@ -1132,7 +1132,7 @@
             "Germany",
             "Turkey"
           ],
-          "poster_path": "/.dev/smt-media/8Sxp3QIdamyoAfgLsUaGCQ1Z1ID.jpg",
+          "poster_path": "/demo/smt-media/8Sxp3QIdamyoAfgLsUaGCQ1Z1ID.jpg",
           "average_rating": 3.6755
         },
         {
@@ -1193,7 +1193,7 @@
           "director": "Deniz Özden",
           "language": "tr",
           "countries": [],
-          "poster_path": "/.dev/smt-media/um2klyo0wXEf6ydi5SE0j2TYpxe.jpg",
+          "poster_path": "/demo/smt-media/um2klyo0wXEf6ydi5SE0j2TYpxe.jpg",
           "average_rating": 4
         },
         {
@@ -1213,7 +1213,7 @@
           "director": "Umut Aral",
           "language": "tr",
           "countries": [],
-          "poster_path": "/.dev/smt-media/sygbYtKWMBPphvXBVKTuIJAEMlW.jpg",
+          "poster_path": "/demo/smt-media/sygbYtKWMBPphvXBVKTuIJAEMlW.jpg",
           "average_rating": 0
         },
         {
@@ -1656,7 +1656,7 @@
           "director": "Kayra Aydın",
           "language": "tr",
           "countries": [],
-          "poster_path": "/.dev/smt-media/daHZGSCMeOASEgjxVqZT2a0yikq.jpg",
+          "poster_path": "/demo/smt-media/daHZGSCMeOASEgjxVqZT2a0yikq.jpg",
           "average_rating": 5
         },
         {
@@ -1687,7 +1687,7 @@
           "countries": [
             "France"
           ],
-          "poster_path": "/.dev/smt-media/rz39nFOxbeHAHx56ac4ao27OJbw.jpg",
+          "poster_path": "/demo/smt-media/rz39nFOxbeHAHx56ac4ao27OJbw.jpg",
           "average_rating": 3.75
         },
         {
@@ -1779,7 +1779,7 @@
           "countries": [
             "United States of America"
           ],
-          "poster_path": "/.dev/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
+          "poster_path": "/demo/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
           "average_rating": 3.4
         },
         {
@@ -1913,7 +1913,7 @@
           "countries": [
             "United States of America"
           ],
-          "poster_path": "/.dev/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
+          "poster_path": "/demo/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
           "average_rating": 4.169
         },
         {
@@ -2624,7 +2624,7 @@
             "Denmark",
             "France"
           ],
-          "poster_path": "/.dev/smt-media/1NxGNQchGBTHXJ6RShLY1IlZqWn.jpg",
+          "poster_path": "/demo/smt-media/1NxGNQchGBTHXJ6RShLY1IlZqWn.jpg",
           "average_rating": 3.715
         },
         {
@@ -16919,7 +16919,7 @@
           "countries": [
             "United States of America"
           ],
-          "poster_path": "/.dev/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
+          "poster_path": "/demo/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
           "average_rating": 4.0535
         },
         {
@@ -21065,7 +21065,7 @@
               "user_rating": null
             }
           ],
-          "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+          "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
         },
         {
           "name": "Brad Pitt",
@@ -22714,14 +22714,14 @@
       "movie_crush": {
         "name": "Woody Allen",
         "count": 21,
-        "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+        "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
       },
       "rated_films": [
         {
           "year": 2013,
           "title": "Prisoners",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
+          "poster_path": "/demo/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
           "your_rating": 5,
           "average_rating": 4.0535,
           "community_rating": 4.1
@@ -22730,7 +22730,7 @@
           "year": 2026,
           "title": "Yellow Letters",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/8Sxp3QIdamyoAfgLsUaGCQ1Z1ID.jpg",
+          "poster_path": "/demo/smt-media/8Sxp3QIdamyoAfgLsUaGCQ1Z1ID.jpg",
           "your_rating": 5,
           "average_rating": 3.6755,
           "community_rating": 3.7
@@ -22739,7 +22739,7 @@
           "year": 1999,
           "title": "thirtyfour",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/sygbYtKWMBPphvXBVKTuIJAEMlW.jpg",
+          "poster_path": "/demo/smt-media/sygbYtKWMBPphvXBVKTuIJAEMlW.jpg",
           "your_rating": 5,
           "average_rating": 0,
           "community_rating": null
@@ -22748,7 +22748,7 @@
           "year": 2014,
           "title": "A Soccer Game Journal",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/um2klyo0wXEf6ydi5SE0j2TYpxe.jpg",
+          "poster_path": "/demo/smt-media/um2klyo0wXEf6ydi5SE0j2TYpxe.jpg",
           "your_rating": 5,
           "average_rating": 4,
           "community_rating": 4
@@ -22757,7 +22757,7 @@
           "year": 1954,
           "title": "Rear Window",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
+          "poster_path": "/demo/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
           "your_rating": 5,
           "average_rating": 4.169,
           "community_rating": 4.2
@@ -22766,7 +22766,7 @@
           "year": 1988,
           "title": "Another Woman",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
+          "poster_path": "/demo/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
           "your_rating": 5,
           "average_rating": 3.4,
           "community_rating": 3.4
@@ -22775,7 +22775,7 @@
           "year": 2000,
           "title": "La Commune (Paris, 1871)",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/rz39nFOxbeHAHx56ac4ao27OJbw.jpg",
+          "poster_path": "/demo/smt-media/rz39nFOxbeHAHx56ac4ao27OJbw.jpg",
           "your_rating": 5,
           "average_rating": 3.75,
           "community_rating": 3.8
@@ -22784,7 +22784,7 @@
           "year": 2026,
           "title": "The Supplement",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/daHZGSCMeOASEgjxVqZT2a0yikq.jpg",
+          "poster_path": "/demo/smt-media/daHZGSCMeOASEgjxVqZT2a0yikq.jpg",
           "your_rating": 5,
           "average_rating": 5,
           "community_rating": 5
@@ -22793,7 +22793,7 @@
           "year": 2018,
           "title": "My Dead Dad's Porno Tapes",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/4gfJQrD1Hk1wowbk7s0ZPIzFdj2.jpg",
+          "poster_path": "/demo/smt-media/4gfJQrD1Hk1wowbk7s0ZPIzFdj2.jpg",
           "your_rating": 5,
           "average_rating": 3.6,
           "community_rating": 3.6
@@ -22802,7 +22802,7 @@
           "year": 2021,
           "title": "The Worst Person in the World",
           "rating": 5,
-          "poster_path": "/.dev/smt-media/1NxGNQchGBTHXJ6RShLY1IlZqWn.jpg",
+          "poster_path": "/demo/smt-media/1NxGNQchGBTHXJ6RShLY1IlZqWn.jpg",
           "your_rating": 5,
           "average_rating": 3.715,
           "community_rating": 3.7
@@ -26841,7 +26841,7 @@
             {
               "year": "1988",
               "title": "Another Woman",
-              "poster_path": "/.dev/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
+              "poster_path": "/demo/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
               "user_rating": 5
             },
             {
@@ -26995,7 +26995,7 @@
               "user_rating": 3.5
             }
           ],
-          "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+          "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
         },
         {
           "name": "Martin Scorsese",
@@ -27080,7 +27080,7 @@
               "user_rating": null
             }
           ],
-          "profile_path": "/.dev/smt-media/g3DjfKsgZQWZiw30I20hZVk1oMX.jpg"
+          "profile_path": "/demo/smt-media/g3DjfKsgZQWZiw30I20hZVk1oMX.jpg"
         },
         {
           "name": "Christopher Nolan",
@@ -27192,7 +27192,7 @@
             {
               "year": "2013",
               "title": "Prisoners",
-              "poster_path": "/.dev/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
+              "poster_path": "/demo/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
               "user_rating": 5
             }
           ],
@@ -27223,7 +27223,7 @@
             {
               "year": "1954",
               "title": "Rear Window",
-              "poster_path": "/.dev/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
+              "poster_path": "/demo/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
               "user_rating": 5
             },
             {
@@ -27953,7 +27953,7 @@
           "delta": 10,
           "title": "thirtyfour",
           "avg_rating": 0,
-          "poster_path": "/.dev/smt-media/sygbYtKWMBPphvXBVKTuIJAEMlW.jpg",
+          "poster_path": "/demo/smt-media/sygbYtKWMBPphvXBVKTuIJAEMlW.jpg",
           "user_rating": 5
         },
         "favorite_genre_combo": {
@@ -33123,7 +33123,7 @@
           "count": 21,
           "avg_rating": 2.83,
           "rated_count": 20,
-          "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+          "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
         },
         {
           "name": "Seymour Cassel",
@@ -33412,7 +33412,7 @@
       "most_watched_director": {
         "name": "Woody Allen",
         "count": 27,
-        "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+        "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
       },
       "countries_with_ratings": [
         {
@@ -33969,7 +33969,7 @@
         "most_watched_director": {
           "name": "Woody Allen",
           "count": 27,
-          "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+          "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
         }
       },
       "top_genres": [
@@ -34008,7 +34008,7 @@
             {
               "year": "1988",
               "title": "Another Woman",
-              "poster_path": "/.dev/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
+              "poster_path": "/demo/smt-media/ds4CcnlACh0r1r3VGa7y85dz72R.jpg",
               "user_rating": 5
             },
             {
@@ -34162,7 +34162,7 @@
               "user_rating": 3.5
             }
           ],
-          "profile_path": "/.dev/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
+          "profile_path": "/demo/smt-media/wcPQgZLDibuej1RwNTy1R2U2ZJw.jpg"
         },
         {
           "name": "Martin Scorsese",
@@ -34247,7 +34247,7 @@
               "user_rating": null
             }
           ],
-          "profile_path": "/.dev/smt-media/g3DjfKsgZQWZiw30I20hZVk1oMX.jpg"
+          "profile_path": "/demo/smt-media/g3DjfKsgZQWZiw30I20hZVk1oMX.jpg"
         },
         {
           "name": "Christopher Nolan",
@@ -34359,7 +34359,7 @@
             {
               "year": "2013",
               "title": "Prisoners",
-              "poster_path": "/.dev/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
+              "poster_path": "/demo/smt-media/jsS3a3ep2KyBVmmiwaz3LvK49b1.jpg",
               "user_rating": 5
             }
           ],
@@ -34390,7 +34390,7 @@
             {
               "year": "1954",
               "title": "Rear Window",
-              "poster_path": "/.dev/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
+              "poster_path": "/demo/smt-media/ILVF0eJxHMddjxeQhswFtpMtqx.jpg",
               "user_rating": 5
             },
             {

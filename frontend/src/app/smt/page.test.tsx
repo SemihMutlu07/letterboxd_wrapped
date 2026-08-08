@@ -27,7 +27,7 @@ describe('/smt dev loader', () => {
     // Locale-aware redirect: /smt runs outside [locale], so the loader
     // resolves the stored/system locale and routes to /<locale>/results.
     expect(navigate).toHaveBeenCalledWith('/en/results?u=semihmutsuz');
-    expect(fetch).toHaveBeenCalledWith('/.dev/smt-fixture.json', { cache: 'no-store' });
+    expect(fetch).toHaveBeenCalledWith('/demo/smt-fixture.json', { cache: 'no-store' });
   });
 
   it('shows a readable error without redirecting when fixture loading fails', async () => {

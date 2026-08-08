@@ -19,7 +19,7 @@ describe('TMDB image URL normalization', () => {
   });
 
   it('preserves bundled development fixture images', () => {
-    const fixtureImage = '/.dev/smt-media/person.jpg';
+    const fixtureImage = '/demo/smt-media/person.jpg';
     expect(getDirectTmdbImageUrl(fixtureImage)).toBe(fixtureImage);
     expect(getPosterUrl(fixtureImage, 'grid')).toBe(fixtureImage);
     expect(getPosterUrl(fixtureImage, 'share')).toBe(fixtureImage);

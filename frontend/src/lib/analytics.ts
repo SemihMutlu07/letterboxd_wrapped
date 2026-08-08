@@ -26,7 +26,7 @@ function warnIfMissingApiBase(): void {
 export function getTmdbImageUrl(path: string | null | undefined, size: string = 'w300'): string | null {
   const value = path?.trim();
   if (!value) return null;
-  if (value.startsWith('/.dev/')) return value;
+  if (value.startsWith('/demo/')) return value;
 
   const proxiedPath = (cleanPath: string) => {
     const base = typeof window !== 'undefined' ? (API_BASE || '') : '';
@@ -69,7 +69,7 @@ export function getProfileUrl(path: string | null | undefined, quality: 'grid' |
 export function getDirectTmdbImageUrl(path: string | null | undefined, size: string = 'w342'): string | null {
   const value = path?.trim();
   if (!value) return null;
-  if (value.startsWith('/.dev/')) return value;
+  if (value.startsWith('/demo/')) return value;
   if (/^https?:\/\//i.test(value) && !value.includes('image.tmdb.org') && !value.includes('/tmdb-proxy/')) {
     return value;
   }

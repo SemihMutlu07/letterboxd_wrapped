@@ -26,7 +26,7 @@ export async function loadSmtFixture(
   navigate: (url: string) => void = (url) => window.location.replace(url),
   locale: Locale = resolveFixtureLocale(storage),
 ) {
-  const response = await fetchFixture('/.dev/smt-fixture.json', { cache: 'no-store' });
+  const response = await fetchFixture('/demo/smt-fixture.json', { cache: 'no-store' });
   const payload = (await response.json()) as FixtureResponse;
   const stats = payload.summary?.details;
   if (!response.ok || !stats || !payload.username) {
