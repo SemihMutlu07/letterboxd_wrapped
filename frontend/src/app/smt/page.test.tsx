@@ -24,7 +24,9 @@ describe('/smt dev loader', () => {
     expect(sessionStorage.getItem('letterboxdStats')).toBe('{"total_films":692}');
     expect(sessionStorage.getItem('username')).toBe('semihmutsuz');
     expect(sessionStorage.getItem('lb_username')).toBe('semihmutsuz');
-    expect(navigate).toHaveBeenCalledWith('/results?u=semihmutsuz');
+    // Locale-aware redirect: /smt runs outside [locale], so the loader
+    // resolves the stored/system locale and routes to /<locale>/results.
+    expect(navigate).toHaveBeenCalledWith('/en/results?u=semihmutsuz');
     expect(fetch).toHaveBeenCalledWith('/.dev/smt-fixture.json', { cache: 'no-store' });
   });
 

@@ -16,7 +16,9 @@
 # next.js
 /.next/
 /out/
-/public/.dev/
+# /public/.dev/ is intentionally NOT ignored: /smt demo fixture (JSON +
+# media) is served in production builds too. Re-add only if the fixture
+# grows beyond a reasonable size.
 
 # production
 /build
