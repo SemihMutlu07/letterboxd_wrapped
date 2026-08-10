@@ -57,6 +57,9 @@ const baseProps = {
   quickMetrics: {},
   cineScore: 60,
   shareCardData: {
+    year: 2026,
+    writtenReviews: 12,
+    genres: ['Drama', 'Noir'],
     onScreenCrush: { name: 'Actor One', headshotUrl: '', count: 4 },
     favoriteDirector: { name: 'Director One', headshotUrl: '', count: 5 },
     watchedFilms: 50,

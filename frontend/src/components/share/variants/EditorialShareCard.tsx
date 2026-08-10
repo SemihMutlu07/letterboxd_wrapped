@@ -1,149 +1,98 @@
-import React, { useMemo } from 'react';
-import Image from 'next/image';
-import { getTmdbImageUrl } from '@/lib/analytics';
-import type { ShareCardData, ShareOrientation } from '../types';
-import { StatGrid, VerticalStatStack, Wordmark } from './shared/SchemaBlocks';
+import React from 'react';
 
-type EditorialShareCardProps = {
-  data: ShareCardData;
-  className?: string;
-  orientation?: ShareOrientation;
-};
+import type { ShareCardData } from '../types';
+import {
+  Brand,
+  GenresLine,
+  Metric,
+  PersonPanel,
+  Username,
+} from './shared/LayoutPrimitives';
 
-const EditorialShareCard = React.forwardRef<HTMLDivElement, EditorialShareCardProps>(
-  function EditorialShareCard({ data, className = '', orientation = 'horizontal' }, ref) {
-    const isVertical = orientation === 'vertical';
+type Props = { data: ShareCardData };
 
-    const crushUrl = useMemo(
-      () => (data.onScreenCrush.headshotUrl ? getTmdbImageUrl(data.onScreenCrush.headshotUrl) ?? undefined : undefined),
-      [data.onScreenCrush.headshotUrl]
-    );
-    const directorUrl = useMemo(
-      () => (data.favoriteDirector.headshotUrl ? getTmdbImageUrl(data.favoriteDirector.headshotUrl) ?? undefined : undefined),
-      [data.favoriteDirector.headshotUrl]
-    );
-
-    /* ═══════ VERTICAL (675×1200 - Schema A) ═══════ */
-    if (isVertical) {
-      return (
-        <div
-          ref={ref}
-          data-export-root="true"
-          className={`w-[675px] h-[1200px] relative overflow-hidden flex flex-col justify-between p-10 bg-black text-white ${className}`}
-          style={{ fontFamily: "'Courier New', Courier, monospace" }}
-        >
-          {/* Glitch lines */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-[#FF0066]" />
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#00ffe5]" />
-
-          {/* Header */}
-          <div className="flex items-start justify-between z-10">
-            <div>
-              <p className="text-xs uppercase tracking-widest text-[#00ffe5] font-bold">
-                [EDITORIAL_WRAPPED]
-              </p>
-              <h1 className="text-3xl font-black mt-1 uppercase text-white">
-                you watched {data.watchedFilms} films so far
-              </h1>
-            </div>
-            {data.username && <span className="text-xs text-[#FF0066] font-bold">@{data.username}</span>}
-          </div>
-
-          {/* Vertical Stat Stack */}
-          <div className="my-auto z-10">
-            <VerticalStatStack
-              data={data}
-              cardClassName="flex items-center gap-4 p-4 rounded-lg bg-neutral-950 border border-neutral-800"
-              personLabelClassName="text-xs font-bold uppercase tracking-wider text-[#FF0066]"
-              personNameClassName="text-xl font-bold text-white font-mono"
-              personSubClassName="text-xs text-neutral-400 font-mono"
-              statBoxClassName="flex flex-col p-4 rounded-lg bg-neutral-950 border border-neutral-800"
-              statLabelClassName="text-xs font-bold uppercase tracking-wider text-[#00ffe5] mb-1"
-              statValueClassName="text-xl font-bold text-white tabular-nums font-mono"
-            />
-          </div>
-
-          <Wordmark orientation="vertical" className="text-[#00ffe5]" />
-        </div>
-      );
-    }
-
-    /* ═══════ HORIZONTAL (1200×675 - Schema A) ═══════ */
+const EditorialShareCard = React.forwardRef<HTMLDivElement, Props>(
+  function EditorialShareCard({ data }, ref) {
     return (
       <div
         ref={ref}
         data-export-root="true"
-        className={`w-[1200px] h-[675px] relative overflow-hidden flex flex-col justify-between p-10 bg-black text-white ${className}`}
-        style={{ fontFamily: "'Courier New', Courier, monospace" }}
+        className="relative flex h-[675px] w-[1200px] flex-col overflow-hidden bg-[#eee8dc] px-10 py-8 text-[#171717]"
+        style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
       >
-        <div className="absolute top-0 left-0 right-0 h-1 bg-[#FF0066]" />
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#00ffe5]" />
+        <header className="flex min-w-0 items-center justify-between gap-8 border-y border-black/80 py-3">
+          <p className="text-[13px] font-bold uppercase tracking-[0.22em]">Movies Wrapped · Volume {data.year}</p>
+          <Username username={data.username} className="max-w-[320px] text-right text-[13px] italic" />
+        </header>
 
-        {/* Header */}
-        <div className="flex items-center justify-between z-10">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-[#00ffe5] font-bold">
-              [EDITORIAL_ISSUE_2026]
-            </p>
-            <h1 className="text-4xl font-black mt-1 uppercase text-white">
-              you watched {data.watchedFilms} films
-            </h1>
-          </div>
-          {data.username && <span className="text-sm text-[#FF0066] font-bold">@{data.username}</span>}
-        </div>
-
-        {/* Main content */}
-        <div className="grid grid-cols-12 gap-8 my-auto z-10">
-          {/* Stat Grid (7 cols) */}
-          <div className="col-span-7 flex flex-col justify-center">
-            <StatGrid
-              data={data}
-              containerClassName="grid grid-cols-2 gap-4 w-full"
-              boxClassName="flex flex-col justify-between p-4 rounded-lg bg-neutral-950 border border-neutral-800"
-              labelClassName="text-xs font-bold uppercase tracking-wider text-[#00ffe5]"
-              valueClassName="text-2xl font-bold text-white tabular-nums mt-2 font-mono"
-              subValueClassName="text-xs text-neutral-400 mt-1 font-mono"
+        <main className="mt-6 grid min-h-0 min-w-0 flex-1 grid-cols-[360px_minmax(0,1fr)] gap-8">
+          <section className="grid min-h-0 grid-rows-[minmax(0,1.18fr)_minmax(0,0.82fr)] gap-4">
+            <PersonPanel
+              person={data.favoriteDirector}
+              label="The Auteur"
+              countLabel="films directed"
+              className="border border-black/70 bg-[#e0d4c2] p-4"
+              mediaClassName="w-[122px] border border-black/40 bg-[#cabba5]"
+              labelClassName="text-[11px] font-bold uppercase tracking-[0.18em]"
+              nameClassName="text-[24px] font-bold leading-[1.05]"
+              countClassName="text-[13px] italic"
             />
-          </div>
+            <PersonPanel
+              person={data.onScreenCrush}
+              label="The Muse"
+              countLabel="films together"
+              className="border border-black/70 bg-[#e8dfd1] p-4"
+              mediaClassName="w-[94px] border border-black/40 bg-[#cabba5]"
+              labelClassName="text-[11px] font-bold uppercase tracking-[0.18em]"
+              nameClassName="text-[21px] font-bold leading-[1.05]"
+              countClassName="text-[13px] italic"
+            />
+          </section>
 
-          {/* Two Person Cards (5 cols) */}
-          <div className="col-span-5 flex flex-col gap-4 justify-center">
-            <div className="flex items-center gap-4 p-4 rounded-lg bg-neutral-950 border border-neutral-800">
-              <div className="relative w-16 h-24 rounded overflow-hidden shrink-0 bg-neutral-900 border border-neutral-700">
-                {crushUrl ? (
-                  <Image src={crushUrl} alt={data.onScreenCrush.name} fill sizes="64px" className="object-cover" crossOrigin="anonymous" />
-                ) : (
-                  <div className="absolute inset-0 grid place-items-center text-xs font-bold text-neutral-500">{data.onScreenCrush.name.slice(0, 2)}</div>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold uppercase text-[#FF0066]">On-Screen Crush</span>
-                <span className="text-lg font-bold text-white font-mono">{data.onScreenCrush.name}</span>
-                <span className="text-xs text-neutral-400 font-mono">{data.onScreenCrush.count} films together</span>
-              </div>
+          <section className="flex min-h-0 min-w-0 flex-col border-l border-black/80 pl-8">
+            <p className="text-[12px] font-bold uppercase tracking-[0.25em]">A year at the pictures</p>
+            <h1 className="mt-3 max-w-[720px] text-[44px] font-black leading-[0.98] tracking-[-0.035em] [text-wrap:balance]">
+              You watched {data.watchedFilms} films. Here is the story they told.
+            </h1>
+            <p className="mt-4 max-w-[690px] text-[17px] leading-relaxed">
+              {data.writtenReviews} written reviews, {data.spentDays} days in the dark,
+              and a Cinema Scale score of {Math.round(data.cinemaScale)}/100.
+            </p>
+
+            <div className="mt-6 grid grid-cols-3 border-y border-black/70 py-4">
+              <Metric
+                label="Peak decade"
+                value={data.peakDecade}
+                detail={`${data.peakDecadeCount} films`}
+                className="border-r border-black/50 pr-4"
+                valueClassName="text-[28px] font-black leading-none"
+              />
+              <Metric
+                label="Common rating"
+                value={`${data.mostCommonRating} ★`}
+                className="border-r border-black/50 px-4"
+                valueClassName="text-[28px] font-black leading-none"
+              />
+              <Metric
+                label="Average runtime"
+                value={`${data.minutesAverage}m`}
+                className="pl-4"
+                valueClassName="text-[28px] font-black leading-none"
+              />
             </div>
 
-            <div className="flex items-center gap-4 p-4 rounded-lg bg-neutral-950 border border-neutral-800">
-              <div className="relative w-16 h-24 rounded overflow-hidden shrink-0 bg-neutral-900 border border-neutral-700">
-                {directorUrl ? (
-                  <Image src={directorUrl} alt={data.favoriteDirector.name} fill sizes="64px" className="object-cover" crossOrigin="anonymous" />
-                ) : (
-                  <div className="absolute inset-0 grid place-items-center text-xs font-bold text-neutral-500">{data.favoriteDirector.name.slice(0, 2)}</div>
-                )}
+            <div className="mt-auto flex min-w-0 items-end justify-between gap-8 pt-5">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em]">Top genres</p>
+                <GenresLine genres={data.genres} className="mt-1 max-w-[580px] text-[15px] font-bold leading-snug" />
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold uppercase text-[#00ffe5]">Favorite Director</span>
-                <span className="text-lg font-bold text-white font-mono">{data.favoriteDirector.name}</span>
-                <span className="text-xs text-neutral-400 font-mono">{data.favoriteDirector.count} films directed</span>
-              </div>
+              <Brand className="shrink-0 text-[11px] uppercase" />
             </div>
-          </div>
-        </div>
-
-        <Wordmark orientation="horizontal" className="text-[#00ffe5]" />
+          </section>
+        </main>
       </div>
     );
-  }
+  },
 );
 
 export default EditorialShareCard;
