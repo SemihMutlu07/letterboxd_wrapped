@@ -60,6 +60,7 @@ def test_requeue_stale_claims_recovers_dead_worker_jobs():
     from datetime import datetime, timedelta, timezone
 
     task_manager._tasks.clear()
+    task_manager._last_worker_heartbeat = None  # worker offline -> lease reclaimable
     tid = task_manager.create_scrape_job("ghost")
     job = task_manager.claim_next_scrape_job()
     assert job.task_id == tid and job.status == "running"
@@ -75,6 +76,7 @@ def test_watchlist_jobs_use_capacity_owner_and_stale_requeue(monkeypatch):
     from datetime import datetime, timedelta, timezone
 
     task_manager._tasks.clear()
+    task_manager._last_worker_heartbeat = None  # worker offline -> lease reclaimable
     monkeypatch.setattr(task_manager, "MAX_ACTIVE_PER_OWNER", 1)
     tid = task_manager.create_watchlist_compare_job(["one", "two"], owner_key="owner")
     with pytest.raises(RuntimeError, match="queue_full"):
@@ -91,6 +93,7 @@ def test_watchlist_processing_is_not_requeued_as_a_stale_worker_claim():
     from datetime import datetime, timedelta, timezone
 
     task_manager._tasks.clear()
+    task_manager._last_worker_heartbeat = None  # worker offline (still, stage!=scraping)
     tid = task_manager.create_watchlist_compare_job(["one", "two"])
     job = task_manager.claim_next_worker_job()
     assert job is not None

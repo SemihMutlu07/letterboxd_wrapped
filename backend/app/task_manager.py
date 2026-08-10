@@ -803,11 +803,21 @@ ACTIVE_JOB_TIMEOUT_SECONDS = 540
 
 
 def requeue_stale_claims(now: Optional[datetime] = None) -> int:
-    """Reset scrape jobs stuck 'running' past STALE_CLAIM_SECONDS back to 'pending'
-    so a single-worker outage (desktop offline mid-scrape) re-queues the job
-    instead of stranding the user on a job that will never complete. Idempotent —
-    a late postback is keyed by task_id. Returns how many were re-queued."""
+    """Reclaim scrape/watchlist jobs whose lease belongs to a worker that is gone.
+
+    Lease invariant: a claim hands the single desktop worker an exclusive lease on
+    the task. Requeue does not fail the task — it invalidates the stale lease so a
+    healthy worker can re-claim it. A *live* worker (heartbeat within
+    ``worker_heartbeat_max_age_seconds``) still owns its lease, so its in-flight
+    claim is never stale, even past STALE_CLAIM_SECONDS: a large library can take
+    longer than the window to scrape. Only when the worker has actually gone dark
+    do we treat an over-age claim as abandoned and re-queue it. Idempotent — a
+    late postback is keyed by task_id. Returns how many leases were invalidated."""
     now = now or datetime.now(timezone.utc)
+    # Live worker => lease still held => nothing is stale. Reclaiming here would
+    # yank a running job out from under the worker and duplicate the scrape.
+    if is_worker_online(settings.worker_heartbeat_max_age_seconds):
+        return 0
     cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
     count = 0
     for t in _tasks.values():
