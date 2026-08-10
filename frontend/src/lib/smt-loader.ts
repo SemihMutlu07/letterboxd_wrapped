@@ -32,8 +32,10 @@ export async function loadSmtFixture(
   if (!response.ok || !stats || !payload.username) {
     throw new Error(payload.error || 'The local fixture response was incomplete.');
   }
-  storage.setItem('letterboxdStats', JSON.stringify(stats));
-  storage.setItem('username', payload.username);
-  storage.setItem('lb_username', payload.username);
+  // Stats/username live in sessionStorage (see stats-storage.ts, session-id.ts) —
+  // `storage` here is only the locale-resolution store, which is localStorage.
+  sessionStorage.setItem('letterboxdStats', JSON.stringify(stats));
+  sessionStorage.setItem('username', payload.username);
+  sessionStorage.setItem('lb_username', payload.username);
   navigate(resultPath(payload.username, locale));
 }

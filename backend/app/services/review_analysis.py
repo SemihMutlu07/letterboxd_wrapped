@@ -10,8 +10,9 @@ Phase 1 — CSV path only (HTML scrape path comes in Phase 2).
 
 from __future__ import annotations
 
-import re
+import html
 import math
+import re
 import unicodedata
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
@@ -107,9 +108,9 @@ _TURKISH_CHARS = set("ığüşöçİĞÜŞÖÇ")
 
 # Regex to strip HTML tags
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
-# Regex to strip URLs
-_URL_RE = re.compile(r"https?://\S+|www\.\S+")
-# Regex to split into words (keep Turkish chars + apostrophes for possessives)
+# URLs are noise for readable review metrics, regardless of scheme casing.
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+# Legacy tokenization keeps its curated language behavior for word clouds.
 _WORD_RE = re.compile(r"[a-zA-ZğüşıöçĞÜŞİÖÇ']+(?:'[a-zA-ZğüşıöçĞÜŞİÖÇ]+)?")
 
 # Letterboxd boilerplate injected before spoiler-flagged reviews — strip before word analysis
@@ -117,18 +118,52 @@ _SPOILER_DISCLAIMER = "This review may contain spoilers. I can handle the truth.
 
 
 def _strip_html(text: str) -> str:
-    """Remove HTML tags from review text."""
-    return _HTML_TAG_RE.sub("", text)
+    """Remove HTML tags without joining words that lived in separate nodes."""
+    return _HTML_TAG_RE.sub(" ", text)
 
 
 def _strip_urls(text: str) -> str:
     """Remove URLs from review text."""
-    return _URL_RE.sub("", text)
+    return _URL_RE.sub(" ", text)
+
+
+def _clean_readable_text(text: str) -> str:
+    without_boilerplate = text.replace(_SPOILER_DISCLAIMER, "")
+    without_markup = _strip_html(without_boilerplate)
+    return unicodedata.normalize("NFC", html.unescape(_strip_urls(without_markup)))
+
+
+def _count_readable_words(text: str) -> int:
+    count = 0
+    in_word = False
+    for index, character in enumerate(text):
+        category = unicodedata.category(character)
+        if category[0] in {"L", "N"}:
+            if not in_word:
+                count += 1
+            in_word = True
+        elif category[0] == "M" and in_word:
+            continue
+        elif (
+            character in {"'", "’"}
+            and in_word
+            and index + 1 < len(text)
+            and unicodedata.category(text[index + 1])[0] in {"L", "N"}
+        ):
+            continue
+        else:
+            in_word = False
+    return count
+
+
+def _word_count(text: str) -> int:
+    """Count readable Unicode words without treating pasted URLs as prose."""
+    return _count_readable_words(_clean_readable_text(text))
 
 
 def _tokenize(text: str) -> list[str]:
     """Tokenize text into lowercase words, filtering stopwords and short tokens."""
-    cleaned = _strip_html(_strip_urls(text.replace(_SPOILER_DISCLAIMER, "")))
+    cleaned = _clean_readable_text(text)
     words = _WORD_RE.findall(cleaned)
     return [
         w.lower() for w in words
@@ -210,7 +245,7 @@ def enrich_scraped_reviews(
         scraped = scraped_by_ty.get((t, y)) or scraped_by_t.get(t)
         text = (scraped.get("review_text") if scraped else None) or review.get("text") or review.get("text_preview") or ""
         review["char_length"] = len(text)
-        review["word_count"] = len(text.split())
+        review["word_count"] = _word_count(text)
         if scraped:
             review["review_path"] = scraped.get("review_path", "")
             review["likers"] = scraped.get("likers", [])
@@ -278,15 +313,6 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     total_reviews = len(df)
     reviews_with_text = len(with_text)
 
-    reviews_list = []
-    for _, row in with_text.iterrows():
-        reviews_list.append({
-            "title": str(row.get("title") or ""),
-            "year": str(row.get("year") or ""),
-            "text": str(row.get("review") or ""),
-            "likes": int(row.get("like_count")) if pd.notna(row.get("like_count")) else 0,
-            "rating": float(row.get("rating")) if pd.notna(row.get("rating")) else None,
-        })
 
     if reviews_with_text == 0:
         return {
@@ -299,7 +325,8 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
     # --- Tokenize all review text ---
     with_text["tokens"] = with_text["review"].apply(_tokenize)
     with_text["char_length"] = with_text["review"].apply(len)
-    with_text["word_count"] = with_text["tokens"].apply(len)
+    with_text["readable_text"] = with_text["review"].apply(_clean_readable_text)
+    with_text["word_count"] = with_text["review"].apply(_word_count)
     with_text["language"] = with_text["review"].apply(_guess_language)
 
     # --- Word frequency ---
@@ -361,41 +388,58 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
             yearly["year_str"] = yearly["date"].dt.year.astype(str)
             yearly_counts = yearly["year_str"].value_counts().sort_index()
             volume_by_year = [
-                {"year": y, "count": int(c)}
-                for y, c in yearly_counts.items()
+                {"year": year, "count": int(count)}
+                for year, count in yearly_counts.items()
             ]
 
     # --- Average length over time ---
     length_over_time: list[dict] = []
     if "date" in with_text.columns and not yearly.empty:
-        # Group by year-month for granularity (only if >=3 reviews in a month)
         yearly["month_str"] = yearly["date"].dt.strftime("%Y-%m")
         monthly_groups = yearly.groupby("month_str")
         for month_str, group in sorted(monthly_groups):
-            n = len(group)
-            if n >= 3:
+            count = len(group)
+            if count >= 3:
                 length_over_time.append({
                     "month": month_str,
                     "avg_chars": round(float(group["char_length"].mean()), 1),
                     "avg_words": round(float(group["word_count"].mean()), 1),
-                    "count": n,
+                    "count": count,
                 })
 
-    # --- Longest / shortest ---
-    longest_idx = with_text["char_length"].idxmax()
-    shortest_idx = with_text[with_text["char_length"] > 0]["char_length"].idxmin()
 
-    longest_review = None
-    shortest_review = None
-    if pd.notna(longest_idx):
-        row = with_text.loc[longest_idx]
-        longest_review = {
-            "title": str(row.get("title", "")),
-            "year": str(row.get("year", "")),
-            "length": int(row["char_length"]),
-        }
-    if pd.notna(shortest_idx):
-        row = with_text.loc[shortest_idx]
+    # --- Longest / shortest ---
+    # Word count is the product contract. Title, year, readable text, and date
+    # make ties deterministic without allowing likes, URL length, or HTML to win.
+    longest_position = min(
+        range(len(with_text)),
+        key=lambda position: (
+            -int(with_text.iloc[position]["word_count"]),
+            _title_key(with_text.iloc[position].get("title")),
+            str(with_text.iloc[position].get("year") or ""),
+            str(with_text.iloc[position].get("readable_text") or ""),
+            str(with_text.iloc[position].get("date") or ""),
+        ),
+    )
+    shortest_positions = [
+        position
+        for position in range(len(with_text))
+        if int(with_text.iloc[position]["char_length"]) > 0
+    ]
+
+    row = with_text.iloc[longest_position]
+    longest_review = {
+        "title": str(row.get("title", "")),
+        "year": str(row.get("year", "")),
+        "length": int(row["word_count"]),
+        "unit": "words",
+    }
+    if shortest_positions:
+        shortest_position = min(
+            shortest_positions,
+            key=lambda position: int(with_text.iloc[position]["char_length"]),
+        )
+        row = with_text.iloc[shortest_position]
         shortest_review = {
             "title": str(row.get("title", "")),
             "year": str(row.get("year", "")),
@@ -436,6 +480,8 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
             "text": str(row.get("review", "")),
             "likes": int(row.get("like_count", 0)) if pd.notna(row.get("like_count")) else 0,
             "rating": float(row["rating"]) if "rating" in row and pd.notna(row.get("rating")) else None,
+            "char_length": int(row["char_length"]),
+            "word_count": int(row["word_count"]),
         })
 
     # --- Top liked reviews + total likes (scraped HTML path only) ---
@@ -492,5 +538,4 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
         "top_liked_reviews": top_liked_reviews,
         "total_review_likes": total_review_likes,
         "reviews_with_likes_data": reviews_with_likes_data,
-        "reviews": reviews_list,
     }

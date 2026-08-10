@@ -241,8 +241,13 @@ export interface StatsData {
       likers?: ReviewLiker[];
       likers_complete?: boolean;
     }[];
-    /** The single longest review by character count. */
-    longest_review?: { title: string; year: string; length: number } | null;
+    /** Canonical longest review; new payloads measure readable words, legacy saves may use characters. */
+    longest_review?: {
+      title: string;
+      year: string;
+      length: number;
+      unit?: 'words' | 'characters';
+    } | null;
     /** Sum of like_count across all reviews with HTML like data. */
     total_review_likes?: number | null;
     /** Number of reviews whose like_count was successfully parsed. */
