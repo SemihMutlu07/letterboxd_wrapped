@@ -1,11 +1,13 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import StoryPage from '@/app/story/page';
 import { buildSlides } from '@/components/StoryExperience';
 import type { StatsData } from '@/containers/results/sections/types';
 import { I18nProvider } from '@/i18n/I18nProvider';
+import { readySlideKeys, slideMeta } from '@/components/story/manifest';
+import { buildStoryShareCard } from '@/components/story/viewModel';
 
 const renderStory = () => render(<I18nProvider locale="en"><StoryPage /></I18nProvider>);
 
@@ -172,5 +174,94 @@ describe('buildSlides', () => {
     render(<>{reviewSlide!.body}</>);
     expect(screen.getByText('Memories of Underdevelopment')).toBeInTheDocument();
     expect(screen.getByText(/0 likes, but it had conviction/i)).toBeInTheDocument();
+  });
+});
+
+describe('story readiness + manifest', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    sessionStorage.clear();
+  });
+
+  it('classifies core vs enrichment slides', () => {
+    expect(slideMeta('intro').tier).toBe('core');
+    expect(slideMeta('intro').interaction).toBe('auto-min');
+    expect(slideMeta('persona').tier).toBe('enrichment');
+    expect(slideMeta('persona').interaction).toBe('manual');
+  });
+
+  it('resolves the dependency plan from available data', () => {
+    const core = readySlideKeys({ total_films: 10 } as StatsData);
+    expect(core).toEqual(expect.arrayContaining(['intro', 'volume', 'outro']));
+    expect(core).not.toContain('persona');
+
+    const enriched = readySlideKeys({
+      total_films: 10,
+      favorite_genre: { name: 'Drama', count: 3 },
+      cinematic_persona: { persona: 'X', description: 'y' },
+      sinefil_meter: { score: 50, type: 'z' },
+    } as StatsData);
+    expect(enriched).toEqual(expect.arrayContaining(['genre', 'persona', 'sinefil']));
+  });
+
+  it('recovers from a corrupt payload with the empty state instead of crashing', async () => {
+    sessionStorage.setItem('letterboxdStats', '{not json');
+    renderStory();
+    expect(await screen.findByText(/No result data in this session/i)).toBeInTheDocument();
+  });
+
+  it('picks up stats written after mount (late data / race)', async () => {
+    renderStory();
+    expect(await screen.findByText(/No result data in this session/i)).toBeInTheDocument();
+
+    sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'letterboxdStats' }));
+
+    expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
+  });
+});
+
+describe('story finale', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    sessionStorage.clear();
+  });
+
+  it('renders a device-aware share-card finale on the last slide', async () => {
+    sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
+    const { container } = renderStory();
+    await screen.findByText('@semihmutsuz');
+
+    const next = screen.getByLabelText('Next slide');
+    for (let i = 0; i < 7; i++) await userEvent.click(next);
+
+    expect(await screen.findByText(/Open the dossier/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector('[data-finale-orientation]')).not.toBeNull();
+    });
+  });
+});
+
+describe('buildStoryShareCard', () => {
+  it('maps stats into a share-card input with de-duplicated people', () => {
+    const card = buildStoryShareCard({
+      total_films: 100,
+      top_genres: [{ name: 'Drama', count: 5 }, { name: 'Noir', count: 3 }],
+      top_actors: [{ name: 'Greta Lee', count: 8 }],
+      top_directors: [{ name: 'Greta Lee', count: 2 }, { name: 'Wim Wenders', count: 6 }],
+    } as StatsData);
+
+    expect(card.onScreenCrush.name).toBe('Greta Lee');
+    expect(card.favoriteDirector?.name).toBe('Wim Wenders');
+    expect(card.genres).toEqual(['Drama', 'Noir']);
+  });
+
+  it('returns a null director when none remain after de-duplication', () => {
+    const card = buildStoryShareCard({
+      total_films: 5,
+      top_actors: [{ name: 'Solo', count: 1 }],
+      top_directors: [{ name: 'Solo', count: 1 }],
+    } as StatsData);
+    expect(card.favoriteDirector).toBeNull();
   });
 });

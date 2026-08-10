@@ -338,6 +338,7 @@ export const en = {
   'story.empty.description': 'Run an analysis first, or seed one from /dev/load-run.',
   'story.pause': 'Pause', 'story.resume': 'Resume', 'story.pauseAria': 'Pause story', 'story.resumeAria': 'Resume story',
   'story.previous': 'Previous slide', 'story.next': 'Next slide', 'story.back': 'Back', 'story.replay': 'Replay', 'story.openResults': 'Open the dossier',
+  'story.tapToContinue': 'Tap to continue',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -681,6 +682,7 @@ export const tr = {
   'story.empty.description': 'Önce bir analiz çalıştır ya da /dev/load-run üzerinden örnek veri yükle.',
   'story.pause': 'Duraklat', 'story.resume': 'Devam et', 'story.pauseAria': 'Hikâyeyi duraklat', 'story.resumeAria': 'Hikâyeyi devam ettir',
   'story.previous': 'Önceki slayt', 'story.next': 'Sonraki slayt', 'story.back': 'Geri', 'story.replay': 'Tekrar izle', 'story.openResults': 'Sonuçları aç',
+  'story.tapToContinue': 'Devam etmek için dokun',
 } as const satisfies Messages;
 
 export const catalogs: Record<Locale, Messages> = { en, tr };

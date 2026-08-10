@@ -24,6 +24,11 @@ export function resultPath(username: string | null | undefined, locale?: Locale)
   return withLocale(isValidRouteUsername(clean) ? `/results?u=${encodeURIComponent(clean)}` : '/results', locale);
 }
 
+export function storyPath(username: string | null | undefined, locale?: Locale): string {
+  const clean = cleanRouteUsername(username);
+  return withLocale(isValidRouteUsername(clean) ? `/story?u=${encodeURIComponent(clean)}` : '/story', locale);
+}
+
 export function watchlistPath(first: string, second: string, locale?: Locale): string {
   const a = cleanRouteUsername(first);
   const b = cleanRouteUsername(second);

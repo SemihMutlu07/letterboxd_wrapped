@@ -18,7 +18,7 @@ import { persistStats } from '@/lib/stats-storage';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
-import { resultPath } from '@/lib/routes';
+import { storyPath } from '@/lib/routes';
 import { trackEvent, trackConsentedEvent, trackFilmStats } from '@/lib/analytics';
 import { normalizeError, type NormalizedError } from '@/lib/errors';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -429,7 +429,7 @@ export default function LetterboxdLanding() {
         } catch { /* analytics failure is non-fatal */ }
       }
 
-      setTimeout(() => { window.location.href = resultPath(detectedUsername, locale); }, 100);
+      setTimeout(() => { window.location.href = storyPath(detectedUsername, locale); }, 100);
     } catch (err) {
       console.error('[upload] analysis failed:', err);
       const normalized = normalizeError(err);
@@ -479,7 +479,7 @@ export default function LetterboxdLanding() {
     deckIndexRef.current = 0;
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape', analysis_period: 'lifetime' });
-    const destination = resultPath(username, locale);
+    const destination = storyPath(username, locale);
     router.prefetch(destination);
 
     const sessionId = ensureSessionId();
