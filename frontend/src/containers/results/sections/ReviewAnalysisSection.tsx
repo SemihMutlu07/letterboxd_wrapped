@@ -6,23 +6,14 @@ import { getPosterUrl } from '@/lib/analytics';
 import { PosterImage } from '@/components/results/Placeholders';
 import type { StatsData, ReviewLiker } from './types';
 import { useI18n } from '@/i18n/I18nProvider';
+import {
+  compareReviewsByLikes,
+  compareReviewsByWordCount,
+  hasReadableReviewText,
+  reviewWordCount,
+  selectLongestReview,
+} from '@/lib/reviews';
 
-/** char length; used as a "Longest" tie-break, falls back to raw text length. */
-function charLen(r: { char_length?: number; text?: string }): number {
-  return r.char_length ?? r.text?.length ?? 0;
-}
-
-/** Word count for the "Longest" sort — matches the "N words" label shown on each card. */
-function wordCountOf(r: { word_count?: number; text?: string }): number {
-  return r.word_count ?? (r.text?.trim() ? r.text.trim().split(/\s+/).length : 0);
-}
-
-/** A review whose text is nothing but a pasted link (or empty once the link is stripped)
- * carries no readable opinion — it's noise in "All written reviews", not a short review. */
-function isLinkOnlyReview(r: { text?: string }): boolean {
-  const stripped = (r.text ?? '').replace(/https?:\/\/\S+|www\.\S+/gi, '').trim();
-  return (r.text?.trim().length ?? 0) > 0 && stripped.length === 0;
-}
 
 /** "1 word" / "5 words", or a plain tag for near-empty reviews so a "1 words" count
  * doesn't read like a broken label. */
@@ -76,20 +67,29 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   );
   const totalLikes = ra?.total_review_likes ?? null;
   const allReviews = useMemo(() => ra?.reviews ?? [], [ra?.reviews]);
+  const writtenReviews = useMemo(
+    () => allReviews.filter(hasReadableReviewText),
+    [allReviews],
+  );
+  const hiddenLinkOnlyCount = allReviews.length - writtenReviews.length;
   const longestReview = useMemo(() => {
-    const longest = [...allReviews].sort((a, b) =>
-      (wordCountOf(b) - wordCountOf(a))
-      || (charLen(b) - charLen(a))
-      || (a.title ?? '').localeCompare(b.title ?? '')
-    )[0];
+    const longest = selectLongestReview(writtenReviews);
     if (longest) {
-      return { title: longest.title, year: longest.year, length: wordCountOf(longest), unit: 'words' as const };
+      return {
+        title: longest.title,
+        year: longest.year,
+        length: reviewWordCount(longest),
+        unit: 'words' as const,
+      };
     }
     if (ra?.longest_review) {
-      return { ...ra.longest_review, unit: 'characters' as const };
+      return {
+        ...ra.longest_review,
+        unit: ra.longest_review.unit ?? ('characters' as const),
+      };
     }
     return null;
-  }, [allReviews, ra?.longest_review]);
+  }, [writtenReviews, ra?.longest_review]);
 
   // Most loyal fan: whoever liked the most of the user's distinct reviews.
   const mostLoyalFan = useMemo(() => {
@@ -107,24 +107,16 @@ export default function ReviewAnalysisSection({ stats }: Props) {
     }
     return best && best.count >= 2 ? best : null;
   }, [allReviews]);
-  // Reviews that are just a pasted link carry no readable opinion — leave them
-  // out of "All written reviews" instead of showing a hollow "1 words" card.
-  const writtenReviews = useMemo(() => allReviews.filter((r) => !isLinkOnlyReview(r)), [allReviews]);
-  const hiddenLinkOnlyCount = allReviews.length - writtenReviews.length;
   const sortedReviews = useMemo(() => {
     return [...writtenReviews].sort((a, b) => {
       if (reviewSort === 'gems') {
-        const aIsGem = (a.likes ?? 0) === 0 && wordCountOf(a) >= GEM_MIN_WORDS;
-        const bIsGem = (b.likes ?? 0) === 0 && wordCountOf(b) >= GEM_MIN_WORDS;
+        const aIsGem = (a.likes ?? 0) === 0 && reviewWordCount(a) >= GEM_MIN_WORDS;
+        const bIsGem = (b.likes ?? 0) === 0 && reviewWordCount(b) >= GEM_MIN_WORDS;
         if (aIsGem !== bIsGem) return bIsGem ? 1 : -1;
-        return (wordCountOf(b) - wordCountOf(a)) || (charLen(b) - charLen(a)) || (a.title ?? '').localeCompare(b.title ?? '');
+        return compareReviewsByWordCount(a, b);
       }
-      if (reviewSort === 'likes') {
-        // Most liked, then longer review as the tie-break.
-        return ((b.likes ?? 0) - (a.likes ?? 0)) || (charLen(b) - charLen(a));
-      }
-      // Canonical longest order: characters, then words, then title.
-      return (charLen(b) - charLen(a)) || (wordCountOf(b) - wordCountOf(a)) || (a.title ?? '').localeCompare(b.title ?? '');
+      if (reviewSort === 'likes') return compareReviewsByLikes(a, b);
+      return compareReviewsByWordCount(a, b);
     });
   }, [writtenReviews, reviewSort]);
   const filteredReviews = useMemo(() => {
@@ -570,7 +562,7 @@ function FullReviewCard({ review }: { review: ReviewItem }) {
   const [expanded, setExpanded] = useState(false);
   const text = review.text ?? '';
   const likes = review.likes ?? 0;
-  const wordCount = review.word_count ?? (text.trim() ? text.trim().split(/\s+/).length : 0);
+  const wordCount = reviewWordCount(review);
   const wordLabel = wordCountLabel(wordCount);
   const isLong = text.length > 260;
   const href = review.review_path ? `https://letterboxd.com${review.review_path}` : null;
