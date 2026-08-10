@@ -1,139 +1,102 @@
-'use client';
-import React, { useMemo } from 'react';
-import Image from 'next/image';
-import { getTmdbImageUrl } from '@/lib/analytics';
-import type { ShareCardData, ShareOrientation } from '../types';
-import { displayFont, Username, utilityFont } from './BoldCardParts';
-import { StatGrid, VerticalStatStack, Wordmark } from './shared/SchemaBlocks';
+import React from 'react';
 
-type Props = { data: ShareCardData; orientation?: ShareOrientation; className?: string };
+import type { ShareCardData } from '../types';
+import {
+  Brand,
+  GenresLine,
+  Metric,
+  PersonPanel,
+  Username,
+} from './shared/LayoutPrimitives';
 
-const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(function DoubleFeatureShareCard(
-  { data, orientation = 'horizontal', className = '' },
-  ref,
-) {
-  const vertical = orientation === 'vertical';
+type Props = { data: ShareCardData };
 
-  const crushUrl = useMemo(
-    () => (data.onScreenCrush.headshotUrl ? getTmdbImageUrl(data.onScreenCrush.headshotUrl) ?? undefined : undefined),
-    [data.onScreenCrush.headshotUrl]
-  );
-  const directorUrl = useMemo(
-    () => (data.favoriteDirector.headshotUrl ? getTmdbImageUrl(data.favoriteDirector.headshotUrl) ?? undefined : undefined),
-    [data.favoriteDirector.headshotUrl]
-  );
-
-  /* ═══════ VERTICAL (675×1200 - Schema A) ═══════ */
-  if (vertical) {
+const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
+  function DoubleFeatureShareCard({ data }, ref) {
     return (
       <div
         ref={ref}
         data-export-root="true"
-        className={`relative h-[1200px] w-[675px] overflow-hidden bg-[#10100f] p-10 text-[#f1e7d0] flex flex-col justify-between ${className}`}
+        className="relative h-[1200px] w-[675px] overflow-hidden bg-[#17130f] text-[#fff8ec]"
+        style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
       >
-        {/* Header */}
-        <header className="flex items-start justify-between gap-6 border-b-4 border-[#ef4b2f] pb-5 z-10">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.3em] text-[#ef4b2f]" style={utilityFont}>
-              Movies Wrapped · Double Feature
+        <div className="absolute inset-x-0 top-0 h-[360px] bg-gradient-to-b from-[#db4f1d] to-transparent opacity-75" />
+        <div className="relative mx-9 flex h-full min-w-0 flex-col py-[142px]">
+          <header className="flex min-w-0 items-start justify-between gap-5 border-y border-[#ffd2a8]/60 py-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em]">Your year in cinema</p>
+              <h1 className="mt-1 text-[35px] font-black leading-none">Letterboxd Wrapped</h1>
             </div>
-            <h1 className="text-2xl font-black uppercase text-white mt-1" style={displayFont}>
-              you watched {data.watchedFilms} films so far
-            </h1>
-          </div>
-          <Username username={data.username} />
-        </header>
+            <div className="shrink-0 text-right">
+              <strong className="block text-[27px] font-black tabular-nums">{data.year}</strong>
+              <Username username={data.username} className="block max-w-[180px] text-[11px]" />
+            </div>
+          </header>
 
-        {/* Vertical Stat Stack */}
-        <div className="my-auto z-10">
-          <VerticalStatStack
-            data={data}
-            cardClassName="flex items-center gap-4 p-4 rounded-xl border border-[#ef4b2f]/40 bg-[#181816]"
-            personLabelClassName="text-xs font-bold uppercase tracking-wider text-[#ef4b2f]"
-            personNameClassName="text-xl font-bold text-[#f1e7d0]"
-            personSubClassName="text-xs text-neutral-400"
-            statBoxClassName="flex flex-col p-4 rounded-xl border border-[#ef4b2f]/40 bg-[#181816]"
-            statLabelClassName="text-xs font-bold uppercase tracking-wider text-[#ef4b2f] mb-1"
-            statValueClassName="text-2xl font-bold text-[#f1e7d0] tabular-nums"
-          />
+          <section className="mt-6 grid min-w-0 grid-cols-[minmax(0,1fr)_168px] gap-5 border-b border-[#ffd2a8]/40 pb-6">
+            <div className="min-w-0">
+              <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]">The headline</p>
+              <p className="mt-2 text-[37px] font-black leading-[0.98] [text-wrap:balance]">
+                {data.watchedFilms} films shaped your {data.year}.
+              </p>
+              <p className="mt-4 text-[15px] leading-relaxed text-[#e8d8c7]">
+                You wrote {data.writtenReviews} reviews and spent {data.spentDays} days watching.
+              </p>
+            </div>
+            <Metric
+              label="Cinema Scale"
+              value={Math.round(data.cinemaScale)}
+              detail="/ 100"
+              className="grid aspect-square place-content-center rounded-full border border-[#ffaf79]/60 bg-black/20 text-center"
+              labelClassName="text-[10px] font-bold uppercase tracking-[0.1em] text-[#ffaf79]"
+              valueClassName="text-[48px] font-black leading-none tabular-nums"
+            />
+          </section>
+
+          <section className="mt-5 grid min-h-0 min-w-0 flex-1 grid-rows-2 gap-4">
+            <PersonPanel
+              person={data.onScreenCrush}
+              label="On-screen crush"
+              countLabel="films together"
+              className="border border-[#ffaf79]/40 bg-[#251b14] p-4"
+              mediaClassName="w-[108px] border border-[#ffaf79]/40 bg-[#3a2419]"
+              nameClassName="text-[24px] font-black leading-tight"
+              labelClassName="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]"
+            />
+            <PersonPanel
+              person={data.favoriteDirector}
+              label="Favorite director"
+              countLabel="films directed"
+              className="border border-[#ffaf79]/40 bg-[#251b14] p-4"
+              mediaClassName="w-[108px] border border-[#ffaf79]/40 bg-[#3a2419]"
+              nameClassName="text-[24px] font-black leading-tight"
+              labelClassName="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]"
+            />
+          </section>
+
+          <footer className="mt-5 min-w-0 border-t border-[#ffd2a8]/40 pt-4">
+            <div className="flex min-w-0 items-start justify-between gap-6">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]">Top genres</p>
+                <GenresLine genres={data.genres} className="mt-1 text-[14px] font-bold leading-snug" />
+              </div>
+              <div className="shrink-0 max-w-[210px] text-right">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#ffaf79]">
+                  {data.topReviewWords?.length ? 'Review words' : 'Peak decade'}
+                </p>
+                <p className="mt-1 text-[12px] font-bold leading-snug [overflow-wrap:anywhere]">
+                  {data.topReviewWords?.length
+                    ? data.topReviewWords.map(({ word }) => word).join(' / ')
+                    : `${data.peakDecade} · ${data.peakDecadeCount} films`}
+                </p>
+              </div>
+            </div>
+            <Brand className="mt-4 block text-[11px] text-[#ffaf79]" />
+          </footer>
         </div>
-
-        <Wordmark orientation="vertical" className="text-[#ef4b2f]" />
       </div>
     );
-  }
-
-  /* ═══════ HORIZONTAL (1200×675 - Schema A) ═══════ */
-  return (
-    <div
-      ref={ref}
-      data-export-root="true"
-      className={`h-[675px] w-[1200px] relative overflow-hidden bg-[#10100f] p-10 text-[#f1e7d0] flex flex-col justify-between ${className}`}
-    >
-      {/* Header */}
-      <header className="flex items-center justify-between border-b-4 border-[#ef4b2f] pb-4 z-10">
-        <div>
-          <div className="text-xs uppercase tracking-[0.25em] text-[#ef4b2f]" style={utilityFont}>
-            Double Feature
-          </div>
-          <h1 className="text-3xl font-black uppercase text-white mt-1" style={displayFont}>
-            you watched {data.watchedFilms} films
-          </h1>
-        </div>
-        <Username username={data.username} />
-      </header>
-
-      {/* Main Content */}
-      <div className="grid grid-cols-12 gap-8 my-auto z-10">
-        {/* Stat Grid (7 cols) */}
-        <div className="col-span-7 flex flex-col justify-center">
-          <StatGrid
-            data={data}
-            containerClassName="grid grid-cols-2 gap-4 w-full"
-            boxClassName="flex flex-col justify-between p-4 rounded-xl border border-[#ef4b2f]/40 bg-[#181816]"
-            labelClassName="text-xs font-bold uppercase tracking-wider text-[#ef4b2f]"
-            valueClassName="text-2xl font-bold text-[#f1e7d0] tabular-nums mt-2"
-            subValueClassName="text-xs text-neutral-400 mt-1"
-          />
-        </div>
-
-        {/* Two Person Cards (5 cols) */}
-        <div className="col-span-5 flex flex-col gap-4 justify-center">
-          <div className="flex items-center gap-4 p-4 rounded-xl border border-[#ef4b2f]/40 bg-[#181816]">
-            <div className="relative w-16 h-24 rounded overflow-hidden shrink-0 bg-white/10">
-              {crushUrl ? (
-                <Image src={crushUrl} alt={data.onScreenCrush.name} fill sizes="64px" className="object-cover" crossOrigin="anonymous" />
-              ) : (
-                <div className="absolute inset-0 grid place-items-center text-xs font-bold text-neutral-500">{data.onScreenCrush.name.slice(0, 2)}</div>
-              )}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold uppercase text-[#ef4b2f]">Starring (Crush)</span>
-              <span className="text-lg font-bold text-[#f1e7d0]">{data.onScreenCrush.name}</span>
-              <span className="text-xs text-neutral-400">{data.onScreenCrush.count} films together</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 rounded-xl border border-[#ef4b2f]/40 bg-[#181816]">
-            <div className="relative w-16 h-24 rounded overflow-hidden shrink-0 bg-white/10">
-              {directorUrl ? (
-                <Image src={directorUrl} alt={data.favoriteDirector.name} fill sizes="64px" className="object-cover" crossOrigin="anonymous" />
-              ) : (
-                <div className="absolute inset-0 grid place-items-center text-xs font-bold text-neutral-500">{data.favoriteDirector.name.slice(0, 2)}</div>
-              )}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold uppercase text-[#ef4b2f]">Directed by</span>
-              <span className="text-lg font-bold text-[#f1e7d0]">{data.favoriteDirector.name}</span>
-              <span className="text-xs text-neutral-400">{data.favoriteDirector.count} films directed</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <Wordmark orientation="horizontal" className="text-[#ef4b2f]" />
-    </div>
-  );
-});
+  },
+);
 
 export default DoubleFeatureShareCard;

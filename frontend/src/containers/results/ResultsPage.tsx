@@ -201,6 +201,9 @@ export default function ResultsPage() {
       : undefined;
 
     return {
+      year: new Date().getFullYear(),
+      writtenReviews: activeStats?.review_analysis?.reviews_with_text ?? 0,
+      genres: (activeStats?.top_genres ?? []).slice(0, 5).map(({ name }) => name),
       onScreenCrush: topActors[actorIdx] || {
         name: copy.unknownActor,
         headshotUrl: "",

@@ -11,6 +11,9 @@ const films = Array.from({ length: 5 }, (_, index) => ({
 }));
 
 const baseline: ShareCardInput = {
+  year: 2026,
+  writtenReviews: 42,
+  genres: ['Science Fiction', 'Drama', 'Noir', 'Animation', 'Thriller'],
   onScreenCrush: { name: 'Greta Lee', headshotUrl: '/tmdb-proxy/actor.png', count: 8 },
   favoriteDirector: { name: 'Wim Wenders', headshotUrl: '/tmdb-proxy/director.png', count: 6 },
   watchedFilms: 147,
@@ -46,8 +49,17 @@ function ShareCardHarness() {
     ? {
         ...baseline,
         username: 'thirty_four_character_letterboxd_username',
-        favoriteDirector: null,
-        onScreenCrush: { name: 'An Extremely Long Performer Name That Wraps', headshotUrl: '/tmdb-proxy/broken.png', count: 12 },
+        genres: ['Bilim Kurgu ve Fantastik', 'Psikolojik Drama', 'Kara Film', 'Animasyon', 'Gerilim'],
+        favoriteDirector: {
+          name: 'Nuri Bilge Ceylan ve Ortak Yönetmenler Kolektifi',
+          headshotUrl: '/tmdb-proxy/broken.png',
+          count: 16,
+        },
+        onScreenCrush: {
+          name: 'Şahika Ercümen ile An Extremely Long Performer Name',
+          headshotUrl: '/tmdb-proxy/broken.png',
+          count: 12,
+        },
       }
     : baseline;
 

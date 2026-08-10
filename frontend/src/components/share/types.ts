@@ -43,6 +43,9 @@ export type ShareOutlierFilm = {
 };
 
 export type ShareCardData = {
+  year: number;
+  writtenReviews: number;
+  genres: string[];
   onScreenCrush: SharePersonStat;
   favoriteDirector: SharePersonStat;
   watchedFilms: number;

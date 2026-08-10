@@ -1,150 +1,103 @@
-import React, { useMemo } from 'react';
-import Image from 'next/image';
-import { getTmdbImageUrl } from '@/lib/analytics';
-import type { ShareCardData, ShareOrientation } from '../types';
-import { StatGrid, VerticalStatStack, Wordmark } from './shared/SchemaBlocks';
+import React from 'react';
 
-type Variant3ShareCardProps = {
-  data: ShareCardData;
-  className?: string;
-  orientation?: ShareOrientation;
-};
+import type { ShareCardData } from '../types';
+import {
+  Brand,
+  GenresLine,
+  Metric,
+  PersonPanel,
+  Username,
+} from './shared/LayoutPrimitives';
 
-const CREAM = '#F5F0EB';
-const CHARCOAL = '#1A1A1A';
-const SECONDARY = '#666666';
-const LB_GREEN = '#00c030';
-const NAVY = '#1B2838';
-const TILE_BG = '#FFFFFF';
-const TILE_BORDER = '#E5E0DB';
+type Props = { data: ShareCardData };
 
-const Variant3ShareCard = React.forwardRef<HTMLDivElement, Variant3ShareCardProps>(
-  function Variant3ShareCard({ data, className = '', orientation = 'horizontal' }, ref) {
-    const isVertical = orientation === 'vertical';
-
-    const crushUrl = useMemo(
-      () => (data.onScreenCrush.headshotUrl ? getTmdbImageUrl(data.onScreenCrush.headshotUrl) ?? undefined : undefined),
-      [data.onScreenCrush.headshotUrl]
-    );
-    const directorUrl = useMemo(
-      () => (data.favoriteDirector.headshotUrl ? getTmdbImageUrl(data.favoriteDirector.headshotUrl) ?? undefined : undefined),
-      [data.favoriteDirector.headshotUrl]
-    );
-
-    /* ═══════ VERTICAL (675×1200 - Schema A) ═══════ */
-    if (isVertical) {
-      return (
-        <div
-          ref={ref}
-          data-export-root="true"
-          className={`w-[675px] h-[1200px] relative overflow-hidden flex flex-col justify-between p-10 text-[${CHARCOAL}] ${className}`}
-          style={{ backgroundColor: CREAM, fontFamily: 'Georgia, serif' }}
-        >
-          {/* Top Header */}
-          <div className="flex items-start justify-between z-10">
-            <div>
-              <p className="text-xs uppercase tracking-widest font-sans text-[${SECONDARY}]" style={{ color: SECONDARY }}>
-                Your Letterboxd Wrapped
-              </p>
-              <h1 className="text-3xl font-bold mt-1 text-[${CHARCOAL}]" style={{ color: CHARCOAL }}>
-                you watched {data.watchedFilms} films so far
-              </h1>
-            </div>
-            {data.username && <span className="text-sm font-sans font-semibold text-[${SECONDARY}]" style={{ color: SECONDARY }}>@{data.username}</span>}
-          </div>
-
-          {/* Vertical Stat Stack */}
-          <div className="my-auto z-10">
-            <VerticalStatStack
-              data={data}
-              cardClassName="flex items-center gap-4 p-4 rounded-xl border bg-white border-[#E5E0DB]"
-              personLabelClassName="text-xs font-bold uppercase tracking-wider font-sans text-[#00c030]"
-              personNameClassName="text-xl font-bold text-[#1A1A1A]"
-              personSubClassName="text-xs text-[#666666] font-sans"
-              statBoxClassName="flex flex-col p-4 rounded-xl border bg-white border-[#E5E0DB]"
-              statLabelClassName="text-xs font-bold uppercase tracking-wider font-sans text-[#666666] mb-1"
-              statValueClassName="text-2xl font-bold text-[#1B2838] tabular-nums font-sans"
-            />
-          </div>
-
-          <Wordmark orientation="vertical" className="text-[#666666]" />
-        </div>
-      );
-    }
-
-    /* ═══════ HORIZONTAL (1200×675 - Schema A) ═══════ */
+const Variant3ShareCard = React.forwardRef<HTMLDivElement, Props>(
+  function Variant3ShareCard({ data }, ref) {
     return (
       <div
         ref={ref}
         data-export-root="true"
-        className={`w-[1200px] h-[675px] relative overflow-hidden flex flex-col justify-between p-10 ${className}`}
-        style={{ backgroundColor: CREAM, fontFamily: 'Georgia, serif' }}
+        className="relative flex h-[675px] w-[1200px] flex-col overflow-hidden bg-[#111a18] p-8 text-[#e8fff6]"
+        style={{ fontFamily: "'Arial Narrow', 'Roboto Condensed', Arial, sans-serif" }}
       >
-        {/* Top Header */}
-        <div className="flex items-center justify-between z-10">
-          <div>
-            <p className="text-xs uppercase tracking-widest font-sans" style={{ color: SECONDARY }}>
-              Variant 3 Wrapped
-            </p>
-            <h1 className="text-4xl font-bold mt-1" style={{ color: CHARCOAL }}>
-              you watched {data.watchedFilms} films
-            </h1>
+        <header className="flex min-w-0 items-center justify-between gap-8">
+          <div className="flex min-w-0 items-baseline gap-4">
+            <h1 className="text-[34px] font-black uppercase tracking-[-0.02em]">Letterboxd Dashboard</h1>
+            <span className="rounded-full bg-[#00e054] px-3 py-1 text-[13px] font-black text-[#061109]">{data.year}</span>
           </div>
-          {data.username && <span className="text-sm font-sans font-semibold" style={{ color: SECONDARY }}>@{data.username}</span>}
-        </div>
+          <Username username={data.username} className="max-w-[300px] text-right text-[13px] font-bold text-[#9abcae]" />
+        </header>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-12 gap-8 my-auto z-10">
-          {/* Stat Grid (7 cols) */}
-          <div className="col-span-7 flex flex-col justify-center">
-            <StatGrid
-              data={data}
-              containerClassName="grid grid-cols-2 gap-4 w-full"
-              boxClassName="flex flex-col justify-between p-4 rounded-xl border bg-white border-[#E5E0DB]"
-              labelClassName="text-xs font-bold uppercase tracking-wider font-sans text-[#666666]"
-              valueClassName="text-2xl font-bold text-[#1B2838] tabular-nums mt-2 font-sans"
-              subValueClassName="text-xs text-[#666666] mt-1 font-sans"
-            />
-          </div>
+        <main className="mt-5 grid min-h-0 min-w-0 flex-1 grid-cols-12 grid-rows-6 gap-3">
+          <Metric
+            label="Films watched"
+            value={data.watchedFilms}
+            detail={`${data.writtenReviews} reviews written`}
+            className="col-span-4 row-span-3 flex flex-col justify-center rounded-2xl bg-[#00e054] p-6 text-[#061109]"
+            labelClassName="text-[13px] font-black uppercase tracking-[0.16em]"
+            valueClassName="text-[88px] font-black leading-none tabular-nums"
+            detailClassName="text-[16px] font-bold"
+          />
+          <Metric
+            label="Cinema Scale"
+            value={Math.round(data.cinemaScale)}
+            detail="/ 100"
+            className="col-span-2 row-span-2 rounded-2xl bg-[#ff8000] p-5 text-black"
+            labelClassName="text-[12px] font-black uppercase tracking-[0.12em]"
+            valueClassName="text-[48px] font-black leading-none tabular-nums"
+            detailClassName="text-[14px] font-black"
+          />
+          <Metric
+            label="Time watched"
+            value={`${data.spentDays}d`}
+            detail={`${data.spentHours} hours`}
+            className="col-span-2 row-span-2 rounded-2xl border border-[#00e054]/30 bg-[#182824] p-5"
+            valueClassName="text-[44px] font-black leading-none tabular-nums"
+          />
+          <Metric
+            label="Peak decade"
+            value={data.peakDecade}
+            detail={`${data.peakDecadeCount} films`}
+            className="col-span-2 row-span-2 rounded-2xl border border-[#40bcf4]/35 bg-[#13252d] p-5"
+            valueClassName="text-[34px] font-black leading-none text-[#40bcf4]"
+          />
+          <Metric
+            label="Common rating"
+            value={`${data.mostCommonRating}★`}
+            className="col-span-2 row-span-2 rounded-2xl bg-[#283431] p-5"
+            valueClassName="text-[40px] font-black leading-none text-white tabular-nums"
+          />
 
-          {/* Two Person Cards (5 cols) */}
-          <div className="col-span-5 flex flex-col gap-4 justify-center">
-            <div className="flex items-center gap-4 p-4 rounded-xl border bg-white border-[#E5E0DB]">
-              <div className="relative w-16 h-24 rounded overflow-hidden shrink-0 bg-neutral-200">
-                {crushUrl ? (
-                  <Image src={crushUrl} alt={data.onScreenCrush.name} fill sizes="64px" className="object-cover" crossOrigin="anonymous" />
-                ) : (
-                  <div className="absolute inset-0 grid place-items-center text-xs font-bold text-neutral-500">{data.onScreenCrush.name.slice(0, 2)}</div>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold uppercase font-sans text-[#00c030]">On-Screen Crush</span>
-                <span className="text-lg font-bold text-[#1A1A1A]">{data.onScreenCrush.name}</span>
-                <span className="text-xs text-[#666666] font-sans">{data.onScreenCrush.count} films together</span>
-              </div>
+          <PersonPanel
+            person={data.onScreenCrush}
+            label="On-screen crush"
+            countLabel="films together"
+            className="col-span-4 row-span-3 rounded-2xl border border-[#ff8000]/35 bg-[#241b14] p-4"
+            mediaClassName="w-[106px] rounded-xl border border-[#ff8000]/30 bg-[#33251b]"
+            nameClassName="text-[22px] font-black leading-tight"
+          />
+          <PersonPanel
+            person={data.favoriteDirector}
+            label="Favorite director"
+            countLabel="films directed"
+            className="col-span-4 row-span-3 rounded-2xl border border-[#00e054]/35 bg-[#13231d] p-4"
+            mediaClassName="w-[106px] rounded-xl border border-[#00e054]/30 bg-[#1d3028]"
+            nameClassName="text-[22px] font-black leading-tight"
+          />
+          <section className="col-span-4 row-span-3 flex min-w-0 flex-col justify-between rounded-2xl border border-white/10 bg-[#1a211f] p-5">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9abcae]">Top genres</p>
+              <GenresLine genres={data.genres} className="mt-3 text-[19px] font-black uppercase leading-snug" />
             </div>
-
-            <div className="flex items-center gap-4 p-4 rounded-xl border bg-white border-[#E5E0DB]">
-              <div className="relative w-16 h-24 rounded overflow-hidden shrink-0 bg-neutral-200">
-                {directorUrl ? (
-                  <Image src={directorUrl} alt={data.favoriteDirector.name} fill sizes="64px" className="object-cover" crossOrigin="anonymous" />
-                ) : (
-                  <div className="absolute inset-0 grid place-items-center text-xs font-bold text-neutral-500">{data.favoriteDirector.name.slice(0, 2)}</div>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-bold uppercase font-sans text-[#1B2838]">Favorite Director</span>
-                <span className="text-lg font-bold text-[#1A1A1A]">{data.favoriteDirector.name}</span>
-                <span className="text-xs text-[#666666] font-sans">{data.favoriteDirector.count} films directed</span>
-              </div>
+            <div className="flex items-end justify-between gap-4 border-t border-white/10 pt-4">
+              <span className="text-[13px] font-bold text-[#9abcae]">{data.minutesAverage} min average</span>
+              <Brand className="text-[11px] text-[#00e054]" />
             </div>
-          </div>
-        </div>
-
-        <Wordmark orientation="horizontal" className="text-[#666666]" />
+          </section>
+        </main>
       </div>
     );
-  }
+  },
 );
 
 export default Variant3ShareCard;

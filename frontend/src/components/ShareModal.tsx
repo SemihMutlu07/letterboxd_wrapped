@@ -5,10 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toBlob } from 'html-to-image';
 import type { ShareCardData, ShareCardInput, ShareVariant } from '@/components/share/types';
 import {
-  normalizeShareCardData,
-  SHARE_VARIANTS,
+  shareVariantsForOrientation,
   ShareVariantRenderer,
 } from '@/components/share/registry';
+import { normalizeShareCardData } from '@/components/share/viewModel';
 import { API_BASE } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 import { useI18n } from '@/i18n/I18nProvider';
@@ -183,6 +183,10 @@ export default function ShareModal({
   onDownloadSuccess,
 }: Props) {
   const { t } = useI18n();
+  const availableVariants = useMemo(
+    () => shareVariantsForOrientation(orientation),
+    [orientation],
+  );
   const railRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [pageW, setPageW] = useState(0);
@@ -196,8 +200,11 @@ export default function ShareModal({
   const [showUsername, setShowUsername] = useState(true);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const variantKey = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].key;
-  const variantLabel = SHARE_VARIANTS[Math.max(0, Math.min(SHARE_VARIANTS.length - 1, activeIdx))].label;
+  const activeVariant = availableVariants[
+    Math.max(0, Math.min(availableVariants.length - 1, activeIdx))
+  ];
+  const variantKey = activeVariant.key;
+  const variantLabel = activeVariant.label;
 
   useEffect(() => {
     if (!open) return;
@@ -208,6 +215,10 @@ export default function ShareModal({
     setShowUsername(true);
     setExportError(null);
   }, [open]);
+
+  useEffect(() => {
+    setActiveIdx(0);
+  }, [orientation]);
 
   useEffect(() => {
     setActorIdx(0);
@@ -401,13 +412,13 @@ export default function ShareModal({
           <div>
             <span id="share-modal-title" className="block text-sm font-semibold text-white/90">{t('share.title')}</span>
             <span className="block text-[11px] text-slate-500">
-              {variantLabel} · {activeIdx + 1}/{SHARE_VARIANTS.length}
+              {variantLabel} · {activeIdx + 1}/{availableVariants.length}
             </span>
           </div>
           <button
             onClick={onClose}
             disabled={isSaving}
-            className="grid place-items-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
+            className="grid place-items-center w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 transition text-white"
             aria-label={t('share.close')}
           >
             <X size={18} strokeWidth={2.5} />
@@ -425,8 +436,8 @@ export default function ShareModal({
               }`}
               style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', minHeight: 280 }}
             >
-              <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * SHARE_VARIANTS.length}px` : '100%' }}>
-                {SHARE_VARIANTS.map((v, i) => {
+              <div className="flex h-full" style={{ width: pageW > 0 ? `${pageW * availableVariants.length}px` : '100%' }}>
+                {availableVariants.map((v, i) => {
                   const isActive = i === activeIdx;
                   const inBudget = Math.abs(i - activeIdx) <= 1;
                   return (
@@ -455,14 +466,14 @@ export default function ShareModal({
 
             {/* Page indicator dots */}
             <div className="flex items-center justify-center gap-1.5 pb-3 pt-2 md:pb-5">
-              {SHARE_VARIANTS.map((v, i) => (
+              {availableVariants.map((v, i) => (
                 <button
                   key={v.key}
                   onClick={() => jumpTo(i)}
                   disabled={isSaving}
                   aria-current={i === activeIdx ? 'true' : undefined}
                   aria-label={t('share.goTo').replace('{variant}', v.label)}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                  className={`relative h-1.5 rounded-full transition-all duration-300 after:absolute after:inset-x-0 after:-inset-y-[19px] after:content-[''] ${
                     i === activeIdx ? 'w-5 bg-white' : 'w-1.5 bg-white/30 hover:bg-white/50'
                   }`}
                 />
@@ -522,14 +533,19 @@ export default function ShareModal({
             </div>
           )}
 
-          {/* Orientation + swap trigger */}
-          <div className="flex items-center justify-between relative">
-            <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+          {/* Format choices and tuning share one resilient row. The first
+              column may shrink and wrap; the tune control keeps its target. */}
+          <div
+            role="group"
+            aria-label={t('share.formatGroup')}
+            className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"
+          >
+            <div className="grid min-w-0 grid-cols-2 gap-1 rounded-xl bg-white/5 p-1">
               <button
                 onClick={() => setOrientation('vertical')}
                 disabled={isSaving}
                 aria-pressed={orientation === 'vertical'}
-                className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                className={`min-h-11 min-w-0 rounded-lg px-2 py-2 text-[12px] font-semibold leading-tight [overflow-wrap:anywhere] transition-colors ${
                   orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -539,7 +555,7 @@ export default function ShareModal({
                 onClick={() => setOrientation('horizontal')}
                 disabled={isSaving}
                 aria-pressed={orientation === 'horizontal'}
-                className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                className={`min-h-11 min-w-0 rounded-lg px-2 py-2 text-[12px] font-semibold leading-tight [overflow-wrap:anywhere] transition-colors ${
                   orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -556,7 +572,7 @@ export default function ShareModal({
                       animate={{ opacity: hintFading ? 0 : 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ duration: 0.2 }}
-                      className="absolute right-0 bottom-full mb-2 z-20 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#1a1a1a] border border-white/10 backdrop-blur shadow-lg whitespace-nowrap"
+                      className="absolute right-0 bottom-full z-20 mb-2 flex max-w-[min(18rem,calc(100vw-2.5rem))] items-center gap-2 rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 shadow-lg backdrop-blur"
                     >
                       <span className="text-xs text-slate-300">{t('share.swapHint')}</span>
                       <button
@@ -575,7 +591,7 @@ export default function ShareModal({
                   onClick={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
                   disabled={isSaving}
                   aria-label={t('share.tune')}
-                  className={`relative grid place-items-center w-9 h-9 rounded-full transition ${
+                  className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition ${
                     swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
                 >
