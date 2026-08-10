@@ -7,6 +7,9 @@ import type { StatsData } from '@/containers/results/sections/types';
 import { useI18n } from '@/i18n/I18nProvider';
 import { resultPath } from '@/lib/routes';
 import { reviewCharLength, reviewWordCount } from '@/lib/reviews';
+import StoryFinaleCard from '@/components/story/StoryFinaleCard';
+import { slideMeta } from '@/components/story/manifest';
+import { useStoryMachine } from '@/components/story/useStoryMachine';
 
 /**
  * Spotify-Wrapped-style story mode over an existing result.
@@ -650,26 +653,21 @@ function PortraitStack({ media, accent }: { media: StoryMedia[]; accent: string 
 
 export default function StoryExperience() {
   const { locale, t } = useI18n();
-  const [stats, setStats] = useState<StatsData | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const elapsedRef = useRef(0);
+  const { phase, stats, start } = useStoryMachine();
 
+  // Begin playback the moment core data is ready.
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem('letterboxdStats');
-      if (saved) setStats(JSON.parse(saved) as StatsData);
-    } catch (err) {
-      console.error('[story] failed to parse stored stats:', err);
-    }
-    setLoaded(true);
-  }, []);
+    if (phase === 'ready') start();
+  }, [phase, start]);
 
   const slides = useMemo(() => (stats ? buildSlides(stats, locale) : []), [locale, stats]);
   const isLast = index >= slides.length - 1;
   const username = stats?.scraped_username;
+  const currentInteraction = slideMeta(slides[index]?.key ?? '').interaction;
 
   const goToSlide = useCallback((nextIndex: number) => {
     setIndex(Math.max(0, Math.min(nextIndex, slides.length - 1)));
@@ -687,7 +685,7 @@ export default function StoryExperience() {
   }, [index, isLast]);
 
   useEffect(() => {
-    if (slides.length === 0 || isLast || isPaused) return;
+    if (slides.length === 0 || isLast || isPaused || phase !== 'playing' || currentInteraction === 'manual') return;
     let frame = 0;
     let previous = performance.now();
 
@@ -707,7 +705,7 @@ export default function StoryExperience() {
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [index, slides.length, isLast, isPaused]);
+  }, [index, slides.length, isLast, isPaused, phase, currentInteraction]);
 
   useEffect(() => {
     if (slides.length === 0) return;
@@ -734,7 +732,7 @@ export default function StoryExperience() {
     return () => window.removeEventListener('keydown', onKey);
   }, [goNext, goPrevious, isLast]);
 
-  if (!loaded) return null;
+  if (phase === 'idle') return null;
 
   if (!stats || slides.length === 0) {
     return (
@@ -789,8 +787,17 @@ export default function StoryExperience() {
             transition={{ duration: 0.45, ease: 'easeOut' }}
             className="w-full max-w-xl justify-self-center rounded-[24px] border border-white/10 bg-black/55 px-4 py-5 shadow-2xl shadow-black/40 backdrop-blur-md sm:px-5 sm:py-6 md:ml-[8vw] md:justify-self-start md:rounded-[28px] md:bg-black/42 md:px-8 md:py-8"
           >
-            <MobileMediaRail media={slides[index].media ?? []} accent={slides[index].accent ?? '#f59e0b'} />
+            {isLast ? (
+              <StoryFinaleCard stats={stats} />
+            ) : (
+              <MobileMediaRail media={slides[index].media ?? []} accent={slides[index].accent ?? '#f59e0b'} />
+            )}
             {slides[index].body}
+            {!isLast && currentInteraction === 'manual' && (
+              <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.2em] text-amber-300/80">
+                {t('story.tapToContinue')}
+              </p>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
