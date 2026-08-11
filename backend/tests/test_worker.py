@@ -25,6 +25,14 @@ ADMIN_KEY = "test-admin-secret-rotated"
 ADMIN_AUTH = {"Authorization": f"Bearer {ADMIN_KEY}"}
 
 
+def _with_lease(task_id: str, body: dict) -> dict:
+    """Attach the claim lease_token so postbacks pass the lease gate."""
+    task = task_manager.get_task_state(task_id)
+    if task and task.lease_token:
+        return {**body, "lease_token": task.lease_token}
+    return body
+
+
 def test_worker_reports_direct_cloudscraper_transport(monkeypatch):
     monkeypatch.setenv("WORKER_BACKEND_URL", "https://backend.example.com")
     monkeypatch.setenv("WORKER_TOKEN", WORKER_TOKEN)
@@ -61,13 +69,14 @@ def test_requeue_stale_claims_recovers_dead_worker_jobs():
 
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None  # worker offline -> lease reclaimable
+    task_manager._worker_heartbeats.clear()
     tid = task_manager.create_scrape_job("ghost")
-    job = task_manager.claim_next_scrape_job()
+    job = task_manager.claim_next_scrape_job(worker_id="worker-a")
     assert job.task_id == tid and job.status == "running"
     job.claimed_at = datetime.now(timezone.utc) - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 60)
     assert task_manager.requeue_stale_claims() == 1
     assert job.status == "pending" and job.claimed is False and job.claimed_at is None
-    task_manager.claim_next_scrape_job()
+    task_manager.claim_next_scrape_job(worker_id="worker-a")
     assert task_manager.requeue_stale_claims() == 0
     task_manager._tasks.clear()
 
@@ -77,11 +86,12 @@ def test_watchlist_jobs_use_capacity_owner_and_stale_requeue(monkeypatch):
 
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None  # worker offline -> lease reclaimable
+    task_manager._worker_heartbeats.clear()
     monkeypatch.setattr(task_manager, "MAX_ACTIVE_PER_OWNER", 1)
     tid = task_manager.create_watchlist_compare_job(["one", "two"], owner_key="owner")
     with pytest.raises(RuntimeError, match="queue_full"):
         task_manager.create_date_night_job(["one", "three"], owner_key="owner")
-    job = task_manager.claim_next_worker_job()
+    job = task_manager.claim_next_worker_job(worker_id="worker-a")
     assert job.task_id == tid
     job.claimed_at = datetime.now(timezone.utc) - timedelta(seconds=task_manager.STALE_CLAIM_SECONDS + 1)
     assert task_manager.requeue_stale_claims() == 1
@@ -94,6 +104,7 @@ def test_watchlist_processing_is_not_requeued_as_a_stale_worker_claim():
 
     task_manager._tasks.clear()
     task_manager._last_worker_heartbeat = None  # worker offline (still, stage!=scraping)
+    task_manager._worker_heartbeats.clear()
     tid = task_manager.create_watchlist_compare_job(["one", "two"])
     job = task_manager.claim_next_worker_job()
     assert job is not None
@@ -368,10 +379,12 @@ async def _complete_raw_watchlist_request(client: AsyncClient, request_coro, raw
             break
     assert len(queued) == 1
     job = queued[0]
-    claim = await client.get("/api/worker/next", headers=AUTH)
+    claim = await client.get("/api/worker/next", headers=AUTH, params={"worker_id": "desktop-test"})
     assert claim.json()["job"]["task_id"] == job.task_id
     complete = await client.post(
-        f"/api/worker/watchlist/{job.task_id}/complete", headers=AUTH, json=raw
+        f"/api/worker/watchlist/{job.task_id}/complete",
+        headers=AUTH,
+        json=_with_lease(job.task_id, raw),
     )
     assert complete.status_code == 200
     return await request_task, job
@@ -505,7 +518,7 @@ async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncC
     assert queued.status_code == 202
     body = queued.json()
     assert (await client.get(f"/api/progress/{body['task_id']}")).status_code == 403
-    claim = await client.get("/api/worker/next", headers=AUTH)
+    claim = await client.get("/api/worker/next", headers=AUTH, params={"worker_id": "desktop-test"})
     assert claim.json()["job"]["task_id"] == body["task_id"]
     # The worker now runs compare_watchlist_sets + TMDB enrichment itself and
     # reports the finished comparison — the backend just persists it.
@@ -520,13 +533,14 @@ async def test_watchlist_compare_enqueue_complete_and_secure_poll(client: AsyncC
             "second_only": [],
         }
     }
-    complete = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    leased = _with_lease(body["task_id"], raw)
+    complete = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=leased)
     assert complete.status_code == 200
     await __import__("asyncio").sleep(0)
     poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})
     assert poll.status_code == 200 and poll.json()["status"] == "done"
     assert poll.json()["result"]["counts"]["common"] == 1
-    duplicate = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    duplicate = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=leased)
     assert duplicate.status_code == 200 and duplicate.json()["duplicate"] is True
 
 
@@ -668,9 +682,16 @@ async def test_date_night_enqueue_complete_and_final_poll(client: AsyncClient, m
     queued = await client.post("/api/date-night", json={"usernames": ["one", "two"]})
     assert queued.status_code == 202
     body = queued.json()
-    assert (await client.get("/api/worker/next", headers=AUTH)).json()["job"]["job_type"] == "date_night"
+    claim = await client.get("/api/worker/next", headers=AUTH, params={"worker_id": "desktop-test"})
+    assert claim.json()["job"]["job_type"] == "date_night"
     raw = {"first_diary": [], "first_grid": [], "second_diary": [], "second_grid": [], "first_watchlist": [], "second_watchlist": []}
-    assert (await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)).status_code == 200
+    assert (
+        await client.post(
+            f"/api/worker/watchlist/{body['task_id']}/complete",
+            headers=AUTH,
+            json=_with_lease(body["task_id"], raw),
+        )
+    ).status_code == 200
     await __import__("asyncio").sleep(0.01)
     poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})
     assert poll.json()["status"] == "done"
@@ -1048,27 +1069,49 @@ async def test_valid_outbox_item_still_sent_and_removed(tmp_path, monkeypatch):
 # ---- completion / failure ----------------------------------------------------
 
 @pytest.mark.asyncio
+async def test_wrong_lease_token_rejected_on_complete(client: AsyncClient):
+    await _beat(client)
+    submitted = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()
+    task_id = submitted["task_id"]
+    claim = await client.get("/api/worker/scrape/next", headers=AUTH, params={"worker_id": "desktop-test"})
+    assert claim.json()["job"]["lease_token"]
+
+    bad = await client.post(
+        f"/api/worker/scrape/{task_id}/complete",
+        headers=AUTH,
+        json={"stats": {"total_films": 1}, "lease_token": "not-the-real-lease"},
+    )
+    assert bad.status_code == 409
+    assert bad.json()["detail"]["error_code"] == "lease_mismatch"
+    assert task_manager.get_task_state(task_id).status == "running"
+
+
+@pytest.mark.asyncio
 async def test_worker_completion_makes_progress_done(client: AsyncClient):
     await _beat(client)
     submitted = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()
     task_id, poll_token = submitted["task_id"], submitted["poll_token"]
-    await client.get("/api/worker/scrape/next", headers=AUTH)
+    claim = await client.get("/api/worker/scrape/next", headers=AUTH, params={"worker_id": "desktop-test"})
+    assert claim.json()["job"]["lease_token"]
 
     stats = {"total_films": 394, "scraped_username": "semihmutsuz"}
     event = await client.post(
         f"/api/worker/scrape/{task_id}/event",
         headers=AUTH,
-        json={"stage": "scrape_started", "message": "Scrape started", "elapsed_seconds": 1.0},
+        json=_with_lease(task_id, {"stage": "scrape_started", "message": "Scrape started", "elapsed_seconds": 1.0}),
     )
     assert event.status_code == 200
     done = await client.post(
         f"/api/worker/scrape/{task_id}/complete",
         headers=AUTH,
-        json={
-            "stats": stats,
-            "telemetry": {"duration_seconds": 12.3, "scrape_seconds": 8.1, "analysis_seconds": 3.2},
-            "trace_events": [{"stage": "analysis_done", "message": "Analysis completed", "elapsed_seconds": 12.0}],
-        },
+        json=_with_lease(
+            task_id,
+            {
+                "stats": stats,
+                "telemetry": {"duration_seconds": 12.3, "scrape_seconds": 8.1, "analysis_seconds": 3.2},
+                "trace_events": [{"stage": "analysis_done", "message": "Analysis completed", "elapsed_seconds": 12.0}],
+            },
+        ),
     )
     assert done.status_code == 200
 
@@ -1099,20 +1142,23 @@ async def test_worker_failure_makes_progress_failed(client: AsyncClient):
     await _beat(client)
     submitted = (await client.post("/api/scrape-profile", json={"username": "semihmutsuz"})).json()
     task_id, poll_token = submitted["task_id"], submitted["poll_token"]
-    await client.get("/api/worker/scrape/next", headers=AUTH)
+    await client.get("/api/worker/scrape/next", headers=AUTH, params={"worker_id": "desktop-test"})
 
     fail = await client.post(
         f"/api/worker/scrape/{task_id}/failed",
         headers=AUTH,
-        json={
-            "error_code": "scrape_failed",
-            "message": "Letterboxd blocked the desktop worker.",
-            "telemetry": {
-                "duration_seconds": 7.8,
-                "error_type": "ValueError",
-                "error_stage": "letterboxd_or_scrape",
+        json=_with_lease(
+            task_id,
+            {
+                "error_code": "scrape_failed",
+                "message": "Letterboxd blocked the desktop worker.",
+                "telemetry": {
+                    "duration_seconds": 7.8,
+                    "error_type": "ValueError",
+                    "error_stage": "letterboxd_or_scrape",
+                },
             },
-        },
+        ),
     )
     assert fail.status_code == 200
 
@@ -1195,11 +1241,12 @@ async def test_find_film_enqueue_complete_and_secure_poll(client: AsyncClient, m
     body = queued.json()
     assert (await client.get(f"/api/progress/{body['task_id']}")).status_code == 403
 
-    claim = await client.get("/api/worker/next", headers=AUTH)
+    claim = await client.get("/api/worker/next", headers=AUTH, params={"worker_id": "desktop-test"})
     job = claim.json()["job"]
     assert job["task_id"] == body["task_id"]
     assert job["job_type"] == "find_film"
     assert job["usernames"] == ["alice", "bob", "carol"]
+    assert job["lease_token"]
 
     shelf = [
         {"title": "Dune", "year": "2021", "slug": "dune"},
@@ -1211,7 +1258,11 @@ async def test_find_film_enqueue_complete_and_secure_poll(client: AsyncClient, m
         # Barbie was watched by exactly one user — it must disappear.
         "watched": {"alice": [], "bob": [{"title": "Barbie", "year": "2023", "slug": "barbie"}], "carol": []},
     }
-    complete = await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    complete = await client.post(
+        f"/api/worker/watchlist/{body['task_id']}/complete",
+        headers=AUTH,
+        json=_with_lease(body["task_id"], raw),
+    )
     assert complete.status_code == 200
     await __import__("asyncio").sleep(0)
 
@@ -1244,10 +1295,14 @@ async def test_find_film_finalization_failure_surfaces_stable_error_code(client:
     )
     queued = await client.post("/api/find-film", json={"usernames": ["alice", "bob"]})
     body = queued.json()
-    await client.get("/api/worker/next", headers=AUTH)
+    await client.get("/api/worker/next", headers=AUTH, params={"worker_id": "desktop-test"})
     shelf = [{"title": "Dune", "year": "2021", "slug": "dune"}]
     raw = {"watchlists": {"alice": shelf, "bob": shelf}, "watched": {"alice": [], "bob": []}}
-    await client.post(f"/api/worker/watchlist/{body['task_id']}/complete", headers=AUTH, json=raw)
+    await client.post(
+        f"/api/worker/watchlist/{body['task_id']}/complete",
+        headers=AUTH,
+        json=_with_lease(body["task_id"], raw),
+    )
     await __import__("asyncio").sleep(0)
 
     poll = await client.get(f"/api/progress/{body['task_id']}", headers={"X-Task-Token": body["poll_token"]})

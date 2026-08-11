@@ -44,16 +44,18 @@ class TaskState:
     job_type: str = ""  # watchlist_compare | date_night
     options: Dict[str, Any] = field(default_factory=dict)
     claimed: bool = False     # scrape/watchlist jobs: True once a worker has taken it
+    claimed_by: Optional[str] = None  # worker_id that holds the lease
+    lease_token: Optional[str] = None  # secret returned at claim; required on postback
     trace_events: list[Dict[str, Any]] = field(default_factory=list)
     poll_token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     owner_key: Optional[str] = None
 
 
-# ponytail: in-memory task queue, single-worker only. `_tasks` and
-# `_last_worker_meta` are process-global dicts — running uvicorn with more
-# than one worker would split state across processes and break polling.
-# Upgrade path: Redis-backed queue or move fully onto the `ops_tasks` table.
-# Keep uvicorn pinned to 1 worker in production (see backend/Dockerfile).
+# ponytail: in-memory task queue. `_tasks` is process-global — running uvicorn
+# with more than one *process* would split state across processes and break
+# polling. Multiple *desktop* scrape workers are supported via per-task
+# claimed_by + lease_token. Keep uvicorn pinned to 1 worker in production
+# (see backend/Dockerfile). Upgrade path for multi-process: Redis or ops_tasks.
 _tasks: Dict[str, TaskState] = {}
 
 # Task state is process-local and does not survive a backend restart (Render
@@ -64,8 +66,10 @@ _tasks: Dict[str, TaskState] = {}
 _SERVER_STARTED_AT: datetime = datetime.now(timezone.utc)
 RECENT_RESTART_WINDOW_SECONDS = 900  # frontend polling gives up after 10 min; add buffer
 
-# Last time the desktop scrape worker checked in. None until the first heartbeat.
+# Last time *any* desktop scrape worker checked in (enqueue/online gate).
 _last_worker_heartbeat: Optional[datetime] = None
+# Per-worker last-seen for lease-aware stale requeue (multi-worker safe).
+_worker_heartbeats: Dict[str, datetime] = {}
 _last_worker_started_at: Optional[datetime] = None
 _last_worker_shutdown_at: Optional[datetime] = None
 _last_worker_meta: Dict[str, Any] = {}
@@ -186,7 +190,26 @@ def create_find_film_job(usernames: list, owner_key: Optional[str] = None, optio
     return task_id
 
 
-def claim_next_watchlist_job() -> Optional[TaskState]:
+def _assign_lease(job: TaskState, worker_id: Optional[str]) -> None:
+    """Hand the claimer an exclusive lease on this task."""
+    wid = (worker_id or "").strip() or None
+    job.claimed = True
+    job.status = "running"
+    job.stage = "scraping"
+    job.message = "Desktop worker is reading Letterboxd"
+    job.claimed_at = datetime.now(timezone.utc)
+    job.claimed_by = wid
+    job.lease_token = secrets.token_urlsafe(32)
+
+
+def _clear_lease(job: TaskState) -> None:
+    job.claimed = False
+    job.claimed_by = None
+    job.lease_token = None
+    job.claimed_at = None
+
+
+def claim_next_watchlist_job(worker_id: Optional[str] = None) -> Optional[TaskState]:
     """Atomically claim the oldest unclaimed watchlist/date-night job."""
     if is_worker_paused():
         return None
@@ -197,16 +220,12 @@ def claim_next_watchlist_job() -> Optional[TaskState]:
     if not queued:
         return None
     job = queued[0]
-    job.claimed = True
-    job.status = "running"
-    job.stage = "scraping"
-    job.message = "Desktop worker is reading Letterboxd"
-    job.claimed_at = datetime.now(timezone.utc)
+    _assign_lease(job, worker_id)
     _persist_task(job)
     return job
 
 
-def claim_next_worker_job() -> Optional[TaskState]:
+def claim_next_worker_job(worker_id: Optional[str] = None) -> Optional[TaskState]:
     """Claim the oldest pending outbound-worker job, regardless of job kind."""
     if is_worker_paused():
         return None
@@ -217,17 +236,13 @@ def claim_next_worker_job() -> Optional[TaskState]:
     if not queued:
         return None
     job = queued[0]
-    job.claimed = True
-    job.status = "running"
-    job.stage = "scraping"
-    job.message = "Desktop worker is reading Letterboxd"
-    job.claimed_at = datetime.now(timezone.utc)
+    _assign_lease(job, worker_id)
     append_task_event(job.task_id, "claimed", "Desktop worker claimed the job", level="info")
     _persist_task(job)
     return job
 
 
-def claim_next_scrape_job() -> Optional[TaskState]:
+def claim_next_scrape_job(worker_id: Optional[str] = None) -> Optional[TaskState]:
     """Atomically claim the oldest unclaimed, pending scrape job (single-process,
     asyncio single-thread — no lock needed). Returns None if the queue is empty."""
     if is_worker_paused():
@@ -239,11 +254,7 @@ def claim_next_scrape_job() -> Optional[TaskState]:
     if not queued:
         return None
     job = queued[0]
-    job.claimed = True
-    job.status = "running"
-    job.stage = "scraping"
-    job.message = "Desktop worker is reading Letterboxd"
-    job.claimed_at = datetime.now(timezone.utc)
+    _assign_lease(job, worker_id)
     append_task_event(job.task_id, "claimed", "Desktop worker claimed the scrape job", level="info")
     _persist_task(job)
     return job
@@ -291,6 +302,8 @@ def _task_row(task: TaskState) -> Dict[str, Any]:
         "usernames": task.usernames,
         "options": task.options,
         "claimed": task.claimed,
+        "claimed_by": task.claimed_by,
+        "lease_token": task.lease_token,
         "owner_key": task.owner_key,
         "poll_token": task.poll_token,
         "result": task.result,
@@ -397,19 +410,33 @@ def append_task_event_payload(task_id: str, event: Dict[str, Any]) -> None:
 
 def record_worker_heartbeat(meta: Optional[Dict[str, Any]] = None) -> None:
     global _last_worker_heartbeat, _last_worker_meta
-    _last_worker_heartbeat = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    _last_worker_heartbeat = now
     if meta:
         _last_worker_meta = {**_last_worker_meta, **meta}
+        worker_id = str(meta.get("worker_id") or "").strip()
+        if worker_id:
+            _worker_heartbeats[worker_id] = now
 
 
 def get_last_worker_id() -> Optional[str]:
     """Worker_id from the most recent heartbeat meta, if any.
 
-    Used when persisting runs so ops_runs.worker_id links the run to the
-    worker that actually executed it (desktop-worker runs only).
+    Prefer task.claimed_by for run attribution when a lease exists; this helper
+    remains for startup/status paths that have no task context.
     """
     worker_id = _last_worker_meta.get("worker_id")
     return str(worker_id) if worker_id else None
+
+
+def is_worker_id_online(worker_id: Optional[str], max_age_seconds: int) -> bool:
+    """True when this specific worker_id heartbeated within max_age_seconds."""
+    if not worker_id:
+        return False
+    seen = _worker_heartbeats.get(worker_id)
+    if seen is None:
+        return False
+    return (datetime.now(timezone.utc) - seen) <= timedelta(seconds=max_age_seconds)
 
 
 def record_worker_startup(meta: Optional[Dict[str, Any]] = None) -> None:
@@ -555,6 +582,7 @@ def get_worker_supervisor_status() -> Dict[str, Any]:
 
 
 def is_worker_online(max_age_seconds: int) -> bool:
+    """Any-worker online gate (enqueue / version checks). Lease requeue uses is_worker_id_online."""
     if _last_worker_heartbeat is None:
         return False
     return (datetime.now(timezone.utc) - _last_worker_heartbeat) <= timedelta(seconds=max_age_seconds)
@@ -731,6 +759,8 @@ async def load_pending_tasks() -> int:
             job_type=row.get("job_type") or "",
             options=row.get("options") or {},
             claimed=bool(row.get("claimed")),
+            claimed_by=row.get("claimed_by"),
+            lease_token=row.get("lease_token"),
             trace_events=row.get("trace_events") or [],
             poll_token=row.get("poll_token") or secrets.token_urlsafe(32),
             owner_key=row.get("owner_key"),
@@ -803,39 +833,45 @@ ACTIVE_JOB_TIMEOUT_SECONDS = 540
 
 
 def requeue_stale_claims(now: Optional[datetime] = None) -> int:
-    """Reclaim scrape/watchlist jobs whose lease belongs to a worker that is gone.
+    """Reclaim scrape/watchlist jobs whose lease owner has gone dark.
 
-    Lease invariant: a claim hands the single desktop worker an exclusive lease on
-    the task. Requeue does not fail the task — it invalidates the stale lease so a
-    healthy worker can re-claim it. A *live* worker (heartbeat within
+    Lease invariant: a claim hands one desktop worker (``claimed_by``) an
+    exclusive ``lease_token``. Requeue does not fail the task — it invalidates
+    the stale lease so a healthy worker can re-claim it.
+
+    A *live* owner (that worker_id's heartbeat within
     ``worker_heartbeat_max_age_seconds``) still owns its lease, so its in-flight
     claim is never stale, even past STALE_CLAIM_SECONDS: a large library can take
-    longer than the window to scrape. Only when the worker has actually gone dark
-    do we treat an over-age claim as abandoned and re-queue it. Idempotent — a
-    late postback is keyed by task_id. Returns how many leases were invalidated."""
+    longer than the window to scrape. Another worker being online does **not**
+    protect a dead owner's claim. Legacy claims without ``claimed_by`` fall back
+    to the global any-worker online gate. Idempotent — a late postback is keyed
+    by task_id + lease_token. Returns how many leases were invalidated."""
     now = now or datetime.now(timezone.utc)
-    # Live worker => lease still held => nothing is stale. Reclaiming here would
-    # yank a running job out from under the worker and duplicate the scrape.
-    if is_worker_online(settings.worker_heartbeat_max_age_seconds):
-        return 0
     cutoff = now - timedelta(seconds=STALE_CLAIM_SECONDS)
+    max_age = settings.worker_heartbeat_max_age_seconds
     count = 0
     for t in _tasks.values():
-        if (
+        if not (
             t.kind in {"scrape", "watchlist"}
             and t.status == "running"
             and t.stage == "scraping"
             and t.claimed_at
             and t.claimed_at < cutoff
         ):
-            t.claimed = False
-            t.status = "pending"
-            t.stage = "queued"
-            t.message = "Re-queued after the worker went away mid-scrape"
-            t.claimed_at = None
-            append_task_event(t.task_id, "requeued", "Worker went away mid-scrape; re-queued", level="warning")
-            _persist_task(t)
-            count += 1
+            continue
+        if t.claimed_by:
+            if is_worker_id_online(t.claimed_by, max_age):
+                continue
+        elif is_worker_online(max_age):
+            # Legacy claim with no owner: keep global single-worker protection.
+            continue
+        _clear_lease(t)
+        t.status = "pending"
+        t.stage = "queued"
+        t.message = "Re-queued after the worker went away mid-scrape"
+        append_task_event(t.task_id, "requeued", "Worker went away mid-scrape; re-queued", level="warning")
+        _persist_task(t)
+        count += 1
     return count
 
 
