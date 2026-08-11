@@ -203,17 +203,18 @@ describe('ShareModal review words', () => {
 
 describe('share registry and privacy', () => {
   it('maps the four landscape and three portrait sketches to distinct compositions', () => {
-    expect(SHARE_VARIANTS.map(({ label, orientation }) => [label, orientation])).toEqual([
-      ['Your Wrapped', 'horizontal'],
-      ['Apple Clean', 'horizontal'],
-      ['Editorial Story', 'horizontal'],
-      ['Tile Dashboard', 'horizontal'],
-      ['Portrait Story', 'vertical'],
-      ['Letterboxd Vertical', 'vertical'],
-      ['Clean Vertical', 'vertical'],
+    expect(SHARE_VARIANTS.map(({ labelKey, orientation }) => [labelKey, orientation])).toEqual([
+      ['share.variant.default', 'horizontal'],
+      ['share.variant.appleHig', 'horizontal'],
+      ['share.variant.editorial', 'horizontal'],
+      ['share.variant.variant3', 'horizontal'],
+      ['share.variant.doubleFeature', 'vertical'],
+      ['share.variant.contactSheet', 'vertical'],
+      ['share.variant.admitOne', 'vertical'],
     ]);
-    expect(shareVariantsForOrientation('horizontal')).toHaveLength(4);
-    expect(shareVariantsForOrientation('vertical')).toHaveLength(3);
+    const label = (key: string) => key;
+    expect(shareVariantsForOrientation('horizontal', label)).toHaveLength(4);
+    expect(shareVariantsForOrientation('vertical', label)).toHaveLength(3);
   });
 
   it('keeps format choices and tuning in one ordered control row', () => {
@@ -242,7 +243,7 @@ describe('share registry and privacy', () => {
       })),
     });
     expect(normalized.favoriteDirector).toEqual({
-      name: 'Director unavailable',
+      name: '',
       headshotUrl: '',
       count: 0,
     });

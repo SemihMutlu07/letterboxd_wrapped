@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } fr
 
 import type { ShareCardData } from '@/components/share/types';
 import { shareVariantsForOrientation } from '@/components/share/registry';
+import { useShareLabels } from '@/components/share/useShareLabels';
 import { normalizeShareCardData } from '@/components/share/viewModel';
 
 import { SHARE_EXPORT_CONFIG } from '@/components/share/modal/exportUtils';
@@ -29,9 +30,10 @@ export default function ShareModal({
   cardProps,
   onDownloadSuccess,
 }: ShareModalProps) {
+  const { variantLabel: resolveVariantLabel } = useShareLabels();
   const availableVariants = useMemo(
-    () => shareVariantsForOrientation(orientation),
-    [orientation],
+    () => shareVariantsForOrientation(orientation, resolveVariantLabel),
+    [orientation, resolveVariantLabel],
   );
   const railRef = useRef<HTMLDivElement>(null);
   const [activeIdx, setActiveIdx] = useState(0);

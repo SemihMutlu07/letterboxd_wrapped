@@ -7,8 +7,11 @@ import { AUTO_MIN_MS, buildSlides } from '@/components/StoryExperience';
 import StoryFinaleCard from '@/components/story/StoryFinaleCard';
 import type { StatsData } from '@/containers/results/sections/types';
 import { I18nProvider } from '@/i18n/I18nProvider';
+import { createTranslator } from '@/i18n/createTranslator';
 import { readySlideKeys, slideMeta } from '@/components/story/manifest';
 import { buildStoryShareCard, pickFinaleOrientation } from '@/components/story/viewModel';
+
+const enI18n = createTranslator('en');
 
 const renderStory = () => render(<I18nProvider locale="en"><StoryPage /></I18nProvider>);
 
@@ -150,7 +153,7 @@ describe('buildSlides', () => {
         viewing_season: { season: 'Summer', percentage: 42, story: 'Summer story' },
         most_active_day: { date: 'August 12', films: 4, story: 'August 12 was a four-film marathon.' },
       },
-    } as unknown as StatsData);
+    } as unknown as StatsData, enI18n);
     const rhythm = slides.find((slide) => slide.key === 'rhythm');
     render(<>{rhythm!.body}</>);
     expect(screen.getByText('Summer')).toBeInTheDocument();
@@ -167,7 +170,7 @@ describe('buildSlides', () => {
         { title: 'Arrival', director: 'Denis Villeneuve', poster_path: '/arrival.jpg' },
         { title: 'Heat', director: 'Michael Mann', poster_path: '/heat.jpg' },
       ],
-    } as unknown as StatsData);
+    } as unknown as StatsData, enI18n);
     const director = slides.find((slide) => slide.key === 'director')!;
     expect(director.visual).toBe('director');
     expect(director.media?.map((item) => item.alt)).toEqual([
@@ -182,7 +185,7 @@ describe('buildSlides', () => {
       rating: 5,
       poster_path: `/five-${index}.jpg`,
     }));
-    const slides = buildSlides({ ...STATS, rating_personality: 'The Generous Critic', all_films: allFilms } as unknown as StatsData);
+    const slides = buildSlides({ ...STATS, rating_personality: 'The Generous Critic', all_films: allFilms } as unknown as StatsData, enI18n);
     const rating = slides.find((slide) => slide.key === 'rating-personality')!;
     expect(rating.visual).toBe('poster-wall');
     expect(rating.media).toHaveLength(11);
@@ -192,14 +195,14 @@ describe('buildSlides', () => {
     const slides = buildSlides({
       ...STATS,
       cinematic_persona_basis: { genre: 'Drama', decade: '2010s', country: 'France', match_type: 'genre' },
-    } as unknown as StatsData);
+    } as unknown as StatsData, enI18n);
     const persona = slides.find((slide) => slide.key === 'persona')!;
     render(<>{persona.body}</>);
     expect(screen.getByText(/Drama was your most-watched genre/i)).toBeInTheDocument();
   });
 
   it('omits the review-personality slide when review_analysis has no reviews', () => {
-    const slides = buildSlides(STATS as unknown as StatsData);
+    const slides = buildSlides(STATS as unknown as StatsData, enI18n);
     expect(slides.some((s) => s.key === 'review-personality')).toBe(false);
   });
 
@@ -214,7 +217,7 @@ describe('buildSlides', () => {
         ],
       },
     };
-    const slides = buildSlides(stats as unknown as StatsData);
+    const slides = buildSlides(stats as unknown as StatsData, enI18n);
     const reviewSlide = slides.find((s) => s.key === 'review-personality');
     expect(reviewSlide).toBeDefined();
     render(<>{reviewSlide!.body}</>);
@@ -327,7 +330,7 @@ describe('story finale', () => {
     }
     vi.stubGlobal('ResizeObserver', FakeResizeObserver);
 
-    const { container } = render(<StoryFinaleCard stats={STATS as unknown as StatsData} />);
+    const { container } = render(<I18nProvider locale="en"><StoryFinaleCard stats={STATS as unknown as StatsData} /></I18nProvider>);
     await waitFor(() => {
       const el = container.querySelector('[data-finale-orientation]');
       expect(el).not.toBeNull();

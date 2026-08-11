@@ -34,28 +34,7 @@ export { ResultsContent };
 // Note: StatsData is imported from @/containers/results/sections/types
 
 export default function ResultsPage() {
-  const { locale } = useI18n();
-  const copy = locale === 'tr'
-    ? {
-        noData: 'Sonuç verisi bulunamadı',
-        noUserData: (value: string) => `@${value} için bu cihazda kayıtlı sonuç bulunamadı.`,
-        uploadFirst: 'Önce Letterboxd verilerini analiz et.',
-        goBack: 'Geri Dön',
-        unknownActor: 'Bilinmeyen Oyuncu',
-        unknownDirector: 'Bilinmeyen Yönetmen',
-        allTime: 'Tüm Zamanlar',
-        last12Months: 'Son 12 Ay',
-      }
-    : {
-        noData: 'No data found',
-        noUserData: (value: string) => `No local result data found for @${value}.`,
-        uploadFirst: 'Please upload your Letterboxd data first.',
-        goBack: 'Go Back',
-        unknownActor: 'Unknown Actor',
-        unknownDirector: 'Unknown Director',
-        allTime: 'All Time',
-        last12Months: 'Last 12 Months',
-      };
+  const { locale, t } = useI18n();
   const {
     stats,
     loading,
@@ -205,12 +184,12 @@ export default function ResultsPage() {
       writtenReviews: activeStats?.review_analysis?.reviews_with_text ?? 0,
       genres: (activeStats?.top_genres ?? []).slice(0, 5).map(({ name }) => name),
       onScreenCrush: topActors[actorIdx] || {
-        name: copy.unknownActor,
+        name: t('results.people.unknownActor'),
         headshotUrl: "",
         count: 0,
       },
       favoriteDirector: topDirectors[directorIdx] || {
-        name: copy.unknownDirector,
+        name: t('results.people.unknownDirector'),
         headshotUrl: "",
         count: 0,
       },
@@ -240,8 +219,8 @@ export default function ResultsPage() {
     timePct,
     username,
     runtimeHours,
-    copy.unknownActor,
-    copy.unknownDirector,
+    t('results.people.unknownActor'),
+    t('results.people.unknownDirector'),
   ]);
 
   useEffect(() => {
@@ -262,17 +241,17 @@ export default function ResultsPage() {
     return (
       <div className="min-h-screen bg-[#1e252d] flex items-center justify-center text-white">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">{copy.noData}</h2>
+          <h2 className="text-2xl font-bold mb-4">{t('results.empty.noData')}</h2>
           <p className="text-gray-400">
             {username
-              ? copy.noUserData(username)
-              : copy.uploadFirst}
+              ? t('results.empty.noUserData', { username })
+              : t('results.empty.uploadFirst')}
           </p>
           <Link
             href={localizePath('/', locale)}
             className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors"
           >
-            {copy.goBack}
+            {t('results.empty.goBack')}
           </Link>
         </div>
       </div>
@@ -289,13 +268,13 @@ export default function ResultsPage() {
                 className={toggleClass(statsWindow === "lifetime")}
                 onClick={() => handleStatsWindowChange("lifetime")}
               >
-                {copy.allTime}
+                {t('results.window.allTime')}
               </button>
               <button
                 className={toggleClass(statsWindow === "year")}
                 onClick={() => handleStatsWindowChange("year")}
               >
-                {copy.last12Months}
+                {t('results.window.last12Months')}
               </button>
             </div>
           </div>
