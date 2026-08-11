@@ -122,7 +122,34 @@ def _task_telemetry(task: task_manager.TaskState) -> dict:
         "error_stage": task.error_stage,
         "error_code": task.error_code,
         "job_type": task.job_type,
-        "worker_id": task_manager.get_last_worker_id(),
+        "worker_id": task.claimed_by or task_manager.get_last_worker_id(),
+    }
+
+
+def _require_lease(task: task_manager.TaskState, body: dict) -> None:
+    """Reject postbacks that do not present the claim's lease_token.
+
+    Legacy rows without a lease_token (pre-migration in-flight claims) skip the
+    check so a rolling deploy does not strand a nearly-finished scrape.
+    """
+    expected = task.lease_token
+    if not expected:
+        return
+    provided = body.get("lease_token") if isinstance(body, dict) else None
+    if not isinstance(provided, str) or not secrets.compare_digest(provided, expected):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "lease_mismatch",
+                "message": "Stale or foreign worker lease for this task.",
+            },
+        )
+
+
+def _job_lease_fields(job: task_manager.TaskState) -> dict:
+    return {
+        "lease_token": job.lease_token,
+        "claimed_by": job.claimed_by,
     }
 
 
@@ -255,7 +282,10 @@ async def worker_supervisor_report(request: Request, x_worker_token: str | None 
 
 
 @router.get("/scrape/next")
-async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
+async def claim_next_scrape(
+    worker_id: str | None = None,
+    x_worker_token: str | None = Header(default=None),
+):
     """Claim the oldest queued scrape job, or return {job: null} if none."""
     _require_worker_token(x_worker_token)
     await dashboard_settings.load_worker_control_state()
@@ -271,13 +301,14 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
                 "version": mismatch,
             },
         )
-    job = task_manager.claim_next_scrape_job()
+    job = task_manager.claim_next_scrape_job(worker_id=worker_id)
     if job is None:
         return {"job": None}
-    logger.info("Worker claimed scrape job %s for @%s", job.task_id, job.username)
+    logger.info("Worker claimed scrape job %s for @%s by %s", job.task_id, job.username, job.claimed_by)
     await log_worker_event("job_claimed", {
         "task_id": job.task_id,
         "username": job.username,
+        "worker_id": job.claimed_by,
         "severity": "info",
     })
     return {
@@ -286,6 +317,7 @@ async def claim_next_scrape(x_worker_token: str | None = Header(default=None)):
             "username": job.username,
             "avatar_only": job.avatar_only,
             "options": job.options,
+            **_job_lease_fields(job),
         }
     }
 
@@ -300,6 +332,7 @@ async def record_scrape_event(task_id: str, request: Request, x_worker_token: st
     body = await request.json()
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail={"error_code": "invalid_body", "message": "Body must be an object."})
+    _require_lease(task, body)
 
     events = body.get("events")
     if isinstance(events, list):
@@ -344,6 +377,7 @@ async def complete_scrape(task_id: str, request: Request, x_worker_token: str | 
         logger.warning("Worker completed orphan scrape job %s; persisted run without task state", task_id)
         return {"ok": True, "orphan": True}
 
+    _require_lease(task, body)
     _merge_worker_trace(task_id, body)
     task_manager.append_task_event(task_id, "completed", "Worker posted final stats", level="info")
     task_manager.set_task_done(
@@ -395,6 +429,7 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
         logger.warning("Worker failed orphan scrape job %s; persisted run without task state: %s", task_id, message)
         return {"ok": True, "orphan": True}
 
+    _require_lease(task, body)
     _merge_worker_trace(task_id, body)
     error_stage = telemetry.get("error_stage")
     task_manager.append_task_event(task_id, error_stage or "failed", message, level="error")
@@ -426,7 +461,10 @@ async def fail_scrape(task_id: str, request: Request, x_worker_token: str | None
 
 
 @router.get("/watchlist/next")
-async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)):
+async def claim_next_watchlist(
+    worker_id: str | None = None,
+    x_worker_token: str | None = Header(default=None),
+):
     """Claim the oldest queued watchlist/date-night scrape job, or return {job: null}."""
     _require_worker_token(x_worker_token)
     await dashboard_settings.load_worker_control_state()
@@ -442,21 +480,32 @@ async def claim_next_watchlist(x_worker_token: str | None = Header(default=None)
                 "version": mismatch,
             },
         )
-    job = task_manager.claim_next_watchlist_job()
+    job = task_manager.claim_next_watchlist_job(worker_id=worker_id)
     if job is None:
         return {"job": None}
-    logger.info("Worker claimed watchlist job %s type=%s users=%s", job.task_id, job.job_type, job.usernames)
+    logger.info("Worker claimed watchlist job %s type=%s users=%s by %s", job.task_id, job.job_type, job.usernames, job.claimed_by)
     await log_worker_event("job_claimed", {
         "task_id": job.task_id,
         "job_type": job.job_type,
         "usernames": job.usernames,
+        "worker_id": job.claimed_by,
         "severity": "info",
     })
-    return {"job": {"task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+    return {
+        "job": {
+            "task_id": job.task_id,
+            "job_type": job.job_type,
+            "usernames": job.usernames,
+            **_job_lease_fields(job),
+        }
+    }
 
 
 @router.get("/next")
-async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
+async def claim_next_worker(
+    worker_id: str | None = None,
+    x_worker_token: str | None = Header(default=None),
+):
     """Claim the oldest profile or watchlist job to prevent queue starvation."""
     _require_worker_token(x_worker_token)
     await dashboard_settings.load_worker_control_state()
@@ -465,7 +514,7 @@ async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
     mismatch = _worker_version_mismatch()
     if mismatch:
         raise HTTPException(status_code=409, detail={"error_code": "worker_version_mismatch", "version": mismatch})
-    job = task_manager.claim_next_worker_job()
+    job = task_manager.claim_next_worker_job(worker_id=worker_id)
     if job is None:
         return {"job": None}
     if job.kind == "watchlist":
@@ -473,12 +522,22 @@ async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
             "task_id": job.task_id,
             "job_type": job.job_type,
             "usernames": job.usernames,
+            "worker_id": job.claimed_by,
             "severity": "info",
         })
-        return {"job": {"kind": "watchlist", "task_id": job.task_id, "job_type": job.job_type, "usernames": job.usernames}}
+        return {
+            "job": {
+                "kind": "watchlist",
+                "task_id": job.task_id,
+                "job_type": job.job_type,
+                "usernames": job.usernames,
+                **_job_lease_fields(job),
+            }
+        }
     await log_worker_event("job_claimed", {
         "task_id": job.task_id,
         "username": job.username,
+        "worker_id": job.claimed_by,
         "severity": "info",
     })
     return {
@@ -488,6 +547,7 @@ async def claim_next_worker(x_worker_token: str | None = Header(default=None)):
             "username": job.username,
             "avatar_only": job.avatar_only,
             "options": job.options,
+            **_job_lease_fields(job),
         }
     }
 
@@ -504,6 +564,7 @@ async def complete_watchlist(task_id: str, request: Request, x_worker_token: str
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
     if task.status in {"done", "failed"} or task.stage == "processing":
         return {"ok": True, "duplicate": True}
+    _require_lease(task, body)
     if task.options.get("raw_only"):
         task_manager.set_task_done(task_id, body)
         logger.info("Worker completed raw watchlist job %s", task_id)
@@ -535,6 +596,7 @@ async def fail_watchlist(task_id: str, request: Request, x_worker_token: str | N
         raise HTTPException(status_code=404, detail={"error_code": "task_not_found", "message": "Watchlist job not found."})
     if task.status in {"done", "failed"} or task.stage == "processing":
         return {"ok": True, "duplicate": True}
+    _require_lease(task, body)
     task_manager.set_task_failed(task_id, message, _request_telemetry(body))
     logger.warning("Worker reported watchlist job %s failed: %s", task_id, message)
     await log_worker_event("job_failed", {

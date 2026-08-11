@@ -62,7 +62,8 @@ TRACE_FLUSH_INTERVAL = float(os.getenv("WORKER_TRACE_FLUSH_INTERVAL", "5"))
 WORKER_PROTOCOL_VERSION = 4
 # Watchlist-compare enrichment has its own timeout (the scrape itself is unbounded).
 WATCHLIST_ENRICH_TIMEOUT = 120
-# V1 processes one job at a time — no concurrency yet.
+# Heartbeat metadata only — the poll loop already runs one job at a time.
+# Backend does not enforce this value as a claim cap.
 MAX_CONCURRENCY = 1
 # Incremented while a job is being processed so heartbeats report load.
 _ACTIVE_JOBS = 0
@@ -309,12 +310,9 @@ async def _run_startup_self_test(session: aiohttp.ClientSession, cfg: WorkerConf
     logger.info("Startup self-test passed for @%s (films=%s)", username, total_films)
 
 
-async def _claim_next_watchlist(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
-    async with session.get(f"{cfg.base_url}/api/worker/watchlist/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
-        if r.status != 200:
-            logger.warning("Watchlist claim failed: HTTP %s", r.status)
-            return None
-        return (await r.json()).get("job")
+def _lease_fields(job: dict) -> dict:
+    token = job.get("lease_token")
+    return {"lease_token": token} if isinstance(token, str) and token else {}
 
 
 async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
@@ -390,34 +388,37 @@ async def _process_watchlist_job(session: aiohttp.ClientSession, cfg: WorkerConf
     except Exception as exc:  # noqa: BLE001
         message = str(exc) if isinstance(exc, ValueError) else f"Scrape failed for {'/'.join(usernames)}."
         logger.warning("Watchlist job %s failed: %s", task_id, exc)
-        payload = {"message": message, "telemetry": _failure_telemetry(exc, 0.0)}
+        payload = {"message": message, "telemetry": _failure_telemetry(exc, 0.0), **_lease_fields(job)}
         outbox_path = _write_outbox(task_id, "watchlist-failed", f"/api/worker/watchlist/{task_id}/failed", payload)
         await _send_outbox_item(session, cfg, outbox_path)
         return
 
+    payload = {**payload, **_lease_fields(job)}
     outbox_path = _write_outbox(task_id, "watchlist-complete", f"/api/worker/watchlist/{task_id}/complete", payload)
     if await _send_outbox_item(session, cfg, outbox_path):
         logger.info("Watchlist job %s complete", task_id)
 
 
-async def _claim_next(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
-    async with session.get(f"{cfg.base_url}/api/worker/scrape/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
+async def _claim_next_fair(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
+    params = {"worker_id": WORKER_ID}
+    async with session.get(
+        f"{cfg.base_url}/api/worker/next",
+        headers=cfg.headers,
+        params=params,
+        timeout=CONTROL_TIMEOUT,
+    ) as r:
         if r.status == 409:
             body = await r.text()
-            logger.warning("Claim blocked by backend: %s", body)
+            logger.warning("Claim blocked by backend (version/lease): %s", body)
             return None
-        if r.status != 200:
-            logger.warning("Claim failed: HTTP %s", r.status)
-            return None
-        return (await r.json()).get("job")
-
-
-async def _claim_next_fair(session: aiohttp.ClientSession, cfg: WorkerConfig) -> dict | None:
-    async with session.get(f"{cfg.base_url}/api/worker/next", headers=cfg.headers, timeout=CONTROL_TIMEOUT) as r:
         if r.status != 200:
             logger.warning("Fair claim failed: HTTP %s", r.status)
             return None
-        return (await r.json()).get("job")
+        data = await r.json()
+        if data.get("paused"):
+            logger.info("Worker paused by control plane — not claiming")
+            return None
+        return data.get("job")
 
 
 def _outbox_path(task_id: str, kind: str) -> Path:
@@ -462,16 +463,29 @@ async def _flush_outbox(session: aiohttp.ClientSession, cfg: WorkerConfig) -> No
         await _send_outbox_item(session, cfg, outbox_path)
 
 
-async def _flush_trace(session: aiohttp.ClientSession, cfg: WorkerConfig, task_id: str, trace: TraceBuffer) -> None:
+async def _flush_trace(
+    session: aiohttp.ClientSession,
+    cfg: WorkerConfig,
+    task_id: str,
+    trace: TraceBuffer,
+    lease: dict | None = None,
+) -> None:
     events = trace.drain()
     if events:
-        await _post(session, cfg, f"/api/worker/scrape/{task_id}/event", {"events": events})
+        payload = {"events": events, **(lease or {})}
+        await _post(session, cfg, f"/api/worker/scrape/{task_id}/event", payload)
 
 
-async def _trace_flush_loop(session: aiohttp.ClientSession, cfg: WorkerConfig, task_id: str, trace: TraceBuffer) -> None:
+async def _trace_flush_loop(
+    session: aiohttp.ClientSession,
+    cfg: WorkerConfig,
+    task_id: str,
+    trace: TraceBuffer,
+    lease: dict | None = None,
+) -> None:
     while True:
         await asyncio.sleep(TRACE_FLUSH_INTERVAL)
-        await _flush_trace(session, cfg, task_id, trace)
+        await _flush_trace(session, cfg, task_id, trace, lease)
 
 
 async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: dict) -> None:
@@ -480,6 +494,7 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     avatar_only = bool(job.get("avatar_only"))
     options = job.get("options") if isinstance(job.get("options"), dict) else {}
     analysis_period = str(options.get("analysis_period") or "lifetime")
+    lease = _lease_fields(job)
     started = monotonic()
     trace = TraceBuffer()
     trace.add(
@@ -492,7 +507,7 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
             "analysis_period": analysis_period,
         },
     )
-    trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace))
+    trace_flush = asyncio.create_task(_trace_flush_loop(session, cfg, task_id, trace, lease))
     logger.info("Processing %s job %s for @%s", "avatar" if avatar_only else "scrape", task_id, username)
     try:
         if avatar_only:
@@ -513,11 +528,17 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
         trace.add(telemetry["error_stage"], message, {"error_type": telemetry["error_type"]}, level="error")
         trace.add("postback_started", "Posting failure to backend")
         logger.warning("Scrape job %s for @%s failed: %s", task_id, username, exc)
-        await _flush_trace(session, cfg, task_id, trace)
+        await _flush_trace(session, cfg, task_id, trace, lease)
         trace_flush.cancel()
         with suppress(asyncio.CancelledError):
             await trace_flush
-        payload = {"username": username, "message": message, "telemetry": telemetry, "trace_events": trace.snapshot()}
+        payload = {
+            "username": username,
+            "message": message,
+            "telemetry": telemetry,
+            "trace_events": trace.snapshot(),
+            **lease,
+        }
         outbox_path = _write_outbox(task_id, "failed", f"/api/worker/scrape/{task_id}/failed", payload)
         if await _send_outbox_item(session, cfg, outbox_path):
             logger.info("Failure postback acknowledged for job %s", task_id)
@@ -526,11 +547,17 @@ async def _process_job(session: aiohttp.ClientSession, cfg: WorkerConfig, job: d
     duration_seconds = round(monotonic() - started, 1)
     trace.add("postback_started", "Posting result to backend")
     telemetry = {"duration_seconds": duration_seconds, "postback_seconds": 0.0, **trace.timings()}
-    await _flush_trace(session, cfg, task_id, trace)
+    await _flush_trace(session, cfg, task_id, trace, lease)
     trace_flush.cancel()
     with suppress(asyncio.CancelledError):
         await trace_flush
-    payload = {"username": username, "stats": stats, "telemetry": telemetry, "trace_events": trace.snapshot()}
+    payload = {
+        "username": username,
+        "stats": stats,
+        "telemetry": telemetry,
+        "trace_events": trace.snapshot(),
+        **lease,
+    }
     outbox_path = _write_outbox(task_id, "complete", f"/api/worker/scrape/{task_id}/complete", payload)
     if await _send_outbox_item(session, cfg, outbox_path):
         logger.info("Completion postback acknowledged for job %s", task_id)

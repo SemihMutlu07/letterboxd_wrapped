@@ -11,8 +11,8 @@ import os
 import socket
 
 # Stable per-machine identity. Defaults to the hostname so a fresh setup
-# "just works"; set WORKER_ID explicitly when running more than one worker
-# against the same backend (e.g. desktop + laptop).
+# "just works". Set WORKER_ID explicitly when running more than one worker
+# against the same backend — claims bind to this id via claimed_by + lease_token.
 WORKER_ID = os.getenv("WORKER_ID") or f"desktop-{socket.gethostname().lower()}"
 
 # Human-facing worker version reported in heartbeats. Bump when worker
