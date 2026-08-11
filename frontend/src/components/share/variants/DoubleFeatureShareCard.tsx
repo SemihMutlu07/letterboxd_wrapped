@@ -21,7 +21,7 @@ const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
         style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
       >
         <div className="absolute inset-x-0 top-0 h-[360px] bg-gradient-to-b from-[#db4f1d] to-transparent opacity-75" />
-        <div className="relative mx-9 flex h-full min-w-0 flex-col py-[142px]">
+        <div className="relative mx-10 flex h-full min-w-0 flex-col py-[158px]">
           <header className="flex min-w-0 items-start justify-between gap-5 border-y border-[#ffd2a8]/60 py-4">
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.24em]">Your year in cinema</p>

@@ -21,13 +21,13 @@ const AdmitOneShareCard = React.forwardRef<HTMLDivElement, Props>(
         style={{ fontFamily: "'Avenir Next', Manrope, 'Segoe UI', system-ui, sans-serif" }}
       >
         <div className="absolute right-0 top-0 h-[380px] w-[380px] rounded-bl-full bg-[#ffb000]/20" />
-        <div className="relative mx-10 flex h-full min-w-0 flex-col py-[150px]">
+        <div className="relative mx-10 flex h-full min-w-0 flex-col py-[158px]">
           <header className="min-w-0">
             <div className="flex min-w-0 items-start justify-between gap-6">
               <p className="text-[12px] font-bold uppercase tracking-[0.22em] text-[#686868]">{data.year} in film</p>
               <Username username={data.username} className="max-w-[230px] text-right text-[12px] font-semibold text-[#686868]" />
             </div>
-            <h1 className="mt-4 text-[49px] font-semibold leading-[0.94] tracking-[-0.045em] [text-wrap:balance]">
+            <h1 className="mt-4 text-[46px] font-semibold leading-[1.25] tracking-[-0.045em] [overflow-wrap:anywhere]">
               Your Letterboxd Wrapped
             </h1>
           </header>

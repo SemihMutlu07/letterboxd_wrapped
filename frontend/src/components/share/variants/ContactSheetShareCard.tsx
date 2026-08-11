@@ -21,7 +21,7 @@ const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(
         style={{ fontFamily: "'Helvetica Neue', Arial, sans-serif" }}
       >
         <div className="absolute left-0 top-0 h-full w-3 bg-[#00e054]" />
-        <div className="mx-10 flex h-full min-w-0 flex-col py-[146px]">
+        <div className="mx-10 flex h-full min-w-0 flex-col py-[158px]">
           <header className="flex min-w-0 items-start justify-between gap-6 border-b-4 border-white pb-4">
             <div className="min-w-0">
               <p className="text-[12px] font-black uppercase tracking-[0.22em] text-[#00e054]">Letterboxd vertical</p>
