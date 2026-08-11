@@ -209,6 +209,32 @@ describe('buildSlides', () => {
     ]);
   });
 
+  it('builds the actor slide after director with rose accent and deduped posters', () => {
+    const slides = buildSlides({
+      ...STATS,
+      top_directors: [{ name: 'Denis Villeneuve', count: 2, profile_path: '/denis.jpg' }],
+      top_actors: [{ name: 'Jake Gyllenhaal', count: 18, profile_path: '/jake.jpg' }],
+      all_films: [
+        { title: 'Nightcrawler', cast: ['Jake Gyllenhaal'], poster_path: '/night.jpg', rating: 5 },
+        { title: 'Arrival', director: 'Denis Villeneuve', cast: ['Amy Adams'], poster_path: '/arrival.jpg', rating: 4 },
+        { title: 'Heat', director: 'Michael Mann', cast: ['Jake Gyllenhaal'], poster_path: '/heat.jpg', rating: 3 },
+      ],
+      rewatch_champions: [{ title: 'Nightcrawler', watch_count: 4 }],
+    } as unknown as StatsData);
+    const directorIndex = slides.findIndex((slide) => slide.key === 'director');
+    const actor = slides.find((slide) => slide.key === 'actor')!;
+    expect(directorIndex).toBeGreaterThan(-1);
+    expect(slides.findIndex((slide) => slide.key === 'actor')).toBe(directorIndex + 1);
+    expect(actor.visual).toBe('actor');
+    expect(actor.accent).toBe('#f472b6');
+    expect(actor.actorSequence?.streamPosters.map((item) => item.alt)).toEqual(['Nightcrawler poster', 'Heat poster']);
+    expect(actor.actorSequence?.streamPosters.length).toBeLessThanOrEqual(12);
+    expect(actor.actorSequence?.rewatch).toEqual({ title: 'Nightcrawler', watchCount: 4 });
+    expect(actor.insight).toEqual({ kind: 'actor-rewatch', title: 'Nightcrawler', watchCount: 4 });
+    expect(actor.actorSequence?.streamPosters.some((item) => item.alt === 'Arrival poster')).toBe(false);
+  });
+
+
   it('shows every five-star film for the generous critic', () => {
     const allFilms = Array.from({ length: 11 }, (_, index) => ({
       title: `Five ${index}`,

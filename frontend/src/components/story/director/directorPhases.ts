@@ -1,43 +1,31 @@
-export const DIRECTOR_STREAM_POSTER_CAP = 12;
+export {
+  PERSON_STREAM_POSTER_CAP,
+  PERSON_STREAM_MIN_FILL,
+  PERSON_PHASE_ORDER,
+  PERSON_PHASE_MS,
+  personPhaseAt,
+  showPersonRewatch,
+  type PersonPhase,
+} from '../person/personPhases';
 
-export type DirectorPhase =
-  | 'textReveal'
-  | 'portraitIntro'
-  | 'compose'
-  | 'streamBurst'
-  | 'streamAmbient'
-  | 'final';
+import {
+  PERSON_STREAM_POSTER_CAP,
+  PERSON_PHASE_ORDER,
+  PERSON_PHASE_MS,
+  personPhaseAt,
+  showPersonRewatch,
+  type PersonPhase,
+} from '../person/personPhases';
 
-export const DIRECTOR_PHASE_ORDER: readonly DirectorPhase[] = [
-  'textReveal',
-  'portraitIntro',
-  'compose',
-  'streamBurst',
-  'streamAmbient',
-  'final',
-];
+export const DIRECTOR_STREAM_POSTER_CAP = PERSON_STREAM_POSTER_CAP;
+export type DirectorPhase = PersonPhase;
+export const DIRECTOR_PHASE_ORDER = PERSON_PHASE_ORDER;
+export const DIRECTOR_PHASE_MS = PERSON_PHASE_MS;
 
-/** Wall-clock offsets from slide mount — navigation never waits on these. */
-export const DIRECTOR_PHASE_MS: Partial<Record<DirectorPhase, number>> = {
-  portraitIntro: 650,
-  compose: 1300,
-  streamBurst: 1900,
-  streamAmbient: 3200,
-  final: 3200,
-};
-
-export function directorPhaseAt(elapsedMs: number): DirectorPhase {
-  let phase: DirectorPhase = 'textReveal';
-  for (const candidate of DIRECTOR_PHASE_ORDER) {
-    const threshold = DIRECTOR_PHASE_MS[candidate];
-    if (threshold != null && elapsedMs >= threshold) {
-      phase = candidate;
-    }
-  }
-  return phase;
+export function directorPhaseAt(elapsedMs: number): PersonPhase {
+  return personPhaseAt(elapsedMs);
 }
 
-export function showDirectorRewatch(phase: DirectorPhase, reduce: boolean): boolean {
-  if (reduce) return true;
-  return phase === 'streamBurst' || phase === 'streamAmbient' || phase === 'final';
+export function showDirectorRewatch(phase: PersonPhase, reduce: boolean): boolean {
+  return showPersonRewatch(phase, reduce);
 }

@@ -17,20 +17,30 @@ export type SlideVisual =
   | 'cascade'
   | 'director'
   | 'person'
+  | 'actor'
   | 'poster-wall'
   | 'recap';
 
-export type DirectorRewatchInsight = {
+export type PersonRewatchInsight = {
   title: string;
   watchCount: number;
 };
 
-export type DirectorSequenceData = {
-  directorName: string;
+export type PersonSequenceData = {
+  personName: string;
   filmCount: number;
   profile: StoryMedia | null;
   streamPosters: StoryMedia[];
-  rewatch: DirectorRewatchInsight | null;
+  rewatch: PersonRewatchInsight | null;
+};
+
+export type DirectorRewatchInsight = PersonRewatchInsight;
+export type DirectorSequenceData = PersonSequenceData;
+
+export type SlideInsight = {
+  kind: 'actor-rewatch';
+  title: string;
+  watchCount: number;
 };
 
 export type Slide = {
@@ -41,6 +51,8 @@ export type Slide = {
   visual?: SlideVisual;
   /** Optional override for desktop poster-field placement (merged with visual defaults). */
   posterLayout?: Partial<PosterFieldConfig>;
-  /** Cinematic director beat — desktop animation + localized copy metadata. */
-  directorSequence?: DirectorSequenceData;
+  /** Cinematic person beat — desktop animation + localized copy metadata. */
+  directorSequence?: PersonSequenceData;
+  actorSequence?: PersonSequenceData;
+  insight?: SlideInsight;
 };

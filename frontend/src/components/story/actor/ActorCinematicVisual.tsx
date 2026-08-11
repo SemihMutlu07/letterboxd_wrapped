@@ -3,7 +3,7 @@
 import type { PersonSequenceData } from '../types';
 import { PersonCinematicVisual } from '../person/PersonCinematicVisual';
 
-export function DirectorCinematicVisual({
+export function ActorCinematicVisual({
   sequence,
   accent,
 }: {
@@ -14,7 +14,8 @@ export function DirectorCinematicVisual({
     <PersonCinematicVisual
       sequence={sequence}
       accent={accent}
-      portraitEase={[0.22, 1, 0.36, 1]}
+      portraitMicroDrift
+      portraitEase={[0.25, 0.46, 0.45, 0.94]}
     />
   );
 }

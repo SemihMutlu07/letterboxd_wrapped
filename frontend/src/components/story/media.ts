@@ -151,39 +151,164 @@ export function generousCriticPosters(stats: StatsData): StoryMedia[] {
   return compactMedia(featured.map((film) => posterMedia(film, 'w500')), Number.POSITIVE_INFINITY);
 }
 
-export const DIRECTOR_STREAM_POSTER_CAP = 12;
+export const PERSON_STREAM_POSTER_CAP = 12;
+export const PERSON_STREAM_MIN_FILL = 6;
+export const DIRECTOR_STREAM_POSTER_CAP = PERSON_STREAM_POSTER_CAP;
 
-export function directorFilmsByName(stats: StatsData, directorName: string) {
-  const clean = directorName.toLowerCase();
-  return (stats.all_films ?? []).filter((film) => film.director?.toLowerCase() === clean);
+function personFilmsByRole(
+  stats: StatsData,
+  personName: string,
+  role: 'director' | 'actor',
+) {
+  const clean = personName.toLowerCase();
+  return (stats.all_films ?? []).filter((film) =>
+    role === 'director'
+      ? film.director?.toLowerCase() === clean
+      : film.cast?.some((actor) => actor.toLowerCase() === clean),
+  );
 }
 
-/** Deterministic capped poster stream — one node per unique film poster. */
-export function directorStreamPosters(stats: StatsData, directorName: string, limit = DIRECTOR_STREAM_POSTER_CAP): StoryMedia[] {
-  const films = directorFilmsByName(stats, directorName)
+export function directorFilmsByName(stats: StatsData, directorName: string) {
+  return personFilmsByRole(stats, directorName, 'director');
+}
+
+export function actorFilmsByName(stats: StatsData, actorName: string) {
+  return personFilmsByRole(stats, actorName, 'actor');
+}
+
+function titleSetForFilms(films: StatsData['all_films']) {
+  return new Set(
+    (films ?? [])
+      .map((film) => film.title?.toLowerCase())
+      .filter(Boolean) as string[],
+  );
+}
+
+function rewatchTitleSet(stats: StatsData, titles: Set<string>) {
+  return new Set(
+    (stats.rewatch_champions ?? [])
+      .filter((entry) => titles.has(entry.title?.toLowerCase() ?? '') && entry.watch_count >= 2)
+      .map((entry) => entry.title?.toLowerCase() ?? '')
+      .filter(Boolean),
+  );
+}
+
+function sortFilmsForStream(
+  films: StatsData['all_films'],
+  rewatchTitles: Set<string>,
+  prioritizeRewatch: boolean,
+) {
+  return [...(films ?? [])]
     .filter((film) => film.poster_path)
     .sort((a, b) => {
+      if (prioritizeRewatch) {
+        const aRewatch = rewatchTitles.has(a.title?.toLowerCase() ?? '');
+        const bRewatch = rewatchTitles.has(b.title?.toLowerCase() ?? '');
+        if (aRewatch !== bRewatch) return aRewatch ? -1 : 1;
+      }
       const ratingDelta = (b.rating ?? 0) - (a.rating ?? 0);
       if (ratingDelta !== 0) return ratingDelta;
       return (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' });
     });
-  return compactMedia(films.map((film) => posterMedia(film, 'w500')), limit);
+}
+
+/** Deterministic capped poster stream — one node per unique film poster. */
+export function directorStreamPosters(
+  stats: StatsData,
+  directorName: string,
+  limit = DIRECTOR_STREAM_POSTER_CAP,
+): StoryMedia[] {
+  const films = directorFilmsByName(stats, directorName);
+  const rewatchTitles = rewatchTitleSet(stats, titleSetForFilms(films));
+  return compactMedia(
+    sortFilmsForStream(films, rewatchTitles, false).map((film) => posterMedia(film, 'w500')),
+    limit,
+  );
+}
+
+export function actorStreamPosters(
+  stats: StatsData,
+  actorName: string,
+  options?: {
+    limit?: number;
+    excludeUrls?: Set<string>;
+    directorClaimedUrls?: string[];
+  },
+): StoryMedia[] {
+  const limit = options?.limit ?? PERSON_STREAM_POSTER_CAP;
+  const excludeUrls = options?.excludeUrls ?? new Set<string>();
+  const films = actorFilmsByName(stats, actorName);
+  const rewatchTitles = rewatchTitleSet(stats, titleSetForFilms(films));
+  const sorted = sortFilmsForStream(films, rewatchTitles, true);
+
+  const seen = new Set<string>();
+  const primary: StoryMedia[] = [];
+  const excludedPool: StoryMedia[] = [];
+
+  for (const film of sorted) {
+    const media = posterMedia(film, 'w500');
+    if (!media || seen.has(media.url)) continue;
+    seen.add(media.url);
+    if (excludeUrls.has(media.url)) {
+      excludedPool.push(media);
+      continue;
+    }
+    primary.push(media);
+    if (primary.length >= limit) break;
+  }
+
+  let result = primary;
+  if (result.length < PERSON_STREAM_MIN_FILL) {
+    const excludedByUrl = new Map(excludedPool.map((item) => [item.url, item]));
+    const refill: StoryMedia[] = [];
+    const directorOrder = options?.directorClaimedUrls ?? [];
+
+    for (let index = directorOrder.length - 1; index >= 0; index -= 1) {
+      const item = excludedByUrl.get(directorOrder[index]);
+      if (!item || result.some((poster) => poster.url === item.url)) continue;
+      if (refill.some((poster) => poster.url === item.url)) continue;
+      refill.push(item);
+    }
+
+    for (const item of excludedPool) {
+      if (result.some((poster) => poster.url === item.url)) continue;
+      if (refill.some((poster) => poster.url === item.url)) continue;
+      refill.push(item);
+    }
+
+    result = [...result, ...refill].slice(0, limit);
+  }
+
+  return result.slice(0, limit);
+}
+
+export function personRewatchInsight(
+  stats: StatsData,
+  titles: Set<string>,
+): { title: string; watchCount: number } | null {
+  const champion = (stats.rewatch_champions ?? [])
+    .filter((entry) => titles.has(entry.title?.toLowerCase() ?? ''))
+    .sort((a, b) => {
+      const countDelta = b.watch_count - a.watch_count;
+      if (countDelta !== 0) return countDelta;
+      return (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' });
+    })[0];
+  if (!champion || champion.watch_count < 2) return null;
+  return { title: champion.title, watchCount: champion.watch_count };
 }
 
 export function directorRewatchInsight(
   stats: StatsData,
   directorName: string,
 ): { title: string; watchCount: number } | null {
-  const titles = new Set(
-    directorFilmsByName(stats, directorName)
-      .map((film) => film.title?.toLowerCase())
-      .filter(Boolean) as string[],
-  );
-  const champion = (stats.rewatch_champions ?? [])
-    .filter((entry) => titles.has(entry.title?.toLowerCase() ?? ''))
-    .sort((a, b) => b.watch_count - a.watch_count)[0];
-  if (!champion || champion.watch_count < 2) return null;
-  return { title: champion.title, watchCount: champion.watch_count };
+  return personRewatchInsight(stats, titleSetForFilms(directorFilmsByName(stats, directorName)));
+}
+
+export function actorRewatchInsight(
+  stats: StatsData,
+  actorName: string,
+): { title: string; watchCount: number } | null {
+  return personRewatchInsight(stats, titleSetForFilms(actorFilmsByName(stats, actorName)));
 }
 
 export function buildDirectorSequence(
@@ -193,10 +318,29 @@ export function buildDirectorSequence(
   profilePerson?: { name?: string; profile_path?: string | null } | null,
 ) {
   return {
-    directorName,
+    personName: directorName,
     filmCount,
     profile: profileMedia(profilePerson ?? stats.top_directors?.find((d) => d.name === directorName)),
     streamPosters: directorStreamPosters(stats, directorName),
     rewatch: directorRewatchInsight(stats, directorName),
+  };
+}
+
+export function buildActorSequence(
+  stats: StatsData,
+  actorName: string,
+  filmCount: number,
+  profilePerson?: { name?: string; profile_path?: string | null } | null,
+  options?: {
+    excludeUrls?: Set<string>;
+    directorClaimedUrls?: string[];
+  },
+) {
+  return {
+    personName: actorName,
+    filmCount,
+    profile: profileMedia(profilePerson ?? stats.top_actors?.find((actor) => actor.name === actorName)),
+    streamPosters: actorStreamPosters(stats, actorName, options),
+    rewatch: actorRewatchInsight(stats, actorName),
   };
 }

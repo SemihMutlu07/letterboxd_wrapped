@@ -11,7 +11,7 @@ import { StoryNavigation } from '@/components/story/StoryNavigation';
 import { StoryPauseButton } from '@/components/story/StoryPauseButton';
 import { StoryProgressBar } from '@/components/story/StoryProgressBar';
 import { StorySlidePanel } from '@/components/story/StorySlidePanel';
-import { DirectorSlidePhaseProvider } from '@/components/story/director/DirectorSlidePhaseContext';
+import { PersonSlidePhaseProvider } from '@/components/story/person/PersonSlidePhaseContext';
 import { StoryVisual } from '@/components/story/visuals/StoryVisual';
 import { useI18n } from '@/i18n/I18nProvider';
 
@@ -115,8 +115,8 @@ export default function StoryExperience() {
   const activeSlide = slides[index];
 
   return (
-    <DirectorSlidePhaseProvider
-      sequence={activeSlide.directorSequence ?? null}
+    <PersonSlidePhaseProvider
+      sequence={activeSlide.directorSequence ?? activeSlide.actorSequence ?? null}
       slideKey={activeSlide.key}
       paused={isPaused}
     >
@@ -149,7 +149,7 @@ export default function StoryExperience() {
         onReplay={() => goToSlide(0)}
       />
     </main>
-    </DirectorSlidePhaseProvider>
+    </PersonSlidePhaseProvider>
   );
 }
 

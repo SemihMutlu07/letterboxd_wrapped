@@ -8,7 +8,7 @@ import { Label, Big, Sub } from '../SlideTypography';
 import { showPersonRewatch } from '../person/personPhases';
 import { usePersonSlidePhase } from '../person/PersonSlidePhaseContext';
 
-export function DirectorSlideBody() {
+export function ActorSlideBody() {
   const { t, formatNumber } = useI18n();
   const { phase, reduce, sequence } = usePersonSlidePhase();
   if (!sequence) return null;
@@ -21,24 +21,24 @@ export function DirectorSlideBody() {
       <motion.div
         initial={instant ? false : { opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, ease: 'easeOut' }}
+        transition={{ duration: instant ? 0 : 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
-        <Label>{t('story.slide.director.label')}</Label>
+        <Label>{t('story.slide.actor.label')}</Label>
       </motion.div>
       <motion.div
         initial={instant ? false : { opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, delay: instant ? 0 : 0.12, ease: 'easeOut' }}
+        transition={{ duration: instant ? 0 : 0.55, delay: instant ? 0 : 0.12, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         <Big>{sequence.personName}</Big>
       </motion.div>
       <motion.div
         initial={instant ? false : { opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.5, delay: instant ? 0 : 0.28, ease: 'easeOut' }}
+        transition={{ duration: instant ? 0 : 0.5, delay: instant ? 0 : 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
       >
         <Sub>
-          {t('story.slide.director.sub', { count: formatNumber(sequence.filmCount) })}
+          {t('story.slide.actor.sub', { count: formatNumber(sequence.filmCount) })}
         </Sub>
       </motion.div>
       {showRewatch && sequence.rewatch && (
@@ -49,11 +49,11 @@ export function DirectorSlideBody() {
         >
           <Sub className="text-stone-400">
             {sequence.rewatch.watchCount > 2
-              ? t('story.slide.director.rewatch.detail', {
+              ? t('story.slide.actor.rewatch.detail', {
                 title: sequence.rewatch.title,
                 count: formatNumber(sequence.rewatch.watchCount),
               })
-              : t('story.slide.director.rewatch.tease')}
+              : t('story.slide.actor.rewatch.tease')}
           </Sub>
         </motion.div>
       )}

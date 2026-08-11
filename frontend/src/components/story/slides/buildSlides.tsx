@@ -19,6 +19,7 @@ import {
   storySeason,
   topRatedPosters,
   buildDirectorSequence,
+  buildActorSequence,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
 import { RewatchInsight } from './RewatchInsight';
@@ -148,34 +149,38 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
   }
 
   if (topActor?.name) {
-    const actorRewatches = personRewatches(stats, topActor.name, 'actor');
-    const topRewatch = actorRewatches[0];
+    const directorClaimedUrls = slides.find((slide) => slide.key === 'director')?.directorSequence?.streamPosters.map(
+      (poster) => poster.url,
+    ) ?? [];
+    const actorProfile = stats.top_actors?.find((actor) => actor.name === topActor.name);
+    const actorSequence = buildActorSequence(
+      stats,
+      topActor.name,
+      topActor.count,
+      actorProfile,
+      {
+        excludeUrls: new Set(directorClaimedUrls),
+        directorClaimedUrls,
+      },
+    );
     slides.push({
       key: 'actor',
-      media: compactMedia([
-        profileMedia(topActor),
-        ...personFilmPosters(stats, topActor.name, 'actor', 18),
-      ], 19),
+      media: compactMedia([actorSequence.profile, ...actorSequence.streamPosters], 6),
       accent: '#f472b6',
-      visual: 'person',
-      body: (
-        <>
-          <Label>{t('story.slide.actor.label')}</Label>
-          <Big>{topActor.name}</Big>
-          <Sub>
-            {t('story.slide.actor.sub', { count: formatNumber(topActor.count) })}
-          </Sub>
-          {topRewatch && (
-            <RewatchInsight
-              title={topRewatch.title}
-              watchCount={topRewatch.watch_count}
-              extraCount={Math.max(0, actorRewatches.length - 1)}
-            />
-          )}
-        </>
-      ),
+      visual: 'actor',
+      posterLayout: { contentX: '-8%', rotation: 2 },
+      actorSequence,
+      insight: actorSequence.rewatch
+        ? {
+          kind: 'actor-rewatch',
+          title: actorSequence.rewatch.title,
+          watchCount: actorSequence.rewatch.watchCount,
+        }
+        : undefined,
+      body: null,
     });
   }
+
 
   if (stats.average_rating != null) {
     slides.push({

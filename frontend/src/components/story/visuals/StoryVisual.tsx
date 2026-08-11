@@ -2,6 +2,7 @@
 
 import type { Slide } from '../types';
 import { DirectorCinematicVisual } from '../director/DirectorCinematicVisual';
+import { ActorCinematicVisual } from '../actor/ActorCinematicVisual';
 import {
   HeroPoster,
   PosterCascade,
@@ -47,6 +48,8 @@ export function StoryVisual({ slide }: { slide: Slide }) {
         <PosterField slideKey={slide.key} layout={posterLayout}>
           {slide.visual === 'director' && slide.directorSequence ? (
             <DirectorCinematicVisual sequence={slide.directorSequence} accent={accent} />
+          ) : slide.visual === 'actor' && slide.actorSequence ? (
+            <ActorCinematicVisual sequence={slide.actorSequence} accent={accent} />
           ) : slide.visual === 'director' || slide.visual === 'person' ? (
             <PersonCinematicVisual media={media} accent={accent} sequenceKey={slide.key} />
           ) : slide.visual === 'poster-wall' ? (

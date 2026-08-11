@@ -463,6 +463,10 @@ export const en = {
   'story.slide.director.sub': '{count} films together — an auteur you kept returning to.',
   'story.slide.director.rewatch.tease': 'You really like this one.',
   'story.slide.director.rewatch.detail': '{title} — watched {count}×',
+  'story.slide.actor.label': 'Your most watched face',
+  'story.slide.actor.sub': '{count} films together — they kept showing up.',
+  'story.slide.actor.rewatch.tease': 'You really like this one.',
+  'story.slide.actor.rewatch.detail': '{title} — watched {count}×',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -931,6 +935,10 @@ export const tr = {
   'story.slide.director.sub': '{count} film birlikte — tekrar tekrar döndüğün bir auteur.',
   'story.slide.director.rewatch.tease': 'Bunu gerçekten seviyorsun.',
   'story.slide.director.rewatch.detail': '{title} — {count}× izlendi',
+  'story.slide.actor.label': 'En çok izlediğin yüz',
+  'story.slide.actor.sub': '{count} film birlikte — sürekli karşına çıktılar.',
+  'story.slide.actor.rewatch.tease': 'Bunu gerçekten seviyorsun.',
+  'story.slide.actor.rewatch.detail': '{title} — {count}× izlendi',
 } as const satisfies Messages;
 
 export const catalogs: Record<Locale, Messages> = { en, tr };

@@ -37,6 +37,7 @@ export const VISUAL_POSTER_DEFAULTS: Partial<Record<SlideVisual, Partial<PosterF
   cascade: { rotation: 7, contentX: '-5%', density: 1 },
   director: { rotation: 2, contentX: '-4%' },
   person: { rotation: 1, contentX: '-2%' },
+  actor: { rotation: 2, contentX: '-6%' },
   hero: { rotation: 2, contentX: '-6%' },
   strip: { rotation: 5, contentX: '-4%' },
   'poster-wall': { rotation: 2, contentX: '-4%' },
