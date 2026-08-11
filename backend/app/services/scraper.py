@@ -677,6 +677,53 @@ def _parse_review_cards(soup: BeautifulSoup) -> list[dict]:
     return reviews
 
 
+def _review_listing_looks_truncated(review_text: str) -> bool:
+    """Heuristic: Letterboxd review listings often clip long bodies."""
+    text = (review_text or "").strip()
+    if not text:
+        return False
+    if text.endswith("…") or text.endswith("..."):
+        return True
+    if len(text) >= 700:
+        return True
+    return False
+
+
+def _parse_review_detail_body(soup: BeautifulSoup) -> str:
+    """Extract full review prose from a single-review page."""
+    body = soup.select_one(".js-review-body, .body-text, .review")
+    if not body:
+        return ""
+    return body.get_text(separator=" ", strip=True)
+
+
+def _hydrate_truncated_review_texts(
+    reviews: list[dict],
+    session: "cloudscraper.CloudScraper",
+) -> None:
+    """Replace truncated listing excerpts with full text from review permalinks."""
+    for review in reviews:
+        excerpt = str(review.get("review_text") or "")
+        review_path = str(review.get("review_path") or "").strip()
+        if not review_path or not _review_listing_looks_truncated(excerpt):
+            continue
+        url = review_path if review_path.startswith("http") else f"{BASE_URL}{review_path}"
+        try:
+            r = _fetch(session, url, timeout=10)
+        except Exception as exc:  # pragma: no cover - network defensive
+            logger.debug("Full review fetch failed for %s: %s", review_path, exc)
+            continue
+        if r.status_code != 200 or _is_cloudflare_block(r.text):
+            continue
+        full_text = _parse_review_detail_body(BeautifulSoup(r.text, "html.parser"))
+        if full_text and (
+            len(full_text) > len(excerpt)
+            or _review_listing_looks_truncated(excerpt) and not _review_listing_looks_truncated(full_text)
+        ):
+            review["review_text"] = full_text
+        time.sleep(PAGE_DELAY)
+
+
 def _sync_scrape_reviews(
     username: str,
     max_pages: int,
@@ -722,6 +769,7 @@ def _sync_scrape_reviews(
             )
             if not reviews:
                 break
+            _hydrate_truncated_review_texts(reviews, s)
             all_reviews.extend(reviews)
             time.sleep(PAGE_DELAY)
 

@@ -583,3 +583,28 @@ async def test_scrape_avatar_only_returns_none_when_unavailable(monkeypatch):
     _run_scraper_executor_inline(monkeypatch)
     monkeypatch.setattr(scraper, "_fetch", lambda s, url, timeout=10: FakeResponse(200, "<div></div>"))
     assert await scraper.scrape_avatar_only("semihmutsuz") is None
+
+
+def test_review_listing_truncation_heuristic():
+    assert scraper._review_listing_looks_truncated("excerpt ends here…") is True
+    assert scraper._review_listing_looks_truncated("excerpt ends here...") is True
+    assert scraper._review_listing_looks_truncated("x" * 700) is True
+    assert scraper._review_listing_looks_truncated("complete short review") is False
+
+
+def test_hydrate_truncated_review_texts_fetches_detail_page(monkeypatch):
+    listing_excerpt = "partial text that keeps going…"
+    full_text = "partial text that keeps going with many more words on the detail page"
+    detail_html = f'<div class="js-review-body body-text"><p>{full_text}</p></div>'
+    session = WatchlistSession([FakeResponse(200, detail_html)])
+    reviews = [
+        {
+            "title": "Long Film",
+            "review_path": "/semihmutsuz/film/long-film/1/",
+            "review_text": listing_excerpt,
+        }
+    ]
+    monkeypatch.setattr(scraper, "PAGE_DELAY", 0)
+    scraper._hydrate_truncated_review_texts(reviews, session)
+    assert reviews[0]["review_text"] == full_text
+    assert session.urls == ["https://letterboxd.com/semihmutsuz/film/long-film/1/"]
