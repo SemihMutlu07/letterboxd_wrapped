@@ -36,7 +36,7 @@ pydantic_core==2.33.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-multipart==0.0.32
-pytz==2025.2
+pytz==2026.3.post1
 requests==2.33.0
 beautifulsoup4==4.13.4
 soupsieve
