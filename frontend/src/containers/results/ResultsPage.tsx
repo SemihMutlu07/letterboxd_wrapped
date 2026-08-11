@@ -8,15 +8,16 @@ import React, {
 } from "react";
 import Link from "next/link";
 import type { ShareCardData } from "@/components/share/types";
+import {
+  buildShareCardFromStats,
+  normalizeShareCardData,
+} from "@/components/share/viewModel";
 import type { StatsData } from "@/containers/results/sections/types";
 
 import { ThemeProvider } from "@/lib/theme";
 import ThemeWrapper from "@/components/ThemeWrapper";
 import type { FeedbackFabRef } from "@/components/FeedbackFab";
-import {
-  getTmdbImageUrl,
-  trackEvent,
-} from "@/lib/analytics";
+import { trackEvent } from "@/lib/analytics";
 import {
   buildAnalysisRange,
   buildDecadeData,
@@ -105,123 +106,23 @@ export default function ResultsPage() {
     return score == null ? undefined : Math.max(0, Math.min(100, score));
   }, [activeStats]);
 
-  // Build top actors & directors list, ensuring no duplicate person across both roles
-  const topActors = useMemo(() => {
-    return (activeStats?.top_actors || []).slice(0, 5).map((a) => ({
-      name: a.name,
-      headshotUrl: getTmdbImageUrl(a.profile_path) || "",
-      count: a.count,
-    }));
-  }, [activeStats]);
-
-  const topDirectors = useMemo(() => {
-    const actorsSet = new Set(
-      (activeStats?.top_actors || []).slice(0, 5).map((a) => a.name),
-    );
-    return (activeStats?.top_directors || [])
-      .filter((d) => !actorsSet.has(d.name))
-      .slice(0, 5)
-      .map((d) => ({
-        name: d.name,
-        headshotUrl: getTmdbImageUrl(d.profile_path) || "",
-        count: d.count,
-      }));
-  }, [activeStats]);
-
-  const shareCardData = useMemo<ShareCardData>(() => {
-    // Avoid crush being same person as director
-    const actorIdx = 0;
-    let directorIdx = 0;
-
-    // If first actor === first director, try next director
-    if (
-      topActors.length > 0 &&
-      topDirectors.length > 0 &&
-      topActors[0].name === topDirectors[0].name
-    ) {
-      directorIdx = topDirectors.length > 1 ? 1 : 0;
-    }
-
-    const filmSource = activeStats?.favorite_films?.length
-      ? activeStats.favorite_films
-      : (activeStats?.rated_films ?? []);
-    const topFilms = filmSource.slice(0, 5).map((f) => ({
-      title: f.title,
-      year: f.year ? String(f.year) : "",
-      posterPath:
-        f.poster_path && f.poster_path.length > 0 ? f.poster_path : null,
-    }));
-
-    const topReviewWords = (activeStats?.review_analysis?.word_frequency ?? [])
-      .filter(({ word }) => word && word.trim().length > 0)
-      .slice(0, 3)
-      .map(({ word, count }) => ({ word, count }));
-
-    const milestones = (activeStats?.milestones ?? []).map((m) => ({
-      ordinal: m.ordinal,
-      title: m.title,
-      year: m.year != null ? String(m.year) : "",
-      posterPath: m.poster_path && m.poster_path.length > 0 ? m.poster_path : null,
-    }));
-
-    const outlier = activeStats?.rating_outlier_film;
-    const ratingOutlierFilm = outlier
-      ? {
-          title: outlier.title,
-          year: outlier.year != null ? String(outlier.year) : "",
-          posterPath:
-            outlier.poster_path && outlier.poster_path.length > 0
-              ? outlier.poster_path
-              : null,
-          userRating: outlier.user_rating,
-          avgRating: outlier.avg_rating,
-          delta: outlier.delta,
-        }
-      : undefined;
-
-    return {
-      year: new Date().getFullYear(),
-      writtenReviews: activeStats?.review_analysis?.reviews_with_text ?? 0,
-      genres: (activeStats?.top_genres ?? []).slice(0, 5).map(({ name }) => name),
-      onScreenCrush: topActors[actorIdx] || {
-        name: t('results.people.unknownActor'),
-        headshotUrl: "",
-        count: 0,
-      },
-      favoriteDirector: topDirectors[directorIdx] || {
-        name: t('results.people.unknownDirector'),
-        headshotUrl: "",
-        count: 0,
-      },
-      watchedFilms: activeStats?.total_films || 0,
-      spentDays: Math.round(runtimeHours / 24),
-      spentHours: Math.round(runtimeHours),
-      timePercent: Number.parseInt(timePct, 10) || 0,
-      cinemaScale: cineScore ?? 0,
-      personaLabel: activeStats?.cinematic_persona?.persona || "",
-      minutesAverage: Math.round(activeStats?.average_runtime || 0),
-      mostCommonRating: activeStats?.most_common_rating || 3.5,
-      peakDecade: activeStats?.favorite_decade?.name || "2020s",
-      peakDecadeCount: activeStats?.favorite_decade?.count || 0,
-      topActors,
-      topDirectors,
-      topFilms,
-      topReviewWords,
-      ratingOutlierFilm,
-      milestones,
-      username: username || undefined,
-    };
-  }, [
-    activeStats,
-    topActors,
-    topDirectors,
-    cineScore,
-    timePct,
-    username,
-    runtimeHours,
-    t('results.people.unknownActor'),
-    t('results.people.unknownDirector'),
-  ]);
+  const shareCardData = useMemo<ShareCardData>(
+    () =>
+      normalizeShareCardData(
+        buildShareCardFromStats(activeStats, {
+          username: username || undefined,
+          unknownActor: t('results.people.unknownActor'),
+          unknownDirector: t('results.people.unknownDirector'),
+          timePercent: Number.parseInt(timePct, 10) || 0,
+        }),
+      ),
+    [
+      activeStats,
+      username,
+      timePct,
+      t,
+    ],
+  );
 
   useEffect(() => {
     // Analytics for results viewed

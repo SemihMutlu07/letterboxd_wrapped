@@ -372,4 +372,30 @@ describe('buildStoryShareCard', () => {
     } as StatsData);
     expect(card.favoriteDirector).toBeNull();
   });
+
+  it('includes Results-only fields (milestones, review words, outlier)', () => {
+    const card = buildStoryShareCard({
+      total_films: 200,
+      review_analysis: {
+        reviews_with_text: 12,
+        word_frequency: [{ word: 'haunting', count: 4 }, { word: '', count: 1 }],
+      },
+      milestones: [{ ordinal: 100, title: 'Film X', year: 1999, poster_path: '/x.jpg' }],
+      rating_outlier_film: {
+        title: 'Odd',
+        year: 2001,
+        poster_path: '/o.jpg',
+        user_rating: 5,
+        avg_rating: 2.1,
+        delta: 2.9,
+      },
+    } as StatsData);
+
+    expect(card.writtenReviews).toBe(12);
+    expect(card.topReviewWords).toEqual([{ word: 'haunting', count: 4 }]);
+    expect(card.milestones).toEqual([
+      { ordinal: 100, title: 'Film X', year: '1999', posterPath: '/x.jpg' },
+    ]);
+    expect(card.ratingOutlierFilm?.title).toBe('Odd');
+  });
 });

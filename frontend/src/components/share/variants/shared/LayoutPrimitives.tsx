@@ -78,7 +78,7 @@ export function PersonPanel({
       <PortraitFrame person={person} className={mediaClassName} />
       <div className="min-w-0 [overflow-wrap:anywhere]">
         <p className={labelClassName}>{label}</p>
-        <p className={classes('mt-1', nameClassName)}>{displayName}</p>
+        <p className={classes('mt-1 line-clamp-2', nameClassName)}>{displayName}</p>
         <p className={classes('mt-1 tabular-nums', countClassName)}>
           {countText ?? `${person.count} ${countLabel}`}
         </p>
@@ -123,7 +123,14 @@ export function GenresLine({ genres, className = '' }: { genres: string[]; class
 
 export function Username({ username, className = '' }: { username?: string; className?: string }) {
   if (!username) return null;
-  return <span className={classes('min-w-0 break-all [overflow-wrap:anywhere]', className)}>@{username}</span>;
+  return (
+    <span
+      className={classes('min-w-0 break-all [overflow-wrap:anywhere] line-clamp-2', className)}
+      title={`@${username}`}
+    >
+      @{username}
+    </span>
+  );
 }
 
 export function Brand({ className = '' }: { className?: string }) {
