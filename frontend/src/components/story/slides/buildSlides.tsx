@@ -2,6 +2,8 @@
 
 import type { StatsData } from '@/containers/results/sections/types';
 import { reviewCharLength, reviewWordCount } from '@/lib/reviews';
+import type { Translator } from '@/i18n/createTranslator';
+import { formatStoryTimeline } from '@/i18n/story-timeline';
 
 import type { Slide } from '../types';
 import {
@@ -20,9 +22,8 @@ import {
 import { IntroUsername } from './IntroUsername';
 import { Big, Label, Sub } from '../SlideTypography';
 
-export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide[] {
-  const tr = locale === 'tr';
-  const copy = (en: string, turkish: string) => tr ? turkish : en;
+export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
+  const { t, formatNumber, plural } = i18n;
   const slides: Slide[] = [];
   const username = stats.scraped_username;
   const broadPosters = topRatedPosters(stats, 10);
@@ -30,6 +31,7 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
   const topActor = stats.top_actors?.[0];
   const viewingSeason = storySeason(stats.story_analytics?.viewing_season);
   const mostActiveDay = activeDayCopy(stats.story_analytics?.most_active_day);
+  const periodLine = formatStoryTimeline(stats.data_timeline, i18n);
 
   slides.push({
     key: 'intro',
@@ -38,12 +40,10 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
     visual: 'mosaic',
     body: (
       <>
-        <Label>Movies Wrapped</Label>
-        {username ? <IntroUsername username={username} /> : <Big>{copy('Your year in film', 'Film yılın')}</Big>}
-        {stats.data_timeline?.period_description && <Sub>{stats.data_timeline.period_description}</Sub>}
-        <Sub className="mt-6">
-          {copy('They say the movies you choose say more about you than the ones you skip. Let’s find out what yours are saying.', 'Seçtiğin filmlerin, es geçtiklerinden daha çok şey anlattığı söylenir. Bakalım seninkiler ne diyor.')}
-        </Sub>
+        <Label>{t('story.slide.intro.brand')}</Label>
+        {username ? <IntroUsername username={username} /> : <Big>{t('story.slide.intro.fallbackHeadline')}</Big>}
+        {periodLine ? <Sub>{periodLine}</Sub> : null}
+        <Sub className="mt-6">{t('story.slide.intro.tagline')}</Sub>
       </>
     ),
   });
@@ -62,14 +62,19 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'cascade',
       body: (
         <>
-          <Label>{copy('Fast forward', 'Hızlı ileri')}</Label>
-          <Big>{stats.total_films} {copy('films', 'film')}</Big>
+          <Label>{t('story.slide.volume.label')}</Label>
+          <Big>
+            {plural(stats.total_films, {
+              one: t('story.slide.volume.films_one'),
+              other: t('story.slide.volume.films_other'),
+            }, { count: formatNumber(stats.total_films) })}
+          </Big>
           {d || stats.hours_watched ? (
             <Sub>
               {d
-                ? copy(`${d} days of your life, in the dark, watching other people live.`, `Hayatının ${d} günü karanlıkta, başka insanların hayatını izleyerek geçti.`)
+                ? t('story.slide.volume.daysSub', { days: formatNumber(d) })
                 : stats.hours_watched
-                  ? copy(`${Math.round(stats.hours_watched)} hours. That’s not a hobby, that’s a parallel life.`, `${Math.round(stats.hours_watched)} saat. Bu hobi değil, paralel bir hayat.`)
+                  ? t('story.slide.volume.hoursSub', { hours: formatNumber(Math.round(stats.hours_watched)) })
                   : null}
             </Sub>
           ) : null}
@@ -90,15 +95,13 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'mosaic',
       body: (
         <>
-          <Label>{copy('Your rhythm', 'Ritmin')}</Label>
+          <Label>{t('story.slide.rhythm.label')}</Label>
           <Big>{peakMonth ? peakMonth.month : viewingSeason}</Big>
           <Sub>
             {peakMonth
-              ? copy(`${peakMonth.count} films that month — you weren’t watching, you were processing something.`, `O ay ${peakMonth.count} film — izlemiyordun, bir şeyleri işliyordun.`)
+              ? t('story.slide.rhythm.peakMonth', { count: formatNumber(peakMonth.count) })
               : null}
-            {mostActiveDay
-              ? ` ${mostActiveDay}`
-              : ''}
+            {mostActiveDay ? ` ${mostActiveDay}` : ''}
           </Sub>
         </>
       ),
@@ -113,9 +116,11 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'mosaic',
       body: (
         <>
-          <Label>{copy('Where you kept returning', 'Dönüp dolaşıp geldiğin yer')}</Label>
+          <Label>{t('story.slide.genre.label')}</Label>
           <Big>{stats.favorite_genre.name}</Big>
-          <Sub>{copy(`${stats.favorite_genre.count} times. Not a phase, apparently — some places just feel like home.`, `${stats.favorite_genre.count} kez. Görünen o ki geçici bir dönem değil — bazı yerler ev gibi gelir.`)}</Sub>
+          <Sub>
+            {t('story.slide.genre.sub', { count: formatNumber(stats.favorite_genre.count) })}
+          </Sub>
         </>
       ),
     });
@@ -133,10 +138,10 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'director',
       body: (
         <>
-          <Label>{copy('Your comfort zone had subtitles', 'Konfor alanında altyazılar vardı')}</Label>
+          <Label>{t('story.slide.director.label')}</Label>
           <Big>{stats.most_watched_director.name}</Big>
           <Sub>
-            {copy(`${stats.most_watched_director.count} films together — an auteur you kept returning to.`, `${stats.most_watched_director.count} film birlikte — tekrar tekrar döndüğün bir auteur.`)}
+            {t('story.slide.director.sub', { count: formatNumber(stats.most_watched_director.count) })}
           </Sub>
         </>
       ),
@@ -154,11 +159,15 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'hero',
       body: (
         <>
-          <Label>{copy('The verdicts', 'Hükümler')}</Label>
+          <Label>{t('story.slide.taste.label')}</Label>
           <Big>{stats.average_rating.toFixed(2)} ★</Big>
           {stats.total_countries
-            ? <Sub>{copy(`Your average rating across ${stats.total_countries} countries of cinema. Not generous, not cruel — just honest.`, `Sinemanın ${stats.total_countries} ülkesi boyunca ortalama puanın. Cömert değil, acımasız değil — sadece dürüst.`)}</Sub>
-            : <Sub>{copy('Your average rating. Not generous, not cruel — just honest.', 'Ortalama puanın. Cömert değil, acımasız değil — sadece dürüst.')}</Sub>}
+            ? (
+              <Sub>
+                {t('story.slide.taste.subWithCountries', { count: formatNumber(stats.total_countries) })}
+              </Sub>
+            )
+            : <Sub>{t('story.slide.taste.sub')}</Sub>}
         </>
       ),
     });
@@ -168,6 +177,7 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
     const generousPosters = stats.rating_personality === 'The Generous Critic'
       ? generousCriticPosters(stats)
       : [];
+    const commonRating = stats.most_common_rating;
     slides.push({
       key: 'rating-personality',
       media: generousPosters.length > 0
@@ -177,15 +187,21 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: generousPosters.length > 0 ? 'poster-wall' : 'strip',
       body: (
         <>
-          <Label>{copy('How you judge', 'Nasıl yargılıyorsun')}</Label>
-          <Big>{stats.rating_personality ?? copy(`${stats.most_common_rating} ★, mostly`, `çoğunlukla ${stats.most_common_rating} ★`)}</Big>
-          {stats.most_common_rating != null ? (
+          <Label>{t('story.slide.rating.label')}</Label>
+          <Big>
+            {stats.rating_personality ?? (
+              commonRating != null
+                ? t('story.slide.rating.mostly', { rating: commonRating })
+                : ''
+            )}
+          </Big>
+          {commonRating != null ? (
             <Sub>
-              {stats.most_common_rating <= 2.5
-                ? copy(`You gave ${stats.most_common_rating} ★ more than anything else. You know what you don't like, and you’re not quiet about it.`, `Her şeyden çok ${stats.most_common_rating} ★ verdin. Neyi sevmediğini biliyorsun ve saklamıyorsun.`)
-                : stats.most_common_rating >= 4
-                  ? copy(`You gave ${stats.most_common_rating} ★ more than anything else. An optimist, or just easily pleased?`, `Her şeyden çok ${stats.most_common_rating} ★ verdin. İyimser misin, yoksa kolay mı memnun oluyorsun?`)
-                  : copy(`You gave ${stats.most_common_rating} ★ more than anything else. The solid middle — no regrets, no hype.`, `Her şeyden çok ${stats.most_common_rating} ★ verdin. Sağlam orta — pişmanlık yok, abartı yok.`)}
+              {commonRating <= 2.5
+                ? t('story.slide.rating.low', { rating: commonRating })
+                : commonRating >= 4
+                  ? t('story.slide.rating.high', { rating: commonRating })
+                  : t('story.slide.rating.mid', { rating: commonRating })}
             </Sub>
           ) : null}
         </>
@@ -201,6 +217,7 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
         : (reviewCharLength(b) > reviewCharLength(a) ? b : a),
     );
     const longestLikes = longest.likes ?? 0;
+    const totalWords = stats.review_analysis?.total_words_written;
     slides.push({
       key: 'review-personality',
       media: compactMedia([
@@ -211,15 +228,18 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'hero',
       body: (
         <>
-          <Label>{copy('Your longest review', 'En uzun incelemen')}</Label>
+          <Label>{t('story.slide.review.label')}</Label>
           <Big>{longest.title}</Big>
           <Sub>
-            {stats.review_analysis?.total_words_written
-              ? copy(`${stats.review_analysis.total_words_written.toLocaleString()} words written total. `, `Toplam ${stats.review_analysis.total_words_written.toLocaleString()} kelime yazdın. `)
+            {totalWords
+              ? t('story.slide.review.wordsTotal', { count: formatNumber(totalWords) })
               : ''}
             {longestLikes === 0
-              ? copy('Your longest review got 0 likes, but it had conviction. Some stories are for the writer, not the crowd.', 'En uzun incelemen 0 beğeni aldı ama bir duruşu vardı. Bazı hikâyeler kalabalık için değil, yazar içindir.')
-              : copy(`That one got ${longestLikes} like${longestLikes === 1 ? '' : 's'} — someone out there gets you.`, `${longestLikes} beğeni aldı — birileri seni anlıyor.`)}
+              ? t('story.slide.review.zeroLikes')
+              : plural(longestLikes, {
+                one: t('story.slide.review.likes_one'),
+                other: t('story.slide.review.likes_other'),
+              }, { count: formatNumber(longestLikes) })}
           </Sub>
         </>
       ),
@@ -236,9 +256,15 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'mosaic',
       body: (
         <>
-          <Label>{copy('How deep the rabbit hole goes', 'Tavşan deliğinin derinliği')}</Label>
-          <Big>{stats.sinefil_meter.score} / 100</Big>
-          {stats.sinefil_meter.type && <Sub>{copy('Your cinema scale says you’re a ', 'Sinema ölçeğin şunu söylüyor: ')}<strong>{stats.sinefil_meter.type}</strong>{copy('. You’ve wandered past the mainstream into something more specific.', '. Ana akımın ötesine, daha spesifik bir yere yürümüşsün.')}</Sub>}
+          <Label>{t('story.slide.sinefil.label')}</Label>
+          <Big>{t('story.slide.sinefil.score', { score: formatNumber(stats.sinefil_meter.score) })}</Big>
+          {stats.sinefil_meter.type && (
+            <Sub>
+              {t('story.slide.sinefil.prefix')}
+              <strong>{stats.sinefil_meter.type}</strong>
+              {t('story.slide.sinefil.suffix')}
+            </Sub>
+          )}
         </>
       ),
     });
@@ -253,15 +279,15 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
       visual: 'poster-wall',
       body: (
         <>
-          <Label>{copy('Which makes you', 'Bu da seni şuna dönüştürüyor')}</Label>
+          <Label>{t('story.slide.persona.label')}</Label>
           <Big>{stats.cinematic_persona.persona}</Big>
           {stats.cinematic_persona.description && <Sub>{stats.cinematic_persona.description}</Sub>}
           {basis?.genre && (
             <Sub className="text-stone-300">
-              {basis.genre} {copy('was your most-watched genre', 'en çok izlediğin türdü')}
+              {t('story.slide.persona.genreMostWatched', { genre: basis.genre })}
               {basis.match_type === 'genre_decade_country'
-                ? copy(`, shaped by your ${basis.decade} and ${basis.country} streak.`, `; ${basis.decade} ve ${basis.country} serin bunu şekillendirdi.`)
-                : copy(' — the strongest signal behind this persona.', ' — bu personanın en güçlü sinyali.')}
+                ? t('story.slide.persona.basisFull', { decade: basis.decade ?? '', country: basis.country ?? '' })
+                : t('story.slide.persona.basisGenre')}
             </Sub>
           )}
         </>
@@ -280,8 +306,8 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
     visual: 'mosaic',
     body: (
       <>
-        <Label>{copy('That’s the short version', 'Kısa versiyon buydu')}</Label>
-        <Big>{copy('The full picture waits.', 'Tüm resim seni bekliyor.')}</Big>
+        <Label>{t('story.slide.outro.label')}</Label>
+        <Big>{t('story.slide.outro.headline')}</Big>
       </>
     ),
   });
