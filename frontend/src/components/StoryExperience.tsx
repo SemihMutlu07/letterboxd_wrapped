@@ -19,6 +19,8 @@ import { useStoryMachine } from '@/components/story/useStoryMachine';
  */
 
 const SLIDE_MS = 6000;
+/** Minimum dwell on `auto-min` slides before tap/→ may advance. Autoplay still uses SLIDE_MS. */
+const AUTO_MIN_MS = 2000;
 const PRELOAD_AHEAD = 2;
 
 type StoryMedia = {
@@ -676,7 +678,11 @@ export default function StoryExperience() {
     setIsPaused(false);
   }, [slides.length]);
 
-  const goNext = useCallback(() => goToSlide(index + 1), [goToSlide, index]);
+  const goNext = useCallback(() => {
+    // Core slides: block early skip until the min dwell has elapsed (pause freezes RAF → lock stays).
+    if (currentInteraction === 'auto-min' && elapsedRef.current < AUTO_MIN_MS) return;
+    goToSlide(index + 1);
+  }, [currentInteraction, goToSlide, index]);
   const goPrevious = useCallback(() => goToSlide(index - 1), [goToSlide, index]);
 
   useEffect(() => {
@@ -844,4 +850,4 @@ export default function StoryExperience() {
   );
 }
 
-export { buildSlides };
+export { buildSlides, AUTO_MIN_MS };

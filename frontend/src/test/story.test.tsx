@@ -3,13 +3,27 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import StoryPage from '@/app/story/page';
-import { buildSlides } from '@/components/StoryExperience';
+import { AUTO_MIN_MS, buildSlides } from '@/components/StoryExperience';
+import StoryFinaleCard from '@/components/story/StoryFinaleCard';
 import type { StatsData } from '@/containers/results/sections/types';
 import { I18nProvider } from '@/i18n/I18nProvider';
 import { readySlideKeys, slideMeta } from '@/components/story/manifest';
-import { buildStoryShareCard } from '@/components/story/viewModel';
+import { buildStoryShareCard, pickFinaleOrientation } from '@/components/story/viewModel';
 
 const renderStory = () => render(<I18nProvider locale="en"><StoryPage /></I18nProvider>);
+
+/** Wait for RAF dwell on auto-min slides so goNext is unlocked. */
+async function waitAutoMin() {
+  await new Promise((r) => setTimeout(r, AUTO_MIN_MS + 150));
+}
+
+async function clickNextWhenReady(next: HTMLElement) {
+  await waitAutoMin();
+  await userEvent.click(next);
+}
+
+/** Multi-slide walks need wall-clock dwell on each auto-min slide. */
+const LONG_STORY_TIMEOUT_MS = 45_000;
 
 const STATS = {
   scraped_username: 'semihmutsuz',
@@ -40,12 +54,44 @@ describe('StoryPage', () => {
 
     expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText('Next slide'));
+    await clickNextWhenReady(screen.getByLabelText('Next slide'));
     expect(await screen.findByText('692 films')).toBeInTheDocument();
 
     await userEvent.click(screen.getByLabelText('Previous slide'));
     expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
-  });
+  }, LONG_STORY_TIMEOUT_MS);
+
+  it('blocks early next on auto-min slides until the min dwell elapses', async () => {
+    sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
+    renderStory();
+    expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
+
+    const next = screen.getByLabelText('Next slide');
+    await userEvent.click(next);
+    // Still on intro — skip lock held.
+    expect(screen.getByText('@semihmutsuz')).toBeInTheDocument();
+    expect(screen.queryByText('692 films')).not.toBeInTheDocument();
+
+    await clickNextWhenReady(next);
+    expect(await screen.findByText('692 films')).toBeInTheDocument();
+  }, LONG_STORY_TIMEOUT_MS);
+
+  it('allows early next on manual enrichment slides', async () => {
+    sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
+    renderStory();
+    await screen.findByText('@semihmutsuz');
+
+    const next = screen.getByLabelText('Next slide');
+    // intro → volume → genre → director (manual)
+    await clickNextWhenReady(next);
+    await clickNextWhenReady(next);
+    await clickNextWhenReady(next);
+    expect(await screen.findByText(/Denis Villeneuve/i)).toBeInTheDocument();
+
+    // director is manual — immediate next must advance without waiting.
+    await userEvent.click(next);
+    expect(await screen.findByText(/3\.44 ★/)).toBeInTheDocument();
+  }, LONG_STORY_TIMEOUT_MS);
 
   it('walks through to the persona and outro slides', async () => {
     sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
@@ -53,7 +99,7 @@ describe('StoryPage', () => {
     await screen.findByText('@semihmutsuz');
 
     const next = screen.getByLabelText('Next slide');
-    for (let i = 0; i < 6; i++) await userEvent.click(next);
+    for (let i = 0; i < 6; i++) await clickNextWhenReady(next);
     expect(await screen.findByText('Emotional Masochist')).toBeInTheDocument();
 
     await userEvent.click(next);
@@ -66,7 +112,7 @@ describe('StoryPage', () => {
     // Outro is the last slide — further taps must not crash or move past it.
     await userEvent.click(next);
     expect(screen.getByText(/Open the dossier/i)).toBeInTheDocument();
-  });
+  }, LONG_STORY_TIMEOUT_MS);
 
   it('can pause and resume the story timeline', async () => {
     sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
@@ -233,12 +279,71 @@ describe('story finale', () => {
     await screen.findByText('@semihmutsuz');
 
     const next = screen.getByLabelText('Next slide');
-    for (let i = 0; i < 7; i++) await userEvent.click(next);
+    for (let i = 0; i < 7; i++) await clickNextWhenReady(next);
 
     expect(await screen.findByText(/Open the dossier/i)).toBeInTheDocument();
     await waitFor(() => {
       expect(container.querySelector('[data-finale-orientation]')).not.toBeNull();
     });
+  }, LONG_STORY_TIMEOUT_MS);
+
+  it('picks portrait when the container is narrow even if the window is wide', async () => {
+    // Wide window, but finale frame reports a phone-width box.
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    class FakeResizeObserver {
+      private cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+      }
+      observe(target: Element) {
+        const rect = {
+          width: 360,
+          height: 440,
+          top: 0,
+          left: 0,
+          bottom: 440,
+          right: 360,
+          x: 0,
+          y: 0,
+          toJSON() { return {}; },
+        };
+        Object.defineProperty(target, 'getBoundingClientRect', {
+          configurable: true,
+          value: () => rect,
+        });
+        this.cb(
+          [{
+            target,
+            contentRect: rect as DOMRectReadOnly,
+            borderBoxSize: [],
+            contentBoxSize: [],
+            devicePixelContentBoxSize: [],
+          }],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+
+    const { container } = render(<StoryFinaleCard stats={STATS as unknown as StatsData} />);
+    await waitFor(() => {
+      const el = container.querySelector('[data-finale-orientation]');
+      expect(el).not.toBeNull();
+      expect(el?.getAttribute('data-finale-orientation')).toBe('vertical');
+    });
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('pickFinaleOrientation', () => {
+  it('uses container width, not an implied window', () => {
+    expect(pickFinaleOrientation(360)).toBe('vertical');
+    expect(pickFinaleOrientation(767)).toBe('vertical');
+    expect(pickFinaleOrientation(768)).toBe('horizontal');
+    expect(pickFinaleOrientation(1200)).toBe('horizontal');
   });
 });
 
