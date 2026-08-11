@@ -51,7 +51,7 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, Props>(
 
           <section className="flex min-h-0 min-w-0 flex-col border-l border-black/80 pl-8">
             <p className="text-[12px] font-bold uppercase tracking-[0.25em]">A year at the pictures</p>
-            <h1 className="mt-3 max-w-[720px] text-[44px] font-black leading-[0.98] tracking-[-0.035em] [text-wrap:balance]">
+            <h1 className="mt-3 max-w-[720px] text-[44px] font-black leading-[1.02] tracking-[-0.035em] [text-wrap:balance]">
               You watched {data.watchedFilms} films. Here is the story they told.
             </h1>
             <p className="mt-4 max-w-[690px] text-[17px] leading-relaxed">

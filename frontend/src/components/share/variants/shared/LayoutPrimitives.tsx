@@ -11,7 +11,7 @@ const classes = (...values: Array<string | false | null | undefined>) => values.
 export function PortraitFrame({
   person,
   className = '',
-  imageClassName = 'object-contain object-center',
+  imageClassName = 'object-cover object-[center_15%]',
 }: {
   person: SharePersonStat;
   className?: string;
@@ -28,7 +28,7 @@ export function PortraitFrame({
     .toUpperCase() || '—';
 
   return (
-    <div className={classes('relative aspect-[2/3] shrink-0 overflow-hidden bg-current/5', className)}>
+    <div className={classes('relative aspect-[2/3] shrink-0 overflow-hidden border border-current/25 bg-current/5', className)}>
       {src && !failed ? (
         <Image
           src={src}
@@ -117,7 +117,7 @@ export function GenresLine({ genres, className = '' }: { genres: string[]; class
 
 export function Username({ username, className = '' }: { username?: string; className?: string }) {
   if (!username) return null;
-  return <span className={classes('min-w-0 [overflow-wrap:anywhere]', className)}>@{username}</span>;
+  return <span className={classes('min-w-0 break-all [overflow-wrap:anywhere]', className)}>@{username}</span>;
 }
 
 export function Brand({ className = '' }: { className?: string }) {
