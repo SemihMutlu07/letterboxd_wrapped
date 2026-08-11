@@ -467,6 +467,12 @@ export const en = {
   'story.slide.actor.sub': '{count} films together — they kept showing up.',
   'story.slide.actor.rewatch.tease': 'You really like this one.',
   'story.slide.actor.rewatch.detail': '{title} — watched {count}×',
+  'story.slide.review.label': 'Your longest review',
+  'story.slide.review.wordsTotal': '{count} words written total.',
+  'story.slide.review.zeroLikes': 'Your longest review got 0 likes, but it had conviction. Some stories are for the writer, not the crowd.',
+  'story.slide.review.likes_one': 'That one got {count} like — someone out there gets you.',
+  'story.slide.review.likes_other': 'That one got {count} likes — someone out there gets you.',
+  'story.slide.review.thisLength': '{count} words on this one.',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -939,6 +945,12 @@ export const tr = {
   'story.slide.actor.sub': '{count} film birlikte — sürekli karşına çıktılar.',
   'story.slide.actor.rewatch.tease': 'Bunu gerçekten seviyorsun.',
   'story.slide.actor.rewatch.detail': '{title} — {count}× izlendi',
+  'story.slide.review.label': 'En uzun incelemen',
+  'story.slide.review.wordsTotal': 'Toplam {count} kelime yazdın.',
+  'story.slide.review.zeroLikes': 'En uzun incelemen 0 beğeni aldı ama bir duruşu vardı. Bazı hikâyeler kalabalık için değil, yazar içindir.',
+  'story.slide.review.likes_one': '{count} beğeni aldı — birileri seni anlıyor.',
+  'story.slide.review.likes_other': '{count} beğeni aldı — birileri seni anlıyor.',
+  'story.slide.review.thisLength': 'Bunda {count} kelime.',
 } as const satisfies Messages;
 
 export const catalogs: Record<Locale, Messages> = { en, tr };

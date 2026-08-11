@@ -18,6 +18,7 @@ export type SlideVisual =
   | 'director'
   | 'person'
   | 'actor'
+  | 'review'
   | 'poster-wall'
   | 'recap';
 
@@ -37,6 +38,16 @@ export type PersonSequenceData = {
 export type DirectorRewatchInsight = PersonRewatchInsight;
 export type DirectorSequenceData = PersonSequenceData;
 
+export type ReviewSequenceData = {
+  filmTitle: string;
+  year?: string | number | null;
+  wordCount: number;
+  totalWordsWritten?: number | null;
+  likes: number;
+  heroPoster: StoryMedia | null;
+  streamPosters: StoryMedia[];
+};
+
 export type SlideInsight = {
   kind: 'actor-rewatch';
   title: string;
@@ -54,5 +65,6 @@ export type Slide = {
   /** Cinematic person beat — desktop animation + localized copy metadata. */
   directorSequence?: PersonSequenceData;
   actorSequence?: PersonSequenceData;
+  reviewSequence?: ReviewSequenceData;
   insight?: SlideInsight;
 };

@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import type { Slide } from './types';
 import { DirectorSlideBody } from './director/DirectorSlideBody';
 import { ActorSlideBody } from './actor/ActorSlideBody';
+import { ReviewSlideBody } from './review/ReviewSlideBody';
 import { MobileMediaRail } from './visuals/MobileMediaRail';
 
 type StorySlidePanelProps = {
@@ -41,7 +42,7 @@ export function StorySlidePanel({ slide, isLast, stats, showTapHint }: StorySlid
           ) : (
             <MobileMediaRail media={slide.media ?? []} accent={slide.accent ?? '#f59e0b'} />
           )}
-          {slide.directorSequence ? <DirectorSlideBody /> : slide.actorSequence ? <ActorSlideBody /> : slide.body}
+          {slide.directorSequence ? <DirectorSlideBody /> : slide.actorSequence ? <ActorSlideBody /> : slide.reviewSequence ? <ReviewSlideBody /> : slide.body}
           {!isLast && showTapHint && (
             <p className="mt-5 font-mono text-[11px] uppercase tracking-[0.2em] text-amber-300/80">
               {t('story.tapToContinue')}

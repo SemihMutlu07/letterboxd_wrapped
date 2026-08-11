@@ -1,4 +1,5 @@
 import type { StatsData } from '@/containers/results/sections/types';
+import { compareReviewsByWordCount, reviewWordCount, selectLongestReview } from '@/lib/reviews';
 import type { StoryMedia } from './types';
 
 export function tmdbCdn(path: string | null | undefined, size = 'w780'): string | null {
@@ -342,5 +343,191 @@ export function buildActorSequence(
     profile: profileMedia(profilePerson ?? stats.top_actors?.find((actor) => actor.name === actorName)),
     streamPosters: actorStreamPosters(stats, actorName, options),
     rewatch: actorRewatchInsight(stats, actorName),
+  };
+}
+
+
+type ReviewRecord = {
+  title?: string | null;
+  year?: string | number | null;
+  likes?: number | null;
+  text?: string | null;
+  poster_path?: string | null;
+};
+
+export const REVIEW_STREAM_POSTER_CAP = 12;
+export const REVIEW_STREAM_MIN_FILL = PERSON_STREAM_MIN_FILL;
+
+export function collectCinematicClaimedUrls(
+  entries: Array<{
+    profile?: StoryMedia | null;
+    streamPosters?: StoryMedia[];
+  }>,
+): { urls: string[]; set: Set<string> } {
+  const urls: string[] = [];
+  for (const entry of entries) {
+    if (entry.profile) urls.push(entry.profile.url);
+    for (const poster of entry.streamPosters ?? []) urls.push(poster.url);
+  }
+  return { urls, set: new Set(urls) };
+}
+
+function reviewPosterForRecord(stats: StatsData, review: ReviewRecord): StoryMedia | null {
+  if (review.poster_path) {
+    const url = tmdbCdn(review.poster_path, 'w500');
+    if (url) {
+      return {
+        type: 'poster',
+        url,
+        alt: `${review.title ?? 'Film'} poster`,
+        objectPosition: 'center center',
+      };
+    }
+  }
+  return posterMedia(filmByTitle(stats, review.title), 'w500');
+}
+
+function softFillReviewFilms(
+  stats: StatsData,
+  heroFilm: ReturnType<typeof filmByTitle>,
+  heroTitleLower: string,
+) {
+  const films = (stats.all_films ?? []).filter(
+    (film) => film.poster_path && film.title?.toLowerCase() !== heroTitleLower,
+  );
+  const heroDirector = heroFilm?.director?.toLowerCase();
+  const heroGenres = heroFilm?.genres ?? [];
+  const sameDirector = films.filter((film) => film.director?.toLowerCase() === heroDirector);
+  const sameDirectorTitles = new Set(sameDirector.map((film) => film.title));
+  const sameGenre = films.filter(
+    (film) => !sameDirectorTitles.has(film.title)
+      && film.genres?.some((genre) => heroGenres.includes(genre)),
+  );
+  const usedTitles = new Set([
+    ...sameDirector.map((film) => film.title),
+    ...sameGenre.map((film) => film.title),
+  ]);
+  const topRated = [...films]
+    .filter((film) => !usedTitles.has(film.title))
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+  return [...sameDirector, ...sameGenre, ...topRated];
+}
+
+function applyReviewStreamDedupe(
+  primary: StoryMedia[],
+  excludedPool: StoryMedia[],
+  claimedUrls: string[],
+  limit: number,
+): StoryMedia[] {
+  let result = primary;
+  if (result.length < REVIEW_STREAM_MIN_FILL) {
+    const excludedByUrl = new Map(excludedPool.map((item) => [item.url, item]));
+    const refill: StoryMedia[] = [];
+
+    for (let index = claimedUrls.length - 1; index >= 0; index -= 1) {
+      const item = excludedByUrl.get(claimedUrls[index]);
+      if (!item || result.some((poster) => poster.url === item.url)) continue;
+      if (refill.some((poster) => poster.url === item.url)) continue;
+      refill.push(item);
+    }
+
+    for (const item of excludedPool) {
+      if (result.some((poster) => poster.url === item.url)) continue;
+      if (refill.some((poster) => poster.url === item.url)) continue;
+      refill.push(item);
+    }
+
+    result = [...result, ...refill].slice(0, limit);
+  }
+  return result.slice(0, limit);
+}
+
+export function reviewStreamPosters(
+  stats: StatsData,
+  options: {
+    heroTitle: string;
+    heroUrl?: string | null;
+    heroFilm?: ReturnType<typeof filmByTitle>;
+    excludeUrls?: Set<string>;
+    claimedUrls?: string[];
+    limit?: number;
+  },
+): StoryMedia[] {
+  const limit = options.limit ?? REVIEW_STREAM_POSTER_CAP;
+  const excludeUrls = options.excludeUrls ?? new Set<string>();
+  const heroTitleLower = options.heroTitle.toLowerCase();
+  const reviews = (stats.review_analysis?.reviews ?? []) as ReviewRecord[];
+
+  const poolA = reviews
+    .filter((review) => review.title?.toLowerCase() !== heroTitleLower)
+    .slice()
+    .sort(compareReviewsByWordCount);
+
+  const seen = new Set<string>();
+  if (options.heroUrl) seen.add(options.heroUrl);
+  const primary: StoryMedia[] = [];
+  const excludedPool: StoryMedia[] = [];
+
+  for (const review of poolA) {
+    const media = reviewPosterForRecord(stats, review);
+    if (!media || seen.has(media.url)) continue;
+    seen.add(media.url);
+    if (excludeUrls.has(media.url)) {
+      excludedPool.push(media);
+      continue;
+    }
+    primary.push(media);
+    if (primary.length >= limit) break;
+  }
+
+  if (primary.length < limit) {
+    for (const film of softFillReviewFilms(stats, options.heroFilm ?? null, heroTitleLower)) {
+      const media = posterMedia(film, 'w500');
+      if (!media || seen.has(media.url)) continue;
+      seen.add(media.url);
+      if (excludeUrls.has(media.url)) {
+        excludedPool.push(media);
+        continue;
+      }
+      primary.push(media);
+      if (primary.length >= limit) break;
+    }
+  }
+
+  return applyReviewStreamDedupe(primary, excludedPool, options.claimedUrls ?? [], limit);
+}
+
+export function buildReviewSequence(
+  stats: StatsData,
+  options?: {
+    excludeUrls?: Set<string>;
+    claimedUrls?: string[];
+  },
+) {
+  const reviews = (stats.review_analysis?.reviews ?? []) as ReviewRecord[];
+  const longest = selectLongestReview(reviews);
+  if (!longest?.title) return null;
+
+  const heroFilm = filmByTitle(stats, longest.title);
+  const heroPoster = reviewPosterForRecord(stats, longest)
+    ?? posterMedia(heroFilm ?? { title: longest.title, poster_path: longest.poster_path }, 'w500');
+  const heroUrl = heroPoster?.url ?? null;
+
+  const streamPosters = reviewStreamPosters(stats, {
+    heroTitle: longest.title,
+    heroUrl,
+    heroFilm,
+    excludeUrls: options?.excludeUrls,
+    claimedUrls: options?.claimedUrls,
+  }).filter((poster) => poster.url !== heroUrl);
+
+  return {
+    filmTitle: longest.title,
+    year: longest.year ?? heroFilm?.year,
+    wordCount: reviewWordCount(longest),
+    totalWordsWritten: stats.review_analysis?.total_words_written,
+    likes: longest.likes ?? 0,
+    heroPoster,
+    streamPosters,
   };
 }

@@ -20,6 +20,8 @@ import {
   topRatedPosters,
   buildDirectorSequence,
   buildActorSequence,
+  buildReviewSequence,
+  collectCinematicClaimedUrls,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
 import { RewatchInsight } from './RewatchInsight';
@@ -243,41 +245,27 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
     });
   }
 
-  const reviewAnalysis = stats.review_analysis;
-  const reviews = reviewAnalysis?.reviews ?? [];
-  const summary = reviewAnalysis?.longest_review;
-  const matched = summary ? findReviewForSummary(reviews, summary) : undefined;
-  const fallback = !summary ? selectLongestReview(reviews) : undefined;
-  const displayTitle = summary?.title ?? matched?.title ?? fallback?.title;
-  if (displayTitle) {
-    const longestLikes = matched?.likes ?? fallback?.likes ?? 0;
-    const totalWords = reviewAnalysis?.total_words_written;
-    slides.push({
-      key: 'review-personality',
-      media: compactMedia([
-        posterMedia(filmByTitle(stats, displayTitle)),
-        ...broadPosters,
-      ], 6),
-      accent: '#fb7185',
-      visual: 'hero',
-      body: (
-        <>
-          <Label>{t('story.slide.review.label')}</Label>
-          <Big>{displayTitle}</Big>
-          <Sub>
-            {totalWords
-              ? t('story.slide.review.wordsTotal', { count: formatNumber(totalWords) })
-              : ''}
-            {longestLikes === 0
-              ? t('story.slide.review.zeroLikes')
-              : plural(longestLikes, {
-                one: t('story.slide.review.likes_one'),
-                other: t('story.slide.review.likes_other'),
-              }, { count: formatNumber(longestLikes) })}
-          </Sub>
-        </>
-      ),
+  const reviews = stats.review_analysis?.reviews ?? [];
+  if (reviews.length > 0) {
+    const claimed = collectCinematicClaimedUrls([
+      slides.find((slide) => slide.key === 'director')?.directorSequence ?? {},
+      slides.find((slide) => slide.key === 'actor')?.actorSequence ?? {},
+    ]);
+    const reviewSequence = buildReviewSequence(stats, {
+      excludeUrls: claimed.set,
+      claimedUrls: claimed.urls,
     });
+    if (reviewSequence) {
+      slides.push({
+        key: 'review-personality',
+        media: compactMedia([reviewSequence.heroPoster, ...reviewSequence.streamPosters], 6),
+        accent: '#fb7185',
+        visual: 'review',
+        posterLayout: { contentX: '-10%', rotation: 3 },
+        reviewSequence,
+        body: null,
+      });
+    }
   }
 
   if (stats.sinefil_meter?.score != null) {

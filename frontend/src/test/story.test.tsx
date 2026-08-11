@@ -10,6 +10,8 @@ import { I18nProvider } from '@/i18n/I18nProvider';
 import { createTranslator } from '@/i18n/createTranslator';
 import { readySlideKeys, slideMeta } from '@/components/story/manifest';
 import { buildStoryShareCard, pickFinaleOrientation } from '@/components/story/viewModel';
+import { ReviewSlideBody } from '@/components/story/review/ReviewSlideBody';
+import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
 
 const enI18n = createTranslator('en');
 
@@ -262,24 +264,46 @@ describe('buildSlides', () => {
     expect(slides.some((s) => s.key === 'review-personality')).toBe(false);
   });
 
-  it('includes the review-personality slide, gems beat included, when reviews are present', () => {
+
+  it('builds the review-personality slide with cinematic sequence and i18n body', () => {
     const stats = {
       ...STATS,
       review_analysis: {
         total_words_written: 500,
         reviews: [
-          { title: 'Aftersun', text: 'short actual text', text_length: 5000, likes: 3 },
-          { title: 'Memories of Underdevelopment', text: 'a much longer review body by actual character count', text_length: 10, likes: 0 },
+          { title: 'Aftersun', text: 'short actual text', text_length: 5000, likes: 3, poster_path: '/after.jpg' },
+          { title: 'Memories of Underdevelopment', text: 'a much longer review body by actual character count', text_length: 10, likes: 0, poster_path: '/mem.jpg' },
         ],
       },
+      all_films: [
+        { title: 'Aftersun', poster_path: '/after.jpg', rating: 4 },
+        { title: 'Memories of Underdevelopment', poster_path: '/mem.jpg', rating: 5 },
+      ],
     };
     const slides = buildSlides(stats as unknown as StatsData, enI18n);
-    const reviewSlide = slides.find((s) => s.key === 'review-personality');
-    expect(reviewSlide).toBeDefined();
-    render(<>{reviewSlide!.body}</>);
+    const reviewSlide = slides.find((s) => s.key === 'review-personality')!;
+    expect(reviewSlide.visual).toBe('review');
+    expect(reviewSlide.reviewSequence?.filmTitle).toBe('Memories of Underdevelopment');
+    expect(reviewSlide.reviewSequence?.streamPosters.length).toBeLessThanOrEqual(12);
+    expect(reviewSlide.reviewSequence?.heroPoster?.alt).toBe('Memories of Underdevelopment poster');
+    expect(
+      reviewSlide.reviewSequence?.streamPosters.some((poster) => poster.url === reviewSlide.reviewSequence?.heroPoster?.url),
+    ).toBe(false);
+
+    render(
+      <I18nProvider locale="en">
+        <ReviewSlidePhaseProvider sequence={reviewSlide.reviewSequence ?? null} slideKey="review-personality" paused={false}>
+          <ReviewSlideBody />
+        </ReviewSlidePhaseProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByText('Your longest review')).toBeInTheDocument();
     expect(screen.getByText('Memories of Underdevelopment')).toBeInTheDocument();
-    expect(screen.getByText(/0 likes, but it had conviction/i)).toBeInTheDocument();
+    expect(screen.getByText(/500 words written total/i)).toBeInTheDocument();
   });
+
+
+
 });
 
 describe('story readiness + manifest', () => {
