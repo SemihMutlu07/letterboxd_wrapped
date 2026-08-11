@@ -20,6 +20,19 @@ export type SlideVisual =
   | 'poster-wall'
   | 'recap';
 
+export type DirectorRewatchInsight = {
+  title: string;
+  watchCount: number;
+};
+
+export type DirectorSequenceData = {
+  directorName: string;
+  filmCount: number;
+  profile: StoryMedia | null;
+  streamPosters: StoryMedia[];
+  rewatch: DirectorRewatchInsight | null;
+};
+
 export type Slide = {
   key: string;
   body: ReactNode;
@@ -28,4 +41,6 @@ export type Slide = {
   visual?: SlideVisual;
   /** Optional override for desktop poster-field placement (merged with visual defaults). */
   posterLayout?: Partial<PosterFieldConfig>;
+  /** Cinematic director beat — desktop animation + localized copy metadata. */
+  directorSequence?: DirectorSequenceData;
 };

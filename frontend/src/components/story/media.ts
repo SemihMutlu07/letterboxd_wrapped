@@ -150,3 +150,53 @@ export function generousCriticPosters(stats: StatsData): StoryMedia[] {
   const featured = fiveStar.length > 0 ? fiveStar : films.filter((film) => film.rating === 4.5);
   return compactMedia(featured.map((film) => posterMedia(film, 'w500')), Number.POSITIVE_INFINITY);
 }
+
+export const DIRECTOR_STREAM_POSTER_CAP = 12;
+
+export function directorFilmsByName(stats: StatsData, directorName: string) {
+  const clean = directorName.toLowerCase();
+  return (stats.all_films ?? []).filter((film) => film.director?.toLowerCase() === clean);
+}
+
+/** Deterministic capped poster stream — one node per unique film poster. */
+export function directorStreamPosters(stats: StatsData, directorName: string, limit = DIRECTOR_STREAM_POSTER_CAP): StoryMedia[] {
+  const films = directorFilmsByName(stats, directorName)
+    .filter((film) => film.poster_path)
+    .sort((a, b) => {
+      const ratingDelta = (b.rating ?? 0) - (a.rating ?? 0);
+      if (ratingDelta !== 0) return ratingDelta;
+      return (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' });
+    });
+  return compactMedia(films.map((film) => posterMedia(film, 'w500')), limit);
+}
+
+export function directorRewatchInsight(
+  stats: StatsData,
+  directorName: string,
+): { title: string; watchCount: number } | null {
+  const titles = new Set(
+    directorFilmsByName(stats, directorName)
+      .map((film) => film.title?.toLowerCase())
+      .filter(Boolean) as string[],
+  );
+  const champion = (stats.rewatch_champions ?? [])
+    .filter((entry) => titles.has(entry.title?.toLowerCase() ?? ''))
+    .sort((a, b) => b.watch_count - a.watch_count)[0];
+  if (!champion || champion.watch_count < 2) return null;
+  return { title: champion.title, watchCount: champion.watch_count };
+}
+
+export function buildDirectorSequence(
+  stats: StatsData,
+  directorName: string,
+  filmCount: number,
+  profilePerson?: { name?: string; profile_path?: string | null } | null,
+) {
+  return {
+    directorName,
+    filmCount,
+    profile: profileMedia(profilePerson ?? stats.top_directors?.find((d) => d.name === directorName)),
+    streamPosters: directorStreamPosters(stats, directorName),
+    rewatch: directorRewatchInsight(stats, directorName),
+  };
+}

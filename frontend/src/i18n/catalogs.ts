@@ -459,6 +459,10 @@ export const en = {
   'story.pause': 'Pause', 'story.resume': 'Resume', 'story.pauseAria': 'Pause story', 'story.resumeAria': 'Resume story',
   'story.previous': 'Previous slide', 'story.next': 'Next slide', 'story.back': 'Back', 'story.replay': 'Replay', 'story.openResults': 'Open the dossier',
   'story.tapToContinue': 'Tap to continue',
+  'story.slide.director.label': 'Your comfort zone had subtitles',
+  'story.slide.director.sub': '{count} films together — an auteur you kept returning to.',
+  'story.slide.director.rewatch.tease': 'You really like this one.',
+  'story.slide.director.rewatch.detail': '{title} — watched {count}×',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -923,6 +927,10 @@ export const tr = {
   'story.pause': 'Duraklat', 'story.resume': 'Devam et', 'story.pauseAria': 'Hikâyeyi duraklat', 'story.resumeAria': 'Hikâyeyi devam ettir',
   'story.previous': 'Önceki slayt', 'story.next': 'Sonraki slayt', 'story.back': 'Geri', 'story.replay': 'Tekrar izle', 'story.openResults': 'Sonuçları aç',
   'story.tapToContinue': 'Devam etmek için dokun',
+  'story.slide.director.label': 'Konfor alanında altyazılar vardı',
+  'story.slide.director.sub': '{count} film birlikte — tekrar tekrar döndüğün bir auteur.',
+  'story.slide.director.rewatch.tease': 'Bunu gerçekten seviyorsun.',
+  'story.slide.director.rewatch.detail': '{title} — {count}× izlendi',
 } as const satisfies Messages;
 
 export const catalogs: Record<Locale, Messages> = { en, tr };

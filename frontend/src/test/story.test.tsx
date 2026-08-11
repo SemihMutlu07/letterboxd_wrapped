@@ -179,7 +179,8 @@ describe('buildSlides', () => {
       ],
     } as unknown as StatsData, enI18n);
     const director = slides.find((slide) => slide.key === 'director')!;
-    expect(director.visual).toBe('person');
+    expect(director.visual).toBe('director');
+    expect(director.directorSequence?.streamPosters.map((item) => item.alt)).toEqual(['Arrival poster']);
     expect(director.media?.map((item) => item.alt)).toEqual([
       'Denis Villeneuve portrait',
       'Arrival poster',

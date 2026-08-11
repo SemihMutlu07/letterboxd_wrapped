@@ -18,6 +18,7 @@ import {
   profileMedia,
   storySeason,
   topRatedPosters,
+  buildDirectorSequence,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
 import { RewatchInsight } from './RewatchInsight';
@@ -129,32 +130,20 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
 
   if (stats.most_watched_director?.name) {
     const directorProfile = stats.top_directors?.find((d) => d.name === stats.most_watched_director?.name);
-    const directorRewatches = personRewatches(stats, stats.most_watched_director.name, 'director');
-    const topRewatch = directorRewatches[0];
+    const directorSequence = buildDirectorSequence(
+      stats,
+      stats.most_watched_director.name,
+      stats.most_watched_director.count,
+      directorProfile,
+    );
     slides.push({
       key: 'director',
-      media: compactMedia([
-        profileMedia(directorProfile),
-        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 18),
-      ], 19),
+      media: compactMedia([directorSequence.profile, ...directorSequence.streamPosters], 6),
       accent: '#ef4444',
-      visual: 'person',
-      body: (
-        <>
-          <Label>{t('story.slide.director.label')}</Label>
-          <Big>{stats.most_watched_director.name}</Big>
-          <Sub>
-            {t('story.slide.director.sub', { count: formatNumber(stats.most_watched_director.count) })}
-          </Sub>
-          {topRewatch && (
-            <RewatchInsight
-              title={topRewatch.title}
-              watchCount={topRewatch.watch_count}
-              extraCount={Math.max(0, directorRewatches.length - 1)}
-            />
-          )}
-        </>
-      ),
+      visual: 'director',
+      posterLayout: { contentX: '-8%', rotation: 2 },
+      directorSequence,
+      body: null,
     });
   }
 

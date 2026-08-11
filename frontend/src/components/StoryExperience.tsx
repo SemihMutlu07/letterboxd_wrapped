@@ -11,6 +11,7 @@ import { StoryNavigation } from '@/components/story/StoryNavigation';
 import { StoryPauseButton } from '@/components/story/StoryPauseButton';
 import { StoryProgressBar } from '@/components/story/StoryProgressBar';
 import { StorySlidePanel } from '@/components/story/StorySlidePanel';
+import { DirectorSlidePhaseProvider } from '@/components/story/director/DirectorSlidePhaseContext';
 import { StoryVisual } from '@/components/story/visuals/StoryVisual';
 import { useI18n } from '@/i18n/I18nProvider';
 
@@ -111,10 +112,17 @@ export default function StoryExperience() {
     );
   }
 
+  const activeSlide = slides[index];
+
   return (
+    <DirectorSlidePhaseProvider
+      sequence={activeSlide.directorSequence ?? null}
+      slideKey={activeSlide.key}
+      paused={isPaused}
+    >
     <main className="relative min-h-screen select-none overflow-hidden bg-[#0f0d0b]">
       <AnimatePresence mode="wait">
-        <StoryVisual key={`bg-${slides[index].key}`} slide={slides[index]} />
+        <StoryVisual key={`bg-${activeSlide.key}`} slide={activeSlide} />
       </AnimatePresence>
 
       <StoryProgressBar slides={slides} index={index} progress={progress} />
@@ -126,7 +134,7 @@ export default function StoryExperience() {
       />
 
       <StorySlidePanel
-        slide={slides[index]}
+        slide={activeSlide}
         isLast={isLast}
         stats={stats}
         showTapHint={currentInteraction === 'manual'}
@@ -141,6 +149,7 @@ export default function StoryExperience() {
         onReplay={() => goToSlide(0)}
       />
     </main>
+    </DirectorSlidePhaseProvider>
   );
 }
 
