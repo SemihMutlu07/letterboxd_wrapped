@@ -13,6 +13,7 @@ import { StoryProgressBar } from '@/components/story/StoryProgressBar';
 import { StorySlidePanel } from '@/components/story/StorySlidePanel';
 import { PersonSlidePhaseProvider } from '@/components/story/person/PersonSlidePhaseContext';
 import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
+import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
 import { StoryVisual } from '@/components/story/visuals/StoryVisual';
 import { useI18n } from '@/i18n/I18nProvider';
 
@@ -126,6 +127,11 @@ export default function StoryExperience() {
       slideKey={activeSlide.key}
       paused={isPaused}
     >
+    <FinaleSlidePhaseProvider
+      sequence={activeSlide.finaleSequence ?? null}
+      slideKey={activeSlide.key}
+      paused={isPaused}
+    >
     <main className="relative min-h-screen select-none overflow-hidden bg-[#0f0d0b]">
       <AnimatePresence mode="wait">
         <StoryVisual key={`bg-${activeSlide.key}`} slide={activeSlide} />
@@ -155,6 +161,7 @@ export default function StoryExperience() {
         onReplay={() => goToSlide(0)}
       />
     </main>
+    </FinaleSlidePhaseProvider>
     </ReviewSlidePhaseProvider>
     </PersonSlidePhaseProvider>
   );

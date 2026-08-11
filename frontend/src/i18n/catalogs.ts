@@ -473,6 +473,9 @@ export const en = {
   'story.slide.review.likes_one': 'That one got {count} like — someone out there gets you.',
   'story.slide.review.likes_other': 'That one got {count} likes — someone out there gets you.',
   'story.slide.review.thisLength': '{count} words on this one.',
+  'story.slide.finale.label': 'That\'s the short version',
+  'story.slide.finale.headline': 'The full picture waits.',
+  'story.slide.finale.cardHint': 'Your year, ready to keep.',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -951,6 +954,9 @@ export const tr = {
   'story.slide.review.likes_one': '{count} beğeni aldı — birileri seni anlıyor.',
   'story.slide.review.likes_other': '{count} beğeni aldı — birileri seni anlıyor.',
   'story.slide.review.thisLength': 'Bunda {count} kelime.',
+  'story.slide.finale.label': 'Kısa versiyon buydu',
+  'story.slide.finale.headline': 'Tüm resim seni bekliyor.',
+  'story.slide.finale.cardHint': 'Yılın, saklamaya hazır.',
 } as const satisfies Messages;
 
 export const catalogs: Record<Locale, Messages> = { en, tr };

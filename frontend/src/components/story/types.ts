@@ -19,6 +19,7 @@ export type SlideVisual =
   | 'person'
   | 'actor'
   | 'review'
+  | 'finale'
   | 'poster-wall'
   | 'recap';
 
@@ -48,6 +49,10 @@ export type ReviewSequenceData = {
   streamPosters: StoryMedia[];
 };
 
+export type FinaleSequenceData = {
+  curtainPosters: StoryMedia[];
+};
+
 export type SlideInsight = {
   kind: 'actor-rewatch';
   title: string;
@@ -66,5 +71,6 @@ export type Slide = {
   directorSequence?: PersonSequenceData;
   actorSequence?: PersonSequenceData;
   reviewSequence?: ReviewSequenceData;
+  finaleSequence?: FinaleSequenceData;
   insight?: SlideInsight;
 };

@@ -12,6 +12,8 @@ import { readySlideKeys, slideMeta } from '@/components/story/manifest';
 import { buildStoryShareCard, pickFinaleOrientation } from '@/components/story/viewModel';
 import { ReviewSlideBody } from '@/components/story/review/ReviewSlideBody';
 import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
+import { FinaleSlideBody } from '@/components/story/finale/FinaleSlideBody';
+import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
 
 const enI18n = createTranslator('en');
 
@@ -264,6 +266,62 @@ describe('buildSlides', () => {
     expect(slides.some((s) => s.key === 'review-personality')).toBe(false);
   });
 
+
+
+  it('builds the outro finale with capped poster curtain and no profile media', () => {
+    const stats = {
+      ...STATS,
+      top_directors: [{ name: 'Denis Villeneuve', count: 2, profile_path: '/denis.jpg' }],
+      top_actors: [{ name: 'Jake Gyllenhaal', count: 18, profile_path: '/jake.jpg' }],
+      review_analysis: {
+        total_words_written: 500,
+        reviews: [
+          { title: 'Aftersun', text: 'short', text_length: 5000, likes: 3, poster_path: '/after.jpg' },
+          { title: 'Memories of Underdevelopment', text: 'longer review body', text_length: 10, likes: 0, poster_path: '/mem.jpg' },
+        ],
+      },
+      all_films: [
+        { title: 'Nightcrawler', cast: ['Jake Gyllenhaal'], poster_path: '/night.jpg', rating: 5 },
+        { title: 'Arrival', director: 'Denis Villeneuve', cast: ['Amy Adams'], poster_path: '/arrival.jpg', rating: 4 },
+        { title: 'Heat', director: 'Michael Mann', cast: ['Jake Gyllenhaal'], poster_path: '/heat.jpg', rating: 3 },
+        { title: 'Aftersun', poster_path: '/after.jpg', rating: 4 },
+        { title: 'Memories of Underdevelopment', poster_path: '/mem.jpg', rating: 5 },
+        { title: 'Film F', poster_path: '/f.jpg', rating: 2 },
+        { title: 'Film G', poster_path: '/g.jpg', rating: 1 },
+        { title: 'Film H', poster_path: '/h.jpg', rating: 4 },
+        { title: 'Film I', poster_path: '/i.jpg', rating: 4 },
+        { title: 'Film J', poster_path: '/j.jpg', rating: 4 },
+        { title: 'Film K', poster_path: '/k.jpg', rating: 4 },
+      ],
+    };
+    const slides = buildSlides(stats as unknown as StatsData);
+    const outro = slides.find((slide) => slide.key === 'outro')!;
+    expect(outro.visual).toBe('finale');
+    expect(outro.finaleSequence).toBeTruthy();
+    expect(outro.media?.length).toBeLessThanOrEqual(8);
+    expect(outro.media?.every((item) => item.type === 'poster')).toBe(true);
+    expect(outro.media?.some((item) => item.type === 'profile')).toBe(false);
+    expect(outro.body).toBeNull();
+    render(
+      <I18nProvider locale="en">
+        <FinaleSlidePhaseProvider sequence={outro.finaleSequence ?? null} slideKey="outro" paused={false}>
+          <FinaleSlideBody />
+        </FinaleSlidePhaseProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByText('That\'s the short version')).toBeInTheDocument();
+    expect(screen.getByText('The full picture waits.')).toBeInTheDocument();
+
+    render(
+      <I18nProvider locale="tr">
+        <FinaleSlidePhaseProvider sequence={outro.finaleSequence ?? null} slideKey="outro" paused={false}>
+          <FinaleSlideBody />
+        </FinaleSlidePhaseProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByText('Kısa versiyon buydu')).toBeInTheDocument();
+    expect(screen.getByText('Tüm resim seni bekliyor.')).toBeInTheDocument();
+  });
 
   it('builds the review-personality slide with cinematic sequence and i18n body', () => {
     const stats = {

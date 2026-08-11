@@ -39,6 +39,7 @@ export const VISUAL_POSTER_DEFAULTS: Partial<Record<SlideVisual, Partial<PosterF
   person: { rotation: 1, contentX: '-2%' },
   actor: { rotation: 2, contentX: '-6%' },
   review: { rotation: 3, contentX: '-8%' },
+  finale: { rotation: -2, contentX: '-5%', motionScale: 1.15 },
   hero: { rotation: 2, contentX: '-6%' },
   strip: { rotation: 5, contentX: '-4%' },
   'poster-wall': { rotation: 2, contentX: '-4%' },

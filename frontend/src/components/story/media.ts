@@ -361,12 +361,14 @@ export const REVIEW_STREAM_MIN_FILL = PERSON_STREAM_MIN_FILL;
 export function collectCinematicClaimedUrls(
   entries: Array<{
     profile?: StoryMedia | null;
+    heroPoster?: StoryMedia | null;
     streamPosters?: StoryMedia[];
   }>,
 ): { urls: string[]; set: Set<string> } {
   const urls: string[] = [];
   for (const entry of entries) {
     if (entry.profile) urls.push(entry.profile.url);
+    if (entry.heroPoster) urls.push(entry.heroPoster.url);
     for (const poster of entry.streamPosters ?? []) urls.push(poster.url);
   }
   return { urls, set: new Set(urls) };
@@ -529,5 +531,87 @@ export function buildReviewSequence(
     likes: longest.likes ?? 0,
     heroPoster,
     streamPosters,
+  };
+}
+
+
+export const FINALE_CURTAIN_POSTER_CAP = 8;
+export const FINALE_CURTAIN_MIN_FILL = 4;
+
+function applyFinaleCurtainDedupe(
+  primary: StoryMedia[],
+  excludedPool: StoryMedia[],
+  claimedUrls: string[],
+  limit: number,
+): StoryMedia[] {
+  let result = primary;
+  if (result.length < FINALE_CURTAIN_MIN_FILL) {
+    const excludedByUrl = new Map(excludedPool.map((item) => [item.url, item]));
+    const refill: StoryMedia[] = [];
+
+    for (let index = claimedUrls.length - 1; index >= 0; index -= 1) {
+      const item = excludedByUrl.get(claimedUrls[index]);
+      if (!item || result.some((poster) => poster.url === item.url)) continue;
+      if (refill.some((poster) => poster.url === item.url)) continue;
+      refill.push(item);
+    }
+
+    for (const item of excludedPool) {
+      if (result.some((poster) => poster.url === item.url)) continue;
+      if (refill.some((poster) => poster.url === item.url)) continue;
+      refill.push(item);
+    }
+
+    result = [...result, ...refill].slice(0, limit);
+  }
+  return result.slice(0, limit);
+}
+
+export function buildFinaleCurtainMedia(
+  stats: StatsData,
+  options?: {
+    excludeUrls?: Set<string>;
+    claimedUrls?: string[];
+    limit?: number;
+  },
+): StoryMedia[] {
+  const limit = options?.limit ?? FINALE_CURTAIN_POSTER_CAP;
+  const excludeUrls = options?.excludeUrls ?? new Set<string>();
+  const sorted = [...(stats.all_films ?? [])]
+    .filter((film) => film.poster_path)
+    .sort((a, b) => {
+      const ratingDelta = (b.rating ?? 0) - (a.rating ?? 0);
+      if (ratingDelta !== 0) return ratingDelta;
+      return (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' });
+    });
+
+  const seen = new Set<string>();
+  const primary: StoryMedia[] = [];
+  const excludedPool: StoryMedia[] = [];
+
+  for (const film of sorted) {
+    const item = posterMedia(film, 'w500');
+    if (!item || seen.has(item.url)) continue;
+    seen.add(item.url);
+    if (excludeUrls.has(item.url)) {
+      excludedPool.push(item);
+      continue;
+    }
+    primary.push(item);
+    if (primary.length >= limit) break;
+  }
+
+  return applyFinaleCurtainDedupe(primary, excludedPool, options?.claimedUrls ?? [], limit);
+}
+
+export function buildFinaleSequence(
+  stats: StatsData,
+  options?: {
+    excludeUrls?: Set<string>;
+    claimedUrls?: string[];
+  },
+) {
+  return {
+    curtainPosters: buildFinaleCurtainMedia(stats, options),
   };
 }

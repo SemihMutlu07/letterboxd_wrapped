@@ -15,12 +15,12 @@ import {
   personFilmPosters,
   personRewatches,
   posterMedia,
-  profileMedia,
   storySeason,
   topRatedPosters,
   buildDirectorSequence,
   buildActorSequence,
   buildReviewSequence,
+  buildFinaleSequence,
   collectCinematicClaimedUrls,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
@@ -317,22 +317,30 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
     });
   }
 
+  const reviewSlide = slides.find((slide) => slide.key === 'review-personality');
+  const claimed = collectCinematicClaimedUrls([
+    slides.find((slide) => slide.key === 'director')?.directorSequence ?? {},
+    slides.find((slide) => slide.key === 'actor')?.actorSequence ?? {},
+    reviewSlide?.reviewSequence
+      ? {
+        streamPosters: reviewSlide.reviewSequence.streamPosters,
+        heroPoster: reviewSlide.reviewSequence.heroPoster,
+      }
+      : {},
+  ]);
+  const finaleSequence = buildFinaleSequence(stats, {
+    excludeUrls: claimed.set,
+    claimedUrls: claimed.urls,
+  });
+
   slides.push({
     key: 'outro',
-    media: compactMedia([
-      profileMedia(stats.top_directors?.find((d) => d.name === directorName) ?? stats.top_directors?.[0]),
-      profileMedia(topActor),
-      ...broadPosters,
-    ], 10),
+    media: finaleSequence.curtainPosters,
     accent: '#fbbf24',
-    visual: 'recap',
-    body: (
-      <>
-        <Label>{t('story.slide.outro.label')}</Label>
-        <Big>{t('story.slide.outro.headline')}</Big>
-        <Sub>{t('story.slide.outro.dossier')}</Sub>
-      </>
-    ),
+    visual: 'finale',
+    posterLayout: { contentX: '-5%', rotation: -2 },
+    finaleSequence,
+    body: null,
   });
 
   return slides;
