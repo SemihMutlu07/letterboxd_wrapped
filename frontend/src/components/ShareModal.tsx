@@ -128,6 +128,16 @@ export default function ShareModal({
 
   useEffect(() => {
     if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isSaving) return;
+      onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, isSaving, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
     const el = railRef.current;
     if (!el) return;
     const measure = () => {
@@ -177,7 +187,7 @@ export default function ShareModal({
   const showSwapTrigger = hasActors || hasDirectors;
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-[100]">
       <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
 
       <div
