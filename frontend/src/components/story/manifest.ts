@@ -4,10 +4,12 @@ import type { StatsData } from '@/containers/results/sections/types';
  * Slide dependency manifest — single source of truth for which slide depends on
  * which StatsData field, and how the viewer moves past it.
  *
- * - tier 'core'        → always played, auto-advances (viewer cannot passively
- *                        miss the headline numbers).
- * - tier 'enrichment'  → only appears when its data is present; does NOT
- *                        auto-advance, so the viewer stays in control.
+ * - tier 'core'        → always played; `auto-min` interaction auto-advances and
+ *                        also blocks early tap/→ until the min dwell elapses
+ *                        (viewer cannot passively or hastily miss headlines).
+ * - tier 'enrichment'  → only appears when its data is present; `manual`
+ *                        interaction does NOT auto-advance, so the viewer stays
+ *                        in control.
  *
  * buildSlides() already gates each slide on the same predicate; this manifest
  * makes the dependency explicit and drives autoplay + readiness in one place.

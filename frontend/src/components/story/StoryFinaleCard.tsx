@@ -25,7 +25,9 @@ export default function StoryFinaleCard({ stats }: { stats: StatsData }) {
     const measure = () => {
       const rect = el.getBoundingClientRect();
       setBox({ w: rect.width, h: rect.height });
-      setOrientation(pickFinaleOrientation(window.innerWidth));
+      // Orientation follows the frame width, not the window — a narrow column
+      // on a wide desktop must still get the portrait card.
+      setOrientation(pickFinaleOrientation(rect.width));
     };
     measure();
     const observer = new ResizeObserver(measure);
