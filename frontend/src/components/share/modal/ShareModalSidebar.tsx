@@ -1,7 +1,10 @@
 'use client';
 
+import { useRef } from 'react';
+
 import type { ShareCardInput } from '@/components/share/types';
 
+import { FloatingPanel } from './FloatingPanel';
 import { FormatControls } from './FormatControls';
 import { ShareSaveButton } from './ShareSaveButton';
 import { SwapDrawer } from './SwapDrawer';
@@ -53,22 +56,12 @@ export function ShareModalSidebar({
   exportError,
   onSave,
 }: ShareModalSidebarProps) {
+  const tuneRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div className="relative space-y-3 px-5 pb-6 pt-3 md:w-[300px] md:shrink-0 md:space-y-5 md:overflow-y-auto md:border-l md:border-white/10 md:px-6 md:py-5 lg:w-[340px]">
-      {showSwapTrigger && swapOpen && (
-        <SwapDrawer
-          cardProps={cardProps}
-          hasActors={hasActors}
-          hasDirectors={hasDirectors}
-          actorIdx={actorIdx}
-          directorIdx={directorIdx}
-          isSaving={isSaving}
-          onActorIdxChange={setActorIdx}
-          onDirectorIdxChange={setDirectorIdx}
-        />
-      )}
-
       <FormatControls
+        ref={tuneRef}
         orientation={orientation}
         setOrientation={setOrientation}
         isSaving={isSaving}
@@ -79,6 +72,24 @@ export function ShareModalSidebar({
         onSwapToggle={() => { setSwapOpen((s) => !s); dismissSwapHint(); }}
         onDismissSwapHint={dismissSwapHint}
       />
+
+      <FloatingPanel
+        open={showSwapTrigger && swapOpen}
+        anchorRef={tuneRef}
+        onClose={() => setSwapOpen(false)}
+        prefer="above"
+      >
+        <SwapDrawer
+          cardProps={cardProps}
+          hasActors={hasActors}
+          hasDirectors={hasDirectors}
+          actorIdx={actorIdx}
+          directorIdx={directorIdx}
+          isSaving={isSaving}
+          onActorIdxChange={setActorIdx}
+          onDirectorIdxChange={setDirectorIdx}
+        />
+      </FloatingPanel>
 
       {cardProps.username && (
         <UsernameToggle

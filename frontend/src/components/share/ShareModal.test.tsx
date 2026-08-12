@@ -290,7 +290,7 @@ describe('ShareModal export outcomes', () => {
       canShare: () => true,
       share,
     });
-    vi.mocked(toBlob).mockResolvedValue(pngBlob(1200, 675));
+    vi.mocked(toBlob).mockResolvedValue(pngBlob(2400, 1350));
     const onDownloadSuccess = vi.fn();
 
     render(
@@ -336,8 +336,8 @@ describe('exact intended exports', () => {
   it.each(SHARE_VARIANTS)('keeps $label at its exact low-memory output size', async ({ key, orientation }) => {
     Object.defineProperty(navigator, 'deviceMemory', { configurable: true, value: 1 });
     const expected = orientation === 'horizontal'
-      ? { width: 1200, height: 675, pixelRatio: 1 }
-      : { width: 1080, height: 1920, pixelRatio: 1.6 };
+      ? { width: 2400, height: 1350, pixelRatio: 2 }
+      : { width: 1350, height: 2400, pixelRatio: 2 };
     vi.mocked(toBlob).mockResolvedValueOnce(pngBlob(expected.width, expected.height));
     const rendered = render(
       <I18nProvider locale="en">
@@ -363,8 +363,8 @@ describe('exact intended exports', () => {
 });
 
 describe.each([
-  ['horizontal', 1200, 675, 1],
-  ['vertical', 1080, 1920, 1.6],
+  ['horizontal', 2400, 1350, 2],
+  ['vertical', 1350, 2400, 2],
 ] as const)('exact %s export', (orientation, width, height, pixelRatio) => {
 
   it('retries failures and wrong-sized blobs without lowering quality', async () => {

@@ -8,6 +8,7 @@ import { useShareLabels } from '@/components/share/useShareLabels';
 import { normalizeShareCardData } from '@/components/share/viewModel';
 
 import { SHARE_EXPORT_CONFIG } from '@/components/share/modal/exportUtils';
+import { CanonicalExportCard } from '@/components/share/modal/CanonicalExportCard';
 import { ShareModalHeader } from '@/components/share/modal/ShareModalHeader';
 import { ShareModalSidebar } from '@/components/share/modal/ShareModalSidebar';
 import { VariantRail } from '@/components/share/modal/VariantRail';
@@ -132,11 +133,15 @@ export default function ShareModal({
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || isSaving) return;
+      if (swapOpen) {
+        setSwapOpen(false);
+        return;
+      }
       onClose();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, isSaving, onClose]);
+  }, [open, isSaving, onClose, swapOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -191,6 +196,12 @@ export default function ShareModal({
   return (
     <div className="fixed inset-0 z-[100]">
       <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
+
+      <CanonicalExportCard
+        variantKey={variantKey}
+        data={effectiveCardProps}
+        orientation={orientation}
+      />
 
       <div
         role="dialog"
