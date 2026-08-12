@@ -17,6 +17,7 @@ import {
   activeDayCopy,
   topRatedPosters,
 } from '../media';
+import { IntroUsername } from './IntroUsername';
 import { Big, Label, Sub } from '../SlideTypography';
 
 export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide[] {
@@ -38,7 +39,7 @@ export function buildSlides(stats: StatsData, locale: 'en' | 'tr' = 'en'): Slide
     body: (
       <>
         <Label>Movies Wrapped</Label>
-        <Big>{username ? `@${username}` : copy('Your year in film', 'Film yılın')}</Big>
+        {username ? <IntroUsername username={username} /> : <Big>{copy('Your year in film', 'Film yılın')}</Big>}
         {stats.data_timeline?.period_description && <Sub>{stats.data_timeline.period_description}</Sub>}
         <Sub className="mt-6">
           {copy('They say the movies you choose say more about you than the ones you skip. Let’s find out what yours are saying.', 'Seçtiğin filmlerin, es geçtiklerinden daha çok şey anlattığı söylenir. Bakalım seninkiler ne diyor.')}
