@@ -38,27 +38,29 @@ export function StoryNavigation({
       />
 
       {isLast && (
-        <div className="absolute inset-x-4 bottom-6 z-50 mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={onPrevious}
-            className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
-          >
-            {t('story.back')}
-          </button>
-          <button
-            type="button"
-            onClick={onReplay}
-            className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
-          >
-            {t('story.replay')}
-          </button>
-          <a
-            href={resultPath(username, locale)}
-            className="rounded-full bg-amber-300 px-7 py-3 font-mono text-xs font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
-          >
-            {t('story.openResults')}
-          </a>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-black/70 to-transparent pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16">
+          <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3 px-4">
+            <button
+              type="button"
+              onClick={onPrevious}
+              className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+            >
+              {t('story.back')}
+            </button>
+            <button
+              type="button"
+              onClick={onReplay}
+              className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
+            >
+              {t('story.replay')}
+            </button>
+            <a
+              href={resultPath(username, locale)}
+              className="rounded-full bg-amber-300 px-7 py-3 font-mono text-xs font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
+            >
+              {t('story.openResults')}
+            </a>
+          </div>
         </div>
       )}
     </>
