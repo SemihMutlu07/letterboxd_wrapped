@@ -1,9 +1,9 @@
 'use client';
 
 import type { StatsData } from '@/containers/results/sections/types';
-import { reviewCharLength, reviewWordCount } from '@/lib/reviews';
+import { findReviewForSummary, selectLongestReview } from '@/lib/reviews';
 import type { Translator } from '@/i18n/createTranslator';
-import { formatStoryTimeline } from '@/i18n/story-timeline';
+import { formatActiveDay, formatStoryTimeline } from '@/i18n/story-timeline';
 
 import type { Slide } from '../types';
 import {
@@ -16,7 +16,6 @@ import {
   posterMedia,
   profileMedia,
   storySeason,
-  activeDayCopy,
   topRatedPosters,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
@@ -30,7 +29,7 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
   const directorName = stats.most_watched_director?.name ?? stats.top_directors?.[0]?.name;
   const topActor = stats.top_actors?.[0];
   const viewingSeason = storySeason(stats.story_analytics?.viewing_season);
-  const mostActiveDay = activeDayCopy(stats.story_analytics?.most_active_day);
+  const mostActiveDay = formatActiveDay(stats.story_analytics?.most_active_day, i18n);
   const periodLine = formatStoryTimeline(stats.data_timeline, i18n);
 
   slides.push({
@@ -209,19 +208,19 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
     });
   }
 
-  const reviews = stats.review_analysis?.reviews ?? [];
-  if (reviews.length > 0) {
-    const longest = reviews.reduce((a, b) =>
-      reviewWordCount(b) !== reviewWordCount(a)
-        ? (reviewWordCount(b) > reviewWordCount(a) ? b : a)
-        : (reviewCharLength(b) > reviewCharLength(a) ? b : a),
-    );
-    const longestLikes = longest.likes ?? 0;
-    const totalWords = stats.review_analysis?.total_words_written;
+  const reviewAnalysis = stats.review_analysis;
+  const reviews = reviewAnalysis?.reviews ?? [];
+  const summary = reviewAnalysis?.longest_review;
+  const matched = summary ? findReviewForSummary(reviews, summary) : undefined;
+  const fallback = !summary ? selectLongestReview(reviews) : undefined;
+  const displayTitle = summary?.title ?? matched?.title ?? fallback?.title;
+  if (displayTitle) {
+    const longestLikes = matched?.likes ?? fallback?.likes ?? 0;
+    const totalWords = reviewAnalysis?.total_words_written;
     slides.push({
       key: 'review-personality',
       media: compactMedia([
-        posterMedia(filmByTitle(stats, longest.title)),
+        posterMedia(filmByTitle(stats, displayTitle)),
         ...broadPosters,
       ], 6),
       accent: '#fb7185',
@@ -229,7 +228,7 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
       body: (
         <>
           <Label>{t('story.slide.review.label')}</Label>
-          <Big>{longest.title}</Big>
+          <Big>{displayTitle}</Big>
           <Sub>
             {totalWords
               ? t('story.slide.review.wordsTotal', { count: formatNumber(totalWords) })
