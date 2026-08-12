@@ -1,7 +1,7 @@
 import type { ShareCardData, ShareCardInput } from './types';
 
 export const DIRECTOR_UNAVAILABLE = {
-  name: 'Director unavailable',
+  name: '',
   headshotUrl: '',
   count: 0,
 } as const;

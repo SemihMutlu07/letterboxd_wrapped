@@ -15,7 +15,8 @@ import { StoryVisual } from '@/components/story/visuals/StoryVisual';
 import { useI18n } from '@/i18n/I18nProvider';
 
 export default function StoryExperience() {
-  const { locale, t } = useI18n();
+  const i18n = useI18n();
+  const { t } = i18n;
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -26,7 +27,7 @@ export default function StoryExperience() {
     if (phase === 'ready') start();
   }, [phase, start]);
 
-  const slides = useMemo(() => (stats ? buildSlides(stats, locale) : []), [locale, stats]);
+  const slides = useMemo(() => (stats ? buildSlides(stats, i18n) : []), [i18n, stats]);
   const isLast = index >= slides.length - 1;
   const username = stats?.scraped_username;
   const currentInteraction = slideMeta(slides[index]?.key ?? '').interaction;
@@ -134,7 +135,7 @@ export default function StoryExperience() {
       <StoryNavigation
         isLast={isLast}
         username={username}
-        locale={locale}
+        locale={i18n.locale}
         onPrevious={goPrevious}
         onNext={goNext}
         onReplay={() => goToSlide(0)}
