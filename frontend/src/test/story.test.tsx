@@ -165,17 +165,46 @@ describe('buildSlides', () => {
     const slides = buildSlides({
       ...STATS,
       top_directors: [{ name: 'Denis Villeneuve', count: 2, profile_path: '/denis.jpg' }],
-      top_actors: [{ name: 'Jake Gyllenhaal', count: 18, profile_path: '/jake.jpg' }],
+      top_actors: [{
+        name: 'Jake Gyllenhaal',
+        count: 18,
+        profile_path: '/jake.jpg',
+        films: [{ title: 'Nightcrawler', poster_path: '/night.jpg' }],
+      }],
+      rewatch_champions: [{ title: 'Nightcrawler', watch_count: 4 }],
       all_films: [
         { title: 'Arrival', director: 'Denis Villeneuve', poster_path: '/arrival.jpg' },
         { title: 'Heat', director: 'Michael Mann', poster_path: '/heat.jpg' },
+        { title: 'Nightcrawler', director: 'Dan Gilroy', poster_path: '/night.jpg', cast: ['Jake Gyllenhaal'] },
       ],
     } as unknown as StatsData, enI18n);
     const director = slides.find((slide) => slide.key === 'director')!;
-    expect(director.visual).toBe('director');
+    expect(director.visual).toBe('person');
     expect(director.media?.map((item) => item.alt)).toEqual([
       'Denis Villeneuve portrait',
       'Arrival poster',
+    ]);
+    const actor = slides.find((slide) => slide.key === 'actor')!;
+    expect(actor.visual).toBe('person');
+    expect(actor.media?.map((item) => item.alt)).toEqual([
+      'Jake Gyllenhaal portrait',
+      'Nightcrawler poster',
+    ]);
+  });
+
+  it('keeps local /demo media paths intact for story visuals', () => {
+    const slides = buildSlides({
+      ...STATS,
+      top_directors: [{ name: 'Denis Villeneuve', count: 1, profile_path: '/demo/smt-media/denis.jpg' }],
+      most_watched_director: { name: 'Denis Villeneuve', count: 1 },
+      all_films: [
+        { title: 'Arrival', director: 'Denis Villeneuve', poster_path: '/demo/smt-media/arrival.jpg' },
+      ],
+    } as unknown as StatsData, enI18n);
+    const director = slides.find((slide) => slide.key === 'director')!;
+    expect(director.media?.map((item) => item.url)).toEqual([
+      '/demo/smt-media/denis.jpg',
+      '/demo/smt-media/arrival.jpg',
     ]);
   });
 

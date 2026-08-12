@@ -14,7 +14,9 @@ export type SlideVisual =
   | 'strip'
   | 'cascade'
   | 'director'
-  | 'poster-wall';
+  | 'person'
+  | 'poster-wall'
+  | 'recap';
 
 export type Slide = {
   key: string;

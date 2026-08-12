@@ -9,9 +9,8 @@ import type { StatsData } from '@/containers/results/sections/types';
 import { buildStoryShareCard, FINALE_CARD_DOM, FINALE_VARIANT, pickFinaleOrientation } from './viewModel';
 
 /**
- * Story finale: the shareable card, chosen portrait on phones and landscape on
- * wider containers, scaled to fit the slide and flipped in with a light 3D
- * tilt. Respects prefers-reduced-motion by rendering the card statically.
+ * Story finale dossier preview — larger, with subtle depth, overlapping the
+ * card boundary. Respects prefers-reduced-motion.
  */
 export default function StoryFinaleCard({ stats }: { stats: StatsData }) {
   const reduce = useReducedMotion();
@@ -25,8 +24,6 @@ export default function StoryFinaleCard({ stats }: { stats: StatsData }) {
     const measure = () => {
       const rect = el.getBoundingClientRect();
       setBox({ w: rect.width, h: rect.height });
-      // Orientation follows the frame width, not the window — a narrow column
-      // on a wide desktop must still get the portrait card.
       setOrientation(pickFinaleOrientation(rect.width));
     };
     measure();
@@ -46,30 +43,32 @@ export default function StoryFinaleCard({ stats }: { stats: StatsData }) {
   return (
     <div
       ref={frameRef}
-      className="relative w-full"
-      style={{ height: 'min(56vh, 440px)', perspective: 1200 }}
+      className="relative -mx-2 mb-5 w-[calc(100%+1rem)] sm:-mx-3 sm:mb-6 sm:w-[calc(100%+1.5rem)]"
+      style={{ height: 'min(48vh, 380px)', perspective: 1400 }}
       data-finale-orientation={orientation}
     >
       {scale > 0 && (
         <div
-          className="absolute left-1/2 top-1/2"
+          className="absolute left-1/2 top-[46%]"
           style={{
             width: dom.w,
             height: dom.h,
-            transform: `translate(-50%, -50%) scale(${scale})`,
+            transform: `translate(-50%, -50%) scale(${scale}) rotateX(${reduce ? 0 : 6}deg) rotateZ(${reduce ? 0 : -1.5}deg)`,
             transformStyle: 'preserve-3d',
           }}
         >
           <motion.div
-            initial={reduce ? false : { opacity: 0, rotateY: -24, scale: 0.92 }}
-            animate={reduce ? { opacity: 1 } : { opacity: 1, rotateY: 0, scale: 1 }}
-            transition={{ duration: reduce ? 0 : 0.7, ease: 'easeOut' }}
+            initial={reduce ? false : { opacity: 0, rotateY: -18, y: 24, scale: 0.94 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, rotateY: 0, y: 0, scale: 1 }}
+            transition={{ duration: reduce ? 0 : 0.75, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden rounded-[18px] shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/15"
             style={{ width: dom.w, height: dom.h, transformStyle: 'preserve-3d' }}
           >
             <ShareVariantRenderer variant={FINALE_VARIANT[orientation]} data={data} orientation={orientation} />
           </motion.div>
         </div>
       )}
+      <div className="pointer-events-none absolute inset-x-8 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent" />
     </div>
   );
 }

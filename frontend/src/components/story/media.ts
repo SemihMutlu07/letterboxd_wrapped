@@ -3,6 +3,10 @@ import type { StoryMedia } from './types';
 
 export function tmdbCdn(path: string | null | undefined, size = 'w780'): string | null {
   if (!path) return null;
+  // Local SMT fixture / app-relative assets must not be rewritten to TMDB CDN.
+  if (path.startsWith('/demo/') || path.startsWith('demo/')) {
+    return path.startsWith('/') ? path : `/${path}`;
+  }
   if (path.startsWith('http')) return path;
   const clean = path.replace(/^\/+/, '').replace(/^t\/p\/[^/]+\//, '');
   return `https://image.tmdb.org/t/p/${size}/${clean}`;
@@ -61,17 +65,65 @@ export function genrePosters(stats: StatsData, genre?: string, limit = 8) {
   );
 }
 
-export function personFilmPosters(stats: StatsData, name?: string, role: 'director' | 'actor' = 'director', limit = 6) {
+export function personFilms(
+  stats: StatsData,
+  name?: string,
+  role: 'director' | 'actor' = 'director',
+) {
   const clean = name?.toLowerCase();
   if (!clean) return [];
+  const seen = new Set<string>();
+  const films: NonNullable<StatsData['all_films']> = [];
+  for (const film of stats.all_films ?? []) {
+    const match = role === 'director'
+      ? film.director?.toLowerCase() === clean
+      : film.cast?.some((actor) => actor.toLowerCase() === clean);
+    if (!match || !film.title) continue;
+    const key = film.title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    films.push(film);
+  }
+  return films;
+}
+
+function personAttachedFilms(
+  stats: StatsData,
+  name?: string,
+  role: 'director' | 'actor' = 'director',
+) {
+  const clean = name?.toLowerCase();
+  if (!clean) return [];
+  const people = role === 'director' ? stats.top_directors : stats.top_actors;
+  return people?.find((person) => person.name?.toLowerCase() === clean)?.films ?? [];
+}
+
+export function personFilmPosters(stats: StatsData, name?: string, role: 'director' | 'actor' = 'director', limit = 6) {
+  // Prefer the person's attached film list (exact credit set) when present.
+  const attached = personAttachedFilms(stats, name, role);
+  if (attached.length > 0) {
+    return compactMedia(attached.map((film) => posterMedia(film, 'w500')), limit);
+  }
   return compactMedia(
-    (stats.all_films ?? [])
-      .filter((film) => role === 'director'
-        ? film.director?.toLowerCase() === clean
-        : film.cast?.some((actor) => actor.toLowerCase() === clean))
-      .map((film) => posterMedia(film, 'w500')),
+    personFilms(stats, name, role).map((film) => posterMedia(film, 'w500')),
     limit,
   );
+}
+
+/** Rewatches among films tied to a director/actor — most-watched first. */
+export function personRewatches(
+  stats: StatsData,
+  name?: string,
+  role: 'director' | 'actor' = 'director',
+) {
+  const titles = new Set([
+    ...personFilms(stats, name, role).map((film) => film.title.toLowerCase()),
+    ...personAttachedFilms(stats, name, role).map((film) => film.title.toLowerCase()),
+  ]);
+  if (titles.size === 0) return [];
+  return [...(stats.rewatch_champions ?? [])]
+    .filter((entry) => titles.has(entry.title.toLowerCase()))
+    .sort((a, b) => b.watch_count - a.watch_count);
 }
 
 export function storySeason(value: string | { season?: string; percentage?: number; story?: string } | undefined): string | null {
@@ -79,11 +131,16 @@ export function storySeason(value: string | { season?: string; percentage?: numb
   return value?.season ?? null;
 }
 
-export function activeDayCopy(value: string | { date?: string; films?: number; story?: string } | undefined): string | null {
+export function activeDayCopy(
+  value: string | { date?: string; films?: number; story?: string } | undefined,
+  t?: (key: 'story.rhythm.activeDay', values: { date: string; count: number }) => string,
+): string | null {
   if (typeof value === 'string') return value;
   if (!value) return null;
   if (value.story) return value.story;
-  if (value.date && value.films) return `${value.date}, when you watched ${value.films} films`;
+  if (value.date && value.films && t) {
+    return t('story.rhythm.activeDay', { date: value.date, count: value.films });
+  }
   return value.date ?? null;
 }
 
