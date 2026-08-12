@@ -1,5 +1,6 @@
 'use client';
 
+import { forwardRef } from 'react';
 import { X, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -19,17 +20,20 @@ type FormatControlsProps = {
   onDismissSwapHint: () => void;
 };
 
-export function FormatControls({
-  orientation,
-  setOrientation,
-  isSaving,
-  showSwapTrigger,
-  showSwapHint,
-  hintFading,
-  swapOpen,
-  onSwapToggle,
-  onDismissSwapHint,
-}: FormatControlsProps) {
+export const FormatControls = forwardRef<HTMLButtonElement, FormatControlsProps>(function FormatControls(
+  {
+    orientation,
+    setOrientation,
+    isSaving,
+    showSwapTrigger,
+    showSwapHint,
+    hintFading,
+    swapOpen,
+    onSwapToggle,
+    onDismissSwapHint,
+  },
+  ref,
+) {
   const { t } = useI18n();
 
   return (
@@ -40,6 +44,7 @@ export function FormatControls({
     >
       <div className="grid min-w-0 grid-cols-2 gap-1 rounded-xl bg-white/5 p-1">
         <button
+          type="button"
           onClick={() => setOrientation('vertical')}
           disabled={isSaving}
           aria-pressed={orientation === 'vertical'}
@@ -50,6 +55,7 @@ export function FormatControls({
           {t('share.story')}
         </button>
         <button
+          type="button"
           onClick={() => setOrientation('horizontal')}
           disabled={isSaving}
           aria-pressed={orientation === 'horizontal'}
@@ -69,30 +75,35 @@ export function FormatControls({
                 animate={{ opacity: hintFading ? 0 : 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.2 }}
-                className="absolute right-0 bottom-full z-20 mb-2 flex max-w-[min(18rem,calc(100vw-2.5rem))] items-center gap-2 rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 shadow-lg backdrop-blur"
+                className="absolute bottom-full right-0 z-20 mb-2 flex max-w-[min(18rem,calc(100vw-2.5rem))] items-center gap-2 rounded-lg border border-white/10 bg-[#1a1a1a] px-3 py-2 shadow-lg backdrop-blur"
               >
                 <span className="text-xs text-slate-300">{t('share.swapHint')}</span>
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onDismissSwapHint(); }}
-                  className="text-slate-500 hover:text-white transition-colors leading-none"
+                  className="leading-none text-slate-500 transition-colors hover:text-white"
                   aria-label={t('share.dismissHint')}
                 >
                   <X size={12} strokeWidth={2.5} />
                 </button>
-                <div className="absolute -bottom-1.5 right-3 w-3 h-3 rotate-45 bg-[#1a1a1a] border-r border-b border-white/10" />
+                <div className="absolute -bottom-1.5 right-3 h-3 w-3 rotate-45 border-b border-r border-white/10 bg-[#1a1a1a]" />
               </motion.div>
             )}
           </AnimatePresence>
           <button
+            ref={ref}
+            type="button"
             onClick={onSwapToggle}
             disabled={isSaving}
             aria-label={t('share.tune')}
+            aria-expanded={swapOpen}
+            aria-haspopup="dialog"
             className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition ${
               swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
             }`}
           >
             {showSwapHint && !hintFading && (
-              <span className="absolute inset-0 rounded-full border border-white/20 animate-ping" />
+              <span className="absolute inset-0 animate-ping rounded-full border border-white/20" />
             )}
             <Sliders size={16} />
           </button>
@@ -100,4 +111,4 @@ export function FormatControls({
       )}
     </div>
   );
-}
+});
