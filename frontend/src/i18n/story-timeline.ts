@@ -36,3 +36,20 @@ export function formatStoryTimeline(
   const years = Math.floor(totalDays / 365);
   return t('story.slide.timeline.legacyYears', { years: formatNumber(years) });
 }
+
+/** Localized most-active-day line for the rhythm slide. */
+export function formatActiveDay(
+  value: string | { date?: string; films?: number; story?: string } | undefined,
+  { t, locale, formatNumber }: Pick<Translator, 't' | 'locale' | 'formatNumber'>,
+): string | null {
+  if (typeof value === 'string') return value;
+  if (!value) return null;
+  if (value.story) return value.story;
+  if (value.date && value.films != null) {
+    return t('story.slide.rhythm.activeDay', {
+      date: formatTimelineDate(value.date, locale),
+      count: formatNumber(value.films),
+    });
+  }
+  return value.date ?? null;
+}
