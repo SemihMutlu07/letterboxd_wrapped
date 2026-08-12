@@ -1,7 +1,5 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
-
 import type { Slide } from '../types';
 import {
   HeroPoster,
@@ -12,13 +10,15 @@ import {
   PortraitStack,
   RecapVisual,
 } from './PosterLayouts';
+import { PosterField } from './PosterField';
+import { resolvePosterFieldLayout } from './posterFieldConfig';
 import { PersonCinematicVisual } from './cinematic/PersonCinematicVisual';
 
 export function StoryVisual({ slide }: { slide: Slide }) {
   const media = slide.media ?? [];
   const accent = slide.accent ?? '#f59e0b';
   const hero = media[0];
-  const reduce = useReducedMotion();
+  const posterLayout = resolvePosterFieldLayout(slide.visual, slide.posterLayout);
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -43,14 +43,7 @@ export function StoryVisual({ slide }: { slide: Slide }) {
       <div className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(245,215,168,.16)_1px,transparent_1px),linear-gradient(90deg,rgba(245,215,168,.12)_1px,transparent_1px)] [background-size:42px_42px]" />
 
       {media.length > 0 && (
-        <motion.div
-          key={`visual-${slide.key}`}
-          initial={reduce ? false : { opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={reduce ? undefined : { opacity: 0, scale: 1.02 }}
-          transition={{ duration: reduce ? 0 : 0.65, ease: 'easeOut' }}
-          className="absolute inset-y-[6vh] left-[32%] right-[-4vw] hidden md:block lg:left-[30%] xl:left-[28%]"
-        >
+        <PosterField slideKey={slide.key} layout={posterLayout}>
           {slide.visual === 'director' || slide.visual === 'person' ? (
             <PersonCinematicVisual media={media} accent={accent} sequenceKey={slide.key} />
           ) : slide.visual === 'poster-wall' ? (
@@ -68,7 +61,7 @@ export function StoryVisual({ slide }: { slide: Slide }) {
           ) : (
             <PosterMosaic media={media} accent={accent} />
           )}
-        </motion.div>
+        </PosterField>
       )}
 
       <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black via-black/50 to-transparent" />
