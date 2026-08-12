@@ -13,6 +13,7 @@ import {
   genrePosters,
   generousCriticPosters,
   personFilmPosters,
+  personRewatches,
   posterMedia,
   profileMedia,
   storySeason,
@@ -20,6 +21,7 @@ import {
   topRatedPosters,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
+import { RewatchInsight } from './RewatchInsight';
 import { Big, Label, Sub } from '../SlideTypography';
 
 export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
@@ -128,14 +130,16 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
 
   if (stats.most_watched_director?.name) {
     const directorProfile = stats.top_directors?.find((d) => d.name === stats.most_watched_director?.name);
+    const directorRewatches = personRewatches(stats, stats.most_watched_director.name, 'director');
+    const topRewatch = directorRewatches[0];
     slides.push({
       key: 'director',
       media: compactMedia([
         profileMedia(directorProfile),
-        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', Number.POSITIVE_INFINITY),
-      ], Number.POSITIVE_INFINITY),
+        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 18),
+      ], 19),
       accent: '#ef4444',
-      visual: 'director',
+      visual: 'person',
       body: (
         <>
           <Label>{t('story.slide.director.label')}</Label>
@@ -143,6 +147,43 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
           <Sub>
             {t('story.slide.director.sub', { count: formatNumber(stats.most_watched_director.count) })}
           </Sub>
+          {topRewatch && (
+            <RewatchInsight
+              title={topRewatch.title}
+              watchCount={topRewatch.watch_count}
+              extraCount={Math.max(0, directorRewatches.length - 1)}
+            />
+          )}
+        </>
+      ),
+    });
+  }
+
+  if (topActor?.name) {
+    const actorRewatches = personRewatches(stats, topActor.name, 'actor');
+    const topRewatch = actorRewatches[0];
+    slides.push({
+      key: 'actor',
+      media: compactMedia([
+        profileMedia(topActor),
+        ...personFilmPosters(stats, topActor.name, 'actor', 18),
+      ], 19),
+      accent: '#f472b6',
+      visual: 'person',
+      body: (
+        <>
+          <Label>{t('story.slide.actor.label')}</Label>
+          <Big>{topActor.name}</Big>
+          <Sub>
+            {t('story.slide.actor.sub', { count: formatNumber(topActor.count) })}
+          </Sub>
+          {topRewatch && (
+            <RewatchInsight
+              title={topRewatch.title}
+              watchCount={topRewatch.watch_count}
+              extraCount={Math.max(0, actorRewatches.length - 1)}
+            />
+          )}
         </>
       ),
     });
@@ -298,16 +339,17 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
   slides.push({
     key: 'outro',
     media: compactMedia([
-      profileMedia(topActor),
       profileMedia(stats.top_directors?.find((d) => d.name === directorName) ?? stats.top_directors?.[0]),
+      profileMedia(topActor),
       ...broadPosters,
-    ], 9),
+    ], 10),
     accent: '#fbbf24',
-    visual: 'mosaic',
+    visual: 'recap',
     body: (
       <>
         <Label>{t('story.slide.outro.label')}</Label>
         <Big>{t('story.slide.outro.headline')}</Big>
+        <Sub>{t('story.slide.outro.dossier')}</Sub>
       </>
     ),
   });

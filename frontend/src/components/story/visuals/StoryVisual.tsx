@@ -1,14 +1,24 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
 import type { Slide } from '../types';
-import { DirectorVisual, HeroPoster, PosterCascade, PosterMosaic, PosterStrip, PosterWall, PortraitStack } from './PosterLayouts';
+import {
+  HeroPoster,
+  PosterCascade,
+  PosterMosaic,
+  PosterStrip,
+  PosterWall,
+  PortraitStack,
+  RecapVisual,
+} from './PosterLayouts';
+import { PersonCinematicVisual } from './cinematic/PersonCinematicVisual';
 
 export function StoryVisual({ slide }: { slide: Slide }) {
   const media = slide.media ?? [];
   const accent = slide.accent ?? '#f59e0b';
   const hero = media[0];
+  const reduce = useReducedMotion();
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -35,14 +45,14 @@ export function StoryVisual({ slide }: { slide: Slide }) {
       {media.length > 0 && (
         <motion.div
           key={`visual-${slide.key}`}
-          initial={{ opacity: 0, scale: 0.98 }}
+          initial={reduce ? false : { opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 1.02 }}
-          transition={{ duration: 0.65, ease: 'easeOut' }}
-          className="absolute inset-y-[9vh] right-[-8vw] hidden w-[58vw] max-w-[760px] md:block"
+          exit={reduce ? undefined : { opacity: 0, scale: 1.02 }}
+          transition={{ duration: reduce ? 0 : 0.65, ease: 'easeOut' }}
+          className="absolute inset-y-[6vh] left-[32%] right-[-4vw] hidden md:block lg:left-[30%] xl:left-[28%]"
         >
-          {slide.visual === 'director' ? (
-            <DirectorVisual media={media} accent={accent} />
+          {slide.visual === 'director' || slide.visual === 'person' ? (
+            <PersonCinematicVisual media={media} accent={accent} sequenceKey={slide.key} />
           ) : slide.visual === 'poster-wall' ? (
             <PosterWall media={media} accent={accent} />
           ) : slide.visual === 'portrait' ? (
@@ -53,6 +63,8 @@ export function StoryVisual({ slide }: { slide: Slide }) {
             <PosterStrip media={media} accent={accent} />
           ) : slide.visual === 'hero' ? (
             <HeroPoster media={media} accent={accent} />
+          ) : slide.visual === 'recap' ? (
+            <RecapVisual media={media} accent={accent} />
           ) : (
             <PosterMosaic media={media} accent={accent} />
           )}
