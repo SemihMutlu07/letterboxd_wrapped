@@ -73,6 +73,12 @@ export default function ReviewAnalysisSection({ stats }: Props) {
   );
   const hiddenLinkOnlyCount = allReviews.length - writtenReviews.length;
   const longestReview = useMemo(() => {
+    if (ra?.longest_review?.title) {
+      return {
+        ...ra.longest_review,
+        unit: ra.longest_review.unit ?? ('characters' as const),
+      };
+    }
     const longest = selectLongestReview(writtenReviews);
     if (longest) {
       return {
@@ -80,12 +86,6 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         year: longest.year,
         length: reviewWordCount(longest),
         unit: 'words' as const,
-      };
-    }
-    if (ra?.longest_review) {
-      return {
-        ...ra.longest_review,
-        unit: ra.longest_review.unit ?? ('characters' as const),
       };
     }
     return null;
