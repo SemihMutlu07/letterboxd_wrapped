@@ -77,7 +77,7 @@ export function ShareModalSidebar({
         open={showSwapTrigger && swapOpen}
         anchorRef={tuneRef}
         onClose={() => setSwapOpen(false)}
-        prefer="above"
+        prefer="below"
       >
         <SwapDrawer
           cardProps={cardProps}

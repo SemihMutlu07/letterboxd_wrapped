@@ -13,7 +13,7 @@
  * Highest-rated tab is gated independently to directors_with_ratings presence.
  */
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { getProfileUrl } from '@/lib/analytics';
 import type { StatsData, PersonFilm } from './types';
@@ -28,6 +28,7 @@ import {
   trackShowMore,
   trackItemClicked,
   toggleClass,
+  mergePersonProfiles,
 } from './section-utils';
 
 // ─── Gating ──────────────────────────────────────────────────────────────────
@@ -91,19 +92,12 @@ function DirectorsGridInner({ stats, onDirectorClick }: { stats: StatsData; onDi
 
   const directors: DirectorCard[] = useMemo(() => {
     if (mode === 'highest_rated' && hasRatings) {
-      return (stats.directors_with_ratings ?? [])
-        .slice()
-        .sort((a, b) => b.avg_rating - a.avg_rating)
-        .map((d) => ({ ...d, films: d.films ?? filmsByName.get(d.name) ?? [] }));
+      return mergePersonProfiles(
+        [...(stats.directors_with_ratings ?? [])].sort((a, b) => b.avg_rating - a.avg_rating),
+        stats.top_directors,
+      ).map((d) => ({ ...d, films: d.films ?? filmsByName.get(d.name) ?? [] }));
     }
-    // Most watched — merge profile_path from directors_with_ratings if present
-    const profileMap = new Map(
-      (stats.directors_with_ratings ?? []).map((d) => [d.name, d.profile_path]),
-    );
-    return (stats.top_directors ?? []).map((d) => ({
-      ...d,
-      profile_path: d.profile_path ?? profileMap.get(d.name),
-    }));
+    return mergePersonProfiles(stats.top_directors ?? [], stats.directors_with_ratings);
   }, [mode, stats.top_directors, stats.directors_with_ratings, hasRatings, filmsByName]);
 
   const shown = directors.slice(0, visible);
@@ -229,16 +223,30 @@ export function PersonCard({
   const imageUrl = profilePath ? getProfileUrl(profilePath, 'grid') : null;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [retried, setRetried] = useState(false);
+  const retriedRef = useRef(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
 
   const showImage = imageUrl && !imageError;
   const showFallback = !imageUrl || imageError || !imageLoaded;
   const [, setClicked] = useState(false);
 
+  const syncImageReady = useCallback((img: HTMLImageElement | null) => {
+    imgRef.current = img;
+    if (img?.complete && img.naturalWidth > 0) {
+      setImageLoaded(true);
+      setImageError(false);
+    }
+  }, []);
+
   useEffect(() => {
+    retriedRef.current = false;
     setImageError(false);
-    setImageLoaded(false);
-    setRetried(false);
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth > 0) {
+      setImageLoaded(true);
+    } else {
+      setImageLoaded(false);
+    }
   }, [imageUrl]);
 
   useEffect(() => {
@@ -312,14 +320,15 @@ export function PersonCard({
               animate={{ opacity: imageLoaded ? 1 : 0, scale: 1.12 }}
               whileHover={{ scale: 1 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              ref={(node) => syncImageReady(node as HTMLImageElement | null)}
               onLoad={() => {
                 setImageLoaded(true);
                 setImageError(false);
               }}
               onError={(e) => {
                 const img = e.currentTarget as HTMLImageElement;
-                if (!retried && imageUrl) {
-                  setRetried(true);
+                if (!retriedRef.current && imageUrl) {
+                  retriedRef.current = true;
                   img.src = `${imageUrl}?retry=1`;
                 } else {
                   setImageError(true);

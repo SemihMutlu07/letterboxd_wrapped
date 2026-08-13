@@ -80,8 +80,8 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Props>(
             countText={labels.personFilmsTogether(data.onScreenCrush.count)}
             unknownName={labels.unknown}
             className="col-span-4 row-span-3 rounded-2xl border border-[#ff8000]/35 bg-[#241b14] p-4"
-            mediaClassName="w-[106px] rounded-xl border border-[#ff8000]/30 bg-[#33251b]"
-            nameClassName="text-[22px] font-black leading-tight"
+            mediaClassName="w-[128px] rounded-xl border border-[#ff8000]/30 bg-[#33251b]"
+            nameClassName="text-[24px] font-black leading-tight"
           />
           <PersonPanel
             person={data.favoriteDirector}
@@ -90,17 +90,17 @@ const Variant3ShareCard = React.forwardRef<HTMLDivElement, Props>(
             countText={labels.personFilmsDirected(data.favoriteDirector.count)}
             unknownName={labels.directorUnavailable}
             className="col-span-4 row-span-3 rounded-2xl border border-[#00e054]/35 bg-[#13231d] p-4"
-            mediaClassName="w-[106px] rounded-xl border border-[#00e054]/30 bg-[#1d3028]"
-            nameClassName="text-[22px] font-black leading-tight"
+            mediaClassName="w-[128px] rounded-xl border border-[#00e054]/30 bg-[#1d3028]"
+            nameClassName="text-[24px] font-black leading-tight"
           />
           <section className="col-span-4 row-span-3 flex min-w-0 flex-col justify-between rounded-2xl border border-white/10 bg-[#1a211f] p-5">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#9abcae]">{labels.topGenres}</p>
-              <GenresLine genres={data.genres} className="mt-3 text-[19px] font-black uppercase leading-snug" />
+              <p className="text-[13px] font-black uppercase tracking-[0.16em] text-[#9abcae]">{labels.topGenres}</p>
+              <GenresLine genres={data.genres} className="mt-3 text-[21px] font-black uppercase leading-snug" />
             </div>
             <div className="flex items-end justify-between gap-4 border-t border-white/10 pt-4">
-              <span className="text-[13px] font-bold text-[#9abcae]">{labels.minAverage(data.minutesAverage)}</span>
-              <Brand className="text-[11px] text-[#00e054]" />
+              <span className="text-[15px] font-bold text-[#9abcae]">{labels.minAverage(data.minutesAverage)}</span>
+              <Brand className="text-[13px] text-[#00e054]" />
             </div>
           </section>
         </main>

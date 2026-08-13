@@ -35,7 +35,7 @@ const ShareCard = React.forwardRef<HTMLDivElement, Props>(function ShareCard({ d
               {labels.yourWrapped}
             </h1>
           </div>
-          <Username username={data.username} className="max-w-[280px] text-right text-[14px] text-neutral-400" />
+          <Username username={data.username} className="max-w-[280px] text-right text-[16px] text-neutral-400" />
         </header>
 
         <main className="mt-7 grid min-h-0 min-w-0 grid-cols-[minmax(0,1.08fr)_minmax(440px,0.92fr)] gap-7">
@@ -77,11 +77,11 @@ const ShareCard = React.forwardRef<HTMLDivElement, Props>(function ShareCard({ d
                 valueClassName="text-[26px] font-black leading-none"
               />
               <div className="min-w-0 text-right">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-neutral-500">{labels.topGenres}</p>
-                <GenresLine genres={data.genres} className="mt-2 text-[15px] font-semibold leading-snug text-neutral-300" />
+                <p className="text-[13px] font-bold uppercase tracking-[0.16em] text-neutral-500">{labels.topGenres}</p>
+                <GenresLine genres={data.genres} className="mt-2 text-[17px] font-semibold leading-snug text-neutral-300" />
               </div>
             </div>
-            <Brand className="mt-5 text-[12px] text-neutral-500" />
+            <Brand className="mt-5 text-[14px] text-neutral-500" />
           </section>
 
           <section className="grid min-h-0 min-w-0 grid-rows-2 gap-4">
@@ -91,8 +91,8 @@ const ShareCard = React.forwardRef<HTMLDivElement, Props>(function ShareCard({ d
               countLabel={labels.moviesTogether}
               unknownName={labels.unknown}
               className="rounded-[28px] border border-fuchsia-400/20 bg-gradient-to-br from-fuchsia-500/15 to-violet-500/5 p-5"
-              mediaClassName="w-[112px] rounded-2xl border border-white/10 bg-zinc-900"
-              nameClassName="text-[25px] font-black leading-tight text-white"
+              mediaClassName="w-[140px] rounded-2xl border border-white/10 bg-zinc-900"
+              nameClassName="text-[28px] font-black leading-tight text-white"
             />
             <PersonPanel
               person={data.favoriteDirector}
@@ -100,8 +100,8 @@ const ShareCard = React.forwardRef<HTMLDivElement, Props>(function ShareCard({ d
               countLabel={labels.moviesDirected}
               unknownName={labels.directorUnavailable}
               className="rounded-[28px] border border-emerald-400/20 bg-gradient-to-br from-emerald-500/15 to-cyan-500/5 p-5"
-              mediaClassName="w-[112px] rounded-2xl border border-white/10 bg-zinc-900"
-              nameClassName="text-[25px] font-black leading-tight text-white"
+              mediaClassName="w-[140px] rounded-2xl border border-white/10 bg-zinc-900"
+              nameClassName="text-[28px] font-black leading-tight text-white"
             />
           </section>
         </main>

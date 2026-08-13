@@ -27,14 +27,18 @@ export function StoryNavigation({
       <button
         type="button"
         aria-label={t('story.previous')}
+        tabIndex={-1}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={onPrevious}
-        className={`absolute inset-y-0 left-0 w-1/3 cursor-w-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${isLast ? 'z-20' : 'z-30'}`}
+        className={`absolute inset-y-0 left-0 w-1/3 cursor-w-resize outline-none ${isLast ? 'z-20' : 'z-30'}`}
       />
       <button
         type="button"
         aria-label={t('story.next')}
+        tabIndex={-1}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={onNext}
-        className={`absolute inset-y-0 right-0 w-2/3 cursor-e-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${isLast ? 'z-20' : 'z-30'}`}
+        className={`absolute inset-y-0 right-0 w-2/3 cursor-e-resize outline-none ${isLast ? 'z-20' : 'z-30'}`}
       />
 
       {isLast && (

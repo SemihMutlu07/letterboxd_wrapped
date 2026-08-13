@@ -17,7 +17,7 @@ type PersonCinematicVisualProps = {
 
 /**
  * Staged cinematic for Favorite Director / Most Watched Actor:
- * identity → portrait → composition shift → poster stream → ambient.
+ * identity (label) → portrait → split right → poster stream.
  */
 export function PersonCinematicVisual({ media, accent, sequenceKey }: PersonCinematicVisualProps) {
   const reduce = useReducedMotion();
@@ -50,16 +50,15 @@ export function PersonCinematicVisual({ media, accent, sequenceKey }: PersonCine
       {profile && (
         <motion.div
           key={`portrait-${sequenceKey}`}
-          initial={reduce ? false : { opacity: 0, x: 48, scale: 0.96 }}
+          initial={reduce ? false : { opacity: 0, left: '22%', scale: 0.96 }}
           animate={{
             opacity: showPortrait ? 1 : 0,
-            // Center-right first; open stage pushes portrait farther right via x.
-            x: openStage ? '18%' : 0,
-            scale: openStage ? 0.92 : 1,
+            left: openStage ? '56%' : '22%',
+            scale: openStage ? 0.94 : 1,
           }}
           transition={openStage ? TRANSITION : REVEAL}
-          className="absolute left-[28%] top-1/2 z-20 aspect-[2/3] h-[78%] max-h-[78vh] w-auto -translate-y-1/2 overflow-hidden rounded-[28px] border border-white/15 bg-black shadow-2xl md:left-[30%] lg:left-[32%]"
-          style={{ boxShadow: `0 0 90px ${accent}55` }}
+          className="absolute top-1/2 z-20 aspect-[2/3] h-[62%] max-h-[62vh] w-auto -translate-y-1/2 overflow-hidden rounded-[24px] border border-white/15 bg-black shadow-2xl"
+          style={{ boxShadow: `0 0 70px ${accent}55` }}
         >
           <StoryImage item={profile} priority />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
@@ -67,7 +66,7 @@ export function PersonCinematicVisual({ media, accent, sequenceKey }: PersonCine
       )}
 
       <div
-        className="absolute inset-y-0 left-0 z-10 w-full"
+        className="absolute inset-y-[-6%] left-0 z-10 w-[50%]"
         style={{ opacity: showPosters ? 1 : 0, transition: reduce ? undefined : 'opacity 0.4s ease' }}
         aria-hidden={!showPosters}
       >

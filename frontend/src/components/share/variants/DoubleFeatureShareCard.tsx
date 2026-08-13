@@ -29,22 +29,22 @@ const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
         <div className="relative mx-10 flex h-full min-w-0 flex-col py-[158px]">
           <header className="flex min-w-0 items-start justify-between gap-5 border-y border-[#ffd2a8]/60 py-4">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.24em]">{labels.yearInCinema}</p>
-              <h1 className="mt-1 text-[35px] font-black leading-none">{labels.letterboxdWrapped}</h1>
+              <p className="text-[14px] font-bold uppercase tracking-[0.24em]">{labels.yearInCinema}</p>
+              <h1 className="mt-1 text-[38px] font-black leading-none">{labels.letterboxdWrapped}</h1>
             </div>
             <div className="shrink-0 text-right">
-              <strong className="block text-[27px] font-black tabular-nums">{data.year}</strong>
-              <Username username={data.username} className="block max-w-[180px] text-[11px]" />
+              <strong className="block text-[30px] font-black tabular-nums">{data.year}</strong>
+              <Username username={data.username} className="block max-w-[200px] text-[14px]" />
             </div>
           </header>
 
-          <section className="mt-6 grid min-w-0 grid-cols-[minmax(0,1fr)_168px] gap-5 border-b border-[#ffd2a8]/40 pb-6">
+          <section className="mt-6 grid min-w-0 grid-cols-[minmax(0,1fr)_180px] gap-5 border-b border-[#ffd2a8]/40 pb-6">
             <div className="min-w-0">
-              <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]">{labels.headline}</p>
-              <p className="mt-2 text-[37px] font-black leading-[0.98] [text-wrap:balance]">
+              <p className="text-[14px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]">{labels.headline}</p>
+              <p className="mt-2 text-[40px] font-black leading-[0.98] [text-wrap:balance]">
                 {labels.filmsShapedYear(data.watchedFilms, data.year)}
               </p>
-              <p className="mt-4 text-[15px] leading-relaxed text-[#e8d8c7]">
+              <p className="mt-4 text-[19px] leading-relaxed text-[#e8d8c7]">
                 {labels.wroteReviewsDays(data.writtenReviews, data.spentDays)}
               </p>
             </div>
@@ -53,8 +53,8 @@ const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
               value={Math.round(data.cinemaScale)}
               detail={labels.scaleOutOf}
               className="grid aspect-square place-content-center rounded-full border border-[#ffaf79]/60 bg-black/20 text-center"
-              labelClassName="text-[10px] font-bold uppercase tracking-[0.1em] text-[#ffaf79]"
-              valueClassName="text-[48px] font-black leading-none tabular-nums"
+              labelClassName="text-[12px] font-bold uppercase tracking-[0.1em] text-[#ffaf79]"
+              valueClassName="text-[52px] font-black leading-none tabular-nums"
             />
           </section>
 
@@ -65,10 +65,11 @@ const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
               countLabel={labels.moviesTogether}
               countText={labels.personFilmsTogether(data.onScreenCrush.count)}
               unknownName={labels.unknown}
-              className="border border-[#ffaf79]/40 bg-[#251b14] p-4"
-              mediaClassName="w-[108px] border border-[#ffaf79]/40 bg-[#3a2419]"
-              nameClassName="text-[24px] font-black leading-tight"
-              labelClassName="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]"
+              className="border border-[#ffaf79]/40 bg-[#251b14] p-5"
+              mediaClassName="w-[168px] border border-[#ffaf79]/40 bg-[#3a2419]"
+              nameClassName="text-[28px] font-black leading-tight"
+              labelClassName="text-[13px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]"
+              countClassName="text-[17px] opacity-80"
             />
             <PersonPanel
               person={data.favoriteDirector}
@@ -76,31 +77,32 @@ const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
               countLabel={labels.moviesDirected}
               countText={labels.personFilmsDirected(data.favoriteDirector.count)}
               unknownName={labels.directorUnavailable}
-              className="border border-[#ffaf79]/40 bg-[#251b14] p-4"
-              mediaClassName="w-[108px] border border-[#ffaf79]/40 bg-[#3a2419]"
-              nameClassName="text-[24px] font-black leading-tight"
-              labelClassName="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]"
+              className="border border-[#ffaf79]/40 bg-[#251b14] p-5"
+              mediaClassName="w-[168px] border border-[#ffaf79]/40 bg-[#3a2419]"
+              nameClassName="text-[28px] font-black leading-tight"
+              labelClassName="text-[13px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]"
+              countClassName="text-[17px] opacity-80"
             />
           </section>
 
           <footer className="mt-5 min-w-0 border-t border-[#ffd2a8]/40 pt-4">
             <div className="flex min-w-0 items-start justify-between gap-6">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]">{labels.topGenres}</p>
-                <GenresLine genres={data.genres} className="mt-1 text-[14px] font-bold leading-snug" />
+                <p className="text-[13px] font-bold uppercase tracking-[0.18em] text-[#ffaf79]">{labels.topGenres}</p>
+                <GenresLine genres={data.genres} className="mt-1 text-[17px] font-bold leading-snug" />
               </div>
-              <div className="shrink-0 max-w-[210px] text-right">
-                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#ffaf79]">
+              <div className="shrink-0 max-w-[230px] text-right">
+                <p className="text-[13px] font-bold uppercase tracking-[0.15em] text-[#ffaf79]">
                   {data.topReviewWords?.length ? labels.reviewWords : labels.peakDecade}
                 </p>
-                <p className="mt-1 text-[12px] font-bold leading-snug [overflow-wrap:anywhere]">
+                <p className="mt-1 text-[16px] font-bold leading-snug [overflow-wrap:anywhere]">
                   {data.topReviewWords?.length
                     ? data.topReviewWords.map(({ word }) => word).join(' / ')
                     : labels.peakDecadeFilms(data.peakDecade, data.peakDecadeCount)}
                 </p>
               </div>
             </div>
-            <Brand className="mt-4 block text-[11px] text-[#ffaf79]" />
+            <Brand className="mt-4 block text-[14px] text-[#ffaf79]" />
           </footer>
         </div>
       </div>

@@ -401,5 +401,16 @@ describe('seven composition content contracts', () => {
     expect(container.textContent).toContain('Bilim Kurgu');
     expect(container.querySelectorAll('img')).toHaveLength(2);
   });
+
+  it('labels the Apple Clean review count as written reviews, not a bare Written', () => {
+    const { container } = render(
+      <I18nProvider locale="en">
+        <ShareVariantRenderer variant="apple-hig" data={baseData} orientation="horizontal" />
+      </I18nProvider>,
+    );
+    expect(container.textContent).toContain('Written reviews');
+    expect(container.textContent).toContain('Days watching');
+    expect(container.textContent?.replace('Written reviews', '')).not.toMatch(/Written/);
+  });
 });
 

@@ -30,7 +30,7 @@ const AdmitOneShareCard = React.forwardRef<HTMLDivElement, Props>(
           <header className="min-w-0">
             <div className="flex min-w-0 items-start justify-between gap-6">
               <p className="text-[12px] font-bold uppercase tracking-[0.22em] text-[#686868]">{labels.yearInFilmShort(data.year)}</p>
-              <Username username={data.username} className="max-w-[230px] text-right text-[12px] font-semibold text-[#686868]" />
+              <Username username={data.username} className="max-w-[230px] text-right text-[15px] font-semibold text-[#686868]" />
             </div>
             <h1 className="mt-4 text-[46px] font-semibold leading-[1.25] tracking-[-0.045em] [overflow-wrap:anywhere]">
               {labels.yourWrapped}
@@ -44,7 +44,7 @@ const AdmitOneShareCard = React.forwardRef<HTMLDivElement, Props>(
                 {data.watchedFilms}
               </strong>
             </div>
-            <p className="text-[16px] font-medium leading-relaxed text-[#555] whitespace-pre-line">
+            <p className="text-[18px] font-medium leading-relaxed text-[#555] whitespace-pre-line">
               {labels.reviewsDaysHours(data.writtenReviews, data.spentDays, data.spentHours)}
             </p>
           </section>
@@ -78,11 +78,11 @@ const AdmitOneShareCard = React.forwardRef<HTMLDivElement, Props>(
               countLabel={labels.moviesTogether}
               countText={labels.personFilmsTogether(data.onScreenCrush.count)}
               unknownName={labels.unknown}
-              className="rounded-[24px] bg-white p-4 shadow-sm"
-              mediaClassName="w-[102px] rounded-[18px] bg-[#e8e3db]"
-              labelClassName="text-[11px] font-semibold text-[#b85b00]"
-              nameClassName="text-[23px] font-semibold leading-tight tracking-[-0.02em]"
-              countClassName="text-[13px] text-[#686868]"
+              className="rounded-[24px] bg-white p-5 shadow-sm"
+              mediaClassName="w-[156px] rounded-[18px] bg-[#e8e3db]"
+              labelClassName="text-[13px] font-semibold text-[#b85b00]"
+              nameClassName="text-[26px] font-semibold leading-tight tracking-[-0.02em]"
+              countClassName="text-[16px] text-[#686868]"
             />
             <PersonPanel
               person={data.favoriteDirector}
@@ -90,17 +90,17 @@ const AdmitOneShareCard = React.forwardRef<HTMLDivElement, Props>(
               countLabel={labels.moviesDirected}
               countText={labels.personFilmsDirected(data.favoriteDirector.count)}
               unknownName={labels.directorUnavailable}
-              className="rounded-[24px] bg-white p-4 shadow-sm"
-              mediaClassName="w-[102px] rounded-[18px] bg-[#e8e3db]"
-              labelClassName="text-[11px] font-semibold text-[#b85b00]"
-              nameClassName="text-[23px] font-semibold leading-tight tracking-[-0.02em]"
-              countClassName="text-[13px] text-[#686868]"
+              className="rounded-[24px] bg-white p-5 shadow-sm"
+              mediaClassName="w-[156px] rounded-[18px] bg-[#e8e3db]"
+              labelClassName="text-[13px] font-semibold text-[#b85b00]"
+              nameClassName="text-[26px] font-semibold leading-tight tracking-[-0.02em]"
+              countClassName="text-[16px] text-[#686868]"
             />
           </section>
 
           <footer className="mt-6 min-w-0 border-t border-black/15 pt-4">
-            <GenresLine genres={data.genres} className="text-[14px] font-semibold leading-snug text-[#555]" />
-            <Brand className="mt-3 block text-[11px] text-[#8a8a8a]" />
+            <GenresLine genres={data.genres} className="text-[16px] font-semibold leading-snug text-[#555]" />
+            <Brand className="mt-3 block text-[14px] text-[#8a8a8a]" />
           </footer>
         </div>
       </div>

@@ -22,6 +22,7 @@ import {
   trackToggleChanged,
   trackShowMore,
   trackItemClicked,
+  mergePersonProfiles,
 } from './section-utils';
 import { SectionShell, PersonCard, ShowMoreButton } from './DirectorsGrid';
 
@@ -81,19 +82,12 @@ function CastGridInner({ stats, onActorClick }: { stats: StatsData; onActorClick
 
   const actors: ActorCard[] = useMemo(() => {
     if (mode === 'highest_rated' && hasRatings) {
-      return (stats.actors_with_ratings ?? [])
-        .slice()
-        .sort((a, b) => b.avg_rating - a.avg_rating)
-        .map((a) => ({ ...a, films: a.films ?? filmsByName.get(a.name) ?? [] }));
+      return mergePersonProfiles(
+        [...(stats.actors_with_ratings ?? [])].sort((a, b) => b.avg_rating - a.avg_rating),
+        stats.top_actors,
+      ).map((a) => ({ ...a, films: a.films ?? filmsByName.get(a.name) ?? [] }));
     }
-    // Most watched — pull profile_paths from actors_with_ratings if available
-    const profileMap = new Map(
-      (stats.actors_with_ratings ?? []).map((a) => [a.name, a.profile_path]),
-    );
-    return (stats.top_actors ?? []).map((a) => ({
-      ...a,
-      profile_path: a.profile_path ?? profileMap.get(a.name),
-    }));
+    return mergePersonProfiles(stats.top_actors ?? [], stats.actors_with_ratings);
   }, [mode, stats.top_actors, stats.actors_with_ratings, hasRatings, filmsByName]);
 
   const shown = actors.slice(0, visible);

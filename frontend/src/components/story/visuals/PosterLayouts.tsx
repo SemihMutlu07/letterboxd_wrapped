@@ -6,6 +6,7 @@ import type { StoryMedia } from '../types';
 import { usePosterField } from './PosterFieldContext';
 import { StoryImage } from './StoryImage';
 import { PersonCinematicVisual } from './cinematic/PersonCinematicVisual';
+import { VerticalPosterFlow } from './cinematic/VerticalPosterFlow';
 
 function motionDuration(base: number, motionScale = 1): number {
   return base * motionScale;
@@ -38,23 +39,8 @@ export function PosterMosaic({ media, accent }: { media: StoryMedia[]; accent: s
 }
 
 export function PosterWall({ media, accent }: { media: StoryMedia[]; accent: string }) {
-  const { motionScale = 1 } = usePosterField();
-
   return (
-    <div className="grid h-full grid-cols-[repeat(auto-fit,minmax(86px,1fr))] content-center gap-3">
-      {media.map((item, index) => (
-        <motion.div
-          key={`${item.url}-${index}`}
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: index % 2 ? 12 : -8 }}
-          transition={{ delay: Math.min(index * 0.035, 0.5), duration: motionDuration(0.55, motionScale) }}
-          className="aspect-[2/3] min-h-0 overflow-hidden rounded-[16px] border border-white/10 bg-black shadow-2xl"
-          style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
-        >
-          <StoryImage item={item} priority={index < 6} />
-        </motion.div>
-      ))}
-    </div>
+    <VerticalPosterFlow posters={media} accent={accent} columns={2} size="s" maxUnique={12} />
   );
 }
 
@@ -64,36 +50,15 @@ export function DirectorVisual({ media, accent, sequenceKey = 'director' }: { me
 }
 
 export function PosterCascade({ media, accent }: { media: StoryMedia[]; accent: string }) {
-  const { motionScale = 1, density = 1 } = usePosterField();
-  const maxVisible = Math.round(42 * density);
-  const visible = media.slice(0, maxVisible);
-  if (visible.length === 0) return null;
-
-  const gapClass = density >= 1 ? 'gap-3' : density >= 0.85 ? 'gap-2.5' : 'gap-2';
-
+  const { density = 1 } = usePosterField();
   return (
-    <div className="relative h-full">
-      <div className={`absolute inset-y-[-8%] left-[0%] w-[92%] grid grid-cols-6 ${gapClass}`}>
-        {visible.map((item, index) => (
-          <motion.div
-            key={`${item.url}-${index}`}
-            initial={{ y: index % 2 ? 36 : -44, x: index % 3 === 0 ? -20 : 16 }}
-            animate={{ y: index % 2 ? -34 : 38, x: index % 3 === 0 ? 18 : -14 }}
-            transition={{
-              duration: motionDuration(7 + (index % 8), motionScale),
-              repeat: Infinity,
-              repeatType: 'reverse',
-              ease: 'easeInOut',
-            }}
-            className="aspect-[2/3] overflow-hidden rounded-[14px] border border-white/10 bg-black shadow-xl"
-            style={{ boxShadow: index === 0 ? `0 0 90px ${accent}66` : undefined }}
-          >
-            <StoryImage item={item} priority={index < 10} />
-          </motion.div>
-        ))}
-      </div>
-      <div className="absolute inset-y-0 right-0 w-[38%] bg-gradient-to-l from-black/40 to-transparent" />
-    </div>
+    <VerticalPosterFlow
+      posters={media}
+      accent={accent}
+      columns={density >= 0.9 ? 3 : 2}
+      size="m"
+      maxUnique={18}
+    />
   );
 }
 
@@ -203,22 +168,21 @@ export function PortraitStack({ media, accent }: { media: StoryMedia[]; accent: 
   );
 }
 
-/** Finale recap field — curated portraits + posters, not a random pile. */
+/** Finale recap field — one portrait plus a calm poster stream. */
 export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: string }) {
   const reduce = useReducedMotion();
   const { motionScale = 1 } = usePosterField();
-  const profiles = media.filter((item) => item.type === 'profile').slice(0, 2);
+  const profiles = media.filter((item) => item.type === 'profile').slice(0, 1);
   const posters = media.filter((item) => item.type === 'poster').slice(0, 8);
   const lead = profiles[0] ?? posters[0];
-  const secondary = profiles[1] ?? posters[1];
-  const stream = posters.filter((item) => item.url !== lead?.url && item.url !== secondary?.url).slice(0, 6);
+  const stream = posters.filter((item) => item.url !== lead?.url).slice(0, 8);
   if (!lead) return null;
 
   return (
     <div className="relative h-full">
       <motion.div
         initial={reduce ? false : { opacity: 0, y: 20 }}
-        animate={reduce ? { opacity: 1, y: 0 } : { opacity: 1, y: [0, -10, 0] }}
+        animate={reduce ? { opacity: 1, y: 0 } : { opacity: 1, y: [0, -8, 0] }}
         transition={
           reduce
             ? { duration: 0 }
@@ -227,48 +191,13 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
                 opacity: { duration: 0.5 },
               }
         }
-        className="absolute left-[8%] top-[12%] z-20 aspect-[2/3] h-[58%] overflow-hidden rounded-[26px] border border-white/15 bg-black shadow-2xl"
+        className="absolute left-[6%] top-1/2 z-20 aspect-[2/3] h-[52%] -translate-y-1/2 overflow-hidden rounded-[24px] border border-white/15 bg-black shadow-2xl"
         style={{ boxShadow: `0 0 80px ${accent}55` }}
       >
         <StoryImage item={lead} priority />
       </motion.div>
-      {secondary && (
-        <motion.div
-          initial={reduce ? false : { opacity: 0, y: 24 }}
-          animate={reduce ? { opacity: 1, y: 0 } : { opacity: 1, y: [0, 12, 0] }}
-          transition={
-            reduce
-              ? { duration: 0 }
-              : {
-                  y: { duration: motionDuration(13, motionScale), repeat: Infinity, ease: 'easeInOut' },
-                  opacity: { duration: 0.55, delay: 0.12 },
-                }
-          }
-          className="absolute bottom-[10%] left-[30%] z-30 aspect-[2/3] h-[42%] overflow-hidden rounded-[22px] border border-white/12 bg-black shadow-xl"
-        >
-          <StoryImage item={secondary} priority />
-        </motion.div>
-      )}
-      <div className="absolute inset-y-[8%] left-[52%] right-[-4%] grid grid-cols-2 content-center gap-3">
-        {stream.map((item, index) => (
-          <motion.div
-            key={`${item.url}-${index}`}
-            animate={reduce ? undefined : { y: index % 2 ? [-14, 14] : [12, -12] }}
-            transition={
-              reduce
-                ? undefined
-                : {
-                    duration: motionDuration(10 + index, motionScale),
-                    repeat: Infinity,
-                    repeatType: 'reverse',
-                    ease: 'easeInOut',
-                  }
-            }
-            className="aspect-[2/3] overflow-hidden rounded-xl border border-white/10 bg-black/90 shadow-lg"
-          >
-            <StoryImage item={item} priority={index < 2} />
-          </motion.div>
-        ))}
+      <div className="absolute inset-y-[4%] left-[38%] right-0">
+        <VerticalPosterFlow posters={stream} accent={accent} columns={2} size="s" maxUnique={8} />
       </div>
     </div>
   );

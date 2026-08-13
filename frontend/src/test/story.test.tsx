@@ -130,6 +130,19 @@ describe('StoryPage', () => {
     expect(screen.getByLabelText('Pause story')).toBeInTheDocument();
   });
 
+  it('keeps tap zones out of the tab order so pause/arrows do not draw a yellow bar', async () => {
+    sessionStorage.setItem('letterboxdStats', JSON.stringify(STATS));
+    renderStory();
+    await screen.findByText('@semihmutsuz');
+
+    const previous = screen.getByLabelText('Previous slide');
+    const next = screen.getByLabelText('Next slide');
+    expect(previous).toHaveAttribute('tabIndex', '-1');
+    expect(next).toHaveAttribute('tabIndex', '-1');
+    expect(previous.className).not.toMatch(/outline-amber/);
+    expect(next.className).not.toMatch(/outline-amber/);
+  });
+
   it('renders story media in the mobile slide flow', async () => {
     sessionStorage.setItem('letterboxdStats', JSON.stringify({
       ...STATS,
@@ -206,6 +219,23 @@ describe('buildSlides', () => {
       '/demo/smt-media/denis.jpg',
       '/demo/smt-media/arrival.jpg',
     ]);
+  });
+
+  it('caps the volume slide and uses a flowing cascade', () => {
+    const allFilms = Array.from({ length: 80 }, (_, index) => ({
+      title: `Film ${index}`,
+      poster_path: `/film-${index}.jpg`,
+    }));
+    const slides = buildSlides({ ...STATS, total_films: 80, all_films: allFilms } as unknown as StatsData, enI18n);
+    const volume = slides.find((slide) => slide.key === 'volume')!;
+    expect(volume.visual).toBe('cascade');
+    expect(volume.media!.length).toBeLessThanOrEqual(18);
+  });
+
+  it('uses a flowing cascade for sinefil and persona slides', () => {
+    const slides = buildSlides(STATS as unknown as StatsData, enI18n);
+    expect(slides.find((slide) => slide.key === 'sinefil')?.visual).toBe('cascade');
+    expect(slides.find((slide) => slide.key === 'persona')?.visual).toBe('cascade');
   });
 
   it('shows every five-star film for the generous critic', () => {

@@ -55,10 +55,10 @@ export function PersonPanel({
   countText,
   unknownName,
   className = '',
-  mediaClassName = 'w-[112px] rounded-2xl',
-  labelClassName = 'text-[12px] font-bold uppercase tracking-[0.16em] opacity-65',
-  nameClassName = 'text-[24px] font-bold leading-tight',
-  countClassName = 'text-[14px] opacity-70',
+  mediaClassName = 'w-[132px] rounded-2xl',
+  labelClassName = 'text-[14px] font-bold uppercase tracking-[0.16em] opacity-65',
+  nameClassName = 'text-[26px] font-bold leading-tight',
+  countClassName = 'text-[16px] opacity-70',
 }: {
   person: SharePersonStat;
   label: string;
@@ -92,9 +92,9 @@ export function Metric({
   value,
   detail,
   className = '',
-  labelClassName = 'text-[12px] font-bold uppercase tracking-[0.14em] opacity-60',
+  labelClassName = 'text-[14px] font-bold uppercase tracking-[0.14em] opacity-60',
   valueClassName = 'text-[32px] font-black leading-none tabular-nums',
-  detailClassName = 'text-[13px] opacity-65',
+  detailClassName = 'text-[15px] opacity-65',
 }: {
   label: string;
   value: React.ReactNode;

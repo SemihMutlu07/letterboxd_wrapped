@@ -39,10 +39,10 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, Props>(
               countText={labels.personFilmsDirected(data.favoriteDirector.count)}
               unknownName={labels.directorUnavailable}
               className="border border-black/70 bg-[#e0d4c2] p-4"
-              mediaClassName="w-[122px] border border-black/40 bg-[#cabba5]"
-              labelClassName="text-[11px] font-bold uppercase tracking-[0.18em]"
-              nameClassName="text-[24px] font-bold leading-[1.05]"
-              countClassName="text-[13px] italic"
+              mediaClassName="w-[148px] border border-black/40 bg-[#cabba5]"
+              labelClassName="text-[13px] font-bold uppercase tracking-[0.18em]"
+              nameClassName="text-[26px] font-bold leading-[1.05]"
+              countClassName="text-[15px] italic"
             />
             <PersonPanel
               person={data.onScreenCrush}
@@ -51,10 +51,10 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, Props>(
               countText={labels.personFilmsTogether(data.onScreenCrush.count)}
               unknownName={labels.unknown}
               className="border border-black/70 bg-[#e8dfd1] p-4"
-              mediaClassName="w-[94px] border border-black/40 bg-[#cabba5]"
-              labelClassName="text-[11px] font-bold uppercase tracking-[0.18em]"
-              nameClassName="text-[21px] font-bold leading-[1.05]"
-              countClassName="text-[13px] italic"
+              mediaClassName="w-[120px] border border-black/40 bg-[#cabba5]"
+              labelClassName="text-[13px] font-bold uppercase tracking-[0.18em]"
+              nameClassName="text-[24px] font-bold leading-[1.05]"
+              countClassName="text-[15px] italic"
             />
           </section>
 
@@ -63,7 +63,7 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, Props>(
             <h1 className="mt-3 max-w-[720px] text-[44px] font-black leading-[1.02] tracking-[-0.035em] [text-wrap:balance]">
               {labels.watchedFilmsStory(data.watchedFilms)}
             </h1>
-            <p className="mt-4 max-w-[690px] text-[17px] leading-relaxed">
+            <p className="mt-4 max-w-[690px] text-[19px] leading-relaxed">
               {labels.wroteReviewsSummary(data.writtenReviews, data.spentDays, Math.round(data.cinemaScale))}
             </p>
 
@@ -91,10 +91,10 @@ const EditorialShareCard = React.forwardRef<HTMLDivElement, Props>(
 
             <div className="mt-auto flex min-w-0 items-end justify-between gap-8 pt-5">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em]">{labels.topGenres}</p>
-                <GenresLine genres={data.genres} className="mt-1 max-w-[580px] text-[15px] font-bold leading-snug" />
+                <p className="text-[13px] font-bold uppercase tracking-[0.2em]">{labels.topGenres}</p>
+                <GenresLine genres={data.genres} className="mt-1 max-w-[580px] text-[17px] font-bold leading-snug" />
               </div>
-              <Brand className="shrink-0 text-[11px] uppercase" />
+              <Brand className="shrink-0 text-[13px] uppercase" />
             </div>
           </section>
         </main>

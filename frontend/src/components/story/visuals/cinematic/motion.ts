@@ -18,10 +18,10 @@ export const EMPHASIS = {
 /** Phase timeline (ms) for the staged person reveal. */
 export const PHASE_MS = {
   identity: 0,
-  portrait: 700,
-  composition: 1600,
-  posters: 2300,
-  ambient: 3400,
+  portrait: 1100,
+  composition: 2100,
+  posters: 2800,
+  ambient: 3800,
   rewatch: 2800,
 } as const;
 

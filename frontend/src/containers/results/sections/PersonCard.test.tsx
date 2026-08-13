@@ -10,6 +10,15 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 describe('PersonCard', () => {
+  it('hides the placeholder once the portrait has loaded', () => {
+    const { container } = render(
+      <PersonCard name="Peter Watkins" profilePath="/watkins.jpg" primaryStat="4 films" />,
+    );
+    expect(container.querySelector('svg')).not.toBeNull();
+    fireEvent.load(screen.getByAltText('Peter Watkins'));
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
   it('keeps film counts visible and retries when the profile path changes', () => {
     const { rerender } = render(
       <PersonCard name="Director" profilePath="/broken.jpg" primaryStat="7 films" />,

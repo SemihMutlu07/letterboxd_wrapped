@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { PosterGuessGame, type PosterGameProps } from '@/components/landing/PosterGuessGame';
+import { resolveScrapeProgress } from '@/components/landing/scrapeProgress';
 import { useI18n } from '@/i18n/I18nProvider';
 import type { MessageKey } from '@/i18n/catalogs';
 
@@ -69,17 +70,13 @@ export default function LoadingScreen({
     return () => clearInterval(interval);
   }, [isScrape]);
 
+  const scrape = isScrape ? resolveScrapeProgress(events, queued) : null;
   const defaultTypical = isScrape ? 30 : 45;
   const typical = typicalSeconds ?? defaultTypical;
   const remaining = Math.max(0, typical - elapsed);
-  const pct = Math.min(100, Math.round((elapsed / typical) * 100));
-
-  // Live discovery feed from the real scrape trace (films climb as pages load).
-  const liveFilms = (events ?? []).reduce((max, e) => {
-    const f = e.metrics?.films;
-    return typeof f === 'number' && f > max ? f : max;
-  }, 0);
-  const recentEvents = (events ?? []).filter((e) => e.message).slice(-3);
+  const pct = scrape ? scrape.pct : Math.min(100, Math.round((elapsed / typical) * 100));
+  const liveFilms = scrape?.filmsFound ?? 0;
+  const scrapeSlow = Boolean(scrape && elapsed > 90 && scrape.pct < 90);
 
   const displayTitle = isScrape ? t('landing.loading.scrape.title') : title ?? t('landing.loading.upload.title');
   const displayMessage = isScrape
@@ -88,7 +85,7 @@ export default function LoadingScreen({
       : t('landing.loading.scrape.readingProfile')
     : message ?? t('landing.loading.upload.message');
   const displayDetail = isScrape
-    ? t('landing.loading.elapsed').replace('{time}', formatElapsed(elapsed, t)).replace('{source}', t('landing.loading.source.profiles'))
+    ? t('landing.loading.elapsedShort').replace('{time}', formatElapsed(elapsed, t))
     : t('landing.loading.elapsed').replace('{time}', formatElapsed(elapsed, t)).replace('{source}', t('landing.loading.source.exports'));
 
   return (
@@ -138,9 +135,14 @@ export default function LoadingScreen({
           ) : (
             <>
               <p className="text-xs text-orange-300 font-medium">
-                {remaining <= 0 ? t('landing.loading.almostThere') : displayDetail}
+                {isScrape && scrape
+                  ? t(scrape.labelKey)
+                  : remaining <= 0
+                    ? t('landing.loading.almostThere')
+                    : displayDetail}
               </p>
-              {elapsed > typical && (
+              {isScrape && <p className="text-xs text-slate-500">{displayDetail}</p>}
+              {(isScrape ? scrapeSlow : elapsed > typical) && (
                 <p className="text-xs text-amber-300/90 animate-pulse">
                   {t('landing.loading.slow')}
                 </p>
@@ -155,12 +157,14 @@ export default function LoadingScreen({
           </div>
         )}
 
-        {/* Progress + remaining time */}
+        {/* Progress: scrape follows worker stages; upload still uses a typical-duration clock. */}
         <div className="mt-4 space-y-2">
-          <div className="flex items-center justify-between text-sm font-medium">
-            <span className="text-slate-300">{t('landing.loading.typical')}</span>
-            <span className="text-slate-200">{formatElapsed(typical, t)}</span>
-          </div>
+          {!isScrape && (
+            <div className="flex items-center justify-between text-sm font-medium">
+              <span className="text-slate-300">{t('landing.loading.typical')}</span>
+              <span className="text-slate-200">{formatElapsed(typical, t)}</span>
+            </div>
+          )}
           <div
             className="h-2 rounded-full bg-slate-700/80 overflow-hidden"
             role="progressbar"
@@ -174,7 +178,7 @@ export default function LoadingScreen({
               style={{ width: `${pct}%` }}
             />
           </div>
-          {remaining > 0 && (
+          {!isScrape && remaining > 0 && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">{t('landing.loading.remaining')}</span>
               <span className="text-orange-300 font-medium">{formatElapsed(remaining, t)}</span>

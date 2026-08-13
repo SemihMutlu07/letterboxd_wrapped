@@ -77,7 +77,7 @@ export default function StoryExperience() {
     if (slides.length === 0) return;
     const urls = new Set<string>();
     for (let i = index; i <= Math.min(index + PRELOAD_AHEAD, slides.length - 1); i += 1) {
-      for (const item of slides[i]?.media?.slice(0, 12) ?? []) urls.add(item.url);
+      for (const item of slides[i]?.media?.slice(0, 6) ?? []) urls.add(item.url);
     }
     for (const url of urls) {
       const img = new Image();
@@ -114,7 +114,7 @@ export default function StoryExperience() {
   return (
     <main className="relative min-h-screen select-none overflow-hidden bg-[#0f0d0b]">
       <AnimatePresence mode="wait">
-        <StoryVisual key={`bg-${slides[index].key}`} slide={slides[index]} />
+        <StoryVisual key={`bg-${slides[index].key}`} slide={slides[index]} paused={isPaused} />
       </AnimatePresence>
 
       <StoryProgressBar slides={slides} index={index} progress={progress} />

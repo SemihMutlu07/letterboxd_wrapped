@@ -43,7 +43,6 @@ export type ShareLabels = {
   scaleOutOf: string;
   topRating: string;
   daysUnit: string;
-  writtenShort: string;
   runtime: string;
   letterboxdDashboard: string;
   letterboxdVertical: string;
@@ -118,7 +117,6 @@ export function useShareLabels(): ShareLabels {
     scaleOutOf: t('share.card.scaleOutOf'),
     topRating: t('share.card.topRating'),
     daysUnit: t('share.card.daysUnit'),
-    writtenShort: t('share.card.writtenShort'),
     runtime: t('share.card.runtime'),
     letterboxdDashboard: t('share.card.letterboxdDashboard'),
     letterboxdVertical: t('share.card.letterboxdVertical'),

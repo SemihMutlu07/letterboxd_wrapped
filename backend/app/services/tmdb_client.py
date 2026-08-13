@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 import time
 from collections import deque
+import re
 from typing import Any, Dict, List, Literal, Optional
 import unicodedata
 
@@ -256,25 +257,132 @@ async def find_person_by_film_credit(
     return None
 
 
+def letterboxd_film_slug(value: Any) -> str:
+    """Extract a Letterboxd film slug from a URI, path, or raw slug."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    text = text.split("?", 1)[0].rstrip("/")
+    if "/film/" in text:
+        text = text.split("/film/", 1)[1]
+    return text.split("/", 1)[0].strip()
+
+
+def slug_search_query(slug: str) -> str:
+    """Turn `kader-2006` / `yeralti` into a TMDB search query."""
+    token = letterboxd_film_slug(slug)
+    token = re.sub(r"-\d{4}$", "", token)
+    return token.replace("-", " ").strip()
+
+
+_TR_FOLD = str.maketrans({
+    "ı": "i",
+    "İ": "i",
+    "ş": "s",
+    "Ş": "s",
+    "ğ": "g",
+    "Ğ": "g",
+    "ü": "u",
+    "Ü": "u",
+    "ö": "o",
+    "Ö": "o",
+    "ç": "c",
+    "Ç": "c",
+})
+
+
+def _norm_title(value: Any) -> str:
+    text = str(value or "").translate(_TR_FOLD)
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower().strip()
+
+
+def pick_tmdb_search_result(
+    results: List[Dict[str, Any]],
+    title: str,
+    year: Optional[int] = None,
+    slug: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Choose the best TMDB search hit for a Letterboxd title/year/slug.
+
+    `results[0]` is popularity-ranked and collides on generic English titles
+    (Inside, Destiny). Prefer exact title+year, then original_title matching
+    the Letterboxd slug (yeralti → Yeraltı).
+    """
+    if not results:
+        return None
+    title_n = _norm_title(title)
+    slug_q = _norm_title(slug_search_query(slug)) if slug else ""
+    year_str = ""
+    if year is not None and not (isinstance(year, float) and pd.isna(year)):
+        try:
+            year_str = str(int(year))
+        except (TypeError, ValueError):
+            year_str = str(year).strip()[:4]
+
+    def score(item: Dict[str, Any]) -> tuple[int, int]:
+        rt = _norm_title(item.get("title"))
+        orig = _norm_title(item.get("original_title"))
+        released = str(item.get("release_date") or "")[:4]
+        points = 0
+        if title_n and (rt == title_n or orig == title_n):
+            points += 100
+        elif title_n and (title_n in rt or title_n in orig or rt in title_n):
+            points += 20
+        if year_str and released == year_str:
+            points += 50
+        elif year_str and released.isdigit():
+            try:
+                if abs(int(released) - int(year_str)) <= 1:
+                    points += 15
+            except ValueError:
+                pass
+        if slug_q:
+            if orig == slug_q or rt == slug_q:
+                points += 90
+            elif slug_q in orig or slug_q in rt:
+                points += 40
+        popularity = item.get("popularity")
+        pop = int(popularity) if isinstance(popularity, (int, float)) else 0
+        return (points, pop)
+
+    return max(results, key=score)
+
+
 async def resolve_tmdb_id(
     session: aiohttp.ClientSession,
     title: str,
     year: Optional[int] = None,
+    slug: str = "",
 ) -> Optional[int]:
-    """Find TMDB movie ID by title (and optional year)."""
+    """Find TMDB movie ID by title (and optional year / Letterboxd slug)."""
     query_params: dict = {"query": title, "include_adult": "false"}
     if year and not pd.isna(year):
         query_params["year"] = int(year)
 
     try:
         data = await tmdb_get(session, "search/movie", query_params)
-        results = data.get("results", []) if data else []
+        results = list(data.get("results") or []) if data else []
 
         if not results and year:
             data = await tmdb_get(session, "search/movie", {"query": title, "include_adult": "false"})
-            results = data.get("results", []) if data else []
+            results = list(data.get("results") or []) if data else []
 
-        return results[0]["id"] if results else None
+        slug_query = slug_search_query(slug)
+        if slug_query and slug_query.casefold() != str(title or "").strip().casefold():
+            extra_params: dict = {"query": slug_query, "include_adult": "false"}
+            if year and not pd.isna(year):
+                extra_params["year"] = int(year)
+            extra = await tmdb_get(session, "search/movie", extra_params)
+            extra_results = list(extra.get("results") or []) if extra else []
+            seen = {item.get("id") for item in results}
+            for item in extra_results:
+                if item.get("id") not in seen:
+                    results.append(item)
+
+        picked = pick_tmdb_search_result(results, title, year, slug)
+        return picked["id"] if picked else None
     except Exception:
         return None
 

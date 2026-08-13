@@ -110,7 +110,20 @@ async def process_comprehensive_letterboxd_data(
         )
         films_df = pd.merge(films_df, ratings_df_renamed, on=["title", "year"], how="left")
 
-    unique_films = films_df[["title", "year"]].drop_duplicates().reset_index(drop=True)
+    from app.services.tmdb_client import letterboxd_film_slug
+
+    if "Letterboxd URI" in films_df.columns:
+        films_df["slug"] = films_df["Letterboxd URI"].map(letterboxd_film_slug)
+    elif "Slug" in films_df.columns:
+        films_df["slug"] = films_df["Slug"].map(letterboxd_film_slug)
+    else:
+        films_df["slug"] = ""
+
+    unique_films = (
+        films_df[["title", "year", "slug"]]
+        .drop_duplicates(subset=["title", "year"])
+        .reset_index(drop=True)
+    )
 
     t1 = time.perf_counter()
     total_rows = len(watched_df) + len(ratings_df) + len(diary_df) + len(reviews_df)
@@ -128,7 +141,15 @@ async def process_comprehensive_letterboxd_data(
         resolve_tmdb_id,
     )
 
-    resolve_tasks = [resolve_tmdb_id(session, row["title"], row["year"]) for _, row in unique_films.iterrows()]
+    resolve_tasks = [
+        resolve_tmdb_id(
+            session,
+            row["title"],
+            row["year"],
+            slug="" if pd.isna(row["slug"]) else str(row["slug"]),
+        )
+        for _, row in unique_films.iterrows()
+    ]
     tmdb_ids = await asyncio.gather(*resolve_tasks)
     unique_films["tmdb_id"] = tmdb_ids
     match_rate = unique_films["tmdb_id"].notna().mean() * 100
@@ -385,11 +406,14 @@ async def process_comprehensive_letterboxd_data(
     stats["directors_with_ratings"] = compute_directors_with_ratings(director_counts, analysis_df)
     for row in stats["directors_with_ratings"]:
         row["films"] = director_films_map.get(row["name"], [])
+        cached = director_profile_map.get(row["name"])
+        if cached:
+            row["profile_path"] = cached
 
-    # Backfill profile_paths for rated directors
+    # Backfill profile_paths for rated directors not already in top_directors
     await resolve_profile_paths(
-        session, stats["directors_with_ratings"][:5], "director",
-        director_films_map, director_profile_map, logger,
+        session, stats["directors_with_ratings"], "director",
+        director_films_map, director_profile_map, logger, limit=8,
     )
 
     # Actors with ratings
@@ -399,8 +423,8 @@ async def process_comprehensive_letterboxd_data(
 
     # Backfill profile_paths for rated actors
     await resolve_profile_paths(
-        session, stats["actors_with_ratings"][:5], "actor",
-        actor_films_map, actor_profile_map, logger,
+        session, stats["actors_with_ratings"], "actor",
+        actor_films_map, actor_profile_map, logger, limit=8,
     )
 
     # Country ISO data

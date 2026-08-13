@@ -36,8 +36,8 @@ export function compactMedia(items: Array<StoryMedia | null | undefined>, limit 
   return output;
 }
 
-export function allPosterMedia(stats: StatsData): StoryMedia[] {
-  return compactMedia((stats.all_films ?? []).map((film) => posterMedia(film, 'w342')), Number.POSITIVE_INFINITY);
+export function allPosterMedia(stats: StatsData, limit = 18): StoryMedia[] {
+  return compactMedia((stats.all_films ?? []).map((film) => posterMedia(film, 'w342')), limit);
 }
 
 export function filmByTitle(stats: StatsData, title?: string | null) {
@@ -51,7 +51,7 @@ export function topRatedPosters(stats: StatsData, limit = 8) {
     [...(stats.all_films ?? [])]
       .filter((film) => film.poster_path)
       .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
-      .map((film) => posterMedia(film)),
+      .map((film) => posterMedia(film, 'w342')),
     limit,
   );
 }
@@ -60,7 +60,7 @@ export function genrePosters(stats: StatsData, genre?: string, limit = 8) {
   return compactMedia(
     (stats.all_films ?? [])
       .filter((film) => !genre || film.genres?.includes(genre))
-      .map((film) => posterMedia(film)),
+      .map((film) => posterMedia(film, 'w342')),
     limit,
   );
 }

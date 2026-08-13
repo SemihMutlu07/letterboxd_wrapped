@@ -12,37 +12,45 @@ type FloatingPanelProps = {
   prefer?: 'above' | 'below';
 };
 
-type Pos = { top: number; left: number; placement: 'above' | 'below' };
+export type PanelPos = { top: number; left: number; placement: 'above' | 'below' };
 
-function computePosition(
-  anchor: DOMRect,
+const GAP = 12;
+const PAD = 12;
+
+export function computePosition(
+  anchor: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right' | 'width' | 'height'>,
   panel: { width: number; height: number },
   prefer: 'above' | 'below',
-): Pos {
-  const gap = 8;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const pad = 12;
+  viewport: { width: number; height: number },
+): PanelPos {
+  const vw = viewport.width;
+  const vh = viewport.height;
+  const fitsBelow = anchor.bottom + GAP + panel.height <= vh - PAD;
+  const fitsAbove = anchor.top - GAP - panel.height >= PAD;
 
   let placement: 'above' | 'below' = prefer;
-  let top = prefer === 'above'
-    ? anchor.top - panel.height - gap
-    : anchor.bottom + gap;
-
-  if (prefer === 'above' && top < pad) {
-    placement = 'below';
-    top = anchor.bottom + gap;
-  } else if (prefer === 'below' && top + panel.height > vh - pad) {
-    placement = 'above';
-    top = anchor.top - panel.height - gap;
+  if (prefer === 'below' && !fitsBelow && fitsAbove) placement = 'above';
+  else if (prefer === 'above' && !fitsAbove && fitsBelow) placement = 'below';
+  else if (!fitsBelow && !fitsAbove) {
+    placement = vh - PAD - anchor.bottom >= anchor.top - PAD ? 'below' : 'above';
   }
 
-  top = Math.max(pad, Math.min(top, vh - panel.height - pad));
+  let top = placement === 'below'
+    ? anchor.bottom + GAP
+    : anchor.top - panel.height - GAP;
 
-  // Align to anchor's right edge, flip left if overflowing.
+  // Clamping to the viewport must not pull the panel back over the anchor.
+  if (placement === 'below') {
+    top = Math.max(top, anchor.bottom + GAP);
+    top = Math.min(top, Math.max(PAD, vh - panel.height - PAD));
+  } else {
+    top = Math.min(top, anchor.top - panel.height - GAP);
+    top = Math.max(top, PAD);
+  }
+
   let left = anchor.right - panel.width;
-  if (left < pad) left = pad;
-  if (left + panel.width > vw - pad) left = Math.max(pad, vw - panel.width - pad);
+  if (left < PAD) left = PAD;
+  if (left + panel.width > vw - PAD) left = Math.max(PAD, vw - panel.width - PAD);
 
   return { top, left, placement };
 }
@@ -56,17 +64,22 @@ export function FloatingPanel({
   anchorRef,
   onClose,
   children,
-  prefer = 'above',
+  prefer = 'below',
 }: FloatingPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<Pos | null>(null);
+  const [pos, setPos] = useState<PanelPos | null>(null);
 
   const reposition = useCallback(() => {
     const anchor = anchorRef.current?.getBoundingClientRect();
     const panel = panelRef.current;
     if (!anchor || !panel) return;
     const rect = panel.getBoundingClientRect();
-    setPos(computePosition(anchor, { width: rect.width || 280, height: rect.height || 120 }, prefer));
+    setPos(computePosition(
+      anchor,
+      { width: rect.width || 280, height: rect.height || 120 },
+      prefer,
+      { width: window.innerWidth, height: window.innerHeight },
+    ));
   }, [anchorRef, prefer]);
 
   useLayoutEffect(() => {
@@ -79,6 +92,10 @@ export function FloatingPanel({
 
   useEffect(() => {
     if (!open) return;
+    const panel = panelRef.current;
+    const observer = panel ? new ResizeObserver(() => reposition()) : null;
+    if (panel && observer) observer.observe(panel);
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
@@ -91,18 +108,18 @@ export function FloatingPanel({
       if (anchorRef.current?.contains(target)) return;
       onClose();
     };
-    const onReposition = () => reposition();
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('mousedown', onPointer);
     window.addEventListener('touchstart', onPointer);
-    window.addEventListener('resize', onReposition);
-    window.addEventListener('scroll', onReposition, true);
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
     return () => {
+      observer?.disconnect();
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('mousedown', onPointer);
       window.removeEventListener('touchstart', onPointer);
-      window.removeEventListener('resize', onReposition);
-      window.removeEventListener('scroll', onReposition, true);
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
     };
   }, [open, onClose, anchorRef, reposition]);
 

@@ -17,6 +17,8 @@ export type PosterFieldConfig = {
   motionScale?: number;
   /** Scales poster density (column gap / visible count). 1 = default. */
   density?: number;
+  /** Pause looping poster motion (story pause / reduced work). */
+  paused?: boolean;
 };
 
 export const DEFAULT_POSTER_FIELD: PosterFieldConfig = {
@@ -33,15 +35,15 @@ export const DEFAULT_POSTER_FIELD: PosterFieldConfig = {
 
 /** Per-visual defaults — rotation and inner bias without duplicating field anchors. */
 export const VISUAL_POSTER_DEFAULTS: Partial<Record<SlideVisual, Partial<PosterFieldConfig>>> = {
-  mosaic: { rotation: -4, contentX: '-3%' },
-  cascade: { rotation: 7, contentX: '-5%', density: 1 },
-  director: { rotation: 2, contentX: '-4%' },
-  person: { rotation: 1, contentX: '-2%' },
+  mosaic: { rotation: -2, contentX: '-2%' },
+  cascade: { rotation: 0, contentX: '0%', density: 1 },
+  director: { rotation: 0, contentX: '0%' },
+  person: { rotation: 0, contentX: '0%' },
   hero: { rotation: 2, contentX: '-6%' },
-  strip: { rotation: 5, contentX: '-4%' },
-  'poster-wall': { rotation: 2, contentX: '-4%' },
+  strip: { rotation: 3, contentX: '-2%' },
+  'poster-wall': { rotation: 0, contentX: '0%' },
   portrait: { rotation: 0, contentX: '-5%' },
-  recap: { rotation: 1, contentX: '-4%' },
+  recap: { rotation: 0, contentX: '0%' },
 };
 
 export function resolvePosterFieldLayout(

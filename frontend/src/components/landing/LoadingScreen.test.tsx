@@ -47,4 +47,26 @@ describe('LoadingScreen result transition', () => {
 
     expect(screen.queryByText(/Queued — the analysis worker is starting up/i)).not.toBeInTheDocument();
   });
+
+  it('drives the scrape bar from worker stages instead of a 30s clock', () => {
+    const events = [
+      { stage: 'scrape_started', metrics: { analysis_period: 'lifetime' } },
+      { stage: 'diary_page', message: 'Diary page 2 parsed', metrics: { page: 2, films: 50 } },
+      { stage: 'diary_page', message: 'Diary page 3 parsed', metrics: { page: 3, films: 50 } },
+    ];
+
+    render(
+      <I18nProvider locale="en">
+        <LoadingScreen mode="scrape" typicalSeconds={30} events={events} />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('Reading your diary…')).toBeInTheDocument();
+    expect(screen.getByText('100')).toBeInTheDocument();
+    expect(screen.queryByText('Typical')).not.toBeInTheDocument();
+    expect(screen.queryByText('Remaining (est.)')).not.toBeInTheDocument();
+    const pct = Number(screen.getByRole('progressbar').getAttribute('aria-valuenow'));
+    expect(pct).toBeGreaterThan(6);
+    expect(pct).toBeLessThan(80);
+  });
 });

@@ -38,7 +38,7 @@ const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(
             </div>
             <div className="shrink-0 text-right">
               <strong className="block text-[30px] font-black">{data.year}</strong>
-              <Username username={data.username} className="block max-w-[185px] text-[11px] text-[#aab8b2]" />
+              <Username username={data.username} className="block max-w-[185px] text-[14px] text-[#aab8b2]" />
             </div>
           </header>
 
@@ -49,7 +49,7 @@ const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(
                 {data.watchedFilms}
               </strong>
             </div>
-            <p className="border-l border-white/30 pl-5 text-[18px] font-bold leading-snug whitespace-pre-line">
+            <p className="border-l border-white/30 pl-5 text-[20px] font-bold leading-snug whitespace-pre-line">
               {labels.reviewsDaysHours(data.writtenReviews, data.spentDays, data.spentHours)}
             </p>
           </section>
@@ -82,30 +82,30 @@ const ContactSheetShareCard = React.forwardRef<HTMLDivElement, Props>(
             <section className="flex min-w-0 flex-col items-center border border-[#00e054]/45 bg-[#15201c] p-4 text-center">
               <PortraitFrame
                 person={data.onScreenCrush}
-                className="w-[156px] border border-[#00e054]/40 bg-[#1f3029]"
+                className="w-[200px] border border-[#00e054]/40 bg-[#1f3029]"
               />
               <div className="mt-4 min-w-0 [overflow-wrap:anywhere]">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#00e054]">{labels.onScreenCrush}</p>
-                <p className="mt-1 text-[20px] font-black leading-tight">{crushName}</p>
-                <p className="mt-1 text-[13px] text-[#aab8b2]">{labels.personFilmsTogether(data.onScreenCrush.count)}</p>
+                <p className="text-[13px] font-black uppercase tracking-[0.14em] text-[#00e054]">{labels.onScreenCrush}</p>
+                <p className="mt-1 text-[22px] font-black leading-tight">{crushName}</p>
+                <p className="mt-1 text-[15px] text-[#aab8b2]">{labels.personFilmsTogether(data.onScreenCrush.count)}</p>
               </div>
             </section>
             <section className="flex min-w-0 flex-col items-center border border-[#00e054]/45 bg-[#15201c] p-4 text-center">
               <PortraitFrame
                 person={data.favoriteDirector}
-                className="w-[156px] border border-[#00e054]/40 bg-[#1f3029]"
+                className="w-[200px] border border-[#00e054]/40 bg-[#1f3029]"
               />
               <div className="mt-4 min-w-0 [overflow-wrap:anywhere]">
-                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#00e054]">{labels.favoriteDirector}</p>
-                <p className="mt-1 text-[20px] font-black leading-tight">{directorName}</p>
-                <p className="mt-1 text-[13px] text-[#aab8b2]">{labels.personFilmsDirected(data.favoriteDirector.count)}</p>
+                <p className="text-[13px] font-black uppercase tracking-[0.14em] text-[#00e054]">{labels.favoriteDirector}</p>
+                <p className="mt-1 text-[22px] font-black leading-tight">{directorName}</p>
+                <p className="mt-1 text-[15px] text-[#aab8b2]">{labels.personFilmsDirected(data.favoriteDirector.count)}</p>
               </div>
             </section>
           </section>
 
           <footer className="mt-5 min-w-0 border-t-4 border-white pt-4">
-            <GenresLine genres={data.genres} className="text-[14px] font-black uppercase leading-snug" />
-            <Brand className="mt-3 block text-[11px] text-[#00e054]" />
+            <GenresLine genres={data.genres} className="text-[16px] font-black uppercase leading-snug" />
+            <Brand className="mt-3 block text-[14px] text-[#00e054]" />
           </footer>
         </div>
       </div>

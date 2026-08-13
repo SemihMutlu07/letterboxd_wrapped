@@ -524,7 +524,7 @@ def test_diary_to_csv_dicts_keeps_undated_films_in_watched():
     collapsed full ~700-film profiles down to just the dated diary subset.
     """
     films = [
-        {"title": "Dated", "year": 2020, "rating": 4.0, "watch_date": "2024-03-15"},
+        {"title": "Dated", "year": 2020, "rating": 4.0, "watch_date": "2024-03-15", "slug": "dated"},
         {"title": "Undated", "year": 2019, "rating": 3.5, "watch_date": ""},
     ]
     result = scraper.diary_to_csv_dicts(films)
@@ -538,6 +538,9 @@ def test_diary_to_csv_dicts_keeps_undated_films_in_watched():
     assert rated_titles == {"Dated", "Undated"}
     # ...but only the dated film feeds the diary timeline.
     assert diary_titles == {"Dated"}
+    by_name = {r["Name"]: r for r in result["watched"]}
+    assert by_name["Dated"]["Letterboxd URI"] == "https://letterboxd.com/film/dated/"
+    assert by_name["Undated"]["Letterboxd URI"] == ""
 
 
 # ── Profile avatar extraction (trust boundary) ──────────────────────────────

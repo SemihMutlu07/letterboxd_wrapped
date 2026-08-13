@@ -1200,9 +1200,13 @@ def diary_to_csv_dicts(films: list[dict]) -> dict[str, list[dict]]:
             continue
         seen.add(key)
 
+        slug = str(f.get("slug") or "").strip().strip("/")
+        uri = f"https://letterboxd.com/film/{slug}/" if slug else ""
+
         watched_rows.append({
             "Name": f["title"],
             "Year": f["year"],
+            "Letterboxd URI": uri,
         })
 
         if f["rating"] is not None:

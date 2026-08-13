@@ -16,6 +16,7 @@ export function StoryImage({ item, className = '', priority = false }: { item: S
       alt={alt}
       className={`h-full w-full object-cover ${className}`}
       loading={priority ? 'eager' : 'lazy'}
+      decoding="async"
       style={{ objectPosition: item.objectPosition ?? (item.type === 'profile' ? '50% 28%' : 'center center') }}
     />
   );

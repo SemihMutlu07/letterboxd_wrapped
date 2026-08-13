@@ -51,14 +51,14 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
 
   if (stats.total_films) {
     const d = stats.days_watched;
-    const fastForwardPosters = allPosterMedia(stats);
+    const fastForwardPosters = allPosterMedia(stats, 18);
     slides.push({
       key: 'volume',
       media: compactMedia([
-        posterMedia(stats.longest_film ? filmByTitle(stats, stats.longest_film.title) : null),
+        posterMedia(stats.longest_film ? filmByTitle(stats, stats.longest_film.title) : null, 'w342'),
         ...fastForwardPosters,
         ...broadPosters,
-      ], Math.max(24, fastForwardPosters.length)),
+      ], 18),
       accent: '#f97316',
       visual: 'cascade',
       body: (
@@ -135,7 +135,7 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
       key: 'director',
       media: compactMedia([
         profileMedia(directorProfile),
-        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 18),
+        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 10),
       ], 19),
       accent: '#ef4444',
       visual: 'person',
@@ -165,7 +165,7 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
       key: 'actor',
       media: compactMedia([
         profileMedia(topActor),
-        ...personFilmPosters(stats, topActor.name, 'actor', 18),
+        ...personFilmPosters(stats, topActor.name, 'actor', 10),
       ], 19),
       accent: '#f472b6',
       visual: 'person',
@@ -290,10 +290,10 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
     slides.push({
       key: 'sinefil',
       media: compactMedia([
-        ...genrePosters(stats, undefined, 10),
-      ], 10),
+        ...genrePosters(stats, undefined, 12),
+      ], 12),
       accent: '#67e8f9',
-      visual: 'mosaic',
+      visual: 'cascade',
       body: (
         <>
           <Label>{t('story.slide.sinefil.label')}</Label>
@@ -316,7 +316,7 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
       key: 'persona',
       media: genrePosters(stats, basis?.genre ?? stats.favorite_genre?.name, 12),
       accent: '#c084fc',
-      visual: 'poster-wall',
+      visual: 'cascade',
       body: (
         <>
           <Label>{t('story.slide.persona.label')}</Label>

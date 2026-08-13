@@ -27,10 +27,10 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
       >
         <header className="flex min-w-0 items-center justify-between gap-8 border-b border-black/10 pb-5">
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-[#6e6e73]">{labels.yearWrapped(data.year)}</p>
+            <p className="text-[15px] font-semibold text-[#6e6e73]">{labels.yearWrapped(data.year)}</p>
             <h1 className="mt-1 text-[32px] font-semibold tracking-[-0.025em]">{labels.yourWrapped}</h1>
           </div>
-          <Username username={data.username} className="max-w-[300px] text-right text-[15px] font-semibold text-[#6e6e73]" />
+          <Username username={data.username} className="max-w-[300px] text-right text-[17px] font-semibold text-[#6e6e73]" />
         </header>
 
         <main className="mt-6 grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,0.92fr)_minmax(0,1.28fr)] gap-5">
@@ -43,30 +43,30 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
 
             <div className="mt-6 grid grid-cols-3 gap-3 border-t border-black/10 pt-5">
               <Metric
-                label={labels.writtenShort}
+                label={labels.writtenReviews}
                 value={data.writtenReviews}
-                valueClassName="text-[28px] font-semibold leading-none tabular-nums"
+                valueClassName="text-[32px] font-semibold leading-none tabular-nums"
               />
               <Metric
-                label={labels.days}
+                label={labels.daysWatching}
                 value={data.spentDays}
-                valueClassName="text-[28px] font-semibold leading-none tabular-nums"
+                valueClassName="text-[32px] font-semibold leading-none tabular-nums"
               />
               <Metric
                 label={labels.scale}
                 value={Math.round(data.cinemaScale)}
                 detail={labels.scaleOutOf}
-                valueClassName="text-[28px] font-semibold leading-none tabular-nums"
+                valueClassName="text-[32px] font-semibold leading-none tabular-nums"
               />
             </div>
 
             <div className="mt-auto border-t border-black/10 pt-5">
-              <GenresLine genres={data.genres} className="text-[15px] font-medium leading-snug text-[#6e6e73]" />
+              <GenresLine genres={data.genres} className="text-[17px] font-medium leading-snug text-[#6e6e73]" />
               <div className="mt-3 flex items-end justify-between gap-4">
-                <span className="text-[14px] font-semibold">
+                <span className="text-[16px] font-semibold">
                   {labels.peakDecadeInline(data.peakDecade, data.peakDecadeCount)}
                 </span>
-                <Brand className="text-[11px] text-[#86868b]" />
+                <Brand className="text-[13px] text-[#86868b]" />
               </div>
             </div>
           </section>
@@ -79,10 +79,10 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
               countText={labels.personFilmsTogether(data.onScreenCrush.count)}
               unknownName={labels.unknown}
               className="rounded-[24px] bg-white p-5 shadow-[0_1px_0_rgba(0,0,0,0.04)]"
-              mediaClassName="w-[116px] rounded-[18px] bg-[#e8e8ed]"
-              labelClassName="text-[13px] font-semibold text-[#0071e3]"
-              nameClassName="text-[27px] font-semibold leading-tight tracking-[-0.02em]"
-              countClassName="text-[14px] text-[#6e6e73]"
+              mediaClassName="w-[148px] rounded-[18px] bg-[#e8e8ed]"
+              labelClassName="text-[14px] font-semibold text-[#0071e3]"
+              nameClassName="text-[30px] font-semibold leading-tight tracking-[-0.02em]"
+              countClassName="text-[16px] text-[#6e6e73]"
             />
             <PersonPanel
               person={data.favoriteDirector}
@@ -91,10 +91,10 @@ const AppleHIGShareCard = React.forwardRef<HTMLDivElement, Props>(
               countText={labels.personFilmsDirected(data.favoriteDirector.count)}
               unknownName={labels.directorUnavailable}
               className="rounded-[24px] bg-white p-5 shadow-[0_1px_0_rgba(0,0,0,0.04)]"
-              mediaClassName="w-[116px] rounded-[18px] bg-[#e8e8ed]"
-              labelClassName="text-[13px] font-semibold text-[#0071e3]"
-              nameClassName="text-[27px] font-semibold leading-tight tracking-[-0.02em]"
-              countClassName="text-[14px] text-[#6e6e73]"
+              mediaClassName="w-[148px] rounded-[18px] bg-[#e8e8ed]"
+              labelClassName="text-[14px] font-semibold text-[#0071e3]"
+              nameClassName="text-[30px] font-semibold leading-tight tracking-[-0.02em]"
+              countClassName="text-[16px] text-[#6e6e73]"
             />
           </section>
         </main>

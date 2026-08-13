@@ -14,11 +14,11 @@ import { PosterField } from './PosterField';
 import { resolvePosterFieldLayout } from './posterFieldConfig';
 import { PersonCinematicVisual } from './cinematic/PersonCinematicVisual';
 
-export function StoryVisual({ slide }: { slide: Slide }) {
+export function StoryVisual({ slide, paused = false }: { slide: Slide; paused?: boolean }) {
   const media = slide.media ?? [];
   const accent = slide.accent ?? '#f59e0b';
   const hero = media[0];
-  const posterLayout = resolvePosterFieldLayout(slide.visual, slide.posterLayout);
+  const posterLayout = resolvePosterFieldLayout(slide.visual, { ...slide.posterLayout, paused });
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">

@@ -38,6 +38,28 @@ export type SectionId =
 
 export type SectionToggle = 'most_watched' | 'highest_rated' | 'lifetime' | 'year';
 
+type NamedPerson = {
+  name: string;
+  profile_path?: string;
+  films?: unknown[];
+};
+
+/** Copy profile photos / film lists across Most Watched ↔ Highest Rated rows. */
+export function mergePersonProfiles<T extends NamedPerson>(
+  primary: T[],
+  secondary: NamedPerson[] | undefined,
+): T[] {
+  const extra = new Map((secondary ?? []).map((person) => [person.name, person]));
+  return primary.map((person) => {
+    const other = extra.get(person.name);
+    return {
+      ...person,
+      profile_path: person.profile_path || other?.profile_path,
+      films: person.films?.length ? person.films : (other?.films ?? person.films),
+    };
+  });
+}
+
 /** Fire once when the section scrolls into view. Pre-consent queue (always allowed). */
 export function trackSectionViewed(sectionId: SectionId): void {
   trackEvent('stats_section_viewed', { section_id: sectionId });
