@@ -1,10 +1,10 @@
 'use client';
 
-import { motion } from 'framer-motion';
-
 import { useI18n } from '@/i18n/I18nProvider';
 
 import { Label, Big, Sub } from '../SlideTypography';
+import { EmphasisLine, RevealLine, TEXT_REVEAL } from '../motion/motionPrimitives';
+import { MOTION_EASE } from '../motion/motionTokens';
 import { showPersonRewatch } from '../person/personPhases';
 import { usePersonSlidePhase } from '../person/PersonSlidePhaseContext';
 
@@ -18,35 +18,19 @@ export function ActorSlideBody() {
 
   return (
     <>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textLabel} ease={MOTION_EASE.warm}>
         <Label>{t('story.slide.actor.label')}</Label>
-      </motion.div>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, delay: instant ? 0 : 0.12, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
+      </RevealLine>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textHeadline} y={18} ease={MOTION_EASE.warm}>
         <Big>{sequence.personName}</Big>
-      </motion.div>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.5, delay: instant ? 0 : 0.28, ease: [0.25, 0.46, 0.45, 0.94] }}
-      >
+      </RevealLine>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textSub} y={14} duration={0.48} ease={MOTION_EASE.warm}>
         <Sub>
           {t('story.slide.actor.sub', { count: formatNumber(sequence.filmCount) })}
         </Sub>
-      </motion.div>
+      </RevealLine>
       {showRewatch && sequence.rewatch && (
-        <motion.div
-          initial={instant ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: instant ? 0 : 0.45 }}
-        >
+        <EmphasisLine instant={instant}>
           <Sub className="text-stone-400">
             {sequence.rewatch.watchCount > 2
               ? t('story.slide.actor.rewatch.detail', {
@@ -55,7 +39,7 @@ export function ActorSlideBody() {
               })
               : t('story.slide.actor.rewatch.tease')}
           </Sub>
-        </motion.div>
+        </EmphasisLine>
       )}
     </>
   );

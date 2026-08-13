@@ -1,7 +1,12 @@
 'use client';
 
+import { motion } from 'framer-motion';
+
 import { useI18n } from '@/i18n/I18nProvider';
 import { resultPath } from '@/lib/routes';
+
+import { MOTION_DURATION, MOTION_EASE } from './motion/motionTokens';
+import { useStoryMotion } from './motion/StoryMotionContext';
 
 type StoryNavigationProps = {
   isLast: boolean;
@@ -21,6 +26,7 @@ export function StoryNavigation({
   onReplay,
 }: StoryNavigationProps) {
   const { t } = useI18n();
+  const { reduce } = useStoryMotion();
 
   return (
     <>
@@ -38,7 +44,12 @@ export function StoryNavigation({
       />
 
       {isLast && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-black/70 to-transparent pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16">
+        <motion.div
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-black/70 to-transparent pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16"
+          initial={reduce ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reduce ? 0 : MOTION_DURATION.reveal, ease: MOTION_EASE.snap }}
+        >
           <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3 px-4">
             <button
               type="button"
@@ -54,14 +65,21 @@ export function StoryNavigation({
             >
               {t('story.replay')}
             </button>
-            <a
+            <motion.a
               href={resultPath(username, locale)}
+              initial={reduce ? false : { scale: 0.96 }}
+              animate={{ scale: 1 }}
+              transition={{
+                duration: reduce ? 0 : MOTION_DURATION.emphasis,
+                delay: reduce ? 0 : 0.08,
+                ease: MOTION_EASE.snap,
+              }}
               className="rounded-full bg-amber-300 px-7 py-3 font-mono text-xs font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
             >
               {t('story.openResults')}
-            </a>
+            </motion.a>
           </div>
-        </div>
+        </motion.div>
       )}
     </>
   );

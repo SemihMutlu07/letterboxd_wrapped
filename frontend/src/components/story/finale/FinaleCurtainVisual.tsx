@@ -6,6 +6,7 @@ import type { FinaleSequenceData } from '../types';
 import { useFinaleSlidePhase } from './FinaleSlidePhaseContext';
 import type { FinalePhase } from './finalePhases';
 import { showFinaleCurtain } from './finalePhases';
+import { MOTION_DURATION, MOTION_EASE, MOTION_STAGGER } from '../motion/motionTokens';
 import { StoryImage } from '../visuals/StoryImage';
 
 const CURTAIN_LAYOUT = [
@@ -61,9 +62,9 @@ export function FinaleCurtainVisual({
               initial={reduce ? false : { opacity: 0, scale: slot.scale * 0.88 }}
               animate={{ opacity: targetOpacity, scale: slot.scale }}
               transition={{
-                duration: reduce ? 0 : 0.5,
-                delay: reduce ? 0 : index * 0.04,
-                ease: 'easeOut',
+                duration: reduce ? 0 : MOTION_DURATION.reveal,
+                delay: reduce ? 0 : index * MOTION_STAGGER.curtainPoster,
+                ease: MOTION_EASE.editorial,
               }}
             >
               <StoryImage item={item} priority={index < 4} />

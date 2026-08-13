@@ -1,10 +1,9 @@
 'use client';
 
-import { motion } from 'framer-motion';
-
 import { useI18n } from '@/i18n/I18nProvider';
 
 import { Label, Big, Sub } from '../SlideTypography';
+import { EmphasisLine, RevealLine, TEXT_REVEAL } from '../motion/motionPrimitives';
 import { showPersonRewatch } from '../person/personPhases';
 import { usePersonSlidePhase } from '../person/PersonSlidePhaseContext';
 
@@ -18,35 +17,19 @@ export function DirectorSlideBody() {
 
   return (
     <>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, ease: 'easeOut' }}
-      >
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textLabel}>
         <Label>{t('story.slide.director.label')}</Label>
-      </motion.div>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, delay: instant ? 0 : 0.12, ease: 'easeOut' }}
-      >
+      </RevealLine>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textHeadline} y={18}>
         <Big>{sequence.personName}</Big>
-      </motion.div>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.5, delay: instant ? 0 : 0.28, ease: 'easeOut' }}
-      >
+      </RevealLine>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textSub} y={14} duration={0.48}>
         <Sub>
           {t('story.slide.director.sub', { count: formatNumber(sequence.filmCount) })}
         </Sub>
-      </motion.div>
+      </RevealLine>
       {showRewatch && sequence.rewatch && (
-        <motion.div
-          initial={instant ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: instant ? 0 : 0.45 }}
-        >
+        <EmphasisLine instant={instant}>
           <Sub className="text-stone-400">
             {sequence.rewatch.watchCount > 2
               ? t('story.slide.director.rewatch.detail', {
@@ -55,7 +38,7 @@ export function DirectorSlideBody() {
               })
               : t('story.slide.director.rewatch.tease')}
           </Sub>
-        </motion.div>
+        </EmphasisLine>
       )}
     </>
   );

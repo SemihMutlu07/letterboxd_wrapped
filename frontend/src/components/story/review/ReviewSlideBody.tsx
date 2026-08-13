@@ -1,10 +1,9 @@
 'use client';
 
-import { motion } from 'framer-motion';
-
 import { useI18n } from '@/i18n/I18nProvider';
 
 import { Label, Big, Sub } from '../SlideTypography';
+import { EmphasisLine, RevealLine, TEXT_REVEAL } from '../motion/motionPrimitives';
 import { showReviewInsight } from './reviewPhases';
 import { useReviewSlidePhase } from './ReviewSlidePhaseContext';
 
@@ -19,37 +18,21 @@ export function ReviewSlideBody() {
 
   return (
     <>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, ease: 'easeOut' }}
-      >
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textLabel}>
         <Label>{t('story.slide.review.label')}</Label>
-      </motion.div>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 18 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.55, delay: instant ? 0 : 0.12, ease: 'easeOut' }}
-      >
+      </RevealLine>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textHeadline} y={18}>
         <Big>{sequence.filmTitle}</Big>
-      </motion.div>
-      <motion.div
-        initial={instant ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: instant ? 0 : 0.5, delay: instant ? 0 : 0.28, ease: 'easeOut' }}
-      >
+      </RevealLine>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textSub} y={14} duration={0.48}>
         <Sub>
           {sequence.totalWordsWritten != null
             ? t('story.slide.review.wordsTotal', { count: formatNumber(sequence.totalWordsWritten) })
             : null}
         </Sub>
-      </motion.div>
+      </RevealLine>
       {showInsight && (
-        <motion.div
-          initial={instant ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: instant ? 0 : 0.45 }}
-        >
+        <EmphasisLine instant={instant}>
           <Sub className="text-stone-400">
             {likes === 0
               ? t('story.slide.review.zeroLikes')
@@ -60,7 +43,7 @@ export function ReviewSlideBody() {
           <Sub className="text-stone-400">
             {t('story.slide.review.thisLength', { count: formatNumber(sequence.wordCount) })}
           </Sub>
-        </motion.div>
+        </EmphasisLine>
       )}
     </>
   );

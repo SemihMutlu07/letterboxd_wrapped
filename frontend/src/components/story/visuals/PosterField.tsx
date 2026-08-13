@@ -1,8 +1,10 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import type { CSSProperties, ReactNode } from 'react';
 
+import { useStoryMotion } from '../motion/StoryMotionContext';
+import { MOTION_DURATION, MOTION_EASE } from '../motion/motionTokens';
 import type { PosterFieldConfig } from './posterFieldConfig';
 import { PosterFieldProvider } from './PosterFieldContext';
 
@@ -17,8 +19,7 @@ type PosterFieldProps = {
  * Inner visuals stay free to compose; they should not hardcode field anchors.
  */
 export function PosterField({ slideKey, layout, children }: PosterFieldProps) {
-  const reduce = useReducedMotion();
-
+  const { reduce } = useStoryMotion();
   const fieldStyle: CSSProperties = {
     top: layout.top,
     bottom: layout.bottom,
@@ -36,10 +37,13 @@ export function PosterField({ slideKey, layout, children }: PosterFieldProps) {
     <PosterFieldProvider layout={layout}>
       <motion.div
         key={`poster-field-${slideKey}`}
-        initial={reduce ? false : { opacity: 0, scale: 0.98 }}
+        initial={reduce ? false : { opacity: 0, scale: 0.985 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={reduce ? undefined : { opacity: 0, scale: 1.02 }}
-        transition={{ duration: reduce ? 0 : 0.65, ease: 'easeOut' }}
+        exit={{ opacity: 0, scale: 1.01 }}
+        transition={{
+          duration: reduce ? 0 : MOTION_DURATION.fieldEnter,
+          ease: MOTION_EASE.editorial,
+        }}
         className="absolute hidden md:block"
         style={fieldStyle}
         data-testid="story-poster-field"

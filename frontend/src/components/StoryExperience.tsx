@@ -14,6 +14,7 @@ import { StorySlidePanel } from '@/components/story/StorySlidePanel';
 import { PersonSlidePhaseProvider } from '@/components/story/person/PersonSlidePhaseContext';
 import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
 import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
+import { StoryMotionProvider } from '@/components/story/motion/StoryMotionContext';
 import { StoryVisual } from '@/components/story/visuals/StoryVisual';
 import { useI18n } from '@/i18n/I18nProvider';
 
@@ -117,6 +118,7 @@ export default function StoryExperience() {
   const activeSlide = slides[index];
 
   return (
+    <StoryMotionProvider paused={isPaused}>
     <PersonSlidePhaseProvider
       sequence={activeSlide.directorSequence ?? activeSlide.actorSequence ?? null}
       slideKey={activeSlide.key}
@@ -164,6 +166,7 @@ export default function StoryExperience() {
     </FinaleSlidePhaseProvider>
     </ReviewSlidePhaseProvider>
     </PersonSlidePhaseProvider>
+    </StoryMotionProvider>
   );
 }
 

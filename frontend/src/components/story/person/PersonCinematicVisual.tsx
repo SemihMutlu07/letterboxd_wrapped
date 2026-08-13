@@ -5,6 +5,14 @@ import { motion } from 'framer-motion';
 import type { PersonSequenceData } from '../types';
 import { usePersonSlidePhase } from './PersonSlidePhaseContext';
 import type { PersonPhase } from './personPhases';
+import { useStoryMotion } from '../motion/StoryMotionContext';
+import {
+  MOTION_AMBIENT,
+  MOTION_DURATION,
+  MOTION_EASE,
+  MOTION_STAGGER,
+  ambientLoopTransition,
+} from '../motion/motionTokens';
 import { usePosterField } from '../visuals/PosterFieldContext';
 import { StoryImage } from '../visuals/StoryImage';
 
@@ -53,18 +61,19 @@ export function PersonCinematicVisual({
   sequence,
   accent,
   portraitMicroDrift = false,
-  portraitEase = [0.22, 1, 0.36, 1],
+  portraitEase = MOTION_EASE.editorial,
 }: {
   sequence: PersonSequenceData;
   accent: string;
   portraitMicroDrift?: boolean;
-  portraitEase?: [number, number, number, number];
+  portraitEase?: (typeof MOTION_EASE)[keyof typeof MOTION_EASE];
 }) {
   const { phase, reduce, paused } = usePersonSlidePhase();
+  const { ambientActive } = useStoryMotion();
   const { motionScale = 1 } = usePosterField();
   const posters = sequence.streamPosters;
   const streamVisible = showPosterStream(phase, reduce);
-  const ambient = !reduce && (phase === 'streamAmbient' || phase === 'final') && !paused;
+  const ambient = !reduce && (phase === 'streamAmbient' || phase === 'final') && !paused && ambientActive;
   const portraitDrift = portraitMicroDrift && ambient && !reduce;
 
   return (
@@ -75,7 +84,7 @@ export function PersonCinematicVisual({
         animate={ambient ? { x: ['-3%', '3%', '-3%'] } : { x: '0%' }}
         transition={
           ambient
-            ? { duration: 14 * motionScale, repeat: Infinity, ease: 'easeInOut' }
+            ? ambientLoopTransition(MOTION_AMBIENT.streamPan, motionScale, true)
             : { duration: 0 }
         }
       >
@@ -94,9 +103,9 @@ export function PersonCinematicVisual({
                 initial={reduce ? false : { opacity: 0, scale: slot.scale * 0.72, x: -28 }}
                 animate={{ opacity: 0.9, scale: slot.scale, x: 0 }}
                 transition={{
-                  duration: reduce ? 0 : 0.38,
-                  delay: reduce ? 0 : index * 0.045,
-                  ease: 'easeOut',
+                  duration: reduce ? 0 : MOTION_DURATION.streamBurst,
+                  delay: reduce ? 0 : index * MOTION_STAGGER.streamPoster,
+                  ease: MOTION_EASE.snap,
                 }}
               >
                 <StoryImage item={item} priority={index < 4} />
@@ -124,12 +133,12 @@ export function PersonCinematicVisual({
           transition={
             portraitDrift
               ? {
-                left: { duration: 0.75, ease: portraitEase },
-                opacity: { duration: 0.75, ease: portraitEase },
-                scale: { duration: 0.75, ease: portraitEase },
-                y: { duration: 16 * motionScale, repeat: Infinity, ease: 'easeInOut' },
+                left: { duration: MOTION_DURATION.transition, ease: portraitEase },
+                opacity: { duration: MOTION_DURATION.transition, ease: portraitEase },
+                scale: { duration: MOTION_DURATION.transition, ease: portraitEase },
+                y: ambientLoopTransition(MOTION_AMBIENT.portraitDrift, motionScale, portraitDrift),
               }
-              : { duration: reduce ? 0 : 0.75, ease: portraitEase }
+              : { duration: reduce ? 0 : MOTION_DURATION.transition, ease: portraitEase }
           }
         >
           <StoryImage item={sequence.profile} priority />

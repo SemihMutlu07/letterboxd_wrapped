@@ -190,7 +190,7 @@ describe('buildSlides', () => {
       'Arrival poster',
     ]);
     const actor = slides.find((slide) => slide.key === 'actor')!;
-    expect(actor.visual).toBe('person');
+    expect(actor.visual).toBe('actor');
     expect(actor.media?.map((item) => item.alt)).toEqual([
       'Jake Gyllenhaal portrait',
       'Nightcrawler poster',
@@ -224,7 +224,7 @@ describe('buildSlides', () => {
         { title: 'Heat', director: 'Michael Mann', cast: ['Jake Gyllenhaal'], poster_path: '/heat.jpg', rating: 3 },
       ],
       rewatch_champions: [{ title: 'Nightcrawler', watch_count: 4 }],
-    } as unknown as StatsData);
+    } as unknown as StatsData, enI18n);
     const directorIndex = slides.findIndex((slide) => slide.key === 'director');
     const actor = slides.find((slide) => slide.key === 'actor')!;
     expect(directorIndex).toBeGreaterThan(-1);
@@ -294,7 +294,7 @@ describe('buildSlides', () => {
         { title: 'Film K', poster_path: '/k.jpg', rating: 4 },
       ],
     };
-    const slides = buildSlides(stats as unknown as StatsData);
+    const slides = buildSlides(stats as unknown as StatsData, enI18n);
     const outro = slides.find((slide) => slide.key === 'outro')!;
     expect(outro.visual).toBe('finale');
     expect(outro.finaleSequence).toBeTruthy();

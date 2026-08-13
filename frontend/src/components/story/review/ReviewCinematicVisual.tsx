@@ -5,6 +5,14 @@ import { motion } from 'framer-motion';
 import type { ReviewSequenceData } from '../types';
 import { useReviewSlidePhase } from './ReviewSlidePhaseContext';
 import type { ReviewPhase } from './reviewPhases';
+import { useStoryMotion } from '../motion/StoryMotionContext';
+import {
+  MOTION_AMBIENT,
+  MOTION_DURATION,
+  MOTION_EASE,
+  MOTION_STAGGER,
+  ambientLoopTransition,
+} from '../motion/motionTokens';
 import { usePosterField } from '../visuals/PosterFieldContext';
 import { StoryImage } from '../visuals/StoryImage';
 
@@ -58,11 +66,12 @@ export function ReviewCinematicVisual({
   accent: string;
 }) {
   const { phase, reduce, paused } = useReviewSlidePhase();
+  const { ambientActive } = useStoryMotion();
   const { motionScale = 1 } = usePosterField();
   const posters = sequence.streamPosters;
   const hasHero = Boolean(sequence.heroPoster);
   const streamVisible = showPosterStream(phase, reduce);
-  const ambient = !reduce && (phase === 'streamAmbient' || phase === 'final') && !paused;
+  const ambient = !reduce && (phase === 'streamAmbient' || phase === 'final') && !paused && ambientActive;
 
   return (
     <div className="relative h-full w-full">
@@ -72,7 +81,7 @@ export function ReviewCinematicVisual({
         animate={ambient ? { x: ['-3%', '3%', '-3%'] } : { x: '0%' }}
         transition={
           ambient
-            ? { duration: 14 * motionScale, repeat: Infinity, ease: 'easeInOut' }
+            ? ambientLoopTransition(MOTION_AMBIENT.streamPan, motionScale, true)
             : { duration: 0 }
         }
       >
@@ -91,9 +100,9 @@ export function ReviewCinematicVisual({
                 initial={reduce ? false : { opacity: 0, scale: slot.scale * 0.72, x: -28 }}
                 animate={{ opacity: 0.9, scale: slot.scale, x: 0 }}
                 transition={{
-                  duration: reduce ? 0 : 0.38,
-                  delay: reduce ? 0 : index * 0.045,
-                  ease: 'easeOut',
+                  duration: reduce ? 0 : MOTION_DURATION.streamBurst,
+                  delay: reduce ? 0 : index * MOTION_STAGGER.streamPoster,
+                  ease: MOTION_EASE.snap,
                 }}
               >
                 <StoryImage item={item} priority={index < 4} />
@@ -117,7 +126,7 @@ export function ReviewCinematicVisual({
             opacity: heroOpacity(phase, reduce, hasHero),
             scale: heroScale(phase, reduce),
           }}
-          transition={{ duration: reduce ? 0 : 0.75, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: reduce ? 0 : MOTION_DURATION.transition, ease: MOTION_EASE.editorial }}
         >
           <StoryImage item={sequence.heroPoster} priority />
         </motion.div>

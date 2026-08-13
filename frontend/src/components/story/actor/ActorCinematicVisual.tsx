@@ -1,6 +1,7 @@
 'use client';
 
 import type { PersonSequenceData } from '../types';
+import { MOTION_EASE } from '../motion/motionTokens';
 import { PersonCinematicVisual } from '../person/PersonCinematicVisual';
 
 export function ActorCinematicVisual({
@@ -15,7 +16,7 @@ export function ActorCinematicVisual({
       sequence={sequence}
       accent={accent}
       portraitMicroDrift
-      portraitEase={[0.25, 0.46, 0.45, 0.94]}
+      portraitEase={MOTION_EASE.warm}
     />
   );
 }

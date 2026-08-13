@@ -98,6 +98,9 @@ function exportRoot() {
 
 async function openSwapDrawer() {
   await userEvent.click(screen.getByRole('button', { name: /tune actor/i }));
+  await waitFor(() => {
+    expect(document.querySelector('[data-share-popover-panel="true"]')).toBeTruthy();
+  });
 }
 
 beforeEach(() => {
@@ -129,6 +132,108 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+
+describe('ShareModal customization popover', () => {
+  it('renders the customization panel in a body portal anchored to the tune button', async () => {
+    renderShareModal();
+    await openSwapDrawer();
+
+    const panel = document.querySelector('[data-share-popover-panel="true"]');
+    expect(panel).toBeTruthy();
+    expect(panel?.parentElement).toBe(document.body);
+    expect(within(panel as HTMLElement).getByText('Actor')).toBeInTheDocument();
+  });
+
+  it('keeps the popover inside the viewport when the tune button is near the top-right edge', async () => {
+    const tuneRect = {
+      top: 8,
+      left: 348,
+      right: 392,
+      bottom: 52,
+      width: 44,
+      height: 44,
+      x: 348,
+      y: 8,
+      toJSON: () => ({}),
+    } as DOMRect;
+    const defaultRect = {
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: 700,
+      width: 400,
+      height: 700,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect;
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: function (this: HTMLElement) {
+        if (this.getAttribute('aria-label') === 'Tune actor and director') return tuneRect;
+        if (this.dataset.sharePopoverPanel === 'true') return original.call(this);
+        return defaultRect;
+      },
+    });
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 400 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 700 });
+
+    renderShareModal();
+    await openSwapDrawer();
+
+    const panel = document.querySelector<HTMLElement>('[data-share-popover-panel="true"]');
+    expect(panel).toBeTruthy();
+
+    await waitFor(() => {
+      expect(Number.isFinite(Number.parseFloat(panel!.style.top))).toBe(true);
+      expect(Number.isFinite(Number.parseFloat(panel!.style.left))).toBe(true);
+    });
+
+    const top = Number.parseFloat(panel!.style.top);
+    const left = Number.parseFloat(panel!.style.left);
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(left).toBeGreaterThanOrEqual(12);
+    expect(left + 256).toBeLessThanOrEqual(400 - 12);
+
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: original,
+    });
+  });
+
+  it('closes the customization popover on Escape without closing the share modal', async () => {
+    const onClose = vi.fn();
+    render(
+      <I18nProvider locale="en"><ShareModal
+        open
+        onClose={onClose}
+        orientation="horizontal"
+        setOrientation={() => {}}
+        cardProps={baseData}
+      /></I18nProvider>,
+    );
+
+    await openSwapDrawer();
+    expect(document.querySelector('[data-share-popover-panel="true"]')).toBeTruthy();
+
+    await userEvent.keyboard('{Escape}');
+    expect(document.querySelector('[data-share-popover-panel="true"]')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Share' })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes the customization popover when clicking outside', async () => {
+    renderShareModal();
+    await openSwapDrawer();
+    expect(document.querySelector('[data-share-popover-panel="true"]')).toBeTruthy();
+
+    await userEvent.pointer({ keys: '[MouseLeft]', target: document.body });
+    expect(document.querySelector('[data-share-popover-panel="true"]')).toBeNull();
+  });
 });
 
 describe('ShareModal person swap', () => {

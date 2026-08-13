@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 
 import { useFinaleSlidePhase } from './finale/FinaleSlidePhaseContext';
 import { showFinaleCard, showFinaleCardHint } from './finale/finalePhases';
+import { MOTION_DURATION, MOTION_EASE } from './motion/motionTokens';
 import { buildStoryShareCard, FINALE_CARD_DOM, FINALE_VARIANT, pickFinaleOrientation } from './viewModel';
 
 /**
@@ -69,9 +70,12 @@ export default function StoryFinaleCard({ stats }: { stats: StatsData }) {
             }}
           >
             <motion.div
-              initial={reduce ? false : { opacity: 0, rotateY: -24, scale: 0.92 }}
+              initial={reduce ? false : { opacity: 0, rotateY: -18, scale: 0.94 }}
               animate={reduce ? { opacity: 1 } : { opacity: 1, rotateY: 0, scale: 1 }}
-              transition={{ duration: reduce ? 0 : 0.65, ease: 'easeOut' }}
+              transition={{
+                duration: reduce ? 0 : MOTION_DURATION.cardReveal,
+                ease: MOTION_EASE.editorial,
+              }}
               style={{ width: dom.w, height: dom.h, transformStyle: reduce ? undefined : 'preserve-3d' }}
             >
               <ShareVariantRenderer variant={FINALE_VARIANT[orientation]} data={data} orientation={orientation} />
@@ -80,9 +84,14 @@ export default function StoryFinaleCard({ stats }: { stats: StatsData }) {
         )}
       </div>
       {showHint && (
-        <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-stone-400">
+        <motion.p
+          initial={reduce ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduce ? 0 : MOTION_DURATION.emphasis, ease: MOTION_EASE.snap }}
+          className="mt-3 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-stone-400"
+        >
           {t('story.slide.finale.cardHint')}
-        </p>
+        </motion.p>
       )}
       <div className="pointer-events-none absolute inset-x-8 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent" />
     </div>

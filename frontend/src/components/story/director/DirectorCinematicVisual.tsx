@@ -1,6 +1,7 @@
 'use client';
 
 import type { PersonSequenceData } from '../types';
+import { MOTION_EASE } from '../motion/motionTokens';
 import { PersonCinematicVisual } from '../person/PersonCinematicVisual';
 
 export function DirectorCinematicVisual({
@@ -14,7 +15,7 @@ export function DirectorCinematicVisual({
     <PersonCinematicVisual
       sequence={sequence}
       accent={accent}
-      portraitEase={[0.22, 1, 0.36, 1]}
+      portraitEase={MOTION_EASE.editorial}
     />
   );
 }

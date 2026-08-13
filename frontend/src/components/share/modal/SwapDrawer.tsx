@@ -16,7 +16,7 @@ type SwapDrawerProps = {
   onDirectorIdxChange: (idx: number) => void;
 };
 
-/** Swap controls body — rendered inside FloatingPanel near the tune button. */
+/** Swap controls body — rendered inside SharePopover near the tune button. */
 export function SwapDrawer({
   cardProps,
   hasActors,
@@ -30,7 +30,7 @@ export function SwapDrawer({
   const { t } = useI18n();
 
   return (
-    <div className="space-y-2">
+    <div className="min-w-[16rem] max-w-[min(18rem,calc(100vw-1.5rem))] rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-xs backdrop-blur space-y-2">
       {hasActors && (
         <div className="flex items-center gap-2">
           <span className="w-16 shrink-0 text-slate-400">{t('share.actor')}</span>
