@@ -17,6 +17,9 @@ type StoryNavigationProps = {
   onReplay: () => void;
 };
 
+const secondaryBtn =
+  'min-h-11 flex-1 rounded-full border border-stone-600 bg-black/65 px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 md:flex-none md:px-6 md:py-3 md:text-xs';
+
 export function StoryNavigation({
   isLast,
   username,
@@ -45,26 +48,22 @@ export function StoryNavigation({
 
       {isLast && (
         <motion.div
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-black/70 to-transparent pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-16"
-          initial={reduce ? false : { opacity: 0, y: 12 }}
+          data-testid="story-finale-actions"
+          className="relative z-50 min-w-0 px-3 pt-2 md:px-5"
+          style={{ paddingBottom: 'max(1.15rem, env(safe-area-inset-bottom, 0px))' }}
+          initial={reduce ? false : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: reduce ? 0 : MOTION_DURATION.reveal, ease: MOTION_EASE.snap }}
         >
-          <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-3 px-4">
-            <button
-              type="button"
-              onClick={onPrevious}
-              className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
-            >
-              {t('story.back')}
-            </button>
-            <button
-              type="button"
-              onClick={onReplay}
-              className="rounded-full border border-stone-600 bg-black/65 px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.14em] text-stone-200 backdrop-blur transition-colors hover:border-amber-300 hover:text-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300"
-            >
-              {t('story.replay')}
-            </button>
+          <div className="mx-auto flex w-full min-w-0 max-w-md flex-col gap-2 md:max-w-3xl md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-3">
+            <div className="flex min-w-0 gap-2 md:contents">
+              <button type="button" onClick={onPrevious} className={secondaryBtn}>
+                {t('story.back')}
+              </button>
+              <button type="button" onClick={onReplay} className={secondaryBtn}>
+                {t('story.replay')}
+              </button>
+            </div>
             <motion.a
               href={resultPath(username, locale)}
               initial={reduce ? false : { scale: 0.96 }}
@@ -74,7 +73,7 @@ export function StoryNavigation({
                 delay: reduce ? 0 : 0.08,
                 ease: MOTION_EASE.snap,
               }}
-              className="rounded-full bg-amber-300 px-7 py-3 font-mono text-xs font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100"
+              className="flex min-h-11 min-w-0 items-center justify-center rounded-full bg-amber-300 px-5 py-2.5 text-center font-mono text-[11px] font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100 md:px-7 md:py-3 md:text-xs"
             >
               {t('story.openResults')}
             </motion.a>

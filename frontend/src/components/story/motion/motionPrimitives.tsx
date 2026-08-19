@@ -11,6 +11,8 @@ import {
 
 type EaseTuple = readonly [number, number, number, number];
 
+const box = 'min-w-0 max-w-full';
+
 export function RevealLine({
   instant,
   delay = 0,
@@ -35,6 +37,7 @@ export function RevealLine({
         delay: instant ? 0 : delay,
         ease,
       }}
+      className={box}
     >
       {children}
     </motion.div>
@@ -56,6 +59,7 @@ export function EmphasisLine({
         duration: instant ? 0 : MOTION_DURATION.emphasis,
         ease: MOTION_EASE.snap,
       }}
+      className={box}
     >
       {children}
     </motion.div>

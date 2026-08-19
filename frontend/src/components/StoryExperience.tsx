@@ -8,9 +8,8 @@ import { useStoryMachine } from '@/components/story/useStoryMachine';
 import { AUTO_MIN_MS, SLIDE_MS, PRELOAD_AHEAD } from '@/components/story/constants';
 import { buildSlides } from '@/components/story/slides/buildSlides';
 import { StoryNavigation } from '@/components/story/StoryNavigation';
-import { StoryPauseButton } from '@/components/story/StoryPauseButton';
-import { StoryProgressBar } from '@/components/story/StoryProgressBar';
 import { StorySlidePanel } from '@/components/story/StorySlidePanel';
+import { StoryTopChrome } from '@/components/story/StoryTopChrome';
 import { PersonSlidePhaseProvider } from '@/components/story/person/PersonSlidePhaseContext';
 import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
 import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
@@ -134,17 +133,20 @@ export default function StoryExperience() {
       slideKey={activeSlide.key}
       paused={isPaused}
     >
-    <main className="relative min-h-screen select-none overflow-hidden bg-[#0f0d0b]">
-      <AnimatePresence mode="wait">
-        <StoryVisual key={`bg-${activeSlide.key}`} slide={activeSlide} />
-      </AnimatePresence>
+    <main className="story-viewport relative grid select-none overflow-x-clip overflow-y-hidden bg-[#0f0d0b] [grid-template-rows:auto_minmax(0,1fr)_auto]">
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <AnimatePresence mode="wait">
+          <StoryVisual key={`bg-${activeSlide.key}`} slide={activeSlide} />
+        </AnimatePresence>
+      </div>
 
-      <StoryProgressBar slides={slides} index={index} progress={progress} />
-
-      <StoryPauseButton
+      <StoryTopChrome
+        slides={slides}
+        index={index}
+        progress={progress}
         isPaused={isPaused}
         isLast={isLast}
-        onToggle={() => !isLast && setIsPaused((v) => !v)}
+        onTogglePause={() => !isLast && setIsPaused((v) => !v)}
       />
 
       <StorySlidePanel
@@ -153,6 +155,10 @@ export default function StoryExperience() {
         stats={stats}
         showTapHint={currentInteraction === 'manual'}
       />
+
+      {!isLast && (
+        <div className="relative z-20" style={{ height: 'max(0.55rem, env(safe-area-inset-bottom, 0px))' }} />
+      )}
 
       <StoryNavigation
         isLast={isLast}

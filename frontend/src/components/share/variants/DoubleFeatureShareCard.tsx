@@ -34,7 +34,7 @@ const DoubleFeatureShareCard = React.forwardRef<HTMLDivElement, Props>(
             </div>
             <div className="shrink-0 text-right">
               <strong className="block text-[27px] font-black tabular-nums">{data.year}</strong>
-              <Username username={data.username} className="block max-w-[180px] text-[11px]" />
+              <Username username={data.username} className="block max-w-[240px] text-[11px]" />
             </div>
           </header>
 
