@@ -15,7 +15,7 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { getProfileUrl } from '@/lib/analytics';
+import { getDirectTmdbImageUrl, getProfileUrl } from '@/lib/analytics';
 import type { StatsData, PersonFilm } from './types';
 import type { GateResult, SectionToggle } from './section-utils';
 import PersonFilmsModal from './PersonFilmsModal';
@@ -226,7 +226,11 @@ export function PersonCard({
   /** Skip hover scale / blur-backdrop work on compact and reduced-motion. */
   liteMotion?: boolean;
 }) {
-  const imageUrl = profilePath ? getProfileUrl(profilePath, 'grid') : null;
+  const imageUrl = profilePath
+    ? liteMotion
+      ? getDirectTmdbImageUrl(profilePath, 'w185')
+      : getProfileUrl(profilePath, 'grid')
+    : null;
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [retried, setRetried] = useState(false);

@@ -7,6 +7,7 @@ import type { StatsData } from './types';
 
 vi.mock('@/lib/analytics', () => ({
   getProfileUrl: (path: string) => `https://image.tmdb.org/t/p/w342/${path.replace(/^\/+/, '')}`,
+  getDirectTmdbImageUrl: (path: string, size = 'w342') => `https://image.tmdb.org/t/p/${size}/${path.replace(/^\/+/, '')}`,
   getTmdbImageUrl: () => null,
   trackEvent: vi.fn(),
   trackConsentedEvent: vi.fn(),

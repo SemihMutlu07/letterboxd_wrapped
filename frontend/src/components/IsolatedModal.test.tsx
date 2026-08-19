@@ -28,6 +28,7 @@ describe('IsolatedModal', () => {
     expect(document.body).toHaveAttribute('data-mw-scroll-locked', 'true');
     expect(document.documentElement).toHaveAttribute('data-mw-scroll-locked', 'true');
     expect(document.body.style.top).toBe('-240px');
+    expect(screen.getByTestId('isolated-modal').querySelector('.mw-isolated-modal__frame')).not.toBeNull();
 
     rerender(<Harness open={false} />);
     expect(document.body).not.toHaveAttribute('data-mw-scroll-locked');
@@ -44,5 +45,19 @@ describe('IsolatedModal', () => {
     const backdrop = modal.querySelector('.mw-isolated-modal__backdrop');
     expect(backdrop).not.toBeNull();
     expect(backdrop).toHaveClass('mw-isolated-modal__backdrop');
+  });
+
+  it('inerts page siblings so chrome behind the overlay cannot be used', async () => {
+    const chrome = document.createElement('div');
+    chrome.textContent = 'page chrome';
+    document.body.appendChild(chrome);
+    render(
+      <IsolatedModal open onClose={() => {}} label="Shelf">
+        <div data-mw-modal-scroll>Inside</div>
+      </IsolatedModal>,
+    );
+    await screen.findByTestId('isolated-modal');
+    expect(chrome).toHaveAttribute('inert');
+    chrome.remove();
   });
 });

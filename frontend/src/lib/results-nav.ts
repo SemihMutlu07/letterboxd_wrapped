@@ -6,7 +6,8 @@ export type ResultsNavPhase =
   | 'route-start'
   | 'shell-visible'
   | 'data-ready'
-  | 'content-mounted';
+  | 'content-mounted'
+  | 'interactive';
 
 function wallClock(): number {
   return Date.now();

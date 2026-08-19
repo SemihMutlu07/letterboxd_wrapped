@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { ShareCardData } from '@/components/share/types';
 import { shareVariantsForOrientation } from '@/components/share/registry';
@@ -49,6 +50,11 @@ export default function ShareModal({
   const [hintFading, setHintFading] = useState(false);
   const [showUsername, setShowUsername] = useState(true);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(() => typeof document !== 'undefined');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const activeVariant = availableVariants[
     Math.max(0, Math.min(availableVariants.length - 1, activeIdx))
@@ -183,27 +189,26 @@ export default function ShareModal({
     onDownloadSuccess,
   });
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const hasActors = (cardProps.topActors?.length ?? 0) >= 2;
   const hasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
   const showSwapTrigger = hasActors || hasDirectors;
 
-  return (
-    <div className="fixed inset-0 z-[var(--mw-modal-z,200)]">
-      <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
-
+  return createPortal(
+    <div className="mw-isolated-modal" data-testid="share-modal">
+      <div className="mw-isolated-modal__backdrop" onClick={() => { if (!isSaving) onClose(); }} />
       <CanonicalExportCard
         variantKey={variantKey}
         data={effectiveCardProps}
         orientation={orientation}
       />
-
+      <div className="mw-isolated-modal__frame">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="share-modal-title"
-        className="relative flex h-full flex-col overflow-hidden bg-[#0f0f0f] md:mx-auto md:mt-6 md:h-[calc(100vh-3rem)] md:max-h-[920px] md:w-[calc(100vw-3rem)] md:max-w-[1180px] md:rounded-3xl"
+        className="mw-isolated-modal__panel relative flex h-full max-h-full w-full flex-col bg-[#0f0f0f] md:h-[calc(100dvh-3rem)] md:max-h-[920px] md:w-[calc(100vw-3rem)] md:max-w-[1180px] md:rounded-3xl"
       >
         <ShareModalHeader
           variantLabel={variantLabel}
@@ -254,6 +259,8 @@ export default function ShareModal({
           />
         </div>
       </div>
-    </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
