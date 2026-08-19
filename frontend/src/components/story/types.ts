@@ -42,7 +42,7 @@ export type DirectorSequenceData = PersonSequenceData;
 export type ReviewSequenceData = {
   filmTitle: string;
   year?: string | number | null;
-  wordCount: number;
+  charLength: number;
   totalWordsWritten?: number | null;
   likes: number;
   heroPoster: StoryMedia | null;

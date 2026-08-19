@@ -51,4 +51,14 @@ describe('review selection', () => {
 
     expect(selectLongestReview(reviews)?.title).toBe('Readable');
   });
+
+  it('prefers more characters when word counts are equal', () => {
+    const reviews = [
+      { title: 'Short Tokens', year: '2024', text: 'aa bb' },
+      { title: 'Long Tokens', year: '2024', text: 'aaaa bbbb' },
+    ];
+
+    expect(reviewWordCount(reviews[0])).toBe(reviewWordCount(reviews[1]));
+    expect(selectLongestReview(reviews)?.title).toBe('Long Tokens');
+  });
 });

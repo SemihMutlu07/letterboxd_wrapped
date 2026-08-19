@@ -1,5 +1,5 @@
 import type { StatsData } from '@/containers/results/sections/types';
-import { compareReviewsByWordCount, reviewWordCount, selectLongestReview } from '@/lib/reviews';
+import { compareReviewsByCharLength, reviewCharLength, selectLongestReview } from '@/lib/reviews';
 import type { StoryMedia } from './types';
 
 export function tmdbCdn(path: string | null | undefined, size = 'w780'): string | null {
@@ -463,7 +463,7 @@ export function reviewStreamPosters(
   const poolA = reviews
     .filter((review) => review.title?.toLowerCase() !== heroTitleLower)
     .slice()
-    .sort(compareReviewsByWordCount);
+    .sort(compareReviewsByCharLength);
 
   const seen = new Set<string>();
   if (options.heroUrl) seen.add(options.heroUrl);
@@ -526,7 +526,7 @@ export function buildReviewSequence(
   return {
     filmTitle: longest.title,
     year: longest.year ?? heroFilm?.year,
-    wordCount: reviewWordCount(longest),
+    charLength: reviewCharLength(longest),
     totalWordsWritten: stats.review_analysis?.total_words_written,
     likes: longest.likes ?? 0,
     heroPoster,

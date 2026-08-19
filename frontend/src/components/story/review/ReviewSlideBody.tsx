@@ -41,7 +41,7 @@ export function ReviewSlideBody() {
                 : t('story.slide.review.likes_other', { count: formatNumber(likes) })}
           </Sub>
           <Sub className="text-stone-400">
-            {t('story.slide.review.thisLength', { count: formatNumber(sequence.wordCount) })}
+            {t('story.slide.review.thisLength', { count: formatNumber(sequence.charLength) })}
           </Sub>
         </EmphasisLine>
       )}

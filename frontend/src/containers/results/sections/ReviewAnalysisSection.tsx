@@ -7,8 +7,8 @@ import { PosterImage } from '@/components/results/Placeholders';
 import type { StatsData, ReviewLiker } from './types';
 import { useI18n } from '@/i18n/I18nProvider';
 import {
+  compareReviewsByCharLength,
   compareReviewsByLikes,
-  compareReviewsByWordCount,
   hasReadableReviewText,
   reviewCharLength,
   reviewWordCount,
@@ -114,10 +114,10 @@ export default function ReviewAnalysisSection({ stats }: Props) {
         const aIsGem = (a.likes ?? 0) === 0 && reviewWordCount(a) >= GEM_MIN_WORDS;
         const bIsGem = (b.likes ?? 0) === 0 && reviewWordCount(b) >= GEM_MIN_WORDS;
         if (aIsGem !== bIsGem) return bIsGem ? 1 : -1;
-        return compareReviewsByWordCount(a, b);
+        return compareReviewsByCharLength(a, b);
       }
       if (reviewSort === 'likes') return compareReviewsByLikes(a, b);
-      return compareReviewsByWordCount(a, b);
+      return compareReviewsByCharLength(a, b);
     });
   }, [writtenReviews, reviewSort]);
   const filteredReviews = useMemo(() => {
