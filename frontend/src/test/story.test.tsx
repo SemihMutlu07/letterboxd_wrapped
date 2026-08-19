@@ -15,6 +15,11 @@ import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlideP
 import { FinaleSlideBody } from '@/components/story/finale/FinaleSlideBody';
 import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/en/story',
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 const enI18n = createTranslator('en');
 
 const renderStory = () => render(<I18nProvider locale="en"><StoryPage /></I18nProvider>);
@@ -113,6 +118,8 @@ describe('StoryPage', () => {
     expect(await screen.findByText(/Open the dossier/i)).toBeInTheDocument();
     expect(screen.getByText('Back')).toBeInTheDocument();
     expect(screen.getByLabelText('Pause story')).toBeDisabled();
+    expect(screen.getByTestId('story-finale-actions')).toBeInTheDocument();
+    expect(screen.getByTestId('story-top-chrome')).toBeInTheDocument();
     await userEvent.click(screen.getByText('Back'));
     expect(await screen.findByText('Emotional Masochist')).toBeInTheDocument();
     await userEvent.click(next);
@@ -146,6 +153,8 @@ describe('StoryPage', () => {
 
     expect(await screen.findByText('@semihmutsuz')).toBeInTheDocument();
     expect(screen.getAllByAltText('Aftersun poster').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('story-mobile-media-rail')).toBeInTheDocument();
+    expect(screen.getByTestId('story-language-switch')).toBeInTheDocument();
   });
 });
 

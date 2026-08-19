@@ -53,6 +53,15 @@ input, button, textarea, select {
   min-height: 100dvh;
 }
 
+/* Story uses the *small* viewport so slides still fit while mobile browser
+   chrome is visible. dvh would overflow when the URL bar is showing. */
+.story-viewport {
+  height: 100vh;
+  height: 100svh;
+  max-height: 100vh;
+  max-height: 100svh;
+}
+
 h1, h2, h3 {
   font-family: var(--font-display);
 }
