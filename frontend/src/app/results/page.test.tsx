@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ResultsPage from './page';
 import { I18nProvider } from '@/i18n/I18nProvider';
@@ -203,6 +203,7 @@ describe('ResultsPage stored-result contracts', () => {
     expect(spy).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reviews' })).toBeInTheDocument();
+    expect(within(spy).queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
   });
 
   it('opens feedback only once after repeated completed share downloads', async () => {

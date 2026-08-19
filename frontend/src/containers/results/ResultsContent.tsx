@@ -455,7 +455,9 @@ export function ResultsContent({
     },
   ];
 
-  const sectionIds = slides.map((s) => s.id);
+  const sectionIds = slides
+    .map((s) => s.id)
+    .filter((id) => id !== "share-footer");
 
   return (
     <>
