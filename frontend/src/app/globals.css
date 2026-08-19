@@ -5,6 +5,13 @@
   --foreground: #171717;
   --font-display: var(--font-syne), "Avenir Next", "Segoe UI", sans-serif;
   --font-body: var(--font-manrope), "Avenir Next", "Segoe UI", sans-serif;
+  /* Language switcher occupies a reserved top-right band. Loading (and any
+     other full-viewport overlay) should pad by --mw-top-chrome-reserve so
+     heading/card content never shares that space. Height = min-h-9 buttons
+     plus the switcher's p-1 chrome. */
+  --mw-top-chrome-height: 2.75rem;
+  --mw-top-chrome-offset: max(0.75rem, env(safe-area-inset-top, 0px));
+  --mw-top-chrome-reserve: calc(var(--mw-top-chrome-offset) + var(--mw-top-chrome-height) + 0.75rem);
 }
 
 @theme inline {
