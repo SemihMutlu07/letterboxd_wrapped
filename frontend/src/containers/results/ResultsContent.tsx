@@ -60,7 +60,7 @@ interface ResultsContentProps {
   cineScore: number | undefined;
   showShareModal: boolean;
   setShowShareModal: React.Dispatch<React.SetStateAction<boolean>>;
-  shareCardData: ShareCardData;
+  shareCardData: ShareCardData | null;
   orientation: "horizontal" | "vertical";
   setOrientation: React.Dispatch<
     React.SetStateAction<"horizontal" | "vertical">
@@ -464,12 +464,17 @@ export function ResultsContent({
       <ScrollspyIndicator sectionIds={sectionIds} />
       <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
         {slides.map((s) => (
-          <section key={s.id} id={s.id} className="scroll-mt-24">
-            {s.render()}
+          <section
+            key={s.id}
+            id={s.id}
+            className={`scroll-mt-24 ${s.id === "hero" ? "" : "[content-visibility:auto] [contain-intrinsic-size:auto_640px]"}`}
+          >
+            {s.id === "hero" ? s.render() : <DeferredSection>{s.render()}</DeferredSection>}
           </section>
         ))}
       </main>
 
+      {shareCardData && (
       <ShareModal
         open={showShareModal}
         onClose={() => setShowShareModal(false)}
@@ -483,6 +488,7 @@ export function ResultsContent({
           }
         }}
       />
+      )}
 
       <FeedbackFab ref={feedbackRef} sessionId={sessionId} />
 
@@ -500,6 +506,16 @@ export function ResultsContent({
         genre={modalGenre}
       />
     </>
+  );
+}
+
+/** Defer below-fold Results sections until they approach the viewport. */
+function DeferredSection({ children }: { children: React.ReactNode }) {
+  const { ref, shouldMount } = useLazyMount(0);
+  return (
+    <div ref={ref}>
+      {shouldMount ? children : <div className="h-48 rounded-2xl bg-slate-800/30" />}
+    </div>
   );
 }
 

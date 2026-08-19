@@ -1,9 +1,12 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 
 import { useI18n } from '@/i18n/I18nProvider';
 import { resultPath } from '@/lib/routes';
+import { stampResultsNavTap } from '@/lib/results-nav';
 
 import { MOTION_DURATION, MOTION_EASE } from './motion/motionTokens';
 import { useStoryMotion } from './motion/StoryMotionContext';
@@ -30,6 +33,14 @@ export function StoryNavigation({
 }: StoryNavigationProps) {
   const { t } = useI18n();
   const { reduce } = useStoryMotion();
+  const [openingResults, setOpeningResults] = useState(false);
+  const resultsHref = resultPath(username, locale);
+
+  useEffect(() => {
+    if (!isLast) {
+      setOpeningResults(false);
+    }
+  }, [isLast]);
 
   return (
     <>
@@ -64,8 +75,7 @@ export function StoryNavigation({
                 {t('story.replay')}
               </button>
             </div>
-            <motion.a
-              href={resultPath(username, locale)}
+            <motion.div
               initial={reduce ? false : { scale: 0.96 }}
               animate={{ scale: 1 }}
               transition={{
@@ -73,10 +83,23 @@ export function StoryNavigation({
                 delay: reduce ? 0 : 0.08,
                 ease: MOTION_EASE.snap,
               }}
-              className="flex min-h-11 min-w-0 items-center justify-center rounded-full bg-amber-300 px-5 py-2.5 text-center font-mono text-[11px] font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors hover:bg-amber-200 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100 md:px-7 md:py-3 md:text-xs"
+              className="min-w-0 md:flex-none"
             >
-              {t('story.openResults')}
-            </motion.a>
+              <Link
+                href={resultsHref}
+                prefetch
+                aria-busy={openingResults}
+                onClick={() => {
+                  stampResultsNavTap();
+                  setOpeningResults(true);
+                }}
+                className={`flex min-h-11 min-w-0 items-center justify-center rounded-full px-5 py-2.5 text-center font-mono text-[11px] font-black uppercase tracking-[0.14em] text-stone-950 shadow-xl shadow-amber-950/20 transition-colors active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-100 md:px-7 md:py-3 md:text-xs ${
+                  openingResults ? 'bg-amber-200' : 'bg-amber-300 hover:bg-amber-200'
+                }`}
+              >
+                {openingResults ? t('story.openingResults') : t('story.openResults')}
+              </Link>
+            </motion.div>
           </div>
         </motion.div>
       )}

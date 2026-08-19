@@ -1,6 +1,13 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
+import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+vi.mock('next/link', () => ({
+  default: ({ children, href, onClick }: { children: React.ReactNode; href: string; onClick?: () => void }) => (
+    <a href={href} onClick={onClick}>{children}</a>
+  ),
+}));
 
 import StoryPage from '@/app/story/page';
 import { AUTO_MIN_MS, buildSlides } from '@/components/StoryExperience';
@@ -116,6 +123,10 @@ describe('StoryPage', () => {
 
     await userEvent.click(next);
     expect(await screen.findByText(/Open the dossier/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open the dossier/i })).toHaveAttribute(
+      'href',
+      '/en/results?u=semihmutsuz',
+    );
     expect(screen.getByText('Back')).toBeInTheDocument();
     expect(screen.getByLabelText('Pause story')).toBeDisabled();
     expect(screen.getByTestId('story-finale-actions')).toBeInTheDocument();
