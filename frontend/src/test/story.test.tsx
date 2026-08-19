@@ -10,6 +10,10 @@ import { I18nProvider } from '@/i18n/I18nProvider';
 import { createTranslator } from '@/i18n/createTranslator';
 import { readySlideKeys, slideMeta } from '@/components/story/manifest';
 import { buildStoryShareCard, pickFinaleOrientation } from '@/components/story/viewModel';
+import { ReviewSlideBody } from '@/components/story/review/ReviewSlideBody';
+import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
+import { FinaleSlideBody } from '@/components/story/finale/FinaleSlideBody';
+import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
 
 const enI18n = createTranslator('en');
 
@@ -179,13 +183,14 @@ describe('buildSlides', () => {
       ],
     } as unknown as StatsData, enI18n);
     const director = slides.find((slide) => slide.key === 'director')!;
-    expect(director.visual).toBe('person');
+    expect(director.visual).toBe('director');
+    expect(director.directorSequence?.streamPosters.map((item) => item.alt)).toEqual(['Arrival poster']);
     expect(director.media?.map((item) => item.alt)).toEqual([
       'Denis Villeneuve portrait',
       'Arrival poster',
     ]);
     const actor = slides.find((slide) => slide.key === 'actor')!;
-    expect(actor.visual).toBe('person');
+    expect(actor.visual).toBe('actor');
     expect(actor.media?.map((item) => item.alt)).toEqual([
       'Jake Gyllenhaal portrait',
       'Nightcrawler poster',
@@ -207,6 +212,32 @@ describe('buildSlides', () => {
       '/demo/smt-media/arrival.jpg',
     ]);
   });
+
+  it('builds the actor slide after director with rose accent and deduped posters', () => {
+    const slides = buildSlides({
+      ...STATS,
+      top_directors: [{ name: 'Denis Villeneuve', count: 2, profile_path: '/denis.jpg' }],
+      top_actors: [{ name: 'Jake Gyllenhaal', count: 18, profile_path: '/jake.jpg' }],
+      all_films: [
+        { title: 'Nightcrawler', cast: ['Jake Gyllenhaal'], poster_path: '/night.jpg', rating: 5 },
+        { title: 'Arrival', director: 'Denis Villeneuve', cast: ['Amy Adams'], poster_path: '/arrival.jpg', rating: 4 },
+        { title: 'Heat', director: 'Michael Mann', cast: ['Jake Gyllenhaal'], poster_path: '/heat.jpg', rating: 3 },
+      ],
+      rewatch_champions: [{ title: 'Nightcrawler', watch_count: 4 }],
+    } as unknown as StatsData, enI18n);
+    const directorIndex = slides.findIndex((slide) => slide.key === 'director');
+    const actor = slides.find((slide) => slide.key === 'actor')!;
+    expect(directorIndex).toBeGreaterThan(-1);
+    expect(slides.findIndex((slide) => slide.key === 'actor')).toBe(directorIndex + 1);
+    expect(actor.visual).toBe('actor');
+    expect(actor.accent).toBe('#f472b6');
+    expect(actor.actorSequence?.streamPosters.map((item) => item.alt)).toEqual(['Nightcrawler poster', 'Heat poster']);
+    expect(actor.actorSequence?.streamPosters.length).toBeLessThanOrEqual(12);
+    expect(actor.actorSequence?.rewatch).toEqual({ title: 'Nightcrawler', watchCount: 4 });
+    expect(actor.insight).toEqual({ kind: 'actor-rewatch', title: 'Nightcrawler', watchCount: 4 });
+    expect(actor.actorSequence?.streamPosters.some((item) => item.alt === 'Arrival poster')).toBe(false);
+  });
+
 
   it('shows every five-star film for the generous critic', () => {
     const allFilms = Array.from({ length: 11 }, (_, index) => ({
@@ -235,24 +266,102 @@ describe('buildSlides', () => {
     expect(slides.some((s) => s.key === 'review-personality')).toBe(false);
   });
 
-  it('includes the review-personality slide, gems beat included, when reviews are present', () => {
+
+
+  it('builds the outro finale with capped poster curtain and no profile media', () => {
+    const stats = {
+      ...STATS,
+      top_directors: [{ name: 'Denis Villeneuve', count: 2, profile_path: '/denis.jpg' }],
+      top_actors: [{ name: 'Jake Gyllenhaal', count: 18, profile_path: '/jake.jpg' }],
+      review_analysis: {
+        total_words_written: 500,
+        reviews: [
+          { title: 'Aftersun', text: 'short', text_length: 5000, likes: 3, poster_path: '/after.jpg' },
+          { title: 'Memories of Underdevelopment', text: 'longer review body', text_length: 10, likes: 0, poster_path: '/mem.jpg' },
+        ],
+      },
+      all_films: [
+        { title: 'Nightcrawler', cast: ['Jake Gyllenhaal'], poster_path: '/night.jpg', rating: 5 },
+        { title: 'Arrival', director: 'Denis Villeneuve', cast: ['Amy Adams'], poster_path: '/arrival.jpg', rating: 4 },
+        { title: 'Heat', director: 'Michael Mann', cast: ['Jake Gyllenhaal'], poster_path: '/heat.jpg', rating: 3 },
+        { title: 'Aftersun', poster_path: '/after.jpg', rating: 4 },
+        { title: 'Memories of Underdevelopment', poster_path: '/mem.jpg', rating: 5 },
+        { title: 'Film F', poster_path: '/f.jpg', rating: 2 },
+        { title: 'Film G', poster_path: '/g.jpg', rating: 1 },
+        { title: 'Film H', poster_path: '/h.jpg', rating: 4 },
+        { title: 'Film I', poster_path: '/i.jpg', rating: 4 },
+        { title: 'Film J', poster_path: '/j.jpg', rating: 4 },
+        { title: 'Film K', poster_path: '/k.jpg', rating: 4 },
+      ],
+    };
+    const slides = buildSlides(stats as unknown as StatsData, enI18n);
+    const outro = slides.find((slide) => slide.key === 'outro')!;
+    expect(outro.visual).toBe('finale');
+    expect(outro.finaleSequence).toBeTruthy();
+    expect(outro.media?.length).toBeLessThanOrEqual(8);
+    expect(outro.media?.every((item) => item.type === 'poster')).toBe(true);
+    expect(outro.media?.some((item) => item.type === 'profile')).toBe(false);
+    expect(outro.body).toBeNull();
+    render(
+      <I18nProvider locale="en">
+        <FinaleSlidePhaseProvider sequence={outro.finaleSequence ?? null} slideKey="outro" paused={false}>
+          <FinaleSlideBody />
+        </FinaleSlidePhaseProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByText('That\'s the short version')).toBeInTheDocument();
+    expect(screen.getByText('The full picture waits.')).toBeInTheDocument();
+
+    render(
+      <I18nProvider locale="tr">
+        <FinaleSlidePhaseProvider sequence={outro.finaleSequence ?? null} slideKey="outro" paused={false}>
+          <FinaleSlideBody />
+        </FinaleSlidePhaseProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByText('Kısa versiyon buydu')).toBeInTheDocument();
+    expect(screen.getByText('Tüm resim seni bekliyor.')).toBeInTheDocument();
+  });
+
+  it('builds the review-personality slide with cinematic sequence and i18n body', () => {
     const stats = {
       ...STATS,
       review_analysis: {
         total_words_written: 500,
         reviews: [
-          { title: 'Aftersun', text: 'short actual text', text_length: 5000, likes: 3 },
-          { title: 'Memories of Underdevelopment', text: 'a much longer review body by actual character count', text_length: 10, likes: 0 },
+          { title: 'Aftersun', text: 'short actual text', text_length: 5000, likes: 3, poster_path: '/after.jpg' },
+          { title: 'Memories of Underdevelopment', text: 'a much longer review body by actual character count', text_length: 10, likes: 0, poster_path: '/mem.jpg' },
         ],
       },
+      all_films: [
+        { title: 'Aftersun', poster_path: '/after.jpg', rating: 4 },
+        { title: 'Memories of Underdevelopment', poster_path: '/mem.jpg', rating: 5 },
+      ],
     };
     const slides = buildSlides(stats as unknown as StatsData, enI18n);
-    const reviewSlide = slides.find((s) => s.key === 'review-personality');
-    expect(reviewSlide).toBeDefined();
-    render(<>{reviewSlide!.body}</>);
+    const reviewSlide = slides.find((s) => s.key === 'review-personality')!;
+    expect(reviewSlide.visual).toBe('review');
+    expect(reviewSlide.reviewSequence?.filmTitle).toBe('Memories of Underdevelopment');
+    expect(reviewSlide.reviewSequence?.streamPosters.length).toBeLessThanOrEqual(12);
+    expect(reviewSlide.reviewSequence?.heroPoster?.alt).toBe('Memories of Underdevelopment poster');
+    expect(
+      reviewSlide.reviewSequence?.streamPosters.some((poster) => poster.url === reviewSlide.reviewSequence?.heroPoster?.url),
+    ).toBe(false);
+
+    render(
+      <I18nProvider locale="en">
+        <ReviewSlidePhaseProvider sequence={reviewSlide.reviewSequence ?? null} slideKey="review-personality" paused={false}>
+          <ReviewSlideBody />
+        </ReviewSlidePhaseProvider>
+      </I18nProvider>,
+    );
+    expect(screen.getByText('Your longest review')).toBeInTheDocument();
     expect(screen.getByText('Memories of Underdevelopment')).toBeInTheDocument();
-    expect(screen.getByText(/0 likes, but it had conviction/i)).toBeInTheDocument();
+    expect(screen.getByText(/500 words written total/i)).toBeInTheDocument();
   });
+
+
+
 });
 
 describe('story readiness + manifest', () => {

@@ -1,6 +1,10 @@
 'use client';
 
 import type { Slide } from '../types';
+import { DirectorCinematicVisual } from '../director/DirectorCinematicVisual';
+import { ActorCinematicVisual } from '../actor/ActorCinematicVisual';
+import { ReviewCinematicVisual } from '../review/ReviewCinematicVisual';
+import { FinaleCurtainVisual } from '../finale/FinaleCurtainVisual';
 import {
   HeroPoster,
   PosterCascade,
@@ -44,7 +48,15 @@ export function StoryVisual({ slide }: { slide: Slide }) {
 
       {media.length > 0 && (
         <PosterField slideKey={slide.key} layout={posterLayout}>
-          {slide.visual === 'director' || slide.visual === 'person' ? (
+          {slide.visual === 'director' && slide.directorSequence ? (
+            <DirectorCinematicVisual sequence={slide.directorSequence} accent={accent} />
+          ) : slide.visual === 'actor' && slide.actorSequence ? (
+            <ActorCinematicVisual sequence={slide.actorSequence} accent={accent} />
+          ) : slide.visual === 'review' && slide.reviewSequence ? (
+            <ReviewCinematicVisual sequence={slide.reviewSequence} accent={accent} />
+          ) : slide.visual === 'finale' && slide.finaleSequence ? (
+            <FinaleCurtainVisual sequence={slide.finaleSequence} accent={accent} />
+          ) : slide.visual === 'director' || slide.visual === 'person' ? (
             <PersonCinematicVisual media={media} accent={accent} sequenceKey={slide.key} />
           ) : slide.visual === 'poster-wall' ? (
             <PosterWall media={media} accent={accent} />

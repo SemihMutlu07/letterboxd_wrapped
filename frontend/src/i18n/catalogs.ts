@@ -459,6 +459,14 @@ export const en = {
   'story.pause': 'Pause', 'story.resume': 'Resume', 'story.pauseAria': 'Pause story', 'story.resumeAria': 'Resume story',
   'story.previous': 'Previous slide', 'story.next': 'Next slide', 'story.back': 'Back', 'story.replay': 'Replay', 'story.openResults': 'Open the dossier',
   'story.tapToContinue': 'Tap to continue',
+  'story.slide.director.rewatch.tease': 'You really like this one.',
+  'story.slide.director.rewatch.detail': '{title} — watched {count}×',
+  'story.slide.actor.rewatch.tease': 'You really like this one.',
+  'story.slide.actor.rewatch.detail': '{title} — watched {count}×',
+  'story.slide.review.thisLength': '{count} words on this one.',
+  'story.slide.finale.label': 'That\'s the short version',
+  'story.slide.finale.headline': 'The full picture waits.',
+  'story.slide.finale.cardHint': 'Your year, ready to keep.',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -923,6 +931,14 @@ export const tr = {
   'story.pause': 'Duraklat', 'story.resume': 'Devam et', 'story.pauseAria': 'Hikâyeyi duraklat', 'story.resumeAria': 'Hikâyeyi devam ettir',
   'story.previous': 'Önceki slayt', 'story.next': 'Sonraki slayt', 'story.back': 'Geri', 'story.replay': 'Tekrar izle', 'story.openResults': 'Sonuçları aç',
   'story.tapToContinue': 'Devam etmek için dokun',
+  'story.slide.director.rewatch.tease': 'Bunu gerçekten seviyorsun.',
+  'story.slide.director.rewatch.detail': '{title} — {count}× izlendi',
+  'story.slide.actor.rewatch.tease': 'Bunu gerçekten seviyorsun.',
+  'story.slide.actor.rewatch.detail': '{title} — {count}× izlendi',
+  'story.slide.review.thisLength': 'Bunda {count} kelime.',
+  'story.slide.finale.label': 'Kısa versiyon buydu',
+  'story.slide.finale.headline': 'Tüm resim seni bekliyor.',
+  'story.slide.finale.cardHint': 'Yılın, saklamaya hazır.',
 } as const satisfies Messages;
 
 export const catalogs: Record<Locale, Messages> = { en, tr };

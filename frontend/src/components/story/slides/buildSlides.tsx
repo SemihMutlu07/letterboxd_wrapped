@@ -15,9 +15,13 @@ import {
   personFilmPosters,
   personRewatches,
   posterMedia,
-  profileMedia,
   storySeason,
   topRatedPosters,
+  buildDirectorSequence,
+  buildActorSequence,
+  buildReviewSequence,
+  buildFinaleSequence,
+  collectCinematicClaimedUrls,
 } from '../media';
 import { IntroUsername } from './IntroUsername';
 import { RewatchInsight } from './RewatchInsight';
@@ -129,64 +133,56 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
 
   if (stats.most_watched_director?.name) {
     const directorProfile = stats.top_directors?.find((d) => d.name === stats.most_watched_director?.name);
-    const directorRewatches = personRewatches(stats, stats.most_watched_director.name, 'director');
-    const topRewatch = directorRewatches[0];
+    const directorSequence = buildDirectorSequence(
+      stats,
+      stats.most_watched_director.name,
+      stats.most_watched_director.count,
+      directorProfile,
+    );
     slides.push({
       key: 'director',
-      media: compactMedia([
-        profileMedia(directorProfile),
-        ...personFilmPosters(stats, stats.most_watched_director.name, 'director', 18),
-      ], 19),
+      media: compactMedia([directorSequence.profile, ...directorSequence.streamPosters], 6),
       accent: '#ef4444',
-      visual: 'person',
-      body: (
-        <>
-          <Label>{t('story.slide.director.label')}</Label>
-          <Big>{stats.most_watched_director.name}</Big>
-          <Sub>
-            {t('story.slide.director.sub', { count: formatNumber(stats.most_watched_director.count) })}
-          </Sub>
-          {topRewatch && (
-            <RewatchInsight
-              title={topRewatch.title}
-              watchCount={topRewatch.watch_count}
-              extraCount={Math.max(0, directorRewatches.length - 1)}
-            />
-          )}
-        </>
-      ),
+      visual: 'director',
+      posterLayout: { contentX: '-8%', rotation: 2 },
+      directorSequence,
+      body: null,
     });
   }
 
   if (topActor?.name) {
-    const actorRewatches = personRewatches(stats, topActor.name, 'actor');
-    const topRewatch = actorRewatches[0];
+    const directorClaimedUrls = slides.find((slide) => slide.key === 'director')?.directorSequence?.streamPosters.map(
+      (poster) => poster.url,
+    ) ?? [];
+    const actorProfile = stats.top_actors?.find((actor) => actor.name === topActor.name);
+    const actorSequence = buildActorSequence(
+      stats,
+      topActor.name,
+      topActor.count,
+      actorProfile,
+      {
+        excludeUrls: new Set(directorClaimedUrls),
+        directorClaimedUrls,
+      },
+    );
     slides.push({
       key: 'actor',
-      media: compactMedia([
-        profileMedia(topActor),
-        ...personFilmPosters(stats, topActor.name, 'actor', 18),
-      ], 19),
+      media: compactMedia([actorSequence.profile, ...actorSequence.streamPosters], 6),
       accent: '#f472b6',
-      visual: 'person',
-      body: (
-        <>
-          <Label>{t('story.slide.actor.label')}</Label>
-          <Big>{topActor.name}</Big>
-          <Sub>
-            {t('story.slide.actor.sub', { count: formatNumber(topActor.count) })}
-          </Sub>
-          {topRewatch && (
-            <RewatchInsight
-              title={topRewatch.title}
-              watchCount={topRewatch.watch_count}
-              extraCount={Math.max(0, actorRewatches.length - 1)}
-            />
-          )}
-        </>
-      ),
+      visual: 'actor',
+      posterLayout: { contentX: '-8%', rotation: 2 },
+      actorSequence,
+      insight: actorSequence.rewatch
+        ? {
+          kind: 'actor-rewatch',
+          title: actorSequence.rewatch.title,
+          watchCount: actorSequence.rewatch.watchCount,
+        }
+        : undefined,
+      body: null,
     });
   }
+
 
   if (stats.average_rating != null) {
     slides.push({
@@ -249,41 +245,27 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
     });
   }
 
-  const reviewAnalysis = stats.review_analysis;
-  const reviews = reviewAnalysis?.reviews ?? [];
-  const summary = reviewAnalysis?.longest_review;
-  const matched = summary ? findReviewForSummary(reviews, summary) : undefined;
-  const fallback = !summary ? selectLongestReview(reviews) : undefined;
-  const displayTitle = summary?.title ?? matched?.title ?? fallback?.title;
-  if (displayTitle) {
-    const longestLikes = matched?.likes ?? fallback?.likes ?? 0;
-    const totalWords = reviewAnalysis?.total_words_written;
-    slides.push({
-      key: 'review-personality',
-      media: compactMedia([
-        posterMedia(filmByTitle(stats, displayTitle)),
-        ...broadPosters,
-      ], 6),
-      accent: '#fb7185',
-      visual: 'hero',
-      body: (
-        <>
-          <Label>{t('story.slide.review.label')}</Label>
-          <Big>{displayTitle}</Big>
-          <Sub>
-            {totalWords
-              ? t('story.slide.review.wordsTotal', { count: formatNumber(totalWords) })
-              : ''}
-            {longestLikes === 0
-              ? t('story.slide.review.zeroLikes')
-              : plural(longestLikes, {
-                one: t('story.slide.review.likes_one'),
-                other: t('story.slide.review.likes_other'),
-              }, { count: formatNumber(longestLikes) })}
-          </Sub>
-        </>
-      ),
+  const reviews = stats.review_analysis?.reviews ?? [];
+  if (reviews.length > 0) {
+    const claimed = collectCinematicClaimedUrls([
+      slides.find((slide) => slide.key === 'director')?.directorSequence ?? {},
+      slides.find((slide) => slide.key === 'actor')?.actorSequence ?? {},
+    ]);
+    const reviewSequence = buildReviewSequence(stats, {
+      excludeUrls: claimed.set,
+      claimedUrls: claimed.urls,
     });
+    if (reviewSequence) {
+      slides.push({
+        key: 'review-personality',
+        media: compactMedia([reviewSequence.heroPoster, ...reviewSequence.streamPosters], 6),
+        accent: '#fb7185',
+        visual: 'review',
+        posterLayout: { contentX: '-10%', rotation: 3 },
+        reviewSequence,
+        body: null,
+      });
+    }
   }
 
   if (stats.sinefil_meter?.score != null) {
@@ -335,22 +317,30 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
     });
   }
 
+  const reviewSlide = slides.find((slide) => slide.key === 'review-personality');
+  const claimed = collectCinematicClaimedUrls([
+    slides.find((slide) => slide.key === 'director')?.directorSequence ?? {},
+    slides.find((slide) => slide.key === 'actor')?.actorSequence ?? {},
+    reviewSlide?.reviewSequence
+      ? {
+        streamPosters: reviewSlide.reviewSequence.streamPosters,
+        heroPoster: reviewSlide.reviewSequence.heroPoster,
+      }
+      : {},
+  ]);
+  const finaleSequence = buildFinaleSequence(stats, {
+    excludeUrls: claimed.set,
+    claimedUrls: claimed.urls,
+  });
+
   slides.push({
     key: 'outro',
-    media: compactMedia([
-      profileMedia(stats.top_directors?.find((d) => d.name === directorName) ?? stats.top_directors?.[0]),
-      profileMedia(topActor),
-      ...broadPosters,
-    ], 10),
+    media: finaleSequence.curtainPosters,
     accent: '#fbbf24',
-    visual: 'recap',
-    body: (
-      <>
-        <Label>{t('story.slide.outro.label')}</Label>
-        <Big>{t('story.slide.outro.headline')}</Big>
-        <Sub>{t('story.slide.outro.dossier')}</Sub>
-      </>
-    ),
+    visual: 'finale',
+    posterLayout: { contentX: '-5%', rotation: -2 },
+    finaleSequence,
+    body: null,
   });
 
   return slides;

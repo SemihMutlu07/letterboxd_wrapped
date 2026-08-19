@@ -3,57 +3,86 @@
 import { motion, useReducedMotion } from 'framer-motion';
 
 import type { StoryMedia } from '../types';
+import { useStoryMotion } from '../motion/StoryMotionContext';
+import {
+  MOTION_AMBIENT,
+  MOTION_DURATION,
+  MOTION_EASE,
+  scaledDuration,
+  verticalDriftTransition,
+} from '../motion/motionTokens';
 import { usePosterField } from './PosterFieldContext';
 import { StoryImage } from './StoryImage';
 import { PersonCinematicVisual } from './cinematic/PersonCinematicVisual';
 
-function motionDuration(base: number, motionScale = 1): number {
-  return base * motionScale;
+function verticalRest(index: number, amplitude = 18) {
+  const sign = index % 2 ? 1 : -1;
+  return sign * amplitude;
+}
+
+function verticalDrift(index: number, amplitude = 18) {
+  const sign = index % 2 ? 1 : -1;
+  return sign * (amplitude + 8);
 }
 
 export function PosterMosaic({ media, accent }: { media: StoryMedia[]; accent: string }) {
   const { motionScale = 1 } = usePosterField();
+  const { ambientActive, reduce } = useStoryMotion();
 
   return (
     <div className="grid h-full auto-rows-max grid-cols-3 content-center gap-3">
-      {media.slice(0, 9).map((item, index) => (
-        <motion.div
-          key={`${item.url}-${index}`}
-          initial={{ y: index % 2 ? 40 : -30 }}
-          animate={{ y: index % 2 ? -18 : 18 }}
-          transition={{
-            duration: motionDuration(7 + index, motionScale),
-            repeat: Infinity,
-            repeatType: 'reverse',
-            ease: 'easeInOut',
-          }}
-          className="relative aspect-[2/3] overflow-hidden rounded-[18px] border border-white/10 bg-stone-950 shadow-2xl"
-          style={{ boxShadow: index === 4 ? `0 0 70px ${accent}55` : undefined }}
-        >
-          <StoryImage item={item} priority={index < 3} />
-        </motion.div>
-      ))}
+      {media.slice(0, 9).map((item, index) => {
+        const rest = verticalRest(index, 16);
+        const drift = verticalDrift(index, 16);
+        return (
+          <motion.div
+            key={`${item.url}-${index}`}
+            initial={reduce ? false : { opacity: 0, y: rest + (index % 2 ? 24 : -20) }}
+            animate={
+              ambientActive
+                ? { opacity: 1, y: [rest, drift, rest] }
+                : { opacity: 1, y: rest }
+            }
+            transition={{
+              opacity: { duration: reduce ? 0 : MOTION_DURATION.revealFast, ease: MOTION_EASE.snap },
+              y: verticalDriftTransition(MOTION_AMBIENT.verticalMosaic, index, motionScale, ambientActive),
+            }}
+            className="relative aspect-[2/3] overflow-hidden rounded-[18px] border border-white/10 bg-stone-950 shadow-2xl"
+            style={{ boxShadow: index === 4 ? `0 0 70px ${accent}55` : undefined }}
+          >
+            <StoryImage item={item} priority={index < 3} />
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
 
 export function PosterWall({ media, accent }: { media: StoryMedia[]; accent: string }) {
   const { motionScale = 1 } = usePosterField();
+  const { reduce } = useStoryMotion();
 
   return (
     <div className="grid h-full grid-cols-[repeat(auto-fit,minmax(86px,1fr))] content-center gap-3">
-      {media.map((item, index) => (
-        <motion.div
-          key={`${item.url}-${index}`}
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: index % 2 ? 12 : -8 }}
-          transition={{ delay: Math.min(index * 0.035, 0.5), duration: motionDuration(0.55, motionScale) }}
-          className="aspect-[2/3] min-h-0 overflow-hidden rounded-[16px] border border-white/10 bg-black shadow-2xl"
-          style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
-        >
-          <StoryImage item={item} priority={index < 6} />
-        </motion.div>
-      ))}
+      {media.map((item, index) => {
+        const rest = index % 2 ? 10 : -6;
+        return (
+          <motion.div
+            key={`${item.url}-${index}`}
+            initial={reduce ? false : { opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: rest }}
+            transition={{
+              delay: reduce ? 0 : Math.min(index * 0.032, 0.45),
+              duration: reduce ? 0 : scaledDuration(MOTION_DURATION.revealFast, motionScale),
+              ease: MOTION_EASE.snap,
+            }}
+            className="aspect-[2/3] min-h-0 overflow-hidden rounded-[16px] border border-white/10 bg-black shadow-2xl"
+            style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
+          >
+            <StoryImage item={item} priority={index < 6} />
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -65,6 +94,7 @@ export function DirectorVisual({ media, accent, sequenceKey = 'director' }: { me
 
 export function PosterCascade({ media, accent }: { media: StoryMedia[]; accent: string }) {
   const { motionScale = 1, density = 1 } = usePosterField();
+  const { ambientActive, reduce } = useStoryMotion();
   const maxVisible = Math.round(42 * density);
   const visible = media.slice(0, maxVisible);
   if (visible.length === 0) return null;
@@ -74,23 +104,36 @@ export function PosterCascade({ media, accent }: { media: StoryMedia[]; accent: 
   return (
     <div className="relative h-full">
       <div className={`absolute inset-y-[-8%] left-[0%] w-[92%] grid grid-cols-6 ${gapClass}`}>
-        {visible.map((item, index) => (
-          <motion.div
-            key={`${item.url}-${index}`}
-            initial={{ y: index % 2 ? 36 : -44, x: index % 3 === 0 ? -20 : 16 }}
-            animate={{ y: index % 2 ? -34 : 38, x: index % 3 === 0 ? 18 : -14 }}
-            transition={{
-              duration: motionDuration(7 + (index % 8), motionScale),
-              repeat: Infinity,
-              repeatType: 'reverse',
-              ease: 'easeInOut',
-            }}
-            className="aspect-[2/3] overflow-hidden rounded-[14px] border border-white/10 bg-black shadow-xl"
-            style={{ boxShadow: index === 0 ? `0 0 90px ${accent}66` : undefined }}
-          >
-            <StoryImage item={item} priority={index < 10} />
-          </motion.div>
-        ))}
+        {visible.map((item, index) => {
+          const restY = verticalRest(index, 34);
+          const driftY = verticalDrift(index, 34);
+          const restX = index % 3 === 0 ? -14 : 12;
+          const driftX = index % 3 === 0 ? 16 : -12;
+          return (
+            <motion.div
+              key={`${item.url}-${index}`}
+              initial={
+                reduce
+                  ? false
+                  : { opacity: 0, y: restY + (index % 2 ? 28 : -32), x: restX - 6 }
+              }
+              animate={
+                ambientActive
+                  ? { opacity: 1, y: [restY, driftY, restY], x: [restX, driftX, restX] }
+                  : { opacity: 1, y: restY, x: restX }
+              }
+              transition={{
+                opacity: { duration: reduce ? 0 : MOTION_DURATION.revealFast, ease: MOTION_EASE.snap },
+                y: verticalDriftTransition(MOTION_AMBIENT.verticalCascade, index, motionScale, ambientActive),
+                x: verticalDriftTransition(MOTION_AMBIENT.verticalCascade + 1.5, index, motionScale, ambientActive),
+              }}
+              className="aspect-[2/3] overflow-hidden rounded-[14px] border border-white/10 bg-black shadow-xl"
+              style={{ boxShadow: index === 0 ? `0 0 90px ${accent}66` : undefined }}
+            >
+              <StoryImage item={item} priority={index < 10} />
+            </motion.div>
+          );
+        })}
       </div>
       <div className="absolute inset-y-0 right-0 w-[38%] bg-gradient-to-l from-black/40 to-transparent" />
     </div>
@@ -99,26 +142,33 @@ export function PosterCascade({ media, accent }: { media: StoryMedia[]; accent: 
 
 export function PosterStrip({ media, accent }: { media: StoryMedia[]; accent: string }) {
   const { motionScale = 1 } = usePosterField();
+  const { ambientActive, reduce } = useStoryMotion();
 
   return (
     <div className="flex h-full items-center gap-3 pl-[2%]">
-      {media.slice(0, 7).map((item, index) => (
-        <motion.div
-          key={`${item.url}-${index}`}
-          initial={{ y: index % 2 ? 46 : -28 }}
-          animate={{ y: index % 2 ? -20 : 26 }}
-          transition={{
-            duration: motionDuration(6 + index * 0.4, motionScale),
-            repeat: Infinity,
-            repeatType: 'reverse',
-            ease: 'easeInOut',
-          }}
-          className="relative aspect-[2/3] h-[70%] shrink-0 overflow-hidden rounded-[20px] border border-white/10 bg-black shadow-2xl"
-          style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
-        >
-          <StoryImage item={item} priority={index < 2} />
-        </motion.div>
-      ))}
+      {media.slice(0, 7).map((item, index) => {
+        const rest = verticalRest(index, 22);
+        const drift = verticalDrift(index, 22);
+        return (
+          <motion.div
+            key={`${item.url}-${index}`}
+            initial={reduce ? false : { opacity: 0, y: rest + (index % 2 ? 30 : -18) }}
+            animate={
+              ambientActive
+                ? { opacity: 1, y: [rest, drift, rest] }
+                : { opacity: 1, y: rest }
+            }
+            transition={{
+              opacity: { duration: reduce ? 0 : MOTION_DURATION.revealFast, ease: MOTION_EASE.snap },
+              y: verticalDriftTransition(MOTION_AMBIENT.verticalStrip + index * 0.35, index, motionScale, ambientActive),
+            }}
+            className="relative aspect-[2/3] h-[70%] shrink-0 overflow-hidden rounded-[20px] border border-white/10 bg-black shadow-2xl"
+            style={{ boxShadow: index === 0 ? `0 0 80px ${accent}66` : undefined }}
+          >
+            <StoryImage item={item} priority={index < 2} />
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -145,7 +195,7 @@ export function HeroPoster({ media, accent }: { media: StoryMedia[]; accent: str
             transition={
               reduce
                 ? undefined
-                : { duration: motionDuration(14, motionScale), repeat: Infinity, ease: 'easeInOut' }
+                : { duration: scaledDuration(14, motionScale), repeat: Infinity, ease: 'easeInOut' }
             }
           >
             <StoryImage item={first} priority />
@@ -164,7 +214,7 @@ export function HeroPoster({ media, accent }: { media: StoryMedia[]; accent: str
                 : {
                     opacity: { delay: 0.35 + index * 0.08, duration: 0.4 },
                     y: {
-                      duration: motionDuration(9 + index, motionScale),
+                      duration: scaledDuration(9 + index, motionScale),
                       repeat: Infinity,
                       repeatType: 'reverse',
                       ease: 'easeInOut',
@@ -223,7 +273,7 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
           reduce
             ? { duration: 0 }
             : {
-                y: { duration: motionDuration(16, motionScale), repeat: Infinity, ease: 'easeInOut' },
+                y: { duration: scaledDuration(16, motionScale), repeat: Infinity, ease: 'easeInOut' },
                 opacity: { duration: 0.5 },
               }
         }
@@ -240,7 +290,7 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
             reduce
               ? { duration: 0 }
               : {
-                  y: { duration: motionDuration(13, motionScale), repeat: Infinity, ease: 'easeInOut' },
+                  y: { duration: scaledDuration(13, motionScale), repeat: Infinity, ease: 'easeInOut' },
                   opacity: { duration: 0.55, delay: 0.12 },
                 }
           }
@@ -258,7 +308,7 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
               reduce
                 ? undefined
                 : {
-                    duration: motionDuration(10 + index, motionScale),
+                    duration: scaledDuration(10 + index, motionScale),
                     repeat: Infinity,
                     repeatType: 'reverse',
                     ease: 'easeInOut',

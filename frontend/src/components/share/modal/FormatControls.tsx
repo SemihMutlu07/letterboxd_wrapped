@@ -1,11 +1,12 @@
 'use client';
 
-import { forwardRef } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { X, Sliders } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useI18n } from '@/i18n/I18nProvider';
 
+import { SharePopover } from './SharePopover';
 import type { Orientation } from './types';
 
 type FormatControlsProps = {
@@ -16,25 +17,26 @@ type FormatControlsProps = {
   showSwapHint: boolean;
   hintFading: boolean;
   swapOpen: boolean;
-  onSwapToggle: () => void;
+  onSwapOpenChange: (open: boolean) => void;
   onDismissSwapHint: () => void;
+  swapPanel: ReactNode;
 };
 
-export const FormatControls = forwardRef<HTMLButtonElement, FormatControlsProps>(function FormatControls(
-  {
-    orientation,
-    setOrientation,
-    isSaving,
-    showSwapTrigger,
-    showSwapHint,
-    hintFading,
-    swapOpen,
-    onSwapToggle,
-    onDismissSwapHint,
-  },
-  ref,
-) {
+export function FormatControls({
+  orientation,
+  setOrientation,
+  isSaving,
+  showSwapTrigger,
+  showSwapHint,
+  hintFading,
+  swapOpen,
+  onSwapOpenChange,
+  onDismissSwapHint,
+  swapPanel,
+}: FormatControlsProps) {
   const { t } = useI18n();
+  const tuneButtonRef = useRef<HTMLButtonElement>(null);
+  const tunePanelId = useId();
 
   return (
     <div
@@ -47,9 +49,10 @@ export const FormatControls = forwardRef<HTMLButtonElement, FormatControlsProps>
           type="button"
           onClick={() => setOrientation('vertical')}
           disabled={isSaving}
-          aria-pressed={orientation === 'vertical'}
-          className={`min-h-11 min-w-0 rounded-lg px-2 py-2 text-[12px] font-semibold leading-tight [overflow-wrap:anywhere] transition-colors ${
-            orientation === 'vertical' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
+          className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+            orientation === 'vertical'
+              ? 'bg-white/15 text-white'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           {t('share.story')}
@@ -58,9 +61,10 @@ export const FormatControls = forwardRef<HTMLButtonElement, FormatControlsProps>
           type="button"
           onClick={() => setOrientation('horizontal')}
           disabled={isSaving}
-          aria-pressed={orientation === 'horizontal'}
-          className={`min-h-11 min-w-0 rounded-lg px-2 py-2 text-[12px] font-semibold leading-tight [overflow-wrap:anywhere] transition-colors ${
-            orientation === 'horizontal' ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-slate-200'
+          className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+            orientation === 'horizontal'
+              ? 'bg-white/15 text-white'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           {t('share.landscape')}
@@ -91,12 +95,16 @@ export const FormatControls = forwardRef<HTMLButtonElement, FormatControlsProps>
             )}
           </AnimatePresence>
           <button
-            ref={ref}
+            ref={tuneButtonRef}
             type="button"
-            onClick={onSwapToggle}
+            onClick={() => {
+              onSwapOpenChange(!swapOpen);
+              onDismissSwapHint();
+            }}
             disabled={isSaving}
             aria-label={t('share.tune')}
             aria-expanded={swapOpen}
+            aria-controls={swapOpen ? tunePanelId : undefined}
             aria-haspopup="dialog"
             className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full transition ${
               swapOpen ? 'bg-white/15 text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
@@ -107,8 +115,17 @@ export const FormatControls = forwardRef<HTMLButtonElement, FormatControlsProps>
             )}
             <Sliders size={16} />
           </button>
+          <SharePopover
+            open={swapOpen}
+            onOpenChange={onSwapOpenChange}
+            anchorRef={tuneButtonRef}
+            panelId={tunePanelId}
+            label={t('share.tune')}
+          >
+            {swapPanel}
+          </SharePopover>
         </div>
       )}
     </div>
   );
-});
+}
