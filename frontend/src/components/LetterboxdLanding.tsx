@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { ERROR_CODE_HINTS } from '@/lib/api';
 import { persistStats } from '@/lib/stats-storage';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { startAnalysis, finishAnalysis, buildSummaryForPersistence } from '@/lib/supabase/analysis_runs';
 import { upsertUserSession } from '@/lib/supabase/sessions';
 import { ensureSessionId, getUsername, setUsername, getConsent } from '@/lib/session-id';
@@ -211,18 +212,17 @@ export default function LetterboxdLanding() {
     testBackendConnectivity();
   }, []);
 
-  // ESC closes the upload modal + lock body scroll while it's open
+  useBodyScrollLock(showUploadModal);
+
+  // ESC closes the upload modal
   useEffect(() => {
     if (!showUploadModal) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setShowUploadModal(false);
     };
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
     };
   }, [showUploadModal]);
 
@@ -418,19 +418,21 @@ export default function LetterboxdLanding() {
       trackFilmStats({ total_films: result.stats.total_films, total_countries: result.stats.total_countries, average_rating: result.stats.average_rating });
 
       if (analysisRun && detectedUsername) {
-        try {
-          await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
-          await upsertUserSession({
-            session_id: sessionId,
-            username: detectedUsername,
-            consent: 'accept',
-            film_count: result.stats.total_films || null,
-            favorite_genre: result.stats.favorite_genre?.name || null,
-          });
-        } catch { /* analytics failure is non-fatal */ }
+        void (async () => {
+          try {
+            await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+            await upsertUserSession({
+              session_id: sessionId,
+              username: detectedUsername,
+              consent: 'accept',
+              film_count: result.stats.total_films || null,
+              favorite_genre: result.stats.favorite_genre?.name || null,
+            });
+          } catch { /* analytics failure is non-fatal */ }
+        })();
       }
 
-      setTimeout(() => { window.location.href = storyPath(detectedUsername, locale); }, 100);
+      router.push(storyPath(detectedUsername, locale));
     } catch (err) {
       console.error('[upload] analysis failed:', err);
       const normalized = normalizeError(err);
@@ -441,7 +443,7 @@ export default function LetterboxdLanding() {
       setError(normalized);
       setIsUploading(false);
     }
-  }, [locale, zipFiles]);
+  }, [locale, router, zipFiles]);
 
   const handleScrape = useCallback(async () => {
     let raw = usernameInput.trim();
@@ -509,16 +511,18 @@ export default function LetterboxdLanding() {
       trackConsentedEvent('analyze_succeeded', { total_films: result.stats.total_films, method });
 
       if (analysisRun) {
-        try {
-          await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
-          await upsertUserSession({
-            session_id: sessionId,
-            username,
-            consent: 'accept',
-            film_count: result.stats.total_films || null,
-            favorite_genre: result.stats.favorite_genre?.name || null,
-          });
-        } catch { /* analytics failure is non-fatal */ }
+        void (async () => {
+          try {
+            await finishAnalysis({ id: analysisRun.id, ok: true, task_id: result.task_id ?? null, summary: buildSummaryForPersistence(result.stats as Record<string, unknown>) });
+            await upsertUserSession({
+              session_id: sessionId,
+              username,
+              consent: 'accept',
+              film_count: result.stats.total_films || null,
+              favorite_genre: result.stats.favorite_genre?.name || null,
+            });
+          } catch { /* analytics failure is non-fatal */ }
+        })();
       }
 
       router.push(destination);

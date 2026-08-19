@@ -12,6 +12,57 @@
   --mw-top-chrome-height: 2.75rem;
   --mw-top-chrome-offset: max(0.75rem, env(safe-area-inset-top, 0px));
   --mw-top-chrome-reserve: calc(var(--mw-top-chrome-offset) + var(--mw-top-chrome-height) + 0.75rem);
+  /* Isolated modals sit above page chrome (language z-90, share was 100). */
+  --mw-modal-z: 200;
+}
+
+html[data-mw-scroll-locked] {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body[data-mw-scroll-locked] {
+  position: fixed;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.mw-isolated-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--mw-modal-z);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  pointer-events: auto;
+}
+
+.mw-isolated-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  touch-action: none;
+}
+
+.mw-isolated-modal__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100dvh - max(2rem, env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)));
+  /* Intentional: the modal chrome is the scrollport boundary; inner
+     [data-mw-modal-scroll] is the only region that may scroll. */
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 @theme inline {

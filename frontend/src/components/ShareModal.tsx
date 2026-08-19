@@ -14,6 +14,7 @@ import { ShareModalSidebar } from '@/components/share/modal/ShareModalSidebar';
 import { VariantRail } from '@/components/share/modal/VariantRail';
 import { useShareExport } from '@/components/share/modal/useShareExport';
 import type { ShareModalProps } from '@/components/share/modal/types';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 export {
   exportExactPng,
@@ -122,12 +123,7 @@ export default function ShareModal({
     return { w: config.domWidth, h: config.domHeight };
   }, [orientation]);
 
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -194,7 +190,7 @@ export default function ShareModal({
   const showSwapTrigger = hasActors || hasDirectors;
 
   return (
-    <div className="fixed inset-0 z-[100]">
+    <div className="fixed inset-0 z-[var(--mw-modal-z,200)]">
       <div className="absolute inset-0 bg-black/80" onClick={() => { if (!isSaving) onClose(); }} />
 
       <CanonicalExportCard

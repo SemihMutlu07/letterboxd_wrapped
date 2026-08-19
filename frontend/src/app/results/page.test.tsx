@@ -10,6 +10,13 @@ const feedbackSpies = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/results',
+  useSearchParams: () => new URLSearchParams('u=alice'),
+}));
+vi.mock('@/components/LanguageSwitcher', () => ({
+  default: () => <div data-testid="language-switcher" />,
+}));
 
 vi.mock('@/lib/analytics', () => ({
   getTmdbImageUrl: (path?: string) => path || null,

@@ -7,6 +7,10 @@ import { useI18n } from '@/i18n/I18nProvider';
 import { LOCALE_STORAGE_KEY, type Locale } from '@/i18n/locales';
 import { localizePath } from '@/i18n/routing';
 
+function isResultsPath(pathname: string): boolean {
+  return /(?:^|\/)results(?:\/|$)/.test(pathname);
+}
+
 export function LanguageSwitchControl({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname() || '/';
   const searchParams = useSearchParams();
@@ -60,12 +64,24 @@ export function StoryLanguageSwitch() {
   );
 }
 
-export default function LanguageSwitcher() {
+export default function LanguageSwitcher({
+  variant = 'fixed',
+}: {
+  variant?: 'fixed' | 'inline';
+}) {
   const pathname = usePathname() || '/';
-  if (isStoryPath(pathname)) return null;
+  if (variant === 'fixed' && (isStoryPath(pathname) || isResultsPath(pathname))) {
+    return null;
+  }
 
   return (
-    <div className="fixed right-3 top-[var(--mw-top-chrome-offset)] z-[90] rounded-full border border-white/10 bg-[#111820]/90 p-1 shadow-lg backdrop-blur-md">
+    <div
+      className={
+        variant === 'fixed'
+          ? 'fixed right-3 top-[var(--mw-top-chrome-offset)] z-[90] rounded-full border border-white/10 bg-[#111820]/90 p-1 shadow-lg backdrop-blur-md'
+          : 'relative z-10 shrink-0 rounded-full border border-white/10 bg-[#111820]/90 p-1 shadow-lg backdrop-blur-md'
+      }
+    >
       <LanguageSwitchControl />
     </div>
   );

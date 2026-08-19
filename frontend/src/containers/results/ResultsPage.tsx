@@ -25,10 +25,13 @@ import {
   getRuntimeHours,
 } from "@/containers/results/results-model";
 import { ResultsContent } from "@/containers/results/ResultsContent";
+import ResultsShell from "@/containers/results/ResultsShell";
+import ResultsTopBar from "@/containers/results/ResultsTopBar";
 import { useResultsSession } from "@/containers/results/useResultsSession";
 import { useI18n } from "@/i18n/I18nProvider";
 import { localizePath } from "@/i18n/routing";
-import { toggleClass, trackToggleChanged } from "@/containers/results/sections/section-utils";
+import { markResultsNav } from "@/lib/results-nav";
+import { trackToggleChanged } from "@/containers/results/sections/section-utils";
 
 export { ResultsContent };
 
@@ -106,23 +109,30 @@ export default function ResultsPage() {
     return score == null ? undefined : Math.max(0, Math.min(100, score));
   }, [activeStats]);
 
-  const shareCardData = useMemo<ShareCardData>(
+  const shareCardData = useMemo<ShareCardData | null>(
     () =>
-      normalizeShareCardData(
-        buildShareCardFromStats(activeStats, {
-          username: username || undefined,
-          unknownActor: t('results.people.unknownActor'),
-          unknownDirector: t('results.people.unknownDirector'),
-          timePercent: Number.parseInt(timePct, 10) || 0,
-        }),
-      ),
+      showShareModal
+        ? normalizeShareCardData(
+            buildShareCardFromStats(activeStats, {
+              username: username || undefined,
+              unknownActor: t('results.people.unknownActor'),
+              unknownDirector: t('results.people.unknownDirector'),
+              timePercent: Number.parseInt(timePct, 10) || 0,
+            }),
+          )
+        : null,
     [
+      showShareModal,
       activeStats,
       username,
       timePct,
       t,
     ],
   );
+
+  useEffect(() => {
+    if (!loading) markResultsNav("content-mounted");
+  }, [loading]);
 
   useEffect(() => {
     // Analytics for results viewed
@@ -134,52 +144,57 @@ export default function ResultsPage() {
     }
   }, [stats, cineScore]);
 
-  if (loading) return <div className="min-h-screen bg-[#1e252d]" />;
+  const chrome = (
+    <ResultsTopBar
+      hasYearWindow={Boolean(stats?.last_12_months)}
+      statsWindow={statsWindow}
+      onStatsWindowChange={handleStatsWindowChange}
+    />
+  );
+
+  if (loading) {
+    return (
+      <ThemeProvider>
+        <ThemeWrapper>
+          {chrome}
+          <ResultsShell />
+        </ThemeWrapper>
+      </ThemeProvider>
+    );
+  }
   if (
     !stats ||
     (typeof stats === "object" && Object.keys(stats).length === 0)
   ) {
     return (
-      <div className="min-h-screen bg-[#1e252d] flex items-center justify-center text-white">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">{t('results.empty.noData')}</h2>
-          <p className="text-gray-400">
-            {username
-              ? t('results.empty.noUserData', { username })
-              : t('results.empty.uploadFirst')}
-          </p>
-          <Link
-            href={localizePath('/', locale)}
-            className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors"
-          >
-            {t('results.empty.goBack')}
-          </Link>
-        </div>
-      </div>
+      <ThemeProvider>
+        <ThemeWrapper>
+          {chrome}
+          <div className="min-h-dvh bg-[#1e252d] flex items-center justify-center text-white">
+            <div className="text-center px-4">
+              <h2 className="text-2xl font-bold mb-4">{t('results.empty.noData')}</h2>
+              <p className="text-gray-400">
+                {username
+                  ? t('results.empty.noUserData', { username })
+                  : t('results.empty.uploadFirst')}
+              </p>
+              <Link
+                href={localizePath('/', locale)}
+                className="mt-6 inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 rounded-xl font-semibold transition-colors"
+              >
+                {t('results.empty.goBack')}
+              </Link>
+            </div>
+          </div>
+        </ThemeWrapper>
+      </ThemeProvider>
     );
   }
 
   return (
     <ThemeProvider>
       <ThemeWrapper>
-        {stats.last_12_months && (
-          <div className="sticky top-0 z-40 flex justify-center py-3 bg-[#1e252d]/90 backdrop-blur">
-            <div className="flex items-center gap-1 p-0.5 bg-slate-800/60 border border-slate-700/30 rounded-full">
-              <button
-                className={toggleClass(statsWindow === "lifetime")}
-                onClick={() => handleStatsWindowChange("lifetime")}
-              >
-                {t('results.window.allTime')}
-              </button>
-              <button
-                className={toggleClass(statsWindow === "year")}
-                onClick={() => handleStatsWindowChange("year")}
-              >
-                {t('results.window.last12Months')}
-              </button>
-            </div>
-          </div>
-        )}
+        {chrome}
         <ResultsContent
         stats={activeStats ?? stats}
         sessionId={sessionId}
