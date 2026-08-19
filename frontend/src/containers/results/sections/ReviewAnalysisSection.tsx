@@ -10,6 +10,7 @@ import {
   compareReviewsByLikes,
   compareReviewsByWordCount,
   hasReadableReviewText,
+  reviewCharLength,
   reviewWordCount,
   selectLongestReview,
 } from '@/lib/reviews';
@@ -84,8 +85,8 @@ export default function ReviewAnalysisSection({ stats }: Props) {
       return {
         title: longest.title,
         year: longest.year,
-        length: reviewWordCount(longest),
-        unit: 'words' as const,
+        length: reviewCharLength(longest),
+        unit: 'characters' as const,
       };
     }
     return null;
