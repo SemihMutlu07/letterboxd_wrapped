@@ -194,6 +194,17 @@ describe('ResultsPage stored-result contracts', () => {
     ]);
   });
 
+  it('renders a scrollspy nav for the results sections', async () => {
+    storeStats();
+    render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);
+
+    await screen.findByTestId('hero-values');
+    const spy = screen.getByRole('navigation', { name: 'On this page' });
+    expect(spy).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reviews' })).toBeInTheDocument();
+  });
+
   it('opens feedback only once after repeated completed share downloads', async () => {
     storeStats();
     render(<I18nProvider locale="en"><ResultsPage /></I18nProvider>);

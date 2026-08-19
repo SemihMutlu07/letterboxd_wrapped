@@ -31,6 +31,7 @@ import type {
   PersonFilm,
   StatsData,
 } from "@/containers/results/sections/types";
+import { ScrollspyIndicator } from "@/containers/results/ScrollspyIndicator";
 import { useLazyMount } from "@/hooks/useIntersectionObserver";
 import { trackEvent } from "@/lib/analytics";
 import { useTheme } from "@/lib/theme";
@@ -454,11 +455,16 @@ export function ResultsContent({
     },
   ];
 
+  const sectionIds = slides.map((s) => s.id);
+
   return (
     <>
+      <ScrollspyIndicator sectionIds={sectionIds} />
       <main className="relative z-10 px-3 md:px-8 py-4 md:py-6 max-w-7xl mx-auto space-y-3 md:space-y-6">
         {slides.map((s) => (
-          <React.Fragment key={s.id}>{s.render()}</React.Fragment>
+          <section key={s.id} id={s.id} className="scroll-mt-24">
+            {s.render()}
+          </section>
         ))}
       </main>
 
