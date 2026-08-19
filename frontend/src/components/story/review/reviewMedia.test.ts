@@ -10,7 +10,7 @@ import type { StatsData } from '@/containers/results/sections/types';
 import { reviewPhaseAt } from './reviewPhases';
 
 describe('review stream media', () => {
-  it('selects longest review by word count via selectLongestReview', () => {
+  it('selects longest review by character length via selectLongestReview', () => {
     const stats = {
       review_analysis: {
         total_words_written: 500,

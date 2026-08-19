@@ -10,7 +10,7 @@ from app.services.review_analysis import (
 )
 
 
-def test_longest_review_uses_readable_word_count_not_likes_or_url_length():
+def test_longest_review_uses_readable_character_count_not_likes_or_url_length():
     reviews = pd.DataFrame(
         [
             {
@@ -51,8 +51,8 @@ def test_longest_review_uses_readable_word_count_not_likes_or_url_length():
     assert metrics["longest_review"] == {
         "title": "Alpha",
         "year": "2024",
-        "length": 8,
-        "unit": "words",
+        "length": 54,
+        "unit": "characters",
     }
     by_title = {review["title"]: review for review in metrics["reviews"]}
     assert by_title["Most Liked"]["word_count"] == 2
@@ -60,7 +60,7 @@ def test_longest_review_uses_readable_word_count_not_likes_or_url_length():
     assert by_title["Alpha"]["word_count"] == 8
     assert by_title["Beta URL Tie"]["word_count"] == 8
     assert by_title["Combining"]["word_count"] == 2
-    assert by_title["Most Liked"]["char_length"] == len(reviews.iloc[0]["Review"])
+    assert by_title["Most Liked"]["char_length"] == 10
 
 
 def test_review_metrics_handle_duplicate_dataframe_indices():
@@ -88,8 +88,8 @@ def test_longest_review_short_vs_long():
         )
     )
     assert metrics["longest_review"]["title"] == "Epic"
-    assert metrics["longest_review"]["unit"] == "words"
-    assert metrics["longest_review"]["length"] == 7
+    assert metrics["longest_review"]["unit"] == "characters"
+    assert metrics["longest_review"]["length"] == 33
 
 
 def test_longest_review_strips_html_and_newlines():
@@ -100,14 +100,14 @@ def test_longest_review_strips_html_and_newlines():
     assert "hidden" in metrics["reviews"][0]["normalized_text"]
     assert "<p>" not in metrics["reviews"][0]["normalized_text"]
     assert metrics["reviews"][0]["word_count"] == 7
-    assert metrics["longest_review"]["length"] == 7
+    assert metrics["longest_review"]["length"] == 35
 
 
 def test_longest_review_unicode_turkish_word_count():
     text = "İstanbul’da geçen bu film kalbimde uzun süre yaşayacak"
     assert _word_count(text) == 8
     metrics = compute_review_metrics(pd.DataFrame([{"Name": "TR", "Year": 2024, "Review": text}]))
-    assert metrics["longest_review"]["length"] == 8
+    assert metrics["longest_review"]["length"] == 54
 
 
 def test_longest_review_tie_breaks_by_title_not_likes():
@@ -148,7 +148,7 @@ def test_enrich_picks_longer_duplicate_scrape_and_recomputes_longest():
             {"title": "The Life of Chuck", "year": 2024, "text": "short excerpt", "likes": 1},
             {"title": "Blow-Up", "year": 1966, "text": "medium length review here", "likes": 0},
         ],
-        "longest_review": {"title": "The Life of Chuck", "year": "2024", "length": 2, "unit": "words"},
+        "longest_review": {"title": "The Life of Chuck", "year": "2024", "length": 13, "unit": "characters"},
     }
     scraped = [
         {
@@ -170,8 +170,8 @@ def test_enrich_picks_longer_duplicate_scrape_and_recomputes_longest():
     ]
     enrich_scraped_reviews(analysis, scraped, [])
     assert analysis["longest_review"]["title"] == "Blow-Up"
-    assert analysis["longest_review"]["length"] == 120
-    assert analysis["longest_review"]["unit"] == "words"
+    assert analysis["longest_review"]["length"] == 599
+    assert analysis["longest_review"]["unit"] == "characters"
     blow = next(r for r in analysis["reviews"] if r["title"] == "Blow-Up")
     assert blow["text"] == scraped[1]["review_text"]
     assert blow["word_count"] == 120
@@ -188,6 +188,6 @@ def test_recompute_longest_review_from_reviews_list():
     assert analysis["longest_review"] == {
         "title": "B",
         "year": "2021",
-        "length": 3,
-        "unit": "words",
+        "length": 13,
+        "unit": "characters",
     }

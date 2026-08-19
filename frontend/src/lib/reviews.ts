@@ -42,8 +42,22 @@ function readableForSort(review: ReviewTextMetrics): string {
   return '';
 }
 
+/** Mirrors backend `_review_sort_key` tie-breaking after character length. */
+export function compareReviewsByCharLength(
+  a: ReviewTextMetrics,
+  b: ReviewTextMetrics,
+): number {
+  return reviewCharLength(b) - reviewCharLength(a)
+    || compareText(titleKey(a.title), titleKey(b.title))
+    || compareText(a.year, b.year)
+    || compareText(readableForSort(a), readableForSort(b))
+    || compareText(a.review_path ?? a.date, b.review_path ?? b.date);
+}
+
 export function reviewCharLength(review: ReviewTextMetrics): number {
-  if (review.text != null) return readableText(review.text).length;
+  if (review.text != null) {
+    return readableText(review.text).replace(/\s+/g, ' ').trim().length;
+  }
   return review.char_length ?? review.text_length ?? 0;
 }
 
@@ -59,7 +73,6 @@ export function hasReadableReviewText(review: ReviewTextMetrics): boolean {
   return review.text != null && readableText(review.text).length > 0;
 }
 
-/** Mirrors backend `_review_sort_key` tie-breaking after word count. */
 export function compareReviewsByWordCount(
   a: ReviewTextMetrics,
   b: ReviewTextMetrics,
@@ -76,7 +89,7 @@ export function compareReviewsByLikes(
   b: ReviewTextMetrics,
 ): number {
   return (b.likes ?? 0) - (a.likes ?? 0)
-    || compareReviewsByWordCount(a, b);
+    || compareReviewsByCharLength(a, b);
 }
 
 export function selectLongestReview<T extends ReviewTextMetrics>(
@@ -85,7 +98,7 @@ export function selectLongestReview<T extends ReviewTextMetrics>(
   return reviews
     .filter(hasReadableReviewText)
     .slice()
-    .sort(compareReviewsByWordCount)[0];
+    .sort(compareReviewsByCharLength)[0];
 }
 
 export function findReviewForSummary<T extends ReviewTextMetrics>(

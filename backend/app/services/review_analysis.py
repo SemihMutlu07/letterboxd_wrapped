@@ -168,6 +168,12 @@ def _word_count(text: str) -> int:
     return _count_readable_words(_clean_readable_text(text))
 
 
+def _char_length(text: str) -> int:
+    """Count readable characters after stripping markup/URLs and squeezing whitespace."""
+    normalized = re.sub(r"\s+", " ", _clean_readable_text(text)).strip()
+    return len(normalized)
+
+
 def _tokenize(text: str) -> list[str]:
     """Tokenize text into lowercase words, filtering stopwords and short tokens."""
     cleaned = _clean_readable_text(text)
@@ -217,12 +223,12 @@ def _year_key(year: Any) -> Optional[str]:
 
 
 def _review_sort_key(review: dict) -> tuple:
-    """Deterministic longest-review ordering: words desc, then title/year/text."""
+    """Deterministic longest-review ordering: characters desc, then title/year/text."""
     text = str(review.get("text") or review.get("text_preview") or "")
     normalized = str(review.get("normalized_text") or _clean_readable_text(text))
-    word_count = int(review.get("word_count") if review.get("word_count") is not None else _word_count(text))
+    char_length = int(review.get("char_length") if review.get("char_length") is not None else _char_length(text))
     return (
-        -word_count,
+        -char_length,
         _title_key(review.get("title")),
         str(review.get("year") or ""),
         normalized,
@@ -231,7 +237,7 @@ def _review_sort_key(review: dict) -> tuple:
 
 
 def _select_longest_review_entry(reviews: list[dict]) -> Optional[dict]:
-    """Pick the review with the highest readable word count."""
+    """Pick the review with the highest readable character length."""
     candidates: list[dict] = []
     for review in reviews:
         text = review.get("text") or review.get("text_preview") or ""
@@ -246,14 +252,14 @@ def _select_longest_review_entry(reviews: list[dict]) -> Optional[dict]:
 
 def _longest_review_summary(review: dict) -> dict:
     text = str(review.get("text") or review.get("text_preview") or "")
-    word_count = int(
-        review.get("word_count") if review.get("word_count") is not None else _word_count(text)
+    char_length = int(
+        review.get("char_length") if review.get("char_length") is not None else _char_length(text)
     )
     summary = {
         "title": str(review.get("title", "")),
         "year": str(review.get("year", "")),
-        "length": word_count,
-        "unit": "words",
+        "length": char_length,
+        "unit": "characters",
     }
     review_path = review.get("review_path")
     if isinstance(review_path, str) and review_path:
@@ -271,7 +277,7 @@ def recompute_longest_review(review_analysis: Dict[str, Any]) -> None:
 def _apply_review_text_fields(review: dict, text: str) -> None:
     review["text"] = text
     review["normalized_text"] = _clean_readable_text(text)
-    review["char_length"] = len(text)
+    review["char_length"] = _char_length(text)
     review["word_count"] = _word_count(text)
 
 
@@ -414,8 +420,8 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
 
     # --- Tokenize all review text ---
     with_text["tokens"] = with_text["review"].apply(_tokenize)
-    with_text["char_length"] = with_text["review"].apply(len)
     with_text["readable_text"] = with_text["review"].apply(_clean_readable_text)
+    with_text["char_length"] = with_text["review"].apply(_char_length)
     with_text["word_count"] = with_text["review"].apply(_word_count)
     with_text["language"] = with_text["review"].apply(_guess_language)
 
@@ -499,7 +505,7 @@ def compute_review_metrics(reviews_df: pd.DataFrame) -> Dict[str, Any]:
 
 
     # --- Longest / shortest ---
-    # Word count is the product contract. Title, year, and readable text make
+    # Character count is the product contract. Title, year, and readable text make
     # ties deterministic without allowing likes, URL length, or HTML to win.
     longest_review = None
     longest_row = _select_longest_review_entry(
