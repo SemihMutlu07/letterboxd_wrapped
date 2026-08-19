@@ -20,7 +20,7 @@ export default function LanguageSwitcher() {
   };
 
   return (
-    <div className="fixed right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[90] rounded-full border border-white/10 bg-[#111820]/90 p-1 shadow-lg backdrop-blur-md">
+    <div className="fixed right-3 top-[var(--mw-top-chrome-offset)] z-[90] rounded-full border border-white/10 bg-[#111820]/90 p-1 shadow-lg backdrop-blur-md">
       <span className="sr-only">{t('language.label')}</span>
       {(['en', 'tr'] as const).map((item) => (
         <button
