@@ -138,6 +138,7 @@ function localizeLandingError(error: NormalizedError, t: (key: import('@/i18n/ca
     scrape_failed: ['landing.error.scrapeFailed.title', 'landing.error.scrapeFailed.message', 'landing.error.scrapeFailed.action'],
     scrape_blocked: ['landing.error.scrapeBlocked.title', 'landing.error.scrapeBlocked.message', 'landing.error.scrapeBlocked.action'],
     scraper_unavailable: ['landing.error.scraperUnavailable.title', 'landing.error.scraperUnavailable.message', 'landing.error.scraperUnavailable.action'],
+    desktop_worker_offline: ['landing.error.desktopOffline.title', 'landing.error.desktopOffline.message', 'landing.error.desktopOffline.action'],
     desktop_worker_paused: ['landing.error.desktopPaused.title', 'landing.error.desktopPaused.message', 'landing.error.desktopPaused.action'],
     stats_too_large: ['landing.error.statsTooLarge.title', 'landing.error.statsTooLarge.message', 'landing.error.statsTooLarge.action'],
   } as const;

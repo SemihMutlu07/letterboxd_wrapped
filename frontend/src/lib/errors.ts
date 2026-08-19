@@ -17,6 +17,7 @@ export type ErrorReason =
   | 'scrape_failed'
   | 'scrape_blocked'
   | 'scraper_unavailable'
+  | 'desktop_worker_offline'
   | 'desktop_worker_paused'
   | 'stats_too_large'
   | 'unknown_error';
@@ -33,8 +34,21 @@ export interface NormalizedError {
  * NormalizedError that the UI can display consistently.
  */
 export function normalizeError(err: unknown): NormalizedError {
+  const errObj = err as { code?: unknown; error_code?: unknown; message?: unknown } | null;
+  const code =
+    typeof errObj?.code === 'string'
+      ? errObj.code
+      : typeof errObj?.error_code === 'string'
+        ? errObj.error_code
+        : '';
   const raw =
-    err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : typeof errObj?.message === 'string'
+          ? errObj.message
+          : code;
 
   // Backend unreachable / network failure
   if (
@@ -118,6 +132,18 @@ export function normalizeError(err: unknown): NormalizedError {
 
   // Scraper-service failure (worker failed/unreachable/too busy). These messages
   // come from the local scraper or desktop worker when it cannot complete a job.
+  if (/desktop_worker_offline|desktop scraper is offline/i.test(raw) || code === 'desktop_worker_offline') {
+    return {
+      title: 'Desktop scraper offline',
+      message:
+        raw ||
+        'The desktop scraper is offline right now.',
+      action:
+        'Use the export upload option for a complete Wrapped, or try again shortly.',
+      reason: 'desktop_worker_offline',
+    };
+  }
+
   if (
     /scraper_unavailable|scraper service|too many people are using the scraper|all scraper slots are full|worker is (busy|offline|not available)|scrape queue full/i.test(
       raw,
@@ -129,19 +155,6 @@ export function normalizeError(err: unknown): NormalizedError {
       action:
         'Wait 30–60 seconds and retry, or use the export upload option below for a guaranteed result.',
       reason: 'scraper_unavailable',
-    };
-  }
-
-  // Admin-paused desktop worker path
-  if (/desktop_worker_paused|desktop scraper is paused/i.test(raw)) {
-    return {
-      title: 'Desktop scraper paused',
-      message:
-        raw ||
-        'The desktop scraper is paused for maintenance.',
-      action:
-        'Use the export upload option for a complete Wrapped, or try again shortly.',
-      reason: 'desktop_worker_paused',
     };
   }
 
