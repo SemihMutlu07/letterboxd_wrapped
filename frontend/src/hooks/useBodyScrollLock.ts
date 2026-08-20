@@ -41,7 +41,7 @@ function onTouchMove(event: TouchEvent) {
     event.preventDefault();
     return;
   }
-  if (target.closest('[data-mw-modal-scroll]')) return;
+  if (target.closest('[data-mw-modal-scroll], [data-mw-overlay-layer]')) return;
   event.preventDefault();
 }
 

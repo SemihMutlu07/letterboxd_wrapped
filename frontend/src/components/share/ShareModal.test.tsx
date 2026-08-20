@@ -136,6 +136,16 @@ afterEach(() => {
 
 
 describe('ShareModal customization popover', () => {
+  it('reuses IsolatedModal so page chrome is inert', async () => {
+    const chrome = document.createElement('div');
+    chrome.textContent = 'page chrome';
+    document.body.appendChild(chrome);
+    renderShareModal();
+    expect(await screen.findByTestId('isolated-modal')).toBeInTheDocument();
+    expect(chrome).toHaveAttribute('inert');
+    chrome.remove();
+  });
+
   it('renders the customization panel in a body portal anchored to the tune button', async () => {
     renderShareModal();
     await openSwapDrawer();

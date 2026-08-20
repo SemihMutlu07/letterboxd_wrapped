@@ -55,14 +55,14 @@ export function buildSlides(stats: StatsData, i18n: Translator): Slide[] {
 
   if (stats.total_films) {
     const d = stats.days_watched;
-    const fastForwardPosters = allPosterMedia(stats);
+    const fastForwardPosters = allPosterMedia(stats, 24);
     slides.push({
       key: 'volume',
       media: compactMedia([
-        posterMedia(stats.longest_film ? filmByTitle(stats, stats.longest_film.title) : null),
+        posterMedia(stats.longest_film ? filmByTitle(stats, stats.longest_film.title) : null, 'w342'),
         ...fastForwardPosters,
         ...broadPosters,
-      ], Math.max(24, fastForwardPosters.length)),
+      ], 24),
       accent: '#f97316',
       visual: 'cascade',
       body: (

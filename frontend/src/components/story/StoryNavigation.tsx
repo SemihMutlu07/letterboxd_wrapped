@@ -103,6 +103,19 @@ export function StoryNavigation({
           </div>
         </motion.div>
       )}
+
+      {openingResults ? (
+        <div
+          data-testid="results-nav-pending"
+          className="fixed inset-0 z-[300] grid place-items-center bg-[#1e252d] px-6 text-center"
+          style={{ paddingBottom: 'max(1.15rem, env(safe-area-inset-bottom, 0px))' }}
+          aria-live="assertive"
+        >
+          <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-amber-200">
+            {t('story.openingResults')}
+          </p>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -24,7 +24,7 @@ import {
   buildRatingData,
   getRuntimeHours,
 } from "@/containers/results/results-model";
-import { ResultsContent } from "@/containers/results/ResultsContent";
+import dynamic from "next/dynamic";
 import ResultsShell from "@/containers/results/ResultsShell";
 import ResultsTopBar from "@/containers/results/ResultsTopBar";
 import { useResultsSession } from "@/containers/results/useResultsSession";
@@ -33,7 +33,27 @@ import { localizePath } from "@/i18n/routing";
 import { markResultsNav } from "@/lib/results-nav";
 import { trackToggleChanged } from "@/containers/results/sections/section-utils";
 
-export { ResultsContent };
+export { ResultsContent } from "@/containers/results/ResultsContent";
+
+const ResultsContentLazy = dynamic(
+  () =>
+    import("@/containers/results/ResultsContent").then((mod) => {
+      function MarkedResultsContent(
+        props: React.ComponentProps<typeof mod.ResultsContent>,
+      ) {
+        useEffect(() => {
+          markResultsNav("content-mounted");
+          const id = window.requestAnimationFrame(() => {
+            markResultsNav("interactive");
+          });
+          return () => window.cancelAnimationFrame(id);
+        }, []);
+        return <mod.ResultsContent {...props} />;
+      }
+      return { default: MarkedResultsContent };
+    }),
+  { ssr: false, loading: () => <ResultsShell /> },
+);
 
 // Note: StatsData is imported from @/containers/results/sections/types
 
@@ -131,8 +151,8 @@ export default function ResultsPage() {
   );
 
   useEffect(() => {
-    if (!loading) markResultsNav("content-mounted");
-  }, [loading]);
+    void import("@/containers/results/ResultsContent");
+  }, []);
 
   useEffect(() => {
     // Analytics for results viewed
@@ -195,7 +215,7 @@ export default function ResultsPage() {
     <ThemeProvider>
       <ThemeWrapper>
         {chrome}
-        <ResultsContent
+        <ResultsContentLazy
         stats={activeStats ?? stats}
         sessionId={sessionId}
         username={username}

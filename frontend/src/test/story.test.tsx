@@ -170,6 +170,15 @@ describe('StoryPage', () => {
 });
 
 describe('buildSlides', () => {
+  it('caps the volume slide at 24 posters instead of the full film list', () => {
+    const allFilms = Array.from({ length: 80 }, (_, index) => ({
+      title: `Film ${index}`,
+      poster_path: `/film-${index}.jpg`,
+    }));
+    const slides = buildSlides({ ...STATS, total_films: 80, all_films: allFilms } as unknown as StatsData, enI18n);
+    const volume = slides.find((slide) => slide.key === 'volume')!;
+    expect((volume.media ?? []).length).toBeLessThanOrEqual(24);
+  });
   it('normalizes object story analytics without rendering object placeholders', () => {
     const slides = buildSlides({
       ...STATS,

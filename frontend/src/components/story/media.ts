@@ -37,8 +37,8 @@ export function compactMedia(items: Array<StoryMedia | null | undefined>, limit 
   return output;
 }
 
-export function allPosterMedia(stats: StatsData): StoryMedia[] {
-  return compactMedia((stats.all_films ?? []).map((film) => posterMedia(film, 'w342')), Number.POSITIVE_INFINITY);
+export function allPosterMedia(stats: StatsData, limit = 24): StoryMedia[] {
+  return compactMedia((stats.all_films ?? []).map((film) => posterMedia(film, 'w342')), limit);
 }
 
 export function filmByTitle(stats: StatsData, title?: string | null) {

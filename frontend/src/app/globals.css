@@ -32,16 +32,9 @@ body[data-mw-scroll-locked] {
   position: fixed;
   inset: 0;
   z-index: var(--mw-modal-z);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   height: 100dvh;
-  padding-top: max(1rem, env(safe-area-inset-top, 0px));
-  padding-right: max(1rem, env(safe-area-inset-right, 0px));
-  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
-  padding-left: max(1rem, env(safe-area-inset-left, 0px));
   pointer-events: auto;
 }
 
@@ -52,13 +45,30 @@ body[data-mw-scroll-locked] {
   touch-action: none;
 }
 
-.mw-isolated-modal__panel {
+/* Safe-area inset lives on the frame, not the overlay. Padding on the
+   overlay would leave a tap-through gap to page chrome. */
+.mw-isolated-modal__frame {
   position: relative;
   z-index: 1;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+.mw-isolated-modal__panel {
+  pointer-events: auto;
+  display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: calc(100dvh - max(2rem, env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px)));
+  max-height: 100%;
   /* Intentional: the modal chrome is the scrollport boundary; inner
      [data-mw-modal-scroll] is the only region that may scroll. */
   overflow: hidden;
