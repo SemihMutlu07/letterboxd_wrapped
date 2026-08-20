@@ -1,6 +1,6 @@
 export const SHARE_POPOVER_GAP = 8;
 export const SHARE_POPOVER_VIEWPORT_PADDING = 12;
-export const SHARE_POPOVER_Z_INDEX = 110;
+export const SHARE_POPOVER_Z_INDEX = 210;
 
 export type SharePopoverPlacement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
 

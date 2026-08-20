@@ -111,6 +111,7 @@ export default function IsolatedModal({
                   : { type: 'tween', duration: 0.18, ease: [0.22, 1, 0.36, 1] }
               }
               className={`mw-isolated-modal__panel ${panelClassName}`.trim()}
+              data-mw-modal-scroll
             >
               {children}
             </motion.div>

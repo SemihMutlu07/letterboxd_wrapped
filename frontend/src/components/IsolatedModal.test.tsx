@@ -29,6 +29,7 @@ describe('IsolatedModal', () => {
     expect(document.documentElement).toHaveAttribute('data-mw-scroll-locked', 'true');
     expect(document.body.style.top).toBe('-240px');
     expect(screen.getByTestId('isolated-modal').querySelector('.mw-isolated-modal__frame')).not.toBeNull();
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-mw-modal-scroll');
 
     rerender(<Harness open={false} />);
     expect(document.body).not.toHaveAttribute('data-mw-scroll-locked');
