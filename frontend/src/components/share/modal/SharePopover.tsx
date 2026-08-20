@@ -126,6 +126,7 @@ export function SharePopover({
       aria-label={label}
       aria-modal="false"
       data-share-popover-panel="true"
+      data-mw-overlay-layer="true"
       className="fixed"
       style={{
         top: coords?.top ?? -10000,

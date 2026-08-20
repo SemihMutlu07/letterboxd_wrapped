@@ -37,9 +37,21 @@ export { ResultsContent } from "@/containers/results/ResultsContent";
 
 const ResultsContentLazy = dynamic(
   () =>
-    import("@/containers/results/ResultsContent").then((mod) => ({
-      default: mod.ResultsContent,
-    })),
+    import("@/containers/results/ResultsContent").then((mod) => {
+      function MarkedResultsContent(
+        props: React.ComponentProps<typeof mod.ResultsContent>,
+      ) {
+        useEffect(() => {
+          markResultsNav("content-mounted");
+          const id = window.requestAnimationFrame(() => {
+            markResultsNav("interactive");
+          });
+          return () => window.cancelAnimationFrame(id);
+        }, []);
+        return <mod.ResultsContent {...props} />;
+      }
+      return { default: MarkedResultsContent };
+    }),
   { ssr: false, loading: () => <ResultsShell /> },
 );
 
@@ -141,15 +153,6 @@ export default function ResultsPage() {
   useEffect(() => {
     void import("@/containers/results/ResultsContent");
   }, []);
-
-  useEffect(() => {
-    if (loading) return;
-    markResultsNav("content-mounted");
-    const id = window.requestAnimationFrame(() => {
-      markResultsNav("interactive");
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [loading]);
 
   useEffect(() => {
     // Analytics for results viewed

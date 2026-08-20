@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 
 import type { ShareCardData } from '@/components/share/types';
 import { shareVariantsForOrientation } from '@/components/share/registry';
@@ -15,7 +14,7 @@ import { ShareModalSidebar } from '@/components/share/modal/ShareModalSidebar';
 import { VariantRail } from '@/components/share/modal/VariantRail';
 import { useShareExport } from '@/components/share/modal/useShareExport';
 import type { ShareModalProps } from '@/components/share/modal/types';
-import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import IsolatedModal from '@/components/IsolatedModal';
 
 export {
   exportExactPng,
@@ -38,7 +37,12 @@ export default function ShareModal({
     () => shareVariantsForOrientation(orientation, resolveVariantLabel),
     [orientation, resolveVariantLabel],
   );
-  const railRef = useRef<HTMLDivElement>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const [railNode, setRailNode] = useState<HTMLDivElement | null>(null);
+  const bindRail = useCallback((el: HTMLDivElement | null) => {
+    railRef.current = el;
+    setRailNode(el);
+  }, []);
   const [activeIdx, setActiveIdx] = useState(0);
   const [pageW, setPageW] = useState(0);
   const [pageH, setPageH] = useState(0);
@@ -50,11 +54,6 @@ export default function ShareModal({
   const [hintFading, setHintFading] = useState(false);
   const [showUsername, setShowUsername] = useState(true);
   const [exportError, setExportError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(() => typeof document !== 'undefined');
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const activeVariant = availableVariants[
     Math.max(0, Math.min(availableVariants.length - 1, activeIdx))
@@ -129,36 +128,18 @@ export default function ShareModal({
     return { w: config.domWidth, h: config.domHeight };
   }, [orientation]);
 
-  useBodyScrollLock(open);
-
   useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || isSaving) return;
-      if (swapOpen) {
-        setSwapOpen(false);
-        return;
-      }
-      onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, isSaving, onClose, swapOpen]);
-
-  useEffect(() => {
-    if (!open) return;
-    const el = railRef.current;
-    if (!el) return;
+    if (!open || !railNode) return;
     const measure = () => {
-      const rect = el.getBoundingClientRect();
+      const rect = railNode.getBoundingClientRect();
       setPageW(rect.width);
-      setPageH(rect.height || el.parentElement?.clientHeight || window.innerHeight * 0.5);
+      setPageH(rect.height || railNode.parentElement?.clientHeight || window.innerHeight * 0.5);
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(railNode);
     return () => ro.disconnect();
-  }, [open]);
+  }, [open, railNode]);
 
   useLayoutEffect(() => {
     const el = railRef.current;
@@ -189,78 +170,74 @@ export default function ShareModal({
     onDownloadSuccess,
   });
 
-  if (!open || !mounted) return null;
-
   const hasActors = (cardProps.topActors?.length ?? 0) >= 2;
   const hasDirectors = (cardProps.topDirectors?.length ?? 0) >= 2;
   const showSwapTrigger = hasActors || hasDirectors;
 
-  return createPortal(
-    <div className="mw-isolated-modal" data-testid="share-modal">
-      <div className="mw-isolated-modal__backdrop" onClick={() => { if (!isSaving) onClose(); }} />
-      <CanonicalExportCard
-        variantKey={variantKey}
-        data={effectiveCardProps}
-        orientation={orientation}
-      />
-      <div className="mw-isolated-modal__frame">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="share-modal-title"
-        className="mw-isolated-modal__panel relative flex h-full max-h-full w-full flex-col bg-[#0f0f0f] md:h-[calc(100dvh-3rem)] md:max-h-[920px] md:w-[calc(100vw-3rem)] md:max-w-[1180px] md:rounded-3xl"
-      >
-        <ShareModalHeader
-          variantLabel={variantLabel}
-          activeIdx={activeIdx}
-          variantCount={availableVariants.length}
-          isSaving={isSaving}
-          onClose={onClose}
+  return (
+    <IsolatedModal
+      open={open}
+      onClose={() => {
+        if (!isSaving) onClose();
+      }}
+      labelledBy="share-modal-title"
+      panelClassName="relative h-full max-h-full w-full bg-[#0f0f0f] md:h-[calc(100dvh-3rem)] md:max-h-[920px] md:w-[calc(100vw-3rem)] md:max-w-[1180px] md:rounded-3xl"
+      extras={
+        <CanonicalExportCard
+          variantKey={variantKey}
+          data={effectiveCardProps}
+          orientation={orientation}
         />
+      }
+    >
+      <ShareModalHeader
+        variantLabel={variantLabel}
+        activeIdx={activeIdx}
+        variantCount={availableVariants.length}
+        isSaving={isSaving}
+        onClose={onClose}
+      />
 
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col md:bg-black/20">
-            <VariantRail
-              railRef={railRef}
-              availableVariants={availableVariants}
-              activeIdx={activeIdx}
-              pageW={pageW}
-              pageH={pageH}
-              target={target}
-              effectiveCardProps={effectiveCardProps}
-              orientation={orientation}
-              isSaving={isSaving}
-              onScroll={handleRailScroll}
-              onJumpTo={jumpTo}
-            />
-          </div>
-
-          <ShareModalSidebar
-            cardProps={cardProps}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:bg-black/20">
+          <VariantRail
+            railRef={bindRail}
+            availableVariants={availableVariants}
+            activeIdx={activeIdx}
+            pageW={pageW}
+            pageH={pageH}
+            target={target}
+            effectiveCardProps={effectiveCardProps}
             orientation={orientation}
-            setOrientation={setOrientation}
             isSaving={isSaving}
-            showSwapTrigger={showSwapTrigger}
-            hasActors={hasActors}
-            hasDirectors={hasDirectors}
-            swapOpen={swapOpen}
-            setSwapOpen={setSwapOpen}
-            showSwapHint={showSwapHint}
-            hintFading={hintFading}
-            dismissSwapHint={dismissSwapHint}
-            actorIdx={actorIdx}
-            directorIdx={directorIdx}
-            setActorIdx={setActorIdx}
-            setDirectorIdx={setDirectorIdx}
-            showUsername={showUsername}
-            setShowUsername={setShowUsername}
-            exportError={exportError}
-            onSave={handleSavePNG}
+            onScroll={handleRailScroll}
+            onJumpTo={jumpTo}
           />
         </div>
+
+        <ShareModalSidebar
+          cardProps={cardProps}
+          orientation={orientation}
+          setOrientation={setOrientation}
+          isSaving={isSaving}
+          showSwapTrigger={showSwapTrigger}
+          hasActors={hasActors}
+          hasDirectors={hasDirectors}
+          swapOpen={swapOpen}
+          setSwapOpen={setSwapOpen}
+          showSwapHint={showSwapHint}
+          hintFading={hintFading}
+          dismissSwapHint={dismissSwapHint}
+          actorIdx={actorIdx}
+          directorIdx={directorIdx}
+          setActorIdx={setActorIdx}
+          setDirectorIdx={setDirectorIdx}
+          showUsername={showUsername}
+          setShowUsername={setShowUsername}
+          exportError={exportError}
+          onSave={handleSavePNG}
+        />
       </div>
-      </div>
-    </div>,
-    document.body,
+    </IsolatedModal>
   );
 }

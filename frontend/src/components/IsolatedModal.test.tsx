@@ -60,4 +60,22 @@ describe('IsolatedModal', () => {
     expect(chrome).toHaveAttribute('inert');
     chrome.remove();
   });
+
+  it('does not inert overlay layers such as share popovers', async () => {
+    const layer = document.createElement('div');
+    layer.setAttribute('data-mw-overlay-layer', 'true');
+    document.body.appendChild(layer);
+    const chrome = document.createElement('div');
+    document.body.appendChild(chrome);
+    render(
+      <IsolatedModal open onClose={() => {}} label="Shelf">
+        <div data-mw-modal-scroll>Inside</div>
+      </IsolatedModal>,
+    );
+    await screen.findByTestId('isolated-modal');
+    expect(layer).not.toHaveAttribute('inert');
+    expect(chrome).toHaveAttribute('inert');
+    layer.remove();
+    chrome.remove();
+  });
 });

@@ -13,11 +13,21 @@ type IsolatedModalProps = {
   labelledBy?: string;
   label?: string;
   panelClassName?: string;
+  /** Rendered inside the overlay but outside the transformed panel (export nodes, etc.). */
+  extras?: ReactNode;
 };
+
+function isOverlayLayer(element: Element): boolean {
+  return (
+    element.hasAttribute('data-mw-overlay-layer') ||
+    Boolean(element.querySelector('[data-mw-overlay-layer]'))
+  );
+}
 
 function setBackgroundInert(active: boolean, keep: Element | null) {
   for (const child of Array.from(document.body.children)) {
     if (keep && (child === keep || child.contains(keep))) continue;
+    if (isOverlayLayer(child)) continue;
     if (active) {
       child.setAttribute('inert', '');
       child.setAttribute('aria-hidden', 'true');
@@ -45,6 +55,7 @@ export default function IsolatedModal({
   labelledBy,
   label,
   panelClassName = '',
+  extras,
 }: IsolatedModalProps) {
   const [mounted, setMounted] = useState(false);
   const reduce = useReducedMotion();
@@ -84,6 +95,7 @@ export default function IsolatedModal({
             className="mw-isolated-modal__backdrop"
             onClick={onClose}
           />
+          {extras}
           <div className="mw-isolated-modal__frame">
             <motion.div
               role="dialog"
