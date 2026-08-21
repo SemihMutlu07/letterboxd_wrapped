@@ -71,6 +71,30 @@ describe('PostHog consent gate', () => {
     });
   });
 
+  it('deduplicates repeated analysis starts until a terminal event', async () => {
+    localStorage.setItem('consent_decision', 'accept');
+    posthogMock.__loaded = true;
+    const { captureEvent } = await import('./posthog');
+
+    captureEvent('analyze_started', { method: 'upload', fileCount: 2 });
+    captureEvent('analyze_started', { method: 'upload', fileCount: 2, hasZip: true });
+
+    expect(posthogMock.capture).toHaveBeenCalledTimes(1);
+    expect(posthogMock.capture).toHaveBeenLastCalledWith('analyze_started', {
+      method: 'upload',
+      fileCount: 2,
+    });
+
+    captureEvent('analyze_failed', { method: 'upload', reason: 'test_failure' });
+    captureEvent('analyze_started', { method: 'upload', fileCount: 2 });
+
+    expect(posthogMock.capture).toHaveBeenCalledTimes(3);
+    expect(posthogMock.capture).toHaveBeenLastCalledWith('analyze_started', {
+      method: 'upload',
+      fileCount: 2,
+    });
+  });
+
   it('migrates legacy session consent and queues only while PostHog is loading', async () => {
     sessionStorage.setItem('consent_decision', 'accept');
     const { captureEvent } = await import('./posthog');
