@@ -4,6 +4,7 @@ const posthogMock = vi.hoisted(() => ({
   __loaded: false,
   init: vi.fn(),
   capture: vi.fn(),
+  captureException: vi.fn(),
   onFeatureFlags: vi.fn(),
   getFeatureFlag: vi.fn(),
 }));
@@ -17,6 +18,7 @@ describe('PostHog consent gate', () => {
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_KEY', 'test-key');
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_HOST', 'https://posthog.example.test');
     sessionStorage.clear();
+    localStorage.clear();
     posthogMock.__loaded = false;
   });
 
@@ -39,8 +41,8 @@ describe('PostHog consent gate', () => {
     ]);
   });
 
-  it('initializes and sends events after explicit acceptance', async () => {
-    sessionStorage.setItem('consent_decision', 'accept');
+  it('initializes and sends events after explicit persisted acceptance', async () => {
+    localStorage.setItem('consent_decision', 'accept');
     const { captureEvent, initPostHog } = await import('./posthog');
 
     initPostHog();
@@ -52,12 +54,13 @@ describe('PostHog consent gate', () => {
     expect(posthogMock.capture).toHaveBeenCalledWith('accepted_event', { source: 'test' });
   });
 
-  it('queues accepted events only while PostHog is still loading', async () => {
+  it('migrates legacy session consent and queues only while PostHog is loading', async () => {
     sessionStorage.setItem('consent_decision', 'accept');
     const { captureEvent } = await import('./posthog');
 
     captureEvent('accepted_loading_event');
 
+    expect(localStorage.getItem('consent_decision')).toBe('accept');
     expect(posthogMock.capture).not.toHaveBeenCalled();
     expect(JSON.parse(sessionStorage.getItem('ph_event_queue') || '[]')).toEqual([
       expect.objectContaining({ event: 'accepted_loading_event' }),
