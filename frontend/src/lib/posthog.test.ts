@@ -54,16 +54,36 @@ describe('PostHog consent gate', () => {
     expect(posthogMock.capture).toHaveBeenCalledWith('accepted_event', { source: 'test' });
   });
 
+  it('strips direct identifiers before capture', async () => {
+    localStorage.setItem('consent_decision', 'accept');
+    posthogMock.__loaded = true;
+    const { captureEvent } = await import('./posthog');
+
+    captureEvent('analyze_started', {
+      username: 'example-user',
+      letterboxd_username: 'example-user',
+      email: 'example@example.com',
+      method: 'scrape',
+    });
+
+    expect(posthogMock.capture).toHaveBeenCalledWith('analyze_started', {
+      method: 'scrape',
+    });
+  });
+
   it('migrates legacy session consent and queues only while PostHog is loading', async () => {
     sessionStorage.setItem('consent_decision', 'accept');
     const { captureEvent } = await import('./posthog');
 
-    captureEvent('accepted_loading_event');
+    captureEvent('accepted_loading_event', { username: 'do-not-queue', method: 'upload' });
 
     expect(localStorage.getItem('consent_decision')).toBe('accept');
     expect(posthogMock.capture).not.toHaveBeenCalled();
     expect(JSON.parse(sessionStorage.getItem('ph_event_queue') || '[]')).toEqual([
-      expect.objectContaining({ event: 'accepted_loading_event' }),
+      expect.objectContaining({
+        event: 'accepted_loading_event',
+        properties: { method: 'upload' },
+      }),
     ]);
   });
 });
