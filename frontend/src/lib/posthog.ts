@@ -5,6 +5,7 @@ import posthog from 'posthog-js';
 import { getConsent } from '@/lib/session-id';
 
 let isInitialized = false;
+let analysisInFlight = false;
 
 // Kill-switch: when NEXT_PUBLIC_POSTHOG_KEY is not set, analytics is a silent no-op.
 const POSTHOG_DISABLED =
@@ -30,6 +31,20 @@ function sanitizeProperties(properties?: Record<string, unknown>): Record<string
   return Object.fromEntries(
     Object.entries(properties).filter(([key]) => !BLOCKED_ANALYTICS_KEYS.has(key.toLowerCase())),
   );
+}
+
+function shouldSuppressLifecycleDuplicate(event: string): boolean {
+  if (event === 'analyze_started') {
+    if (analysisInFlight) return true;
+    analysisInFlight = true;
+    return false;
+  }
+
+  if (event === 'analyze_succeeded' || event === 'analyze_failed') {
+    analysisInFlight = false;
+  }
+
+  return false;
 }
 
 function loadQueue(): QueuedEvent[] {
@@ -133,6 +148,7 @@ export function captureEvent(event: string, properties?: Record<string, unknown>
   try {
     // Never collect behavioral analytics without explicit opt-in.
     if (getConsent() !== 'accept') return;
+    if (shouldSuppressLifecycleDuplicate(event)) return;
 
     if (!posthog.__loaded) {
       initPostHog();
