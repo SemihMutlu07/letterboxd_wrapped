@@ -1,1 +1,0 @@
-This file intentionally points to `docs/posthog-event-contract.md`, the canonical analytics event contract for Movies Wrapped.
