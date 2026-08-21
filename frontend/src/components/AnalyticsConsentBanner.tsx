@@ -17,12 +17,12 @@ export default function AnalyticsConsentBanner({ locale }: { locale: Locale }) {
 
   const copy = locale === 'tr'
     ? {
-        text: 'Movies Wrapped, ürünü geliştirmek ve hataları bulmak için anonim kullanım verileri ve gizlilik korumalı oturum kayıtları kullanır.',
+        text: 'Movies Wrapped, ürünü geliştirmek ve hataları bulmak için anonim kullanım verileri kullanır. Oturum kaydı etkin olduğunda form alanları maskelenir.',
         accept: 'Kabul et',
         decline: 'Hayır',
       }
     : {
-        text: 'Movies Wrapped uses anonymous usage analytics and privacy-protected session recordings to improve the product and diagnose errors.',
+        text: 'Movies Wrapped uses anonymous usage analytics to improve the product and diagnose errors. When session recording is enabled, form inputs are masked.',
         accept: 'Accept',
         decline: 'No thanks',
       };
