@@ -12,11 +12,24 @@ const POSTHOG_DISABLED =
 
 const isDev = process.env.NODE_ENV !== 'production';
 const QUEUE_KEY = 'ph_event_queue';
+const BLOCKED_ANALYTICS_KEYS = new Set([
+  'username',
+  'letterboxd_username',
+  'email',
+]);
 
 interface QueuedEvent {
   event: string;
   properties?: Record<string, unknown>;
   queued_at: number;
+}
+
+function sanitizeProperties(properties?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!properties) return undefined;
+
+  return Object.fromEntries(
+    Object.entries(properties).filter(([key]) => !BLOCKED_ANALYTICS_KEYS.has(key.toLowerCase())),
+  );
 }
 
 function loadQueue(): QueuedEvent[] {
@@ -38,7 +51,7 @@ function saveQueue(queue: QueuedEvent[]) {
 
 function enqueue(event: string, properties?: Record<string, unknown>) {
   const queue = loadQueue();
-  queue.push({ event, properties, queued_at: Date.now() });
+  queue.push({ event, properties: sanitizeProperties(properties), queued_at: Date.now() });
   saveQueue(queue);
   if (isDev) console.debug(`[posthog] queued "${event}" (queue size: ${queue.length})`);
 }
@@ -56,7 +69,10 @@ export function flushQueue() {
 
   sessionStorage.removeItem(QUEUE_KEY);
   for (const item of queue) {
-    posthog.capture(item.event, { ...item.properties, queued_at: item.queued_at });
+    posthog.capture(item.event, {
+      ...sanitizeProperties(item.properties),
+      queued_at: item.queued_at,
+    });
   }
 }
 
@@ -122,13 +138,15 @@ export function captureEvent(event: string, properties?: Record<string, unknown>
       initPostHog();
     }
 
+    const safeProperties = sanitizeProperties(properties);
+
     if (posthog.__loaded) {
-      if (isDev) console.debug(`[posthog] ${event}`, properties ?? {});
-      posthog.capture(event, properties);
+      if (isDev) console.debug(`[posthog] ${event}`, safeProperties ?? {});
+      posthog.capture(event, safeProperties);
       return;
     }
 
-    enqueue(event, properties);
+    enqueue(event, safeProperties);
   } catch (error) {
     if (isDev) console.error('[posthog] capture failed:', event, error);
   }
@@ -138,7 +156,7 @@ export function captureException(error: unknown, properties?: Record<string, unk
   if (POSTHOG_DISABLED || typeof window === 'undefined' || getConsent() !== 'accept') return;
   try {
     if (!posthog.__loaded) initPostHog();
-    if (posthog.__loaded) posthog.captureException(error, properties);
+    if (posthog.__loaded) posthog.captureException(error, sanitizeProperties(properties));
   } catch (captureError) {
     if (isDev) console.error('[posthog] exception capture failed:', captureError);
   }
