@@ -15,4 +15,12 @@ describe('normalizeError desktop worker offline', () => {
 
     expect(normalized.reason).toBe('desktop_worker_offline');
   });
+
+  it('maps queue_full from error code and ZIP-first copy', () => {
+    const err = Object.assign(new Error('The analysis queue is full. Please try again later.'), { code: 'queue_full' });
+    const normalized = normalizeError(err);
+
+    expect(normalized.reason).toBe('queue_full');
+    expect(normalized.action).toMatch(/ZIP/i);
+  });
 });
