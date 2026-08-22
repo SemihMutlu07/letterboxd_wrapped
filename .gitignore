@@ -40,6 +40,8 @@ build/
 # logs
 logs/
 *.log
+# rotated generations (worker-supervisor.log.1 etc) — these do not match *.log
+*.log.[0-9]
 *.lcov
 coverage/
 frontend/test-results/
