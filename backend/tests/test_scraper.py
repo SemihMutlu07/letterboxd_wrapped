@@ -364,6 +364,25 @@ def test_rating_from_svg_label_handles_halves():
     assert scraper._rating_from_svg_label("") is None
 
 
+def test_preview_items_caps_and_drops_untrusted_posters():
+    sample = scraper.preview_items(
+        [
+            {"title": "Heat", "year": "1995", "poster_url": "https://a.ltrbxd.com/resized/heat.jpg"},
+            {"title": "Heat", "year": "1995", "poster_url": "https://evil.example/heat.jpg"},
+            {"title": "Inside", "year": "2023", "poster_url": "http://a.ltrbxd.com/inside.jpg"},
+            {"title": "  ", "year": "1999"},
+            {"title": "Kader", "year": "2006", "poster_url": "https://evil.example/kader.jpg"},
+        ]
+        + [{"title": f"Filler {i}"} for i in range(12)],
+        limit=8,
+    )
+    assert [item["title"] for item in sample] == ["Heat", "Inside", "Kader"] + [f"Filler {i}" for i in range(5)]
+    assert sample[0]["poster_url"].startswith("https://a.ltrbxd.com/")
+    assert "poster_url" not in sample[1]
+    assert "poster_url" not in sample[2]
+    assert len(sample) == 8
+
+
 def test_sync_scrape_reviews_walks_pages_and_stops_on_empty(monkeypatch):
     page_html = """
     <article class="production-viewing">
