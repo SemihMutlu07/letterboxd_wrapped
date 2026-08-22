@@ -21,7 +21,7 @@ export function ReviewSlideBody() {
       <RevealLine instant={instant} delay={TEXT_REVEAL.textLabel}>
         <Label>{t('story.slide.review.label')}</Label>
       </RevealLine>
-      <RevealLine instant={instant} delay={TEXT_REVEAL.textHeadline} y={18}>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textHeadline} y={16}>
         <Big>{sequence.filmTitle}</Big>
       </RevealLine>
       <RevealLine instant={instant} delay={TEXT_REVEAL.textSub} y={14} duration={0.48}>

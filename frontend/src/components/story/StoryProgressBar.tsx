@@ -2,6 +2,7 @@
 
 import type { Slide } from './types';
 
+// Progress fill smoothing sits in the micro motion tier (120–180ms).
 type StoryProgressBarProps = {
   slides: Slide[];
   index: number;
@@ -16,7 +17,7 @@ export function StoryProgressBar({ slides, index, progress }: StoryProgressBarPr
           {i < index && <div className="h-full w-full bg-amber-300" />}
           {i === index && (
             <div
-              className="h-full bg-amber-300 transition-[width] duration-100 ease-linear"
+              className="h-full bg-amber-300 transition-[width] duration-150 ease-linear"
               style={{ width: `${progress}%` }}
             />
           )}

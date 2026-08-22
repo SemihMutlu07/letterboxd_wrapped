@@ -1,6 +1,10 @@
 'use client';
 
+import { motion } from 'framer-motion';
+
 import type { Slide } from '../types';
+import { MOTION_DURATION, MOTION_EASE } from '../motion/motionTokens';
+import { useStoryMotion } from '../motion/StoryMotionContext';
 import { DirectorCinematicVisual } from '../director/DirectorCinematicVisual';
 import { ActorCinematicVisual } from '../actor/ActorCinematicVisual';
 import { ReviewCinematicVisual } from '../review/ReviewCinematicVisual';
@@ -19,13 +23,23 @@ import { resolvePosterFieldLayout } from './posterFieldConfig';
 import { PersonCinematicVisual } from './cinematic/PersonCinematicVisual';
 
 export function StoryVisual({ slide }: { slide: Slide }) {
+  const { reduce } = useStoryMotion();
   const media = slide.media ?? [];
   const accent = slide.accent ?? '#f59e0b';
   const hero = media[0];
   const posterLayout = resolvePosterFieldLayout(slide.visual, slide.posterLayout);
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <motion.div
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      initial={reduce ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{
+        duration: reduce ? 0 : MOTION_DURATION.transition,
+        ease: MOTION_EASE.editorial,
+      }}
+    >
       <div
         className="absolute inset-0"
         style={{
@@ -77,6 +91,6 @@ export function StoryVisual({ slide }: { slide: Slide }) {
       )}
 
       <div className="absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black via-black/50 to-transparent" />
-    </div>
+    </motion.div>
   );
 }

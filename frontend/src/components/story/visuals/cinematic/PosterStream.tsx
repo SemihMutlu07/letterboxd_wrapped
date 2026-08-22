@@ -3,6 +3,9 @@
 import { motion, useReducedMotion } from 'framer-motion';
 
 import type { StoryMedia } from '../../types';
+import { MOTION_AMBIENT, MOTION_DURATION } from '../../motion/motionTokens';
+
+const AMBIENT_DRIFT_CAP = MOTION_AMBIENT.streamPan;
 import { StoryImage } from '../StoryImage';
 
 type PosterStreamProps = {
@@ -44,7 +47,8 @@ export function PosterStream({ posters, accent, active, settle, className = '' }
     <div className={`pointer-events-none absolute inset-y-[-12%] left-[8%] right-[-6%] md:left-[4%] lg:left-0 ${className}`}>
       <div className="grid h-full grid-cols-3 gap-2 sm:gap-3 md:gap-3 lg:gap-4">
         {columns.map((col, colIndex) => {
-          const duration = reduce ? 0 : ambient ? 18 + colIndex * 4 : 1.1 + colIndex * 0.15;
+          // Ambient drift stays inside the 16–24s tier band.
+          const duration = reduce ? 0 : ambient ? Math.min(18 + colIndex * 4, AMBIENT_DRIFT_CAP) : MOTION_DURATION.revealFast;
           const travel = reduce ? 0 : ambient ? (colIndex % 2 === 0 ? -48 : 56) : 0;
           return (
             <motion.div
@@ -59,7 +63,7 @@ export function PosterStream({ posters, accent, active, settle, className = '' }
               transition={
                 ambient
                   ? { duration, repeat: Infinity, ease: 'easeInOut' }
-                  : { duration: 0.7 + colIndex * 0.12, ease: [0.22, 1, 0.36, 1], delay: colIndex * 0.08 }
+                  : { duration: MOTION_DURATION.fieldEnter, ease: [0.22, 1, 0.36, 1], delay: colIndex * 0.08 }
               }
             >
               {col.map((item, index) => (

@@ -195,7 +195,7 @@ export function HeroPoster({ media, accent }: { media: StoryMedia[]; accent: str
             transition={
               reduce
                 ? undefined
-                : { duration: scaledDuration(14, motionScale), repeat: Infinity, ease: 'easeInOut' }
+                : { duration: scaledDuration(MOTION_AMBIENT.portraitDrift, motionScale), repeat: Infinity, ease: 'easeInOut' }
             }
           >
             <StoryImage item={first} priority />
@@ -212,9 +212,9 @@ export function HeroPoster({ media, accent }: { media: StoryMedia[]; accent: str
               reduce
                 ? { duration: 0 }
                 : {
-                    opacity: { delay: 0.35 + index * 0.08, duration: 0.4 },
+                    opacity: { delay: 0.35 + index * 0.08, duration: MOTION_DURATION.revealFast },
                     y: {
-                      duration: scaledDuration(9 + index, motionScale),
+                      duration: scaledDuration(MOTION_AMBIENT.verticalStrip + index * 0.35, motionScale),
                       repeat: Infinity,
                       repeatType: 'reverse',
                       ease: 'easeInOut',
@@ -273,7 +273,7 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
           reduce
             ? { duration: 0 }
             : {
-                y: { duration: scaledDuration(16, motionScale), repeat: Infinity, ease: 'easeInOut' },
+                y: { duration: scaledDuration(MOTION_AMBIENT.verticalCascade, motionScale), repeat: Infinity, ease: 'easeInOut' },
                 opacity: { duration: 0.5 },
               }
         }
@@ -290,7 +290,7 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
             reduce
               ? { duration: 0 }
               : {
-                  y: { duration: scaledDuration(13, motionScale), repeat: Infinity, ease: 'easeInOut' },
+                  y: { duration: scaledDuration(MOTION_AMBIENT.verticalMosaic, motionScale), repeat: Infinity, ease: 'easeInOut' },
                   opacity: { duration: 0.55, delay: 0.12 },
                 }
           }
@@ -308,7 +308,7 @@ export function RecapVisual({ media, accent }: { media: StoryMedia[]; accent: st
               reduce
                 ? undefined
                 : {
-                    duration: scaledDuration(10 + index, motionScale),
+                    duration: scaledDuration(MOTION_AMBIENT.verticalStrip + index * 0.35, motionScale),
                     repeat: Infinity,
                     repeatType: 'reverse',
                     ease: 'easeInOut',

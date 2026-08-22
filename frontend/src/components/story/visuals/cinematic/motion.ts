@@ -1,17 +1,19 @@
-/** Shared motion vocabulary for person-cinematic story slides. */
+/** Shared motion vocabulary for person-cinematic story slides.
+ *  Durations come from the central tier system (motionTokens); eases stay local where they differ. */
+import { MOTION_DURATION } from '../../motion/motionTokens';
 
 export const REVEAL = {
-  duration: 0.55,
+  duration: MOTION_DURATION.reveal,
   ease: [0.22, 1, 0.36, 1] as const,
 };
 
 export const TRANSITION = {
-  duration: 0.85,
+  duration: MOTION_DURATION.transition,
   ease: [0.33, 1, 0.68, 1] as const,
 };
 
 export const EMPHASIS = {
-  duration: 0.45,
+  duration: MOTION_DURATION.emphasis,
   ease: [0.16, 1, 0.3, 1] as const,
 };
 
