@@ -13,7 +13,7 @@ import {
 import { useReducedMotion } from 'framer-motion';
 
 import type { PersonSequenceData } from '../types';
-import { personPhaseAt, type PersonPhase } from './personPhases';
+import { PERSON_PHASE_MS, personPhaseAt, type PersonPhase } from './personPhases';
 
 type PersonSlidePhaseValue = {
   phase: PersonPhase;
@@ -54,18 +54,24 @@ export function PersonSlidePhaseProvider({
     elapsedRef.current = 0;
     lastTickRef.current = null;
     setPhase(reduce ? 'final' : 'textReveal');
-  }, [slideKey, reduce, sequence]);
+    // Reset only on real slide changes: a data refresh re-creates the sequence
+    // object with the same slideKey, and the A1 entrance must not replay.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideKey, reduce]);
 
   useEffect(() => {
     if (!sequence || reduce) return undefined;
 
     let raf = 0;
+    // Timer hygiene: stop the loop once the timeline completes — no idle rAF after settle.
+    const terminalMs = PERSON_PHASE_MS.final ?? Number.POSITIVE_INFINITY;
     const tick = (now: number) => {
       if (lastTickRef.current != null && !paused) {
         elapsedRef.current += now - lastTickRef.current;
         syncPhase(elapsedRef.current);
       }
       lastTickRef.current = now;
+      if (!paused && elapsedRef.current >= terminalMs) return;
       raf = window.requestAnimationFrame(tick);
     };
     raf = window.requestAnimationFrame(tick);

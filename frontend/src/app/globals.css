@@ -123,6 +123,19 @@ input, button, textarea, select {
   max-height: 100svh;
 }
 
+/* Reduced-motion CSS backstop: JS layer (StoryMotionContext / framer useReducedMotion)
+   handles framer animations; this kills any CSS animation/transition left running. */
+@media (prefers-reduced-motion: reduce) {
+  .story-viewport *,
+  .story-viewport *::before,
+  .story-viewport *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 h1, h2, h3 {
   font-family: var(--font-display);
 }

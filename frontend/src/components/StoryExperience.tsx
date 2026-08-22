@@ -14,8 +14,13 @@ import { PersonSlidePhaseProvider } from '@/components/story/person/PersonSlideP
 import { ReviewSlidePhaseProvider } from '@/components/story/review/ReviewSlidePhaseContext';
 import { FinaleSlidePhaseProvider } from '@/components/story/finale/FinaleSlidePhaseContext';
 import { StoryMotionProvider } from '@/components/story/motion/StoryMotionContext';
+import { MOTION_DURATION } from '@/components/story/motion/motionTokens';
+import { createTransitionGate, type TransitionGate } from '@/components/story/motion/transitionGate';
 import { StoryVisual } from '@/components/story/visuals/StoryVisual';
 import { useI18n } from '@/i18n/I18nProvider';
+
+/** Scene crossfade wall-clock lock (audit band 480–620ms). */
+const SCENE_TRANSITION_MS = Math.round(MOTION_DURATION.transition * 1000);
 
 export default function StoryExperience() {
   const i18n = useI18n();
@@ -24,6 +29,12 @@ export default function StoryExperience() {
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const elapsedRef = useRef(0);
+  const indexRef = useRef(0);
+  const gateRef = useRef<TransitionGate | null>(null);
+  if (!gateRef.current) gateRef.current = createTransitionGate(SCENE_TRANSITION_MS);
+  const sceneGate = gateRef.current;
+
+  useEffect(() => () => sceneGate.dispose(), [sceneGate]);
   const { phase, stats, start } = useStoryMachine();
 
   useEffect(() => {
@@ -35,12 +46,21 @@ export default function StoryExperience() {
   const username = stats?.scraped_username;
   const currentInteraction = slideMeta(slides[index]?.key ?? '').interaction;
 
+  // Audit decision 2: a scene crossfade never overlaps the previous one.
+  // Navigations mid-transition queue behind it (latest target wins).
   const goToSlide = useCallback((nextIndex: number) => {
-    setIndex(Math.max(0, Math.min(nextIndex, slides.length - 1)));
-    elapsedRef.current = 0;
-    setProgress(0);
-    setIsPaused(false);
-  }, [slides.length]);
+    const clamped = Math.max(0, Math.min(nextIndex, slides.length - 1));
+    if (clamped === indexRef.current) return;
+    sceneGate.tryBegin(() => {
+      // Re-check on queue flush: the latest target may equal the settled slide.
+      if (clamped === indexRef.current) return;
+      indexRef.current = clamped;
+      setIndex(clamped);
+      elapsedRef.current = 0;
+      setProgress(0);
+      setIsPaused(false);
+    });
+  }, [sceneGate, slides.length]);
 
   const goNext = useCallback(() => {
     if (currentInteraction === 'auto-min' && elapsedRef.current < AUTO_MIN_MS) return;
@@ -65,8 +85,7 @@ export default function StoryExperience() {
       const nextProgress = (elapsedRef.current / SLIDE_MS) * 100;
       setProgress(nextProgress);
       if (elapsedRef.current >= SLIDE_MS) {
-        elapsedRef.current = 0;
-        setIndex((i) => Math.min(i + 1, slides.length - 1));
+        goToSlide(indexRef.current + 1);
         return;
       }
       frame = requestAnimationFrame(tick);
@@ -74,7 +93,7 @@ export default function StoryExperience() {
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [index, slides.length, isLast, isPaused, phase, currentInteraction]);
+  }, [goToSlide, index, slides.length, isLast, isPaused, phase, currentInteraction]);
 
   useEffect(() => {
     if (slides.length === 0) return;
@@ -135,7 +154,9 @@ export default function StoryExperience() {
     >
     <main className="story-viewport relative grid select-none overflow-x-clip overflow-y-hidden bg-[#0f0d0b] [grid-template-rows:auto_minmax(0,1fr)_auto]">
       <div className="pointer-events-none absolute inset-0 z-0">
-        <AnimatePresence mode="wait">
+        {/* Sync mode: outgoing and incoming fade overlap into one scene-band
+            crossfade; the transition gate keeps transitions from stacking. */}
+        <AnimatePresence>
           <StoryVisual key={`bg-${activeSlide.key}`} slide={activeSlide} />
         </AnimatePresence>
       </div>

@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from 'framer-motion';
 
+import { MOTION_DURATION } from '../motion/motionTokens';
 import { useI18n } from '@/i18n/I18nProvider';
 
 type RewatchInsightProps = {
@@ -18,7 +19,7 @@ export function RewatchInsight({ title, watchCount, extraCount }: RewatchInsight
     <motion.div
       initial={reduce ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: reduce ? 0 : 2.6, duration: reduce ? 0 : 0.45, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ delay: reduce ? 0 : 2.6, duration: reduce ? 0 : MOTION_DURATION.fieldEnter, ease: [0.16, 1, 0.3, 1] }}
       className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-left"
     >
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-200/90">

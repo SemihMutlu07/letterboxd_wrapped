@@ -13,7 +13,7 @@ export function FinaleSlideBody() {
 
   return (
     <div className="min-w-0 max-w-full">
-      <RevealLine instant={instant} delay={TEXT_REVEAL.textLabel} y={10}>
+      <RevealLine instant={instant} delay={TEXT_REVEAL.textLabel} y={12}>
         <Label className="max-[40rem]:hidden">{t('story.slide.finale.label')}</Label>
       </RevealLine>
       <RevealLine instant={instant} delay={TEXT_REVEAL.textHeadline} y={12}>
