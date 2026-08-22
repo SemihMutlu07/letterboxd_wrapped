@@ -17,6 +17,7 @@ export type ErrorReason =
   | 'scrape_failed'
   | 'scrape_blocked'
   | 'scraper_unavailable'
+  | 'queue_full'
   | 'desktop_worker_offline'
   | 'desktop_worker_paused'
   | 'stats_too_large'
@@ -27,6 +28,19 @@ export interface NormalizedError {
   message: string;
   action?: string;
   reason: ErrorReason;
+}
+
+/** Scrape-path failures where export upload is the reliable next step. */
+export const ZIP_FALLBACK_REASONS: readonly ErrorReason[] = [
+  'scraper_unavailable',
+  'queue_full',
+  'desktop_worker_offline',
+  'desktop_worker_paused',
+  'scrape_blocked',
+];
+
+export function needsZipFallback(reason: ErrorReason): boolean {
+  return ZIP_FALLBACK_REASONS.includes(reason);
 }
 
 /**
@@ -139,8 +153,20 @@ export function normalizeError(err: unknown): NormalizedError {
         raw ||
         'The desktop scraper is offline right now.',
       action:
-        'Use the export upload option for a complete Wrapped, or try again shortly.',
+        'Upload your Letterboxd export ZIP — that path does not use the scraper.',
       reason: 'desktop_worker_offline',
+    };
+  }
+
+  if (code === 'queue_full' || /queue_full|analysis queue is full|worker queue is full/i.test(raw)) {
+    return {
+      title: 'Scraper queue is full',
+      message:
+        raw ||
+        'Too many scrapes are already running from this network. Export upload still works.',
+      action:
+        'Upload your Letterboxd export ZIP (Settings → Import & Export). Username scrape can wait.',
+      reason: 'queue_full',
     };
   }
 
@@ -153,7 +179,7 @@ export function normalizeError(err: unknown): NormalizedError {
       title: 'Scraper is busy',
       message: raw || 'Too many people are using the scraper right now. Please wait a few seconds and try again.',
       action:
-        'Wait 30–60 seconds and retry, or use the export upload option below for a guaranteed result.',
+        'Upload your Letterboxd export ZIP for a guaranteed result, or retry in a minute.',
       reason: 'scraper_unavailable',
     };
   }
@@ -166,7 +192,7 @@ export function normalizeError(err: unknown): NormalizedError {
         raw ||
         'The desktop scraper is paused for maintenance.',
       action:
-        'Use the export upload option for a complete Wrapped, or try again shortly.',
+        'Upload your Letterboxd export ZIP — that path does not use the scraper.',
       reason: 'desktop_worker_paused',
     };
   }
@@ -176,7 +202,7 @@ export function normalizeError(err: unknown): NormalizedError {
     return {
       title: 'Letterboxd access blocked',
       message: raw || 'Letterboxd has temporarily blocked automated profile access.',
-      action: 'For the most reliable results, download your Letterboxd export and upload it here.',
+      action: 'Download your Letterboxd export ZIP and upload it here — that always works.',
       reason: 'scrape_blocked',
     };
   }
