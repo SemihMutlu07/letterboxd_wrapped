@@ -180,6 +180,50 @@ def _normalize_poster_url(url: str) -> str:
         return "https://letterboxd.com" + url
     return url
 
+
+PREVIEW_ITEM_LIMIT = 8
+
+
+def _safe_preview_poster(url: str) -> Optional[str]:
+    """Keep only https Letterboxd CDN posters for the live scrape preview."""
+    normalized = _normalize_poster_url(url).strip()
+    parsed = urlparse(normalized)
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme != "https":
+        return None
+    if hostname == "letterboxd.com" or hostname.endswith(".letterboxd.com"):
+        return normalized
+    if hostname == "ltrbxd.com" or hostname.endswith(".ltrbxd.com"):
+        return normalized
+    return None
+
+
+def preview_items(films: list[dict], limit: int = PREVIEW_ITEM_LIMIT) -> list[dict[str, str]]:
+    """Tiny overwrite-safe sample for the wait story. Counts and titles only — no review text."""
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for film in films:
+        title = str(film.get("title") or "").strip()
+        if not title:
+            continue
+        key = title.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        item: dict[str, str] = {"title": title}
+        year = str(film.get("year") or "").strip()
+        if year:
+            item["year"] = year
+        poster = film.get("poster_url")
+        if isinstance(poster, str) and poster.strip():
+            safe = _safe_preview_poster(poster)
+            if safe:
+                item["poster_url"] = safe
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
 def _parse_grid_items(soup: BeautifulSoup) -> list[dict]:
     """Parse film grid items from Letterboxd grid pages.
 
@@ -397,7 +441,12 @@ def _sync_scrape_films_grid(
             s.close()
 
     logger.info("Grid scrape complete for %s: %d films", username, len(all_films))
-    _trace(trace_callback, "grid_done", "Grid scrape completed", {"films": len(all_films)})
+    _trace(
+        trace_callback,
+        "grid_done",
+        "Grid scrape completed",
+        {"films": len(all_films), "sample": preview_items(all_films)},
+    )
     return all_films
 
 
@@ -569,7 +618,12 @@ def _sync_scrape_diary(
             s.close()
 
     logger.info("Diary scrape complete for %s: %d films", username, len(all_films))
-    _trace(trace_callback, "diary_done", "Diary scrape completed", {"films": len(all_films)})
+    _trace(
+        trace_callback,
+        "diary_done",
+        "Diary scrape completed",
+        {"films": len(all_films), "sample": preview_items(all_films)},
+    )
     return all_films
 
 
