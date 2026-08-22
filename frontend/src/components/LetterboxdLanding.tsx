@@ -176,6 +176,8 @@ export default function LetterboxdLanding() {
   const shuffledDeckRef = useRef<PosterGameMovie[]>([]);
   const deckIndexRef = useRef(0);
   const scrapeAbortRef = useRef<AbortController | null>(null);
+  // Story route to navigate to once the scrape wait machine settles READY → STORY.
+  const storyDestinationRef = useRef<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [usernameFocused, setUsernameFocused] = useState(false);
@@ -482,6 +484,7 @@ export default function LetterboxdLanding() {
     setError(null);
     trackEvent('analyze_started', { username, method: 'scrape', analysis_period: 'lifetime' });
     const destination = storyPath(username, locale);
+    storyDestinationRef.current = destination;
     router.prefetch(destination);
 
     scrapeAbortRef.current?.abort();
@@ -529,7 +532,8 @@ export default function LetterboxdLanding() {
         })();
       }
 
-      router.push(destination);
+      // Navigation is deferred: ScrapeStoryWait fires onStoryReady when the
+      // machine settles READY → STORY, so the story opens after its settle dwell.
     } catch (err) {
       if ((err instanceof DOMException && err.name === 'AbortError') || (err instanceof Error && err.name === 'AbortError')) {
         return;
@@ -558,9 +562,18 @@ export default function LetterboxdLanding() {
     }
   }, [locale, router, usernameInput]);
 
+  // STORY handoff: fired exactly once by ScrapeStoryWait when READY settles.
+  const handleStoryReady = useCallback(() => {
+    const destination = storyDestinationRef.current;
+    if (!destination) return;
+    storyDestinationRef.current = null;
+    router.push(destination);
+  }, [router]);
+
   const handleCancel = useCallback(() => {
     scrapeAbortRef.current?.abort();
     scrapeAbortRef.current = null;
+    storyDestinationRef.current = null;
     setIsUploading(false);
     setIsScraping(false);
     setScrapeProgress(null);
@@ -585,6 +598,7 @@ export default function LetterboxdLanding() {
         onCancel={handleCancel}
         queued={workerQueued}
         events={scrapeProgress?.trace_events}
+        onStoryReady={handleStoryReady}
       />
     );
   }
